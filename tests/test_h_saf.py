@@ -35,8 +35,8 @@ class Test_H08(unittest.TestCase):
         timestamps_should = [datetime.datetime(2010, 5, 1, 8, 33, 1)]
         assert sorted(timestamps) == sorted(timestamps_should)
 
-    @pytest.mark.skipif("TRAVIS_PYTHON_VERSION" in os.environ,
-                        reason="Needs to much memory on CI server")
+    # @pytest.mark.skipif("TRAVIS_PYTHON_VERSION" in os.environ,
+    #                     reason="Needs to much memory on CI server")
     def test_image_reading(self):
         data, meta, timestamp, lons, lats, time_var = self.reader.read(
             datetime.datetime(2010, 5, 1, 8, 33, 1))
@@ -48,8 +48,8 @@ class Test_H08(unittest.TestCase):
         for var in data:
             assert data[var].shape == (3120, 7680)
 
-    @pytest.mark.skipif("TRAVIS_PYTHON_VERSION" in os.environ,
-                        reason="Needs to much memory on CI server")
+    # @pytest.mark.skipif("TRAVIS_PYTHON_VERSION" in os.environ,
+    #                     reason="Needs to much memory on CI server")
     def test_image_reading_bbox_empty(self):
         data, meta, timestamp, lons, lats, time_var = self.reader.read(datetime.datetime(2010, 5, 1, 8, 33, 1),
                                                                        lat_lon_bbox=[45, 48, 15, 18])
@@ -58,8 +58,8 @@ class Test_H08(unittest.TestCase):
         assert lons is None
         assert lats is None
 
-    @pytest.mark.skipif("TRAVIS_PYTHON_VERSION" in os.environ,
-                        reason="Needs to much memory on CI server")
+    # @pytest.mark.skipif("TRAVIS_PYTHON_VERSION" in os.environ,
+    #                     reason="Needs to much memory on CI server")
     def test_image_reading_bbox(self):
         data, meta, timestamp, lons, lats, time_var = self.reader.read(datetime.datetime(2010, 5, 1, 8, 33, 1),
                                                                        lat_lon_bbox=[60, 70, 15, 25])
