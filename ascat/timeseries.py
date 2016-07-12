@@ -40,6 +40,7 @@ from glob import glob
 import pygeogrids.grids as grids
 
 from datetime import datetime
+from ascat.utils import doy
 
 
 class ASCATReaderException(Exception):

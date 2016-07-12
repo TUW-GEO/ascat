@@ -32,24 +32,20 @@ Created on May 21, 2014
 '''
 
 import os
-import glob
 from datetime import datetime, timedelta
 import numpy as np
+import pandas as pd
 import warnings
-
-import pytesmo.io.dataset_base as dataset_base
 
 from pygeobase.io_base import ImageBase
 from pygeobase.io_base import MultiTemporalImageBase
 from pygeobase.object_base import Image
 
-import pytesmo.io.bufr.bufr as bufr_reader
+import ascat.bufr as bufr_reader
 try:
     import pygrib
 except ImportError:
     warnings.warn('pygrib can not be imported H14 images can not be read.')
-
-import pytesmo.timedate.julian as julian
 
 import sys
 if sys.version_info < (3, 0):
@@ -403,8 +399,13 @@ class H07Single(ImageBase):
                 minutes = message[:, 10].astype(int)
                 seconds = message[:, 11].astype(int)
 
-                dates.append(julian.julday(months, days, years,
-                                           hours, minutes, seconds))
+                df = pd.to_datetime(pd.DataFrame({'month': months,
+                                                  'year': years,
+                                                  'day': days,
+                                                  'hour': hours,
+                                                  'minute': minutes,
+                                                  'second': seconds}))
+                dates.append(pd.DatetimeIndex(df).to_julian_date().values)
 
         ssm = np.concatenate(ssm)
         latitude = np.concatenate(latitude)
