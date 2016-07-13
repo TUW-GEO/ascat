@@ -43,14 +43,18 @@ image products:
 
 * SM OBS 1 - H07 - Large scale surface soil moisture by radar scatterometer in
   BUFR format over Europe
-* SM OBS 2 - H08 - Small scale surface soil moisture by radar scatterometer in
-  BUFR format over Europe
-* SM DAS 2 - H14 - Profile index in the roots region by scatterometer data
-  assimilation in GRIB format, global
 * H16 - SSM ASCAT-B NRT O : Metop-B ASCAT soil moisture 12.5km sampling NRT
 * H103 - SSM ASCAT-B NRT O : Metop-B ASCAT soil moisture 25km sampling NRT
 * H101 - SSM ASCAT-A NRT O : Metop-A ASCAT soil moisture 12.5km sampling NRT
 * H102 - SSM ASCAT-A NRT O : Metop-A ASCAT soil moisture 25km sampling NRT
+* SM OBS 2 - H08 - Small scale surface soil moisture by radar scatterometer in
+  BUFR format over Europe
+* SM DAS 2 - H14 - Profile index in the roots region by scatterometer data
+  assimilation in GRIB format, global
+
+The products H07, H16, H101, H102, H103 come in BUFR format and can be read by
+the same reader. So examples for the H07 product are equally valid for the other
+products.
 
 They are available after registration from the `H-SAF Website
 <http://hsaf.meteoam.it/soil-moisture.php>`_
