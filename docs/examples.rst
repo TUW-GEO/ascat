@@ -12,7 +12,7 @@ porosity data.
 
 If the standard file names assumed by the script have changed this can be
 specified during initialization of the AscatH25_SSM object. Please see the
-documentation of :class:`ascat.AscatH25_SSM`
+documentation of :class:`ascat.timeseries.AscatH25_SSM`
 
 .. include::
    read_ASCAT_H25.rst
