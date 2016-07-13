@@ -27,7 +27,8 @@ if on_rtd:
 
     import mock
 
-    MOCK_MODULES = ['netCDF4', 'pygeogrids', 'pygeogrids.grids']
+    MOCK_MODULES = ['netCDF4', 'pygeogrids', 'pygeogrids.grids',
+                    'pybufr_ecmwf']
     for mod_name in MOCK_MODULES:
         sys.modules[mod_name] = mock.Mock()
     import inspect

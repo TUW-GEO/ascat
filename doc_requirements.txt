@@ -1,5 +1,4 @@
 mock
 numpy
 pandas
-pybufr-ecmwf
 pygeobase
