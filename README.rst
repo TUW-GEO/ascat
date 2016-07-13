@@ -2,15 +2,64 @@
 ascat
 =====
 
+.. image:: https://travis-ci.org/TUW-GEO/ascat.svg?branch=master
+    :target: https://travis-ci.org/TUW-GEO/ascat
+
+.. image:: https://coveralls.io/repos/TUW-GEO/ascat/badge.png?branch=master
+  :target: https://coveralls.io/r/TUW-GEO/ascat?branch=master
+
+.. image:: https://badge.fury.io/py/ascat.svg
+    :target: http://badge.fury.io/py/ascat
+
 Readers and converters for data acquired by the ASCAT sensor on-board the MetOP
 satellites. Written in Python.
 
+Supported Products
+==================
 
-Description
-===========
+This give a short overview over the supported products. Please see the
+documentation for detailed examples of how to work with a product.
 
-A LONGER DESCRIPTION OF YOUR PROJECT GOES HERE...
+Read ASCAT data from different sources into a common format supported by pytesmo
 
+Time Series Products
+--------------------
+
+* ASCAT SSM(Surface Soil Moisture) Time Series
+
+  Available in netCDF format from `H-SAF
+  <http://hsaf.meteoam.it/soil-moisture.php>`_ (H25 product)
+
+
+* ASCAT SWI(Soil Water Index) Time Series
+
+  Available in binary format from `TU Wien <http://rs.geo.tuwien.ac.at/products/>`_
+
+Image products
+--------------
+
+`H-SAF <http://hsaf.meteoam.it/soil-moisture.php>`_ provides several different
+image products:
+
+* SM OBS 1 - H07 - Large scale surface soil moisture by radar scatterometer in
+  BUFR format over Europe
+* SM OBS 2 - H08 - Small scale surface soil moisture by radar scatterometer in
+  BUFR format over Europe
+* SM DAS 2 - H14 - Profile index in the roots region by scatterometer data
+  assimilation in GRIB format, global
+* H16 - SSM ASCAT-B NRT O : Metop-B ASCAT soil moisture 12.5km sampling NRT
+* H103 - SSM ASCAT-B NRT O : Metop-B ASCAT soil moisture 25km sampling NRT
+* H101 - SSM ASCAT-A NRT O : Metop-A ASCAT soil moisture 12.5km sampling NRT
+* H102 - SSM ASCAT-A NRT O : Metop-A ASCAT soil moisture 25km sampling NRT
+
+They are available after registration from the `H-SAF Website
+<http://hsaf.meteoam.it/soil-moisture.php>`_
+
+Installation
+============
+
+Detailed instructions will follow. For now please see the ``install`` section in
+``.travis.yml`` in this repository.
 
 Contribute
 ==========

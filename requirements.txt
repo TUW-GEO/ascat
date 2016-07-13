@@ -4,5 +4,4 @@ pandas
 pygeobase
 pygeogrids
 netCDF4
-# scipy>=0.9
 
