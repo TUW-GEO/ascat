@@ -55,6 +55,14 @@ image products:
 They are available after registration from the `H-SAF Website
 <http://hsaf.meteoam.it/soil-moisture.php>`_
 
+Documentation
+=============
+
+|Documentation Status|
+
+.. |Documentation Status| image:: https://readthedocs.org/projects/ascat/badge/?version=latest
+   :target: http://ascat.readthedocs.org/
+
 Installation
 ============
 
@@ -84,3 +92,4 @@ Note
 
 This project has been set up using PyScaffold 2.5.6. For details and usage
 information on PyScaffold see http://pyscaffold.readthedocs.org/.
+
