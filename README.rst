@@ -5,14 +5,16 @@ ascat
 .. image:: https://travis-ci.org/TUW-GEO/ascat.svg?branch=master
     :target: https://travis-ci.org/TUW-GEO/ascat
 
-.. image:: https://coveralls.io/repos/TUW-GEO/ascat/badge.png?branch=master
-  :target: https://coveralls.io/r/TUW-GEO/ascat?branch=master
+.. image:: https://coveralls.io/repos/github/TUW-GEO/ascat/badge.svg?branch=master
+   :target: https://coveralls.io/github/TUW-GEO/ascat?branch=master
 
 .. image:: https://badge.fury.io/py/ascat.svg
     :target: http://badge.fury.io/py/ascat
 
 Readers and converters for data acquired by the ASCAT sensor on-board the MetOP
 satellites. Written in Python.
+
+Works great in combination with `pytesmo <https://github.com/TUW-GEO/pytesmo>`_.
 
 Supported Products
 ==================
@@ -70,8 +72,31 @@ Documentation
 Installation
 ============
 
-Detailed instructions will follow. For now please see the ``install`` section in
-``.travis.yml`` in this repository.
+The packages you have to install depend on the features you want to use. The
+H-SAF image products are disseminated in BUFR (H07, H16, H103, H101, H102, H08)
+or GRIB (H14) format. So to read them you will have to install the appropriate
+packages which will be explained shortly. Unfortunately neither BUFR nor GRIB
+readers work on Windows so if you need these formats then Linux or OS X are your
+only options.
+
+For installation we recommend `Miniconda
+<http://conda.pydata.org/miniconda.html>`_. So please install it according to
+the official installation instructions. As soon as you have the ``conda``
+command in your shell you can continue.
+
+The following script will download and install all the needed packages.
+
+.. code::
+
+    conda create -q -n ascat python=2 numpy pandas netCDF4 pytest pip pyproj
+    source activate ascat
+    conda install -c cpaulik pybufr-ecmwf # for reading BUFR files
+    conda install -c conda-forge pygrib=2.0.1 # for reading GRIB files
+    pip install ascat
+
+This script should work on Windows, Linux or OSX but on Windows you will get
+errors for the installation commands of pybufr-ecmwf and pygrib.
+
 
 Contribute
 ==========
@@ -79,6 +104,17 @@ Contribute
 We are happy if you want to contribute. Please raise an issue explaining what is missing
 or if you find a bug. We will also gladly accept pull requests against our master branch
 for new features or bug fixes.
+
+Development setup
+-----------------
+
+For Development we also recommend a ``conda`` environment. You can create one
+including test dependencies and debugger by running ``conda env create -f
+environment.yml``. This will create a new ``ascat-dev`` environment which you
+can activate by using ``source activate ascat-dev``.
+
+Guidelines
+----------
 
 If you want to contribute please follow these steps:
 
