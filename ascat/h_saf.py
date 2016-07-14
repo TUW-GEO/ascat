@@ -562,16 +562,13 @@ class H14Single(ImageBase):
     """
 
     def __init__(self, filename, mode='r', expand_grid=True,
-                 metadata_fields=['parameterUnits',
-                                  'parameterName']):
+                 metadata_fields=['units',
+                                  'name']):
         self.expand_grid = expand_grid
-
-        # pygrib version 1 reads the data differently
+        self.metadata_fields = metadata_fields
         self.pygrib1 = True
         if int(pygrib.__version__[0]) > 1:
             self.pygrib1 = False
-
-        self.metadata_fields = metadata_fields
 
         super(H14Single, self).__init__(filename, mode=mode)
 
