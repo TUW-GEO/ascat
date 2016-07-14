@@ -557,11 +557,22 @@ class H14Single(ImageBase):
         if false the images will be returned as 1D arrays on the
         reduced gaussian grid
         Default: True
-
+    metadata_fields: list, optional
+        fields of the message to put into the metadata dictionary.
     """
 
-    def __init__(self, filename, mode='r', expand_grid=True):
+    def __init__(self, filename, mode='r', expand_grid=True,
+                 metadata_fields=['parameterUnits',
+                                  'parameterName']):
         self.expand_grid = expand_grid
+
+        # pygrib version 1 reads the data differently
+        self.pygrib1 = True
+        if int(pygrib.__version__[0]) > 1:
+            self.pygrib1 = False
+
+        self.metadata_fields = metadata_fields
+
         super(H14Single, self).__init__(filename, mode=mode)
 
     def read(self, timestamp=None):
@@ -591,11 +602,19 @@ class H14Single(ImageBase):
             observations have the same timestamp
         """
 
-        param_names = {'40': 'SM_layer1_0-7cm',
-                       '41': 'SM_layer2_7-28cm',
-                       '42': 'SM_layer3_28-100cm',
-                       '43': 'SM_layer4_100-289cm'}
+        if self.pygrib1:
+            param_names = {'40': 'SM_layer1_0-7cm',
+                           '41': 'SM_layer2_7-28cm',
+                           '42': 'SM_layer3_28-100cm',
+                           '43': 'SM_layer4_100-289cm'}
+
+        else:
+            param_names = {'SWI1 Soil wetness index in layer 1': 'SM_layer1_0-7cm',
+                           'SWI2 Soil wetness index in layer 2': 'SM_layer2_7-28cm',
+                           'SWI3 Soil wetness index in layer 3': 'SM_layer3_28-100cm',
+                           'SWI4 Soil wetness index in layer 4': 'SM_layer4_100-289cm'}
         data = {}
+        metadata = {}
 
         with pygrib.open(self.filename) as grb:
             for i, message in enumerate(grb):
@@ -604,7 +623,14 @@ class H14Single(ImageBase):
                     lats, lons = message.latlons()
                 data[param_names[message['parameterName']]] = message.values
 
-        return Image(lons, lats, data, {}, timestamp)
+                # read and store metadata
+                md = {}
+                for k in self.metadata_fields:
+                    if message.valid_key(k):
+                        md[k] = message[k]
+                metadata[param_names[message['parameterName']]] = md
+
+        return Image(lons, lats, data, metadata, timestamp)
 
     def write(self, data):
         raise NotImplementedError()

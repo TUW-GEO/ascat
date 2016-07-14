@@ -146,6 +146,8 @@ class Test_H14(unittest.TestCase):
         assert lats.shape == (843490,)
         for var in data:
             assert data[var].shape == (843490,)
+            assert meta[var]['parameterName']
+            assert meta[var]['parameterUnits'] == 'dimensionless'
 
     def test_expanded_image_reading(self):
         data, meta, timestamp, lons, lats, time_var = self.expand_reader.read(
@@ -156,6 +158,8 @@ class Test_H14(unittest.TestCase):
         assert lats.shape == (800, 1600)
         for var in data:
             assert data[var].shape == (800, 1600)
+            assert meta[var]['parameterName']
+            assert meta[var]['parameterUnits'] == 'dimensionless'
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
