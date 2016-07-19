@@ -11,6 +11,9 @@ ascat
 .. image:: https://badge.fury.io/py/ascat.svg
     :target: http://badge.fury.io/py/ascat
 
+.. image:: https://zenodo.org/badge/12761/TUW-GEO/ascat.svg
+   :target: https://zenodo.org/badge/latestdoi/12761/TUW-GEO/ascat
+
 Readers and converters for data acquired by the ASCAT sensor on-board the MetOP
 satellites. Written in Python.
 
@@ -126,6 +129,14 @@ If you want to contribute please follow these steps:
 - please include tests for your contributions in one of the test directories
   We use py.test so a simple function called test_my_feature is enough
 - submit a pull request to our master branch
+
+Citation
+========
+
+If you use the software in a publication then please cite it using the Zenodo DOI:
+
+.. image:: https://zenodo.org/badge/12761/TUW-GEO/ascat.svg
+   :target: https://zenodo.org/badge/latestdoi/12761/TUW-GEO/ascat
 
 Note
 ====
