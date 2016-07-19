@@ -36,6 +36,7 @@ import pandas as pd
 import warnings
 import netCDF4
 from pynetcf.time_series import GriddedNcContiguousRaggedTs
+from pygeobase.object_base import TS
 from glob import glob
 
 import pygeogrids.grids as grids
@@ -48,7 +49,7 @@ class ASCATReaderException(Exception):
     pass
 
 
-class ASCATTimeSeries(object):
+class ASCATTimeSeries(TS):
 
     """
     Container class for ASCAT time series
@@ -78,9 +79,9 @@ class ASCATTimeSeries(object):
     ----------
     gpi : int
         grid point index
-    longitude : float
+    lon : float
         longitude of grid point
-    latitude : float
+    lat : float
         latitude of grid point
     cell : int
         cell number of grid point
@@ -100,45 +101,22 @@ class ASCATTimeSeries(object):
                  topo_complex=None, wetland_frac=None,
                  porosity_gldas=None, porosity_hwsd=None):
 
-        self.gpi = gpi
-        self.longitude = lon
-        self.latitude = lat
+        super(ASCATTimeSeries, self).__init__(gpi, lon, lat, data, {})
         self.cell = cell
         self.topo_complex = topo_complex
         self.wetland_frac = wetland_frac
         self.porosity_gldas = porosity_gldas
         self.porosity_hwsd = porosity_hwsd
-        self.data = data
+        # for backwards compatibility add also longitude and latitude
+        # attributes
+        self.longitude = self.lon
+        self.latitude = self.lat
 
     def __repr__(self):
 
-        return "ASCAT time series gpi:%d lat:%2.3f lon:%3.3f" % (self.gpi, self.latitude, self.longitude)
-
-    def plot(self, *args, **kwargs):
-        """
-        wrapper for pandas.DataFrame.plot which adds title to plot
-        and drops NaN values for plotting
-        Returns
-        -------
-        ax : axes
-            matplotlib axes of the plot
-
-        Raises
-        ------
-        ASCATReaderException
-            if data attribute is not a pandas.DataFrame
-        """
-        if type(self.data) is pd.DataFrame:
-            tempdata = self.data.dropna(how='all')
-            ax = tempdata.plot(*args, figsize=(15, 5), **kwargs)
-            try:
-                ax.set_title(self.__repr__())
-            except AttributeError:
-                pass
-            return ax
-        else:
-            raise ASCATReaderException(
-                "data attribute is not a pandas.DataFrame")
+        return "ASCAT time series gpi:%d lat:%2.3f lon:%3.3f" % (self.gpi,
+                                                                 self.lat,
+                                                                 self.lon)
 
 
 class AscatNetcdf(GriddedNcContiguousRaggedTs):
