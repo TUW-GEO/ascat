@@ -22,7 +22,7 @@ Works great in combination with `pytesmo <https://github.com/TUW-GEO/pytesmo>`_.
 Supported Products
 ==================
 
-This give a short overview over the supported products. Please see the
+This gives a short overview over the supported products. Please see the
 documentation for detailed examples of how to work with a product.
 
 Read ASCAT data from different sources into a common format supported by pytesmo
