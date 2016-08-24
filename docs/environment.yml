@@ -1,0 +1,11 @@
+name: ascat-docs
+channels:
+  - cpaulik
+  - conda-forge
+dependencies:
+- pybufr-ecmwf=0.81=np111py27_0
+- netcdf4=1.2.2=np111py27_0
+- numpy=1.11.1=py27_0
+- pygrib
+- pip:
+    - pynetcf
