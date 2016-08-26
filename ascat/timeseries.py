@@ -522,6 +522,166 @@ class AscatH25_SSM(AscatNetcdf):
         return ts.data
 
 
+class AscatH109_SSM(AscatNetcdf):
+
+    """
+    Class for reading ASCAT SSM data. It extends AscatNetcdf and provides the
+    information necessary for reading SSM data
+
+    Parameters
+    ----------
+    path : string
+        path to data folder which contains the netCDF files from the FTP server
+    grid_path : string
+        path to grid_info folder which contains txt files with information about
+        grid point index,latitude, longitude and cell
+    grid_info_filename : string, optional
+        name of the grid info netCDF file in grid_path
+        default 'TUW_WARP5_grid_info_2_1.nc'
+    include_in_df : list, optional
+        list of variables which should be included in the returned DataFrame.
+        Default is all variables
+        ['sm', 'sm_noise', 'ssf', 'proc_flag', 'orbit_dir']
+    read_bulk : boolean, optional
+        if True then a whole cell will be read at once making
+        access to multiple time series from one cell faster
+
+    Attributes
+    ----------
+    include_in_df : list
+        list of variables in the netcdf file
+        that should be returned to the user after reading
+
+    Methods
+    -------
+    read_ssm(*args,**kwargs)
+        read surface soil moisture
+    """
+
+    def __init__(self, path, grid_path,
+                 grid_info_filename='TUW_WARP5_grid_info_2_1.nc',
+                 include_in_df=['sm',
+                                'sm_noise',
+                                'ssf',
+                                'proc_flag',
+                                'orbit_dir'],
+                 read_bulk=False):
+
+        self.path = path
+        self._get_product_version()
+
+        version_kwargs_dict = {'Metop ASCAT DR2016 SSM time series 12.5 km sampling':
+                               {'netcdftemplate': '{:04d}',
+                                'loc_id': 'gpi',
+                                'obs_var': 'row_size'}
+                               }
+
+        if self.product_version not in version_kwargs_dict:
+            # if not listed then the standard format should apply
+            version_kwargs = {'netcdftemplate': self.netcdftemplate}
+        else:
+            version_kwargs = version_kwargs_dict[self.product_version]
+
+        super(AscatH109_SSM, self).__init__(path, grid_path,
+                                            grid_info_filename=grid_info_filename,
+                                            read_bulk=read_bulk,
+                                            **version_kwargs)
+        self.include_in_df = include_in_df
+
+    def _get_product_version(self):
+        first_file = glob(os.path.join(self.path, '*.nc'))[0]
+        with netCDF4.Dataset(first_file) as dataset:
+            self.product_version = dataset.product_version
+
+        # try to guess the naming scheme from the filename
+        # this is the fallback if the version is not listed
+        # in the version kwargs_dict above and should work
+        # if the cell numbering is not changed.
+        self.netcdftemplate = os.path.split(first_file)[1][:-7] + '{:04d}'
+
+    def _read_gp(self, gpi, **kwargs):
+        """
+        Reads the time series of the given grid point index.
+
+        Parameters
+        ----------
+        gpi : long
+            grid point index
+
+        Returns
+        -------
+        df : pandas.DataFrame
+            containing all fields in the list self.include_in_df
+            plus frozen_prob and snow_prob if a path to advisory flags was set during
+            initialization
+        gpi : long
+            grid point index
+        lon : float
+            longitude
+        lat : float
+            latitude
+        cell : int
+            cell number
+        """
+        df = super(AscatNetcdf, self)._read_gp(gpi)
+        cell = self.grid.gpi2cell(gpi)
+        lon, lat = self.grid.gpi2lonlat(gpi)
+        return df, gpi, lon, lat, cell
+
+    def read_ssm(self, *args, **kwargs):
+        """
+        function to read SSM takes either 1 or 2 arguments.
+        It can be called as read_ssm(gpi,**kwargs) or read_ssm(lon,lat,**kwargs)
+
+        Parameters
+        ----------
+        gpi : int
+            grid point index
+        lon : float
+            longitude of point
+        lat : float
+            latitude of point
+        mask_ssf : boolean, optional
+            default False, if True only SSF values of 1 will be allowed, all others are removed
+
+        Returns
+        -------
+        ASCATTimeSeries : object
+            :class:`ascat.ASCATTimeSeries` instance
+        """
+        df, gpi, lon, lat, cell = self.read(*args, **kwargs)
+
+        if 'mask_ssf' in kwargs:
+            mask_ssf = kwargs['mask_ssf']
+            if mask_ssf:
+                df = df[df['ssf'] == 1]
+
+        return ASCATTimeSeries(gpi, lon, lat, cell, df)
+
+    def read_ts(self, *args, **kwargs):
+        """
+        function to read SSM takes either 1 or 2 arguments.
+        It can be called as read_ssm(gpi,**kwargs) or read_ssm(lon,lat,**kwargs)
+
+        Parameters
+        ----------
+        gpi : int
+            grid point index
+        lon : float
+            longitude of point
+        lat : float
+            latitude of point
+        mask_ssf : boolean, optional
+            default False, if True only SSF values of 1 will be allowed, all others are removed
+
+        Returns
+        -------
+        data : pandas.DataFrame
+        """
+        ts = self.read_ssm(*args, **kwargs)
+        return ts.data
+
+
 class Ascat_data(object):
 
     """
