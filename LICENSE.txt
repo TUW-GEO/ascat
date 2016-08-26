@@ -1,4 +1,4 @@
-Copyright (c) 2016, Christoph Paulik
+Copyright (c) 2016, TU Wien
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
