@@ -93,7 +93,7 @@ The following script will download and install all the needed packages.
 
     conda create -q -n ascat python=2 numpy pandas netCDF4 pytest pip pyproj
     source activate ascat
-    conda install -c cpaulik pybufr-ecmwf # for reading BUFR files
+    conda install -c conda-forge pybufr-ecmwf # for reading BUFR files
     conda install -c conda-forge pygrib=2.0.1 # for reading GRIB files
     pip install ascat
 
