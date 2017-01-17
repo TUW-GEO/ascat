@@ -36,6 +36,12 @@ Time Series Products
   <http://hsaf.meteoam.it/soil-moisture.php>`_ (H25 product)
 
 
+* CGLS SWI(Soil Water Index) Time Series (SWI_TS)
+
+  Available from the `Copernicus Global Land Service (CGLS)
+  <http://land.copernicus.eu/global/products/swi>`_ 
+
+
 * ASCAT SWI(Soil Water Index) Time Series
 
   Available in binary format from `TU Wien <http://rs.geo.tuwien.ac.at/products/>`_

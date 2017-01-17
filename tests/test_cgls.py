@@ -15,7 +15,7 @@
 Tests for reading CGLOPS SWI data.
 '''
 
-from ascat.cglops import SWI_TS
+from ascat.cgls import SWI_TS
 import os
 import pandas as pd
 import numpy as np
