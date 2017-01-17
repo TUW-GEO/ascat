@@ -2,7 +2,7 @@
 numpy
 pandas
 pygeobase
-pygeogrids
+pygeogrids>=0.2.2
 netCDF4
 pynetcf>=0.1.8
 
