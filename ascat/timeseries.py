@@ -294,8 +294,12 @@ class AscatNetcdf(GriddedNcContiguousRaggedTs):
         # read porosity values
         porosity = {}
         for por_source in ['gldas', 'hwsd']:
-            porosity[por_source] = ncfile.variables[
+            ncfile.variables['por_%s' % por_source].set_auto_mask(False)
+            por_value = ncfile.variables[
                 'por_%s' % por_source][gpi_index]
+            if por_value == ncfile.variables['por_%s' % por_source].missing_value:
+                por_value = np.nan
+            porosity[por_source] = por_value
 
         if 'absolute_values' in kwargs:
 
