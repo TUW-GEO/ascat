@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 0.3
+===========
+
+- Add reader for Copernicus Global Land SWI_TS products.
+
 Version 0.2
 ===========
 
