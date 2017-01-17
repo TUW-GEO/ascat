@@ -17,6 +17,19 @@ documentation of :class:`ascat.timeseries.AscatH25_SSM`
 .. include::
    read_ASCAT_H25.rst
 
+Reading and plotting CGLS SWI_TS data from netCDF format
+========================================================
+
+This example script reads the SWI_TS product of the Copernicus Global Land
+Service.
+
+If the standard file names assumed by the script have changed this can be
+specified during initialization of the SWI_TS object. Please see the
+documentation of :class:`ascat.cgls.SWI_TS`.
+
+.. include::
+   read_cgls_swi_ts.rst
+
 Reading and plotting H-SAF images
 =================================
 
