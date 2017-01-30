@@ -25,6 +25,11 @@ import os
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 if on_rtd:
 
+    import mock
+
+    MOCK_MODULES = ['pygrib']
+    for mod_name in MOCK_MODULES:
+        sys.modules[mod_name] = mock.Mock()
     import inspect
     from sphinx import apidoc
 
