@@ -49,6 +49,9 @@ Time Series Products
 Image products
 --------------
 
+H-SAF
+~~~~~
+
 `H-SAF <http://hsaf.meteoam.it/soil-moisture.php>`_ provides several different
 image products:
 
@@ -72,9 +75,25 @@ default filenames are slightly different the following readers should be used:
 * H103 - ascat.h_saf.H103img
 * H07 - ascat.h_saf.H07img
 
-
 They are available after registration from the `H-SAF Website
 <http://hsaf.meteoam.it/soil-moisture.php>`_
+
+EUMETSAT
+~~~~~~~~
+
+EUMETSAT provides ASCAT Level1 and Level2 data among others through the
+`EUMETSAT Data Centre
+<http://www.eumetsat.int/website/home/Data/DataDelivery/EUMETSATDataCentre/index.html>`_.
+At the moment this package supports the following products:
+
+* ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in BUFR format
+  ``ascat.eumetsat.AscatAL2Ssm125`` and ``ascat.eumetsat.AscatBL2Ssm125``.
+* ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in netCDF format
+  ``ascat.eumetsat.AscatAL2Ssm125Nc`` and ``ascat.eumetsat.AscatBL2Ssm125Nc``.
+* ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in BUFR format
+  ``ascat.eumetsat.AscatAL2Ssm250`` and ``ascat.eumetsat.AscatBL2Ssm250``.
+* ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in netCDF format
+  ``ascat.eumetsat.AscatAL2Ssm250Nc`` and ``ascat.eumetsat.AscatBL2Ssm250Nc``.
 
 Documentation
 =============
