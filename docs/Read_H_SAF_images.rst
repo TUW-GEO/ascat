@@ -27,6 +27,16 @@ In this Example we will read and plot images of the H-SAF products H07, H08 and 
 Reading the H07 product
 =======================
 
+The products H07, H16, H101, H102, H103 come in the same BUFR format. Since the
+default filenames are slightly different the following readers should be used:
+
+* H16 - ascat.h_saf.H16img
+* H101 - ascat.h_saf.H101img
+* H102 - ascat.h_saf.H102img
+* H103 - ascat.h_saf.H103img
+* H07 - ascat.h_saf.H07img
+
+Otherwise the format and API is identical.
 
 The ascat repository includes one h07 image with the timestamp 2010-05-01
 08:33:01 We can either read this image alone if we know the timestamp or iterate

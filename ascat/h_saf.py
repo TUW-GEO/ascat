@@ -314,7 +314,18 @@ class H08img(MultiTemporalImageBase):
         return timestamps
 
 
-class H07Single(ImageBase):
+class AscatSsmNrtSingle(ImageBase):
+    """
+    Reads ASCAT SSM NRT images in BUFR format. There are the
+    following products:
+
+    - H101 SSM ASCAT-A NRT O 12.5 Metop-A ASCAT NRT SSM orbit geometry 12.5 km sampling
+    - H102 SSM ASCAT-A NRT O 25.0 Metop-A ASCAT NRT SSM orbit geometry 25 km sampling
+    - H16  SSM ASCAT-B NRT O 12.5 Metop-B ASCAT NRT SSM orbit geometry 12.5 km sampling
+    - H103 SSM ASCAT-B NRT O 25.0 Metop-B ASCAT NRT SSM orbit geometry 25 km sampling
+    - H104 SSM ASCAT-C NRT O 12.5 Metop-C ASCAT NRT SSM orbit geometry 12.5 km sampling
+    - H105 SSM ASCAT-C NRT O 25.0 Metop-C ASCAT NRT SSM orbit geometry 25 km sampling
+    """
 
     def read(self, timestamp=None):
         """
@@ -450,10 +461,10 @@ class H07Single(ImageBase):
         pass
 
 
-class H07img(MultiTemporalImageBase):
+class AscatSsmNrt(MultiTemporalImageBase):
 
     """
-    Class for reading HSAF H07 SM OBS 1 images in bufr format.
+    Class for reading HSAF ASCAt SSM images in bufr format.
     The images have the same structure as the ASCAT 3 minute pdu files
     and these 2 readers could be merged in the future
     The images have to be uncompressed in the following folder structure
@@ -496,10 +507,10 @@ class H07img(MultiTemporalImageBase):
         self.day_search_str = day_search_str
         self.file_search_str = file_search_str
         self.filename_datetime_format = filename_datetime_format
-        super(H07img, self).__init__(path, H07Single, subpath_templ=[month_path_str],
-                                     fname_templ=file_search_str,
-                                     datetime_format=datetime_format,
-                                     exact_templ=False)
+        super(AscatSsmNrt, self).__init__(path, AscatSsmNrtSingle, subpath_templ=[month_path_str],
+                                          fname_templ=file_search_str,
+                                          datetime_format=datetime_format,
+                                          exact_templ=False)
 
     def _get_orbit_start_date(self, filename):
         orbit_start_str = \
@@ -545,6 +556,96 @@ class H07img(MultiTemporalImageBase):
         for filename in file_list:
             timestamps.append(self._get_orbit_start_date(filename))
         return timestamps
+
+
+class H07img(AscatSsmNrt):
+    pass
+
+
+class H16img(AscatSsmNrt):
+    """
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        if the files are stored in folders by month as is the standard on the HSAF FTP Server
+        then please specify the string that should be used in datetime.datetime.strftime
+        Default: 'h16_%Y%m_buf'
+    """
+
+    def __init__(self, path, month_path_str='h16_%Y%m_buf'):
+        day_search_str = 'h16_%Y%m%d_*.buf'
+        file_search_str = 'h16_{datetime}*.buf'
+        super(H16img, self).__init__(path, month_path_str=month_path_str,
+                                     day_search_str=day_search_str,
+                                     file_search_str=file_search_str)
+
+
+class H101img(AscatSsmNrt):
+    """
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        if the files are stored in folders by month as is the standard on the HSAF FTP Server
+        then please specify the string that should be used in datetime.datetime.strftime
+        Default: 'h101_%Y%m_buf'
+    """
+
+    def __init__(self, path, month_path_str='h101_%Y%m_buf'):
+        day_search_str = 'h101_%Y%m%d_*.buf'
+        file_search_str = 'h101_{datetime}*.buf'
+        filename_datetime_format = (5, 20, '%Y%m%d_%H%M%S')
+        super(H101img, self).__init__(path, month_path_str=month_path_str,
+                                      day_search_str=day_search_str,
+                                      file_search_str=file_search_str,
+                                      filename_datetime_format=filename_datetime_format)
+
+
+class H102img(AscatSsmNrt):
+    """
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        if the files are stored in folders by month as is the standard on the HSAF FTP Server
+        then please specify the string that should be used in datetime.datetime.strftime
+        Default: 'h102_%Y%m_buf'
+    """
+
+    def __init__(self, path, month_path_str='h102_%Y%m_buf'):
+        day_search_str = 'h102_%Y%m%d_*.buf'
+        file_search_str = 'h102_{datetime}*.buf'
+        filename_datetime_format = (5, 20, '%Y%m%d_%H%M%S')
+        super(H102img, self).__init__(path, month_path_str=month_path_str,
+                                      day_search_str=day_search_str,
+                                      file_search_str=file_search_str,
+                                      filename_datetime_format=filename_datetime_format)
+
+
+class H103img(AscatSsmNrt):
+    """
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        if the files are stored in folders by month as is the standard on the HSAF FTP Server
+        then please specify the string that should be used in datetime.datetime.strftime
+        Default: 'h103_%Y%m_buf'
+    """
+
+    def __init__(self, path, month_path_str='h103_%Y%m_buf'):
+        day_search_str = 'h103_%Y%m%d_*.buf'
+        file_search_str = 'h103_{datetime}*.buf'
+        filename_datetime_format = (5, 20, '%Y%m%d_%H%M%S')
+        super(H103img, self).__init__(path, month_path_str=month_path_str,
+                                      day_search_str=day_search_str,
+                                      file_search_str=file_search_str,
+                                      filename_datetime_format=filename_datetime_format)
 
 
 class H14Single(ImageBase):

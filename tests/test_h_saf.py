@@ -119,6 +119,183 @@ class Test_H07(unittest.TestCase):
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
+class Test_H16(unittest.TestCase):
+
+    def setUp(self):
+        data_path = os.path.join(
+            os.path.dirname(__file__),  'test-data', 'sat', 'h_saf', 'h16')
+        self.reader = H_SAF.H16img(data_path, month_path_str='')
+
+    def tearDown(self):
+        self.reader = None
+
+    def test_offset_getting(self):
+        """
+        test getting the image offsets for a known day
+        2010-05-01
+        """
+        timestamps = self.reader.tstamps_for_daterange(
+            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
+        timestamps_should = [datetime.datetime(
+            2017, 2, 20, 11, 0, 0) + datetime.timedelta(minutes=3) * n for n in range(8)]
+        assert sorted(timestamps) == sorted(timestamps_should)
+
+    def test_image_reading(self):
+        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+            datetime.datetime(2017, 2, 20, 11, 15, 0))
+
+        ssm_should = np.array([0., 3.6, 7.8, 8.2, 12.3, 14.7, 21.6, 26.7,
+                               30.6, 32.2, 43., 50.5, 46.3, 47.6, 58.])
+
+        lats_should = np.array([-28.25222, -28.21579, -28.1789, -28.14155,
+                                -28.10374, -28.06547, -28.02674, -27.98755, -27.94791, -27.90782,
+                                -27.86727, -27.82627, -27.78482, -27.74292, -27.70058, ])
+
+        ssm_mean_should = np.array([32.8, 35.1, 37.8, 39.2, 39., 38., 36.2,
+                                    39.6, 43.8, 45.6, 46.1, 47., 43.7, 46., 46.7])
+
+        nptest.assert_allclose(lats[798:813], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['ssm'][798:813], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['ssm mean'][798:813],
+                               ssm_mean_should,
+                               atol=0.01)
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
+class Test_H101(unittest.TestCase):
+
+    def setUp(self):
+        data_path = os.path.join(
+            os.path.dirname(__file__),  'test-data', 'sat', 'h_saf', 'h101')
+        self.reader = H_SAF.H101img(data_path, month_path_str='')
+
+    def tearDown(self):
+        self.reader = None
+
+    def test_offset_getting(self):
+        """
+        test getting the image offsets for a known day
+        2010-05-01
+        """
+        timestamps = self.reader.tstamps_for_daterange(
+            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
+        timestamps_should = [datetime.datetime(
+            2017, 2, 20, 10, 24, 0) + datetime.timedelta(minutes=3) * n for n in range(8)]
+        assert sorted(timestamps) == sorted(timestamps_should)
+
+    def test_image_reading(self):
+        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+            datetime.datetime(2017, 2, 20, 10, 42, 0))
+
+        ssm_should = np.array([26.1, 31.5, 49.5, 64.3, 80.3, 87.9, 24.5, 18.5,
+                               20., 12.9, 6.3, 3.1, 3.5, 5.7, 2., 0., 4.6, 8., 9.6, 11.8])
+
+        lats_should = np.array([56.26292, 56.29267, 56.32112, 56.34827,
+                                56.37413, 56.39868, 51.98611, 52.08869, 52.19038, 52.29117, 52.39104,
+                                52.48999, 52.58802, 52.68512, 52.78127, 52.87648, 52.97073, 53.06402,
+                                53.15634, 53.24768])
+
+        ssm_mean_should = np.array([22.8, 27., 31.8, 38.3, 44.3, 52.4, 24.8,
+                                    27.8, 24.7, 23.9, 22.8, 25., 25.6, 26.1, 25.9, 26.9, 28.5, 27.8, 24.3,
+                                    22.7])
+
+        nptest.assert_allclose(lats[1800:1820], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['ssm'][1800:1820], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['ssm mean'][1800:1820],
+                               ssm_mean_should,
+                               atol=0.01)
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
+class Test_H102(unittest.TestCase):
+
+    def setUp(self):
+        data_path = os.path.join(
+            os.path.dirname(__file__),  'test-data', 'sat', 'h_saf', 'h102')
+        self.reader = H_SAF.H102img(data_path, month_path_str='')
+
+    def tearDown(self):
+        self.reader = None
+
+    def test_offset_getting(self):
+        """
+        test getting the image offsets for a known day
+        2010-05-01
+        """
+        timestamps = self.reader.tstamps_for_daterange(
+            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
+        timestamps_should = [datetime.datetime(
+            2017, 2, 20, 10, 24, 0) + datetime.timedelta(minutes=3) * n for n in range(8)]
+        assert sorted(timestamps) == sorted(timestamps_should)
+
+    def test_image_reading(self):
+        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+            datetime.datetime(2017, 2, 20, 10, 42, 0))
+
+        ssm_should = np.array([45.8, 43.5, 41.7, 42.7, 38.6, 31.1, 23.4, 21.7,
+                               23.6, 26.8, 30.5, 30.1, 32.7, 34.7, 35.8, 38.3, 46.2, 53.7, 46.2])
+
+        lats_should = np.array([43.16844, 43.21142, 43.25423, 43.29686,
+                                43.33931, 43.38158, 43.42367, 43.46558, 43.50731, 43.54887, 43.59024,
+                                43.63143, 43.67243, 43.71326, 43.7539, 43.79436, 43.83463, 43.87472,
+                                43.91463])
+
+        ssm_mean_should = np.array([50.8, 44.5, 36.3, 29.9, 28.7, 29.1, 30.,
+                                    30.1, 30.8, 33., 34.9, 35.7, 35.2, 34.2, 32.9, 32.9, 34.5, 32.7,
+                                    30.6])
+
+        nptest.assert_allclose(lats[0:19], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['ssm'][0:19], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['ssm mean'][0:19],
+                               ssm_mean_should,
+                               atol=0.01)
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
+class Test_H103(unittest.TestCase):
+
+    def setUp(self):
+        data_path = os.path.join(
+            os.path.dirname(__file__),  'test-data', 'sat', 'h_saf', 'h103')
+        self.reader = H_SAF.H103img(data_path, month_path_str='')
+
+    def tearDown(self):
+        self.reader = None
+
+    def test_offset_getting(self):
+        """
+        test getting the image offsets for a known day
+        2010-05-01
+        """
+        timestamps = self.reader.tstamps_for_daterange(
+            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
+        timestamps_should = [datetime.datetime(
+            2017, 2, 20, 10, 30, 0) + datetime.timedelta(minutes=3) * n for n in range(8)]
+        assert sorted(timestamps) == sorted(timestamps_should)
+
+    def test_image_reading(self):
+        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+            datetime.datetime(2017, 2, 20, 10, 30, 0))
+
+        ssm_should = np.array([20.4, 15.2, 4.2, 0., 0.7, 6.8, 14.2, 21.9,
+                               23.7, 17.4, 14.8, 19.8, 15.4, 17.1, 28.9, 28.5, 23.9, 18.1, 25.4])
+
+        lats_should = np.array([8.82896, 8.85636, 8.88373, 8.91107, 8.93837,
+                                8.96564, 8.99288, 9.02009, 9.04726, 9.0744, 9.1015, 9.12858, 9.15561,
+                                9.18262, 9.20959, 9.23653, 9.26343, 9.2903, 9.31713])
+
+        ssm_mean_should = np.array([14., 14., 13.8, 13.5, 13.3, 13.1, 12.8,
+                                    12.6, 12.6, 12., 12.1, 12.6, 13.2, 14.1, 13.9, 12.4, 10.9, 10.3,
+                                    10.7])
+
+        nptest.assert_allclose(lats[0:19], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['ssm'][0:19], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['ssm mean'][0:19],
+                               ssm_mean_should,
+                               atol=0.01)
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_H14(unittest.TestCase):
 
     def setUp(self):
