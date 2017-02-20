@@ -63,9 +63,15 @@ image products:
 * SM DAS 2 - H14 - Profile index in the roots region by scatterometer data
   assimilation in GRIB format, global
 
-The products H07, H16, H101, H102, H103 come in BUFR format and can be read by
-the same reader. So examples for the H07 product are equally valid for the other
-products.
+The products H07, H16, H101, H102, H103 come in the same BUFR format. Since the
+default filenames are slightly different the following readers should be used:
+
+* H16 - ascat.h_saf.H16img
+* H101 - ascat.h_saf.H101img
+* H102 - ascat.h_saf.H102img
+* H103 - ascat.h_saf.H103img
+* H07 - ascat.h_saf.H07img
+
 
 They are available after registration from the `H-SAF Website
 <http://hsaf.meteoam.it/soil-moisture.php>`_
