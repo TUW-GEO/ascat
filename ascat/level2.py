@@ -55,6 +55,8 @@ class AscatL2SsmBufrFile(ImageBase):
     - H103 SSM ASCAT-B NRT O 25.0 Metop-B ASCAT NRT SSM orbit geometry 25 km sampling
     - H104 SSM ASCAT-C NRT O 12.5 Metop-C ASCAT NRT SSM orbit geometry 12.5 km sampling
     - H105 SSM ASCAT-C NRT O 25.0 Metop-C ASCAT NRT SSM orbit geometry 25 km sampling
+    - EUMETSAT ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in BUFR format
+    - EUMETSAT ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in BUFR format
 
     Parameters
     ----------
@@ -63,19 +65,45 @@ class AscatL2SsmBufrFile(ImageBase):
     mode : str, optional
         Opening mode. Default: r
     msg_name_lookup: dict, optional
-        Dictionary mapping bufr msg number to parameter name. See `ASCAT BUFR format table`_
+        Dictionary mapping bufr msg number to parameter name. See :ref:`ascatformattable`.
+
+        Default:
+
+             === =====================================================
+             Key Value
+             === =====================================================
+             6   'Direction Of Motion Of Moving Observing Platform',
+             16  'Orbit Number',
+             65  'Surface Soil Moisture (Ms)',
+             66  'Estimated Error In Surface Soil Moisture',
+             67  'Backscatter',
+             68  'Estimated Error In Sigma0 At 40 Deg Incidence Angle',
+             69  'Slope At 40 Deg Incidence Angle',
+             70  'Estimated Error In Slope At 40 Deg Incidence Angle',
+             71  'Soil Moisture Sensitivity',
+             72  'Dry Backscatter',
+             73  'Wet Backscatter',
+             74  'Mean Surface Soil Moisture',
+             75  'Rain Fall Detection',
+             76  'Soil Moisture Correction Flag',
+             77  'Soil Moisture Processing Flag',
+             78  'Soil Moisture Quality',
+             79  'Snow Cover',
+             80  'Frozen Land Surface Fraction',
+             81  'Inundation And Wetland Fraction',
+             82  'Topographic Complexity'
+             === =====================================================
     """
 
-    def __init__(self, filename, mode='r', msg_name_lookup=None,  **kwargs):
+    def __init__(self, filename, mode='r', msg_name_lookup=None, **kwargs):
         """
         Initialization of i/o object.
 
         """
-        self.filename = filename
-        self.mode = mode
-        self.kwargs = kwargs
+        super(AscatL2SsmBufrFile, self).__init__(filename, mode=mode,
+                                                 **kwargs)
         if msg_name_lookup is None:
-            self.msg_name_lookup = {
+            msg_name_lookup = {
                 6: "Direction Of Motion Of Moving Observing Platform",
                 16: "Orbit Number",
                 65: "Surface Soil Moisture (Ms)",
@@ -96,6 +124,7 @@ class AscatL2SsmBufrFile(ImageBase):
                 80: "Frozen Land Surface Fraction",
                 81: "Inundation And Wetland Fraction",
                 82: "Topographic Complexity"}
+        self.msg_name_lookup = msg_name_lookup
 
     def read(self, timestamp=None):
         """
@@ -153,8 +182,8 @@ class AscatL2SsmBufrFile(ImageBase):
                 dates.append(pd.DatetimeIndex(df).to_julian_date().values)
 
                 # read optional data fields
-                for mid in msg_name_lookup:
-                    name = msg_name_lookup[mid]
+                for mid in self.msg_name_lookup:
+                    name = self.msg_name_lookup[mid]
 
                     if name not in data:
                         data[name] = []
@@ -165,8 +194,8 @@ class AscatL2SsmBufrFile(ImageBase):
         longitude = np.concatenate(longitude)
         latitude = np.concatenate(latitude)
 
-        for mid in msg_name_lookup:
-            name = msg_name_lookup[mid]
+        for mid in self.msg_name_lookup:
+            name = self.msg_name_lookup[mid]
             data[name] = np.concatenate(data[name])
             if mid == 74:
                 # ssm mean is encoded differently
@@ -193,8 +222,7 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
     The images have the same structure as the ASCAT 3 minute pdu files
     and these 2 readers could be merged in the future
     The images have to be uncompressed in the following folder structure
-    path -
-         month_path_str (default 'h07_%Y%m_buf')
+    path - month_path_str (default 'h07_%Y%m_buf')
 
     For example if path is set to /home/user/hsaf07 and month_path_str is left to the default 'h07_%Y%m_buf'
     then the images for March 2012 have to be in
@@ -226,7 +254,8 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
                  day_search_str='h07_%Y%m%d_*.buf',
                  file_search_str='h07_{datetime}*.buf',
                  datetime_format='%Y%m%d_%H%M%S',
-                 filename_datetime_format=(4, 19, '%Y%m%d_%H%M%S')):
+                 filename_datetime_format=(4, 19, '%Y%m%d_%H%M%S'),
+                 msg_name_lookup=None):
         self.path = path
         self.month_path_str = month_path_str
         self.day_search_str = day_search_str
@@ -289,8 +318,8 @@ class AscatL2Ssm125NcFile(ImageBase):
         """
         reads from the netCDF file given by the filename
 
-        Returns:
-        --------
+        Returns
+        -------
         data : pygeobase.object_base.Image
         """
 

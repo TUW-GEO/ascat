@@ -57,14 +57,34 @@ let's inspect the data
 .. parsed-literal::
 
     <type 'dict'>
-    The following variables are in this image ['snow_cover', 'topo_complex', 'ssm', 'jd', 'ssm_noise', 'frozen_prob']
+    The following variables are in this image
+   ["Direction Of Motion Of Moving Observing Platform",
+    "Orbit Number",
+    "Surface Soil Moisture (Ms)",
+    "Estimated Error In Surface Soil Moisture",
+    "Backscatter",
+    "Estimated Error In Sigma0 At 40 Deg Incidence Angle",
+    "Slope At 40 Deg Incidence Angle",
+    "Estimated Error In Slope At 40 Deg Incidence Angle",
+    "Soil Moisture Sensitivity",
+    "Dry Backscatter",
+    "Wet Backscatter",
+    "Mean Surface Soil Moisture",
+    "Rain Fall Detection",
+    "Soil Moisture Correction Flag",
+    "Soil Moisture Processing Flag",
+    "Soil Moisture Quality",
+    "Snow Cover",
+    "Frozen Land Surface Fraction",
+    "Inundation And Wetland Fraction",
+    "Topographic Complexity"]
 
 
 let's inspect surface soil moisture (ssm)
 
 .. code:: python
 
-    print h07_data['ssm'].shape
+    print h07_data['Surface Soil Moisture (Ms)'].shape
     # it is only a 1D array to plot the data we also need latitude and logitude information
     print lons.shape
     print lats.shape
@@ -105,7 +125,7 @@ H07 data is not that easy to plot because it comes in orbit geometry and not on 
                 lat_ts=50.,ax=ax)
     
     # make a pseudocolor plot using the ASCAT SWI colormap
-    im = m.pcolormesh(lons_grid, lats_grid, resampled_data['ssm'], latlon=True,
+    im = m.pcolormesh(lons_grid, lats_grid, resampled_data['Surface Soil Moisture (Ms)'], latlon=True,
              cmap=smcolormaps.load('SWI_ASCAT'))
     
     m.drawcoastlines()
