@@ -83,3 +83,55 @@ class AscatBL2Ssm125(AscatL2SsmBufr):
                                              file_search_str=file_search_str,
                                              datetime_format=datetime_format,
                                              filename_datetime_format=filename_datetime_format)
+
+
+class AscatAL2Ssm250(AscatL2SsmBufr):
+    """
+    ASCAT A Level2 Soil Moisture at 25.0 km Swath Grid BUFR files from EUMETSAT
+
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        If the data is stored in subpaths per year or month then specify the string
+        that should be used in datetime.datetime.strftime to get the subpath for a file.
+        Default: ''
+    """
+
+    def __init__(self, path, month_path_str=''):
+        day_search_str = 'M02-ASCA-ASCSMO02-NA-5.0-%Y%m%d*.bfr'
+        file_search_str = 'M02-ASCA-ASCSMO02-NA-5.0-{datetime}*.bfr'
+        datetime_format = '%Y%m%d%H%M%S'
+        filename_datetime_format = (25, 39, '%Y%m%d%H%M%S')
+        super(AscatAL2Ssm250, self).__init__(path, month_path_str=month_path_str,
+                                             day_search_str=day_search_str,
+                                             file_search_str=file_search_str,
+                                             datetime_format=datetime_format,
+                                             filename_datetime_format=filename_datetime_format)
+
+
+class AscatBL2Ssm250(AscatL2SsmBufr):
+    """
+    ASCAT B Level2 Soil Moisture at 25.0 km Swath Grid BUFR files from EUMETSAT
+
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        If the data is stored in subpaths per year or month then specify the string
+        that should be used in datetime.datetime.strftime to get the subpath for a file.
+        Default: ''
+    """
+
+    def __init__(self, path, month_path_str=''):
+        day_search_str = 'M01-ASCA-ASCSMO02-NA-5.0-%Y%m%d*.bfr'
+        file_search_str = 'M01-ASCA-ASCSMO02-NA-5.0-{datetime}*.bfr'
+        datetime_format = '%Y%m%d%H%M%S'
+        filename_datetime_format = (25, 39, '%Y%m%d%H%M%S')
+        super(AscatBL2Ssm250, self).__init__(path, month_path_str=month_path_str,
+                                             day_search_str=day_search_str,
+                                             file_search_str=file_search_str,
+                                             datetime_format=datetime_format,
+                                             filename_datetime_format=filename_datetime_format)
