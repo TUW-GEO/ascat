@@ -34,7 +34,6 @@ Created on May 21, 2014
 import os
 from datetime import datetime, timedelta
 import numpy as np
-import pandas as pd
 import warnings
 
 from pygeobase.io_base import ImageBase
@@ -42,6 +41,7 @@ from pygeobase.io_base import MultiTemporalImageBase
 from pygeobase.object_base import Image
 
 import ascat.bufr as bufr_reader
+from ascat.level2 import AscatL2SsmBufr
 try:
     import pygrib
 except ImportError:
@@ -314,255 +314,11 @@ class H08img(MultiTemporalImageBase):
         return timestamps
 
 
-class AscatSsmNrtSingle(ImageBase):
-    """
-    Reads ASCAT SSM NRT images in BUFR format. There are the
-    following products:
-
-    - H101 SSM ASCAT-A NRT O 12.5 Metop-A ASCAT NRT SSM orbit geometry 12.5 km sampling
-    - H102 SSM ASCAT-A NRT O 25.0 Metop-A ASCAT NRT SSM orbit geometry 25 km sampling
-    - H16  SSM ASCAT-B NRT O 12.5 Metop-B ASCAT NRT SSM orbit geometry 12.5 km sampling
-    - H103 SSM ASCAT-B NRT O 25.0 Metop-B ASCAT NRT SSM orbit geometry 25 km sampling
-    - H104 SSM ASCAT-C NRT O 12.5 Metop-C ASCAT NRT SSM orbit geometry 12.5 km sampling
-    - H105 SSM ASCAT-C NRT O 25.0 Metop-C ASCAT NRT SSM orbit geometry 25 km sampling
-    """
-
-    def read(self, timestamp=None):
-        """
-        Read specific image for given datetime timestamp.
-
-        Parameters
-        ----------
-        timestamp : datetime.datetime
-            exact observation timestamp of the image that should be read
-
-        Returns
-        -------
-        data : dict
-            dictionary of numpy arrays that hold the image data for each
-            variable of the dataset
-        metadata : dict
-            dictionary of numpy arrays that hold the metadata
-        timestamp : datetime.datetime
-            exact timestamp of the image
-        lon : numpy.array or None
-            array of longitudes, if None self.grid will be assumed
-        lat : numpy.array or None
-            array of latitudes, if None self.grid will be assumed
-        time_var : string or None
-            variable name of observation times in the data dict, if None all
-            observations have the same timestamp
-        """
-
-        latitude = []
-        longitude = []
-        ssm = []
-        dates = []
-        orbit_number = []
-        direction_of_motion = []
-        ssm_sens = []
-        frozen_lsf = []
-        snow_cover = []
-        topo_complex = []
-        ssm_noise = []
-        ssm_mean = []
-        beam_ident = []
-        azimuth = []
-        incidence = []
-        sig0 = []
-        sigma40 = []
-        sigma40_noise = []
-
-        with bufr_reader.BUFRReader(self.filename) as bufr:
-            for message in bufr.messages():
-
-                latitude.append(message[:, 12])
-                longitude.append(message[:, 13])
-                ssm.append(message[:, 64])
-                orbit_number.append(message[:, 15])
-                direction_of_motion.append(message[:, 5])
-                ssm_sens.append(message[:, 70])
-                frozen_lsf.append(message[:, 79])
-                snow_cover.append(message[:, 78])
-                topo_complex.append(message[:, 81])
-                ssm_noise.append(message[:, 65])
-                ssm_mean.append(message[:, 73])
-                sigma40.append(message[:, 66])
-                sigma40_noise.append(message[:, 67])
-
-                beam_ident.append([message[:, 20],
-                                   message[:, 34],
-                                   message[:, 48]])
-                incidence.append([message[:, 21],
-                                  message[:, 35],
-                                  message[:, 49]])
-                azimuth.append([message[:, 22],
-                                message[:, 36],
-                                message[:, 50]])
-                sig0.append([message[:, 23],
-                             message[:, 37],
-                             message[:, 51]])
-
-                years = message[:, 6].astype(int)
-                months = message[:, 7].astype(int)
-                days = message[:, 8].astype(int)
-                hours = message[:, 9].astype(int)
-                minutes = message[:, 10].astype(int)
-                seconds = message[:, 11].astype(int)
-
-                df = pd.to_datetime(pd.DataFrame({'month': months,
-                                                  'year': years,
-                                                  'day': days,
-                                                  'hour': hours,
-                                                  'minute': minutes,
-                                                  'second': seconds}))
-                dates.append(pd.DatetimeIndex(df).to_julian_date().values)
-
-        ssm = np.concatenate(ssm)
-        latitude = np.concatenate(latitude)
-        longitude = np.concatenate(longitude)
-        orbit_number = np.concatenate(orbit_number)
-        direction_of_motion = np.concatenate(direction_of_motion)
-        ssm_sens = np.concatenate(ssm_sens)
-        frozen_lsf = np.concatenate(frozen_lsf)
-        snow_cover = np.concatenate(snow_cover)
-        topo_complex = np.concatenate(topo_complex)
-        ssm_noise = np.concatenate(ssm_noise)
-        ssm_mean = np.concatenate(ssm_mean)
-        dates = np.concatenate(dates)
-        sigma40 = np.concatenate(sigma40)
-        sigma40_noise = np.concatenate(sigma40_noise)
-
-        data = {'ssm': ssm,
-                'ssm_noise': ssm_noise,
-                'snow cover': snow_cover,
-                'frozen prob': frozen_lsf,
-                'topo complex': topo_complex,
-                'orbit number': orbit_number,
-                'ssm sensitivity': ssm_sens,
-                'frozen prob': frozen_lsf,
-                'snow prob': snow_cover,
-                'ssm mean': ssm_mean * 100,
-                'sigma40': sigma40,
-                'sigma40 noise': sigma40_noise,
-                'direction of motion': direction_of_motion,
-                'jd': dates
-                }
-
-        return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
-
-    def write(self, data):
-        raise NotImplementedError()
-
-    def flush(self):
-        pass
-
-    def close(self):
-        pass
-
-
-class AscatSsmNrt(MultiTemporalImageBase):
-
-    """
-    Class for reading HSAF ASCAt SSM images in bufr format.
-    The images have the same structure as the ASCAT 3 minute pdu files
-    and these 2 readers could be merged in the future
-    The images have to be uncompressed in the following folder structure
-    path -
-         month_path_str (default 'h07_%Y%m_buf')
-
-    For example if path is set to /home/user/hsaf07 and month_path_str is left to the default 'h07_%Y%m_buf'
-    then the images for March 2012 have to be in
-    the folder /home/user/hsaf07/h07_201203_buf/
-
-    Parameters
-    ----------
-    path: string
-        path where the data is stored
-    month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on the HSAF FTP Server
-        then please specify the string that should be used in datetime.datetime.strftime
-        Default: 'h07_%Y%m_buf'
-    day_search_str: string, optional
-        to provide an iterator over all images of a day the method _get_possible_timestamps
-        looks for all available images on a day on the harddisk. This string is used in
-        datetime.datetime.strftime and in glob.glob to search for all files on a day.
-        Default : 'h07_%Y%m%d_*.buf'
-    file_search_str: string, optional
-        this string is used in datetime.datetime.strftime and glob.glob to find
-        a 3 minute bufr file by the exact date.
-        Default: 'h07_{datetime}*.buf'
-    datetime_format: string, optional
-        datetime format by which {datetime} will be replaced in file_search_str
-        Default: %Y%m%d_%H%M%S
-    """
-
-    def __init__(self, path, month_path_str='h07_%Y%m_buf',
-                 day_search_str='h07_%Y%m%d_*.buf',
-                 file_search_str='h07_{datetime}*.buf',
-                 datetime_format='%Y%m%d_%H%M%S',
-                 filename_datetime_format=(4, 19, '%Y%m%d_%H%M%S')):
-        self.path = path
-        self.month_path_str = month_path_str
-        self.day_search_str = day_search_str
-        self.file_search_str = file_search_str
-        self.filename_datetime_format = filename_datetime_format
-        super(AscatSsmNrt, self).__init__(path, AscatSsmNrtSingle, subpath_templ=[month_path_str],
-                                          fname_templ=file_search_str,
-                                          datetime_format=datetime_format,
-                                          exact_templ=False)
-
-    def _get_orbit_start_date(self, filename):
-        orbit_start_str = \
-            os.path.basename(filename)[self.filename_datetime_format[0]:
-                                       self.filename_datetime_format[1]]
-        return datetime.strptime(orbit_start_str,
-                                 self.filename_datetime_format[2])
-
-    def tstamps_for_daterange(self, startdate, enddate):
-        """
-        Get the timestamps as datetime array that are possible for the
-        given day, if the timestamps are
-
-        For this product it is not fixed but has to be looked up from
-        the hard disk since bufr files are not regular spaced and only
-        europe is in this product. For a global product a 3 minute
-        spacing could be used as a fist approximation
-
-        Parameters
-        ----------
-        start_date : datetime.date or datetime.datetime
-            start date
-        end_date : datetime.date or datetime.datetime
-            end date
-
-        Returns
-        -------
-        dates : list
-            list of datetimes
-        """
-        file_list = []
-        delta_all = enddate - startdate
-        timestamps = []
-
-        for i in range(delta_all.days + 1):
-            timestamp = startdate + timedelta(days=i)
-
-            files = self._search_files(
-                timestamp, custom_templ=self.day_search_str)
-
-            file_list.extend(sorted(files))
-
-        for filename in file_list:
-            timestamps.append(self._get_orbit_start_date(filename))
-        return timestamps
-
-
-class H07img(AscatSsmNrt):
+class H07img(AscatL2SsmBufr):
     pass
 
 
-class H16img(AscatSsmNrt):
+class H16img(AscatL2SsmBufr):
     """
     Parameters
     ----------
@@ -582,7 +338,7 @@ class H16img(AscatSsmNrt):
                                      file_search_str=file_search_str)
 
 
-class H101img(AscatSsmNrt):
+class H101img(AscatL2SsmBufr):
     """
     Parameters
     ----------
@@ -604,7 +360,7 @@ class H101img(AscatSsmNrt):
                                       filename_datetime_format=filename_datetime_format)
 
 
-class H102img(AscatSsmNrt):
+class H102img(AscatL2SsmBufr):
     """
     Parameters
     ----------
@@ -626,7 +382,7 @@ class H102img(AscatSsmNrt):
                                       filename_datetime_format=filename_datetime_format)
 
 
-class H103img(AscatSsmNrt):
+class H103img(AscatL2SsmBufr):
     """
     Parameters
     ----------
