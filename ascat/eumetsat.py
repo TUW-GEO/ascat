@@ -31,6 +31,7 @@ Readers for data downloaded from EUMETSAT data centre (UMARF)
 '''
 
 from ascat.level2 import AscatL2SsmBufr
+from ascat.level2 import AscatL2SsmNc
 
 
 class AscatAL2Ssm125(AscatL2SsmBufr):
@@ -135,3 +136,107 @@ class AscatBL2Ssm250(AscatL2SsmBufr):
                                              file_search_str=file_search_str,
                                              datetime_format=datetime_format,
                                              filename_datetime_format=filename_datetime_format)
+
+
+class AscatAL2Ssm125Nc(AscatL2SsmNc):
+    """
+    ASCAT A Level2 Soil Moisture at 12.5 km Swath Grid NetCDF files from EUMETSAT
+
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        If the data is stored in subpaths per year or month then specify the string
+        that should be used in datetime.datetime.strftime to get the subpath for a file.
+        Default: ''
+    """
+
+    def __init__(self, path, month_path_str=''):
+        day_search_str = 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.nc'
+        file_search_str = 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_{datetime}*_125_ssm_l2.nc'
+        datetime_format = '%Y%m%d%H%M%S'
+        filename_datetime_format = (62, 76, '%Y%m%d%H%M%S')
+        super(AscatAL2Ssm125Nc, self).__init__(path, month_path_str=month_path_str,
+                                               day_search_str=day_search_str,
+                                               file_search_str=file_search_str,
+                                               datetime_format=datetime_format,
+                                               filename_datetime_format=filename_datetime_format)
+
+
+class AscatBL2Ssm125Nc(AscatL2SsmNc):
+    """
+    ASCAT B Level2 Soil Moisture at 12.5 km Swath Grid NetCDF files from EUMETSAT
+
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        If the data is stored in subpaths per year or month then specify the string
+        that should be used in datetime.datetime.strftime to get the subpath for a file.
+        Default: ''
+    """
+
+    def __init__(self, path, month_path_str=''):
+        day_search_str = 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.nc'
+        file_search_str = 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_{datetime}*_125_ssm_l2.nc'
+        datetime_format = '%Y%m%d%H%M%S'
+        filename_datetime_format = (62, 76, '%Y%m%d%H%M%S')
+        super(AscatBL2Ssm125Nc, self).__init__(path, month_path_str=month_path_str,
+                                               day_search_str=day_search_str,
+                                               file_search_str=file_search_str,
+                                               datetime_format=datetime_format,
+                                               filename_datetime_format=filename_datetime_format)
+
+
+class AscatAL2Ssm250Nc(AscatL2SsmNc):
+    """
+    ASCAT A Level2 Soil Moisture at 25 km Swath Grid NetCDF files from EUMETSAT
+
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        If the data is stored in subpaths per year or month then specify the string
+        that should be used in datetime.datetime.strftime to get the subpath for a file.
+        Default: ''
+    """
+
+    def __init__(self, path, month_path_str=''):
+        day_search_str = 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_%Y%m%d*_250_ssm_l2.nc'
+        file_search_str = 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_{datetime}*_250_ssm_l2.nc'
+        datetime_format = '%Y%m%d%H%M%S'
+        filename_datetime_format = (62, 76, '%Y%m%d%H%M%S')
+        super(AscatAL2Ssm250Nc, self).__init__(path, month_path_str=month_path_str,
+                                               day_search_str=day_search_str,
+                                               file_search_str=file_search_str,
+                                               datetime_format=datetime_format,
+                                               filename_datetime_format=filename_datetime_format)
+
+
+class AscatBL2Ssm250Nc(AscatL2SsmNc):
+    """
+    ASCAT B Level2 Soil Moisture at 25 km Swath Grid NetCDF files from EUMETSAT
+
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        If the data is stored in subpaths per year or month then specify the string
+        that should be used in datetime.datetime.strftime to get the subpath for a file.
+        Default: ''
+    """
+
+    def __init__(self, path, month_path_str=''):
+        day_search_str = 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_%Y%m%d*_250_ssm_l2.nc'
+        file_search_str = 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_{datetime}*250_ssm_l2.nc'
+        datetime_format = '%Y%m%d%H%M%S'
+        filename_datetime_format = (62, 76, '%Y%m%d%H%M%S')
+        super(AscatBL2Ssm250Nc, self).__init__(path, month_path_str=month_path_str,
+                                               day_search_str=day_search_str,
+                                               file_search_str=file_search_str,
+                                               datetime_format=datetime_format,
+                                               filename_datetime_format=filename_datetime_format)

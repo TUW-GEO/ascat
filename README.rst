@@ -89,11 +89,11 @@ At the moment this package supports the following products:
 * ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in BUFR format
   :py:class:`ascat.eumetsat.AscatAL2Ssm125` and :py:class:`ascat.eumetsat.AscatBL2Ssm125`.
 * ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in netCDF format
-  ``ascat.eumetsat.AscatAL2Ssm125Nc`` and ``ascat.eumetsat.AscatBL2Ssm125Nc``.
+  :py:class:`ascat.eumetsat.AscatAL2Ssm125Nc` and :py:class:`ascat.eumetsat.AscatBL2Ssm125Nc`.
 * ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in BUFR format
   :py:class:`ascat.eumetsat.AscatAL2Ssm250` and :py:class:`ascat.eumetsat.AscatBL2Ssm250`.
 * ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in netCDF format
-  ``ascat.eumetsat.AscatAL2Ssm250Nc`` and ``ascat.eumetsat.AscatBL2Ssm250Nc``.
+  :py:class:`ascat.eumetsat.AscatAL2Ssm250Nc` and :py:class:`ascat.eumetsat.AscatBL2Ssm250Nc`.
 
 Documentation
 =============
