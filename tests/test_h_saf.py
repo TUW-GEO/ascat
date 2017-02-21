@@ -112,8 +112,9 @@ class Test_H07(unittest.TestCase):
                                     0.536,  0.704,  0.466]) * 100
 
         nptest.assert_allclose(lats[25:-1:30], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['ssm'][15:-1:20], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['ssm mean'][15:-1:20],
+        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
+                               15:-1:20], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['Mean Surface Soil Moisture'][15:-1:20],
                                ssm_mean_should,
                                atol=0.01)
 
@@ -155,8 +156,9 @@ class Test_H16(unittest.TestCase):
                                     39.6, 43.8, 45.6, 46.1, 47., 43.7, 46., 46.7])
 
         nptest.assert_allclose(lats[798:813], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['ssm'][798:813], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['ssm mean'][798:813],
+        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
+                               798:813], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['Mean Surface Soil Moisture'][798:813],
                                ssm_mean_should,
                                atol=0.01)
 
@@ -200,8 +202,9 @@ class Test_H101(unittest.TestCase):
                                     22.7])
 
         nptest.assert_allclose(lats[1800:1820], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['ssm'][1800:1820], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['ssm mean'][1800:1820],
+        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
+                               1800:1820], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['Mean Surface Soil Moisture'][1800:1820],
                                ssm_mean_should,
                                atol=0.01)
 
@@ -245,8 +248,9 @@ class Test_H102(unittest.TestCase):
                                     30.6])
 
         nptest.assert_allclose(lats[0:19], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['ssm'][0:19], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['ssm mean'][0:19],
+        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
+                               0:19], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['Mean Surface Soil Moisture'][0:19],
                                ssm_mean_should,
                                atol=0.01)
 
@@ -289,8 +293,9 @@ class Test_H103(unittest.TestCase):
                                     10.7])
 
         nptest.assert_allclose(lats[0:19], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['ssm'][0:19], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['ssm mean'][0:19],
+        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
+                               0:19], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['Mean Surface Soil Moisture'][0:19],
                                ssm_mean_should,
                                atol=0.01)
 

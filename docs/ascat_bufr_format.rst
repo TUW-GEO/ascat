@@ -1,3 +1,5 @@
+.. _ascatformattable:
+
 ASCAT BUFR format table
 =======================
 

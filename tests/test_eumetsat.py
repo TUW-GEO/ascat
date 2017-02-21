@@ -83,8 +83,9 @@ class Test_ASCAT_A_L2_SSM_125_BUFR(unittest.TestCase):
                                     31., 31.3, 31.9, 32.1])
 
         nptest.assert_allclose(lats[:25], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['ssm'][:25], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['ssm mean'][:25],
+        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
+                               :25], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['Mean Surface Soil Moisture'][:25],
                                ssm_mean_should,
                                atol=0.01)
 
@@ -132,7 +133,8 @@ class Test_ASCAT_B_L2_SSM_125_BUFR(unittest.TestCase):
                                     19.7, 20.3, 21.5, 22.9])
 
         nptest.assert_allclose(lats[:25], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['ssm'][:25], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['ssm mean'][:25],
+        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
+                               :25], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['Mean Surface Soil Moisture'][:25],
                                ssm_mean_should,
                                atol=0.01)
