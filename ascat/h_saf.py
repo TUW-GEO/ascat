@@ -224,8 +224,7 @@ class H08img(MultiTemporalImageBase):
 
     """
     Reads HSAF H08 images. The images have to be uncompressed in the following folder structure
-    path -
-         month_path_str (default 'h08_%Y%m_buf')
+    path - month_path_str (default 'h08_%Y%m_buf')
 
     For example if path is set to /home/user/hsaf08 and month_path_str is left to the default 'h08_%Y%m_buf'
     then the images for March 2012 have to be in
@@ -501,8 +500,7 @@ class H14img(MultiTemporalImageBase):
     """
     Class for reading HSAF H14 SM DAS 2 products in grib format
     The images have to be uncompressed in the following folder structure
-    path -
-         month_path_str (default 'h14_%Y%m_grib')
+    path - month_path_str (default 'h14_%Y%m_grib')
 
     For example if path is set to /home/user/hsaf14 and month_path_str is left to the default 'h14_%Y%m_grib'
     then the images for March 2012 have to be in

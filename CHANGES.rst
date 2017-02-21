@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 0.4
+===========
+
+- Restructure ASCAT swath readers and add support for NetCDF, BUFR and BUFR PDU
+  files from EUMETSAT.
+
 Version 0.3
 ===========
 
