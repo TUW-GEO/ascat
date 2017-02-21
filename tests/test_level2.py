@@ -112,9 +112,11 @@ class Test_AscatL2SsmNcFile(unittest.TestCase):
     def test_image_reading(self):
         data, meta, timestamp, lons, lats, time_var = self.reader.read()
 
-        ssm_should = np.array([3., 0., 0., 0., 0., 0., 0., 0., 0., 1.8, 3.3,
-                               4.8, 4.3, 2.5, 0., 3.8, 5.8, 1.5, 2.4, 4.1, 2.3,
-                               2.7, 5.6, 5.5, 4.9])
+        ssm_should = np.array([2.96000004, 0., 0., 0., 0., 0., 0., 0., 0.,
+                               1.82999992, 3.32999992, 4.78999996, 4.31999969,
+                               2.53999996, 0., 3.83999991, 5.76999998, 1.5,
+                               2.44000006, 4.11999989, 2.25999999, 2.65999985,
+                               5.5999999, 5.53999996, 4.85999966])
 
         lats_should = np.array([62.60224, 62.67133, 62.74015, 62.80871, 62.877,
                                 62.94502, 63.01276, 63.08024, 63.14743,
@@ -123,17 +125,22 @@ class Test_AscatL2SsmNcFile(unittest.TestCase):
                                 63.7394, 63.80372, 63.86773, 63.93144,
                                 63.99485, 64.05795, 64.12075, 64.18323])
 
-        ssm_mean_should = np.array([21.3, 21.3, 21.4, 22.4, 23.4, 24.5, 26.,
-                                    27.1, 27., 26.6, 27.1, 27.6, 27.4, 26.7,
-                                    26.5, 27.5, 28.2, 28.4, 28.8, 29.2, 30.,
-                                    31., 31.3, 31.9, 32.1])
+        ssm_mean_should = np.array([21.26000023, 21.27999878, 21.38999939,
+                                    22.43000031, 23.36999893, 24.51000023,
+                                    26.01000023, 27.04999924, 26.94999886,
+                                    26.63999939, 27.09999847, 27.56999969,
+                                    27.43000031, 26.64999962, 26.53999901,
+                                    27.48999977, 28.20999908, 28.38999939,
+                                    28.79999924, 29.21999931, 30.01000023,
+                                    30.97999954, 31.27999878, 31.8599987,
+                                    32.05999756])
 
         nptest.assert_allclose(lats[:25], lats_should, atol=1e-5)
         nptest.assert_allclose(data['soil_moisture'][
-                               :25], ssm_should, atol=0.01)
+                               :25], ssm_should, atol=1e-5)
         nptest.assert_allclose(data['mean_soil_moisture'][:25],
                                ssm_mean_should,
-                               atol=0.01)
+                               atol=1e-5)
 
 
 class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
