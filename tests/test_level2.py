@@ -38,6 +38,8 @@ import pytest
 import unittest
 import sys
 from ascat.level2 import AscatL2SsmBufr
+from ascat.level2 import AscatL2SsmBufrFile
+from ascat.level2 import AscatL2SsmNcFile
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
@@ -92,3 +94,116 @@ class Test_AscatL2SsmBufr_ioclass_kws(unittest.TestCase):
         nptest.assert_allclose(data['ssm mean'][15:-1:20],
                                ssm_mean_should,
                                atol=0.01)
+
+
+class Test_AscatL2SsmNcFile(unittest.TestCase):
+
+    def setUp(self):
+        data_path = os.path.join(
+            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_125', 'nc')
+        fname = os.path.join(
+            data_path,
+            'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20170220041500_53652_eps_o_125_ssm_l2.nc')
+        self.reader = AscatL2SsmNcFile(fname)
+
+    def tearDown(self):
+        self.reader = None
+
+    def test_image_reading(self):
+        data, meta, timestamp, lons, lats, time_var = self.reader.read()
+
+        ssm_should = np.array([3., 0., 0., 0., 0., 0., 0., 0., 0., 1.8, 3.3,
+                               4.8, 4.3, 2.5, 0., 3.8, 5.8, 1.5, 2.4, 4.1, 2.3,
+                               2.7, 5.6, 5.5, 4.9])
+
+        lats_should = np.array([62.60224, 62.67133, 62.74015, 62.80871, 62.877,
+                                62.94502, 63.01276, 63.08024, 63.14743,
+                                63.21435, 63.28098, 63.34734, 63.41341,
+                                63.47919, 63.54468, 63.60988, 63.67479,
+                                63.7394, 63.80372, 63.86773, 63.93144,
+                                63.99485, 64.05795, 64.12075, 64.18323])
+
+        ssm_mean_should = np.array([21.3, 21.3, 21.4, 22.4, 23.4, 24.5, 26.,
+                                    27.1, 27., 26.6, 27.1, 27.6, 27.4, 26.7,
+                                    26.5, 27.5, 28.2, 28.4, 28.8, 29.2, 30.,
+                                    31., 31.3, 31.9, 32.1])
+
+        nptest.assert_allclose(lats[:25], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['soil_moisture'][
+                               :25], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['mean_soil_moisture'][:25],
+                               ssm_mean_should,
+                               atol=0.01)
+
+
+class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
+
+    def setUp(self):
+        data_path = os.path.join(
+            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_125')
+        fname_nc = os.path.join(
+            data_path, 'nc',
+            'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20170220041500_53652_eps_o_125_ssm_l2.nc')
+        self.reader_nc = AscatL2SsmNcFile(fname_nc)
+
+        fname_bufr = os.path.join(
+            data_path, 'bufr', 'M02-ASCA-ASCSMR02-NA-5.0-20170220041500.000000000Z-20170220055656-1207110.bfr')
+        self.reader_bufr = AscatL2SsmBufrFile(fname_bufr)
+
+    def tearDown(self):
+        self.reader_nc = None
+        self.reader_bufr = None
+
+    def test_image_reading(self):
+        data_nc, meta, timestamp, lons_nc, lats_nc, time_var_nc = self.reader_nc.read()
+        data_bufr, meta, timestamp, lons_bufr, lats_bufr, time_var_bufr = self.reader_bufr.read()
+
+        nptest.assert_allclose(lats_nc, lats_bufr, atol=1e-4)
+
+        nc_bufr_matching = {
+            'slope40':                   'Slope At 40 Deg Incidence Angle',
+            'sigma40_error':             'Estimated Error In Sigma0 At 40 Deg Incidence Angle',
+            'utc_line_nodes':            None,
+            'jd':                        'jd',
+            'wet_backscatter':           'Wet Backscatter',
+            'swath_indicator':           None,
+            'frozen_soil_probability':   'Frozen Land Surface Fraction',
+            'wetland_flag':              'Inundation And Wetland Fraction',
+            # The processing flag definition between BUFR and netCDF is slightly different
+            # 'proc_flag1':                'Soil Moisture Processing Flag',
+            'proc_flag2':                None,
+            'abs_line_number':           None,
+            'sat_track_azi':             None,
+            'sigma40':                   'Backscatter',
+            'soil_moisture':             'Surface Soil Moisture (Ms)',
+            'soil_moisture_error':       'Estimated Error In Surface Soil Moisture',
+            'rainfall_flag':             'Rain Fall Detection',
+            'soil_moisture_sensitivity': 'Soil Moisture Sensitivity',
+            'corr_flags':                'Soil Moisture Correction Flag',
+            'dry_backscatter':           'Dry Backscatter',
+            'aggregated_quality_flag':   None,
+            'mean_soil_moisture':        'Mean Surface Soil Moisture',
+            'as_des_pass':               None,
+            'slope40_error':             'Estimated Error In Slope At 40 Deg Incidence Angle',
+            'topography_flag':           'Topographic Complexity',
+            'snow_cover_probability':    'Snow Cover'}
+
+        # 'Direction Of Motion Of Moving Observing Platform']
+        # BUFR files contain less accurate data so we only compare to one 0.1
+        # accuracy.
+        for nc_name in nc_bufr_matching:
+            bufr_name = nc_bufr_matching[nc_name]
+            if bufr_name is None:
+                continue
+
+            # flags and probabilities do not have the same NaN value so we mask
+            # the invalid values for comparison
+            if nc_name in ['snow_cover_probability',
+                           'rainfall_flag',
+                           'topography_flag']:
+                valid = np.where(data_nc[nc_name] != 255)
+                data_nc[nc_name] = data_nc[nc_name][valid]
+                data_bufr[bufr_name] = data_bufr[bufr_name][valid]
+
+            nptest.assert_allclose(data_nc[nc_name],
+                                   data_bufr[bufr_name], atol=0.1)

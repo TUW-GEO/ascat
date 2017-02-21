@@ -203,6 +203,14 @@ class AscatL2SsmBufrFile(ImageBase):
 
         data['jd'] = dates
 
+        if 65 in self.msg_name_lookup:
+            # mask all the arrays based on fill_value of soil moisture
+            valid_data = np.where(data[self.msg_name_lookup[65]] != 1.7e+38)
+            latitude = latitude[valid_data]
+            longitude = longitude[valid_data]
+            for name in data:
+                data[name] = data[name][valid_data]
+
         return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
 
     def write(self, data):
@@ -313,7 +321,17 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
         return timestamps
 
 
-class AscatL2Ssm125NcFile(ImageBase):
+class AscatL2SsmNcFile(ImageBase):
+
+    def __init__(self, filename, mode='r', nc_variables=None, **kwargs):
+        """
+        Initialization of i/o object.
+
+        """
+        super(AscatL2SsmNcFile, self).__init__(filename, mode=mode,
+                                               **kwargs)
+        self.nc_variables = nc_variables
+        self.ds = None
 
     def read(self, timestamp=None):
         """
@@ -327,61 +345,48 @@ class AscatL2Ssm125NcFile(ImageBase):
         if self.ds is None:
             self.ds = netCDF4.Dataset(self.filename)
 
+        if self.nc_variables is None:
+            var_to_read = self.ds.variables.keys()
+        else:
+            var_to_read = self.nc_variables
+
+        # make sure that essential variables are read always:
+        if 'latitude' not in var_to_read:
+            var_to_read.append('latitude')
+        if 'longitude' not in var_to_read:
+            var_to_read.append('longitude')
+
         # store data in dictionary
         dd = {}
 
-        for name in ['latitude', 'longitude', 'soil_moisture',
-                     'soil_moisture_sensitivity', 'frozen_soil_probability',
-                     'snow_cover_probability', 'topography_flag',
-                     'soil_moisture_error', 'mean_soil_moisture',
-                     'sigma40', 'sigma40_error', 'wetland_flag',
-                     'wet_backscatter', 'dry_backscatter',
-                     'slope40', 'slope40_error',
-                     'proc_flag1', 'corr_flags']:
-            dd[name] = self.ds.variables[name][:].flatten()
+        num_cells = self.ds.dimensions['numCells'].size
+        for name in var_to_read:
+            variable = self.ds.variables[name]
+            dd[name] = variable[:].flatten()
+            if len(variable.shape) == 1:
+                # If the data is 1D then we repeat it for each cell
+                dd[name] = np.repeat(dd[name], num_cells)
 
-        # dates are stored as UTC line nodes
-        # this means that each row in the array has the same
-        # time stamp
-        utc_ln = self.ds.variables['utc_line_nodes']
-        utc_dates = netCDF4.num2date(utc_ln[:], utc_ln.units)
-        dates = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
-        # get the shape of the initial arrays in the netCDF
-        orig_shape = self.ds.variables['latitude'].shape
-        dd['dates'] = np.repeat(dates,
-                                orig_shape[1]).reshape(orig_shape).flatten()
-        # as_des_pass is stored as a 1D array in the netCDF
-        # we convert it into 2D to have a boolean value for each observation
-        dd['ascending pass'] = np.repeat(self.ds.variables['as_des_pass'][:],
-                                         orig_shape[1]).reshape(orig_shape).flatten().astype(np.bool)
+            if name == 'utc_line_nodes':
+                utc_dates = netCDF4.num2date(dd[name], variable.units)
+                dd['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
 
-        # the variables below are not stored in the netCDF file so
-        # they are filled with nan values
-        dd['orbit_number'] = np.full_like(dd['latitude'], np.nan)
-        dd['direction_of_motion'] = np.full_like(dd['latitude'], np.nan)
+        if 'soil_moisture' in dd:
+            # mask all the arrays based on fill_value of latitude
+            valid_data = ~dd['soil_moisture'].mask
+            for name in dd:
+                dd[name] = dd[name][valid_data]
 
-        # mask all the arrays based on fill_value of soil moisture
-        valid_data = ~dd['soil_moisture'].mask
-        for name in dd:
-            dd[name] = dd[name][valid_data]
+        longitude = dd.pop('longitude')
+        latitude = dd.pop('latitude')
 
-        data = {'ssm': dd['soil_moisture'],
-                'ssm noise': dd['soil_moisture_error'],
-                'topo complex': dd['topography_flag'],
-                'ssm sensitivity': dd['soil_moisture_sensitivity'],
-                'frozen prob': dd['frozen_soil_probability'],
-                'snow prob': dd['snow_cover_probability'],
-                'ssm mean': dd['mean_soil_moisture'],
-                'sigma40': dd['sigma40'],
-                'sigma40 noise': dd['sigma40_error'],
-                'ascending pass': dd['ascending pass'],
-                'wetland prob': dd['wetland_flag'],
-                'wet reference': dd['wet_backscatter'],
-                'dry reference': dd['dry_backscatter'],
-                'slope40': dd['slope40'],
-                'slope40 noise': dd['slope40_error'],
-                'processing flag': dd['proc_flag1'],
-                'correction flag': dd['corr_flags'],
-                'jd': dd['dates']}
+        return Image(longitude, latitude, dd, {}, timestamp, timekey='utc_line_nodes')
 
-        return Image(dd['longitude'], dd['latitude'], data, {}, timestamp, timekey='jd')
+    def write(self, data):
+        raise NotImplementedError()
+
+    def flush(self):
+        pass
+
+    def close(self):
+        pass
