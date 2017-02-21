@@ -27,7 +27,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 '''
-Level 2 data readers for ASCAT data in all formats. Not specific to distributor.
+General Level 2 data readers for ASCAT data in all formats. Not specific to distributor.
 '''
 
 import os
@@ -264,7 +264,8 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
         super(AscatL2SsmBufr, self).__init__(path, AscatL2SsmBufrFile, subpath_templ=[month_path_str],
                                              fname_templ=file_search_str,
                                              datetime_format=datetime_format,
-                                             exact_templ=False)
+                                             exact_templ=False,
+                                             ioclass_kws={'msg_name_lookup': msg_name_lookup})
 
     def _get_orbit_start_date(self, filename):
         orbit_start_str = \
