@@ -30,10 +30,10 @@
 Readers for data downloaded from EUMETSAT data centre (UMARF)
 '''
 
-import ascat.h_saf as H_SAF
+from ascat.level2 import AscatL2SsmBufr
 
 
-class AscatAL2Ssm125(H_SAF.AscatSsmNrt):
+class AscatAL2Ssm125(AscatL2SsmBufr):
     """
     ASCAT A Level2 Soil Moisture at 12.5 km Swath Grid BUFR files from EUMETSAT
 
@@ -59,7 +59,7 @@ class AscatAL2Ssm125(H_SAF.AscatSsmNrt):
                                              filename_datetime_format=filename_datetime_format)
 
 
-class AscatBL2Ssm125(H_SAF.AscatSsmNrt):
+class AscatBL2Ssm125(AscatL2SsmBufr):
     """
     ASCAT B Level2 Soil Moisture at 12.5 km Swath Grid BUFR files from EUMETSAT
 

@@ -7,6 +7,7 @@ Contents
    :maxdepth: 2
 
    examples.rst
+   ascat_bufr_format
    License <license>
    Authors <authors>
    Changelog <changes>
