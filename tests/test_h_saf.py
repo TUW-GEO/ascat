@@ -141,6 +141,17 @@ class Test_H16(unittest.TestCase):
             2017, 2, 20, 11, 0, 0) + datetime.timedelta(minutes=3) * n for n in range(8)]
         assert sorted(timestamps) == sorted(timestamps_should)
 
+    def test_offset_getting_datetime_boundary(self):
+        """
+        test getting the image offsets for a known daterange,
+        checks if exact datetimes are used
+        """
+        timestamps = self.reader.tstamps_for_daterange(
+            datetime.datetime(2017, 2, 20, 11, 3), datetime.datetime(2017, 2, 20, 11, 12))
+        timestamps_should = [datetime.datetime(
+            2017, 2, 20, 11, 3, 0) + datetime.timedelta(minutes=3) * n for n in range(4)]
+        assert sorted(timestamps) == sorted(timestamps_should)
+
     def test_image_reading(self):
         data, meta, timestamp, lons, lats, time_var = self.reader.read(
             datetime.datetime(2017, 2, 20, 11, 15, 0))
