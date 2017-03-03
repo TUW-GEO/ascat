@@ -347,6 +347,9 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
 
         for filename in file_list:
             timestamps.append(self._get_orbit_start_date(filename))
+
+        timestamps = [dt for dt in timestamps if (
+            dt >= startdate and dt <= enddate)]
         return timestamps
 
 
@@ -522,4 +525,7 @@ class AscatL2SsmNc(MultiTemporalImageBase):
 
         for filename in file_list:
             timestamps.append(self._get_orbit_start_date(filename))
+
+        timestamps = [dt for dt in timestamps if dt >=
+                      startdate and dt <= enddate]
         return timestamps
