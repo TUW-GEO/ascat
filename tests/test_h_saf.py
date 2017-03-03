@@ -31,7 +31,7 @@ class Test_H08(unittest.TestCase):
         2010-05-01
         """
         timestamps = self.reader.tstamps_for_daterange(
-            datetime.datetime(2010, 5, 1), datetime.datetime(2010, 5, 1))
+            datetime.datetime(2010, 5, 1), datetime.datetime(2010, 5, 1, 12))
         timestamps_should = [datetime.datetime(2010, 5, 1, 8, 33, 1)]
         assert sorted(timestamps) == sorted(timestamps_should)
 
@@ -83,7 +83,7 @@ class Test_H07(unittest.TestCase):
         2010-05-01
         """
         timestamps = self.reader.tstamps_for_daterange(
-            datetime.datetime(2010, 5, 1), datetime.datetime(2010, 5, 1))
+            datetime.datetime(2010, 5, 1), datetime.datetime(2010, 5, 1, 12))
         timestamps_should = [datetime.datetime(2010, 5, 1, 8, 33, 1)]
         assert sorted(timestamps) == sorted(timestamps_should)
 

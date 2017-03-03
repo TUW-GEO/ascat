@@ -60,7 +60,7 @@ class Test_AscatL2SsmBufr_ioclass_kws(unittest.TestCase):
         2010-05-01
         """
         timestamps = self.reader.tstamps_for_daterange(
-            datetime.datetime(2010, 5, 1), datetime.datetime(2010, 5, 1))
+            datetime.datetime(2010, 5, 1), datetime.datetime(2010, 5, 1, 12))
         timestamps_should = [datetime.datetime(2010, 5, 1, 8, 33, 1)]
         assert sorted(timestamps) == sorted(timestamps_should)
 
