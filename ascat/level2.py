@@ -213,6 +213,61 @@ class AscatL2SsmBufrFile(ImageBase):
 
         return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
 
+    def read_masked_data(self, **kwargs):
+        """
+        It does not make sense to read a orbit file unmasked
+        so we only have a masked implementation.
+        """
+        return self.read(**kwargs)
+
+    def resample_data(self, image, index, distance, windowRadius, **kwargs):
+        """
+        Takes an image and resample (interpolate) the image data to
+        arbitrary defined locations given by index and distance.
+
+        Parameters
+        ----------
+        image : object
+            pygeobase.object_base.Image object
+        index : np.array
+            Index into image data defining a look-up table for data elements
+            used in the interpolation process for each defined target
+            location.
+        distance : np.array
+            Array representing the distances of the image data to the
+            arbitrary defined locations.
+
+        Returns
+        -------
+        image : object
+            pygeobase.object_base.Image object
+        """
+        from rs_math.windows import hamming_window
+        weights, _ = hamming_window(windowRadius, distance)
+        total_weights = np.nansum(weights, axis=1)
+
+        resOrbit = {}
+        # resample backscatter
+        for name in image.dtype.names:
+            if name in ['Soil Moisture Correction Flag',
+                        'Soil Moisture Processing Flag']:
+                # The flags are resampled by taking the minimum flag This works
+                # since any totally valid observation has the flag 0 and
+                # overrides the flagged observations. This is true in cases
+                # where the data was set to NaN by the flag as well as when the
+                # data was set to 0 or 100. The last image element is the one
+                # standing for NaN so we fill it with all flags filled to not
+                # interfere with the minimum.
+                image[name][-1] = 255
+                bits = np.unpackbits(image[name].reshape((-1, 1)).astype(np.uint8), axis=1)
+                resampled_bits = np.min(bits[index, :], axis=1)
+                resOrbit[name] = np.packbits(resampled_bits)
+            else:
+                resOrbit[name] = np.nansum(
+                    image[name][index] * weights, axis=1) / total_weights
+
+        return resOrbit
+
     def write(self, data):
         raise NotImplementedError()
 
@@ -426,6 +481,13 @@ class AscatL2SsmNcFile(ImageBase):
         latitude = dd.pop('latitude')
 
         return Image(longitude, latitude, dd, {}, timestamp, timekey='utc_line_nodes')
+
+    def read_masked_data(self, **kwargs):
+        """
+        It does not make sense to read a orbit file unmasked
+        so we only have a masked implementation.
+        """
+        return self.read(**kwargs)
 
     def write(self, data):
         raise NotImplementedError()
