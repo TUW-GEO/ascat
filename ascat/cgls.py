@@ -61,7 +61,8 @@ class SWI_TS(netcdf_dataset.GriddedNcOrthoMultiTs):
         if grid_fname is None:
             grid_fname = os.path.join(
                 data_path, 'c_gls_SWI-STATIC-DGG_201501010000_GLOBE_ASCAT_V3.0.1.nc')
-        grid = netcdf.load_grid(grid_fname, location_var_name='location_id')
+        grid = netcdf.load_grid(grid_fname, location_var_name='location_id',
+                                subset_flag='land_flag')
 
         scale_factors = {'SWI_001': 0.5,
                          'SWI_005': 0.5,
