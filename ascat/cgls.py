@@ -92,8 +92,8 @@ class SWI_TS(netcdf_dataset.GriddedNcOrthoMultiTs):
             automask=False, ioclass_kws={'read_bulk': read_bulk,
                                          'loc_ids_name': 'locations'})
 
-    def read_ts(self, gpi, period=None, mask_frozen=True):
-        data = super(SWI_TS, self).read_ts(gpi, period=period)
+    def _read_gp(self, gpi, period=None, mask_frozen=True):
+        data = super(SWI_TS, self)._read_gp(gpi, period=period)
 
         if mask_frozen is True:
             unfrozen = data['SSF'].values <= 1
