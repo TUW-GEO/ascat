@@ -34,5 +34,14 @@ def test_swi_ts_reader():
     assert len(data) == len(reference_index)
     assert np.all(data_sorted.index == reference_index)
 
+    lon, lat = rd.grid.gpi2lonlat(3002621)
+    data = rd.read_ts(lon, lat, mask_frozen=False)
+    data_sorted = data.sort_index()
+    assert np.all(data_sorted.index == data.index)
+    # just check if enough data is there
+    reference_index = pd.date_range('20070101T12:00:00', '20161231T12:00:00')
+    assert len(data) == len(reference_index)
+    assert np.all(data_sorted.index == reference_index)
+
 if __name__ == "__main__":
     test_swi_ts_reader()
