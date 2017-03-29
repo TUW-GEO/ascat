@@ -7,6 +7,7 @@ Version 0.4
 
 - Restructure ASCAT swath readers and add support for NetCDF, BUFR and BUFR PDU
   files from EUMETSAT.
+- Fix read_ts function of CGLS SWI_TS reader.
 
 Version 0.3
 ===========
