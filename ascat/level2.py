@@ -220,7 +220,7 @@ class AscatL2SsmBufrFile(ImageBase):
         """
         return self.read(**kwargs)
 
-    def resample_data(self, image, index, distance, windowRadius, **kwargs):
+    def resample_data(self, image, index, distance, weights, **kwargs):
         """
         Takes an image and resample (interpolate) the image data to
         arbitrary defined locations given by index and distance.
@@ -236,14 +236,17 @@ class AscatL2SsmBufrFile(ImageBase):
         distance : np.array
             Array representing the distances of the image data to the
             arbitrary defined locations.
+        weights : np.array
+            Array representing the weights of the image data that should be
+            used during resampling.
+            The weights of points not to use are set to np.nan
+            This array is of shape (x, max_neighbors)
 
         Returns
         -------
         image : object
             pygeobase.object_base.Image object
         """
-        from rs_math.windows import hamming_window
-        weights, _ = hamming_window(windowRadius, distance)
         total_weights = np.nansum(weights, axis=1)
 
         resOrbit = {}
