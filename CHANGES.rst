@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 0.5
+===========
+
+- Include resample interface for Level 2 BUFR data.
+
 Version 0.4
 ===========
 
