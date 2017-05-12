@@ -57,9 +57,9 @@ image products:
 
 * SM OBS 1 - H07 - Large scale surface soil moisture by radar scatterometer in
   BUFR format over Europe
-* H16 - SSM ASCAT-B NRT O : Metop-B ASCAT soil moisture 12.5km sampling NRT
+* H16 - SSM ASCAT-B NRT R : Metop-B ASCAT soil moisture 12.5km sampling NRT
 * H103 - SSM ASCAT-B NRT O : Metop-B ASCAT soil moisture 25km sampling NRT
-* H101 - SSM ASCAT-A NRT O : Metop-A ASCAT soil moisture 12.5km sampling NRT
+* H101 - SSM ASCAT-A NRT R : Metop-A ASCAT soil moisture 12.5km sampling NRT
 * H102 - SSM ASCAT-A NRT O : Metop-A ASCAT soil moisture 25km sampling NRT
 * SM OBS 2 - H08 - Small scale surface soil moisture by radar scatterometer in
   BUFR format over Europe
