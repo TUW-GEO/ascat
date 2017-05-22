@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 0.6
+===========
+
+- Fix bug when reading CGLS SWI QFLAG values.
+
 Version 0.5
 ===========
 

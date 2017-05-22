@@ -72,6 +72,14 @@ class SWI_TS(netcdf_dataset.GriddedNcOrthoMultiTs):
                          'SWI_040': 0.5,
                          'SWI_060': 0.5,
                          'SWI_100': 0.5,
+                         'QFLAG_001': 0.5,
+                         'QFLAG_005': 0.5,
+                         'QFLAG_010': 0.5,
+                         'QFLAG_015': 0.5,
+                         'QFLAG_020': 0.5,
+                         'QFLAG_040': 0.5,
+                         'QFLAG_060': 0.5,
+                         'QFLAG_100': 0.5,
                          'SSF': 1}
 
         dtypes = {'SWI_001': np.uint8,
@@ -82,6 +90,14 @@ class SWI_TS(netcdf_dataset.GriddedNcOrthoMultiTs):
                   'SWI_040': np.uint8,
                   'SWI_060': np.uint8,
                   'SWI_100': np.uint8,
+                  'QFLAG_001': np.uint8,
+                  'QFLAG_005': np.uint8,
+                  'QFLAG_010': np.uint8,
+                  'QFLAG_015': np.uint8,
+                  'QFLAG_020': np.uint8,
+                  'QFLAG_040': np.uint8,
+                  'QFLAG_060': np.uint8,
+                  'QFLAG_100': np.uint8,
                   'SSF': np.uint8}
 
         super(SWI_TS, self).__init__(
