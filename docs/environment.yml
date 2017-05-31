@@ -9,3 +9,4 @@ dependencies:
 - sphinx>1.5
 - pip:
     - pynetcf
+    - pygeobase

@@ -39,6 +39,7 @@ import netCDF4
 
 from pygeobase.io_base import ImageBase
 from pygeobase.io_base import MultiTemporalImageBase
+from pygeobase.io_base import IntervalReadingMixin
 from pygeobase.object_base import Image
 
 from ascat.bufr import BUFRReader
@@ -262,7 +263,8 @@ class AscatL2SsmBufrFile(ImageBase):
                 # standing for NaN so we fill it with all flags filled to not
                 # interfere with the minimum.
                 image[name][-1] = 255
-                bits = np.unpackbits(image[name].reshape((-1, 1)).astype(np.uint8), axis=1)
+                bits = np.unpackbits(image[name].reshape(
+                    (-1, 1)).astype(np.uint8), axis=1)
                 resampled_bits = np.min(bits[index, :], axis=1)
                 resOrbit[name] = np.packbits(resampled_bits)
             else:
@@ -409,6 +411,37 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
         timestamps = [dt for dt in timestamps if (
             dt >= startdate and dt <= enddate)]
         return timestamps
+
+
+class AscatL2SsmBufrChunked(IntervalReadingMixin, AscatL2SsmBufr):
+    """
+    Reads BUFR files but does not return them on a file by file basis but in
+    bigger chunks. For example it allows to read multiple 3 minute PDU's in
+    half orbit chunks of 50 minutes. This speeds up operations like e.g.
+    resampling of the data.
+
+    Parameters
+    ----------
+    chunk_minutes: int, optional
+        How many minutes should a chunk of data cover.
+    """
+
+    def __init__(self, path, month_path_str='h07_%Y%m_buf',
+                 day_search_str='h07_%Y%m%d_*.buf',
+                 file_search_str='h07_{datetime}*.buf',
+                 datetime_format='%Y%m%d_%H%M%S',
+                 filename_datetime_format=(4, 19, '%Y%m%d_%H%M%S'),
+                 msg_name_lookup=None, chunk_minutes=50):
+
+        super(AscatL2SsmBufrChunked, self).__init__(
+            path,
+            month_path_str=month_path_str,
+            day_search_str=day_search_str,
+            file_search_str=file_search_str,
+            datetime_format=datetime_format,
+            filename_datetime_format=filename_datetime_format,
+            msg_name_lookup=msg_name_lookup,
+            chunk_minutes=chunk_minutes)
 
 
 class AscatL2SsmNcFile(ImageBase):

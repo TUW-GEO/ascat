@@ -38,6 +38,7 @@ import pytest
 import unittest
 import sys
 from ascat.level2 import AscatL2SsmBufr
+from ascat.level2 import AscatL2SsmBufrChunked
 from ascat.level2 import AscatL2SsmBufrFile
 from ascat.level2 import AscatL2SsmNcFile
 
@@ -214,3 +215,26 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
 
             nptest.assert_allclose(data_nc[nc_name],
                                    data_bufr[bufr_name], atol=0.1)
+
+
+def test_AscatL2SsmBufrChunked():
+
+    data_path = os.path.join(
+        os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_125', 'PDU')
+    day_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.bin'
+    file_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_{datetime}*_125_ssm_l2.bin'
+    datetime_format = '%Y%m%d%H%M%S'
+    filename_datetime_format = (63, 77, '%Y%m%d%H%M%S')
+    reader = AscatL2SsmBufrChunked(data_path, month_path_str='',
+                                   day_search_str=day_search_str,
+                                   file_search_str=file_search_str,
+                                   datetime_format=datetime_format,
+                                   filename_datetime_format=filename_datetime_format)
+
+    intervals = reader.tstamps_for_daterange(datetime.datetime(2017, 2, 20, 5),
+                                             datetime.datetime(2017, 2, 20, 6))
+    data = reader.read(intervals[0])
+    assert len(data.metadata.keys()) == 3
+    assert data.data['jd'].shape == (23145,)
+    assert data.lon.shape == (23145,)
+    assert data.lat.shape == (23145,)

@@ -6,6 +6,7 @@ Version 0.6
 ===========
 
 - Fix bug when reading CGLS SWI QFLAG values.
+- Add chunked half-orbit readers for the three minute PDU BUFR files.
 
 Version 0.5
 ===========
