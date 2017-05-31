@@ -146,7 +146,7 @@ class AscatL1NcFile(ImageBase):
                 arr.fill(attribute)
                 data[field] = arr
 
-            data['node_num'] = np.arange(1, nodes + 1).repeat(rows)
+            data['node_num'] = np.tile(np.arange(1, nodes + 1), rows)
             data['line_num'] = np.arange(rows).repeat(nodes)
 
             fields = ['azi_angle_trip', 'inc_angle_trip',
@@ -156,6 +156,9 @@ class AscatL1NcFile(ImageBase):
             for field in fields:
                 for i, beam in enumerate(self.beams):
                     arr = ds.variables[field][:, :, i].flatten()
+                    if field == 'azi_angle_trip':
+                        mask = arr < 0
+                        arr[mask] = arr[mask] + 360
 
                     field_name = field
                     if field in name_translation:
@@ -163,22 +166,33 @@ class AscatL1NcFile(ImageBase):
 
                     data[field_name + beam] = arr
 
-            fields = ['processor_major_version',
-                      'product_minor_version', 'format_major_version',
-                      'format_minor_version']
+            metadata_fields = ['processor_major_version',
+                               'product_minor_version', 'format_major_version',
+                               'format_minor_version']
             metadata = {}
-            for field in fields:
-                metadata[field] = ds.getncattr(field)
+            for field in metadata_fields:
+                attribute = ds.getncattr(field)
+                arr = np.empty(nodes * rows, dtype=type(attribute))
+                arr.fill(attribute)
+                metadata[field] = arr
 
             lons = ds.variables['longitude'][:].flatten()
             lats = ds.variables['latitude'][:].flatten()
 
             for field in data:
+                try:
+                    data[field] = data[field].filled()
+                except AttributeError:
+                    pass
                 if field in name_translation:
                     data[name_translation[field]] = data[field]
                     del data[field]
 
             for field in metadata:
+                try:
+                    metadata[field] = metadata[field].filled()
+                except AttributeError:
+                    pass
                 if field in name_translation:
                     metadata[name_translation[field]] = metadata[field]
                     del metadata[field]
@@ -198,7 +212,7 @@ class AscatL1NcFile(ImageBase):
 
         for b in self.beams:
             valid = (valid & (orbit.data['f_usable' + b] < 2))
-            valid = (valid & (orbit.data['f_land' + b] > 95))
+            valid = (valid & (orbit.data['f_land' + b] > 0.95))
         for key in orbit.data.keys():
             orbit.data[key] = orbit.data[key][valid]
         for key in orbit.metadata.keys():

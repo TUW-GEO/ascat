@@ -30,7 +30,6 @@
 Tests for general level 1 readers.
 '''
 
-import unittest
 import os
 import numpy.testing as nptest
 from ascat.level1 import AscatL1NcFile
@@ -56,15 +55,61 @@ def test_ascat_l1_netcdf_reading():
             'f_refm', 'f_kpm', 'kpf', 'f_kpa', 'f_vm', 'f_refa', 'kpm',
             'f_kpf', 'spacecraft_id', 'abs_orbit_nr', 'line_num']
     assert sorted(data_nc.keys()) == sorted(keys)
-    meta_should = {'processor_major_version': u'10',
-                   'format_minor_version': u'0',
-                   'processor_minor_version': u'0',
-                   'format_major_version': u'12'}
-    assert meta_should == meta
+    meta_keys = ['processor_major_version',
+                 'format_minor_version',
+                 'processor_minor_version',
+                 'format_major_version']
+    assert sorted(meta.keys()) == sorted(meta_keys)
     assert lons_nc.shape == (275520,)
     assert lats_nc.shape == (275520,)
     for key in keys:
         data_nc[key].shape == (275520,)
+    for key in meta_keys:
+        meta[key].shape == (275520,)
+    assert data_nc['node_num'][1] == 2
+
+    nptest.assert_almost_equal(data_nc['jd'][0], 2457754.55833333)
+    nptest.assert_almost_equal(data_nc['spacecraft_id'][2332], 2)
+    # check if azimuth was converted to 0-360 degrees
+    nptest.assert_almost_equal(data_nc['azia'][0], 285.5)
+    # check lon, lat bounds
+    nptest.assert_almost_equal(lats_nc.min(), -89.331665774459225)
+    nptest.assert_almost_equal(lats_nc.max(), 89.226732774724155)
+    nptest.assert_almost_equal(lons_nc.min(), -179.97620654560376)
+    nptest.assert_almost_equal(lons_nc.max(), 179.99058954556745)
+
+
+def test_ascat_l1_netcdf_reading_masked_data():
+
+    data_path = os.path.join(
+        os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L1_SZR_NC')
+    fname_nc = os.path.join(
+        data_path,
+        'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20170101012400_52940_eps_o_125_l1.nc')
+    reader_nc = AscatL1NcFile(fname_nc)
+
+    data_nc, meta, timestamp, lons_nc, lats_nc, time_var_nc = reader_nc.read_masked_data()
+    keys = ['siga', 'f_ff', 'f_usablea', 'f_usablef', 'sat_track_azi',
+            'sigf', 'f_fm', 'sigm', 'f_usablem', 'f_saa', 'f_saf',
+            'swath_indicator', 'f_tela', 'f_telf', 'f_sam', 'f_oam',
+            'f_fa', 'f_vf', 'f_oaf', 'f_oaa', 'inca',
+            'node_num', 'incf', 'num_valf', 'as_des_pass', 'incm',
+            'f_landm', 'azia', 'azif', 'f_va', 'f_landf', 'f_landa', 'azim',
+            'f_reff', 'f_telm', 'jd', 'num_valm', 'num_vala', 'kpa',
+            'f_refm', 'f_kpm', 'kpf', 'f_kpa', 'f_vm', 'f_refa', 'kpm',
+            'f_kpf', 'spacecraft_id', 'abs_orbit_nr', 'line_num']
+    assert sorted(data_nc.keys()) == sorted(keys)
+    meta_keys = ['processor_major_version',
+                 'format_minor_version',
+                 'processor_minor_version',
+                 'format_major_version']
+    assert sorted(meta.keys()) == sorted(meta_keys)
+    assert lons_nc.shape == (104898,)
+    assert lats_nc.shape == (104898,)
+    for key in keys:
+        data_nc[key].shape == (104898,)
+    for key in meta_keys:
+        meta[key].shape == (104898,)
     nptest.assert_almost_equal(data_nc['jd'][0], 2457754.55833333)
     nptest.assert_almost_equal(data_nc['spacecraft_id'][2332], 2)
 
