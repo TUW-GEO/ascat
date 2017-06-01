@@ -126,9 +126,11 @@ class AscatAL2Ssm125PDUChunked(AscatL2SsmBufrChunked):
         If the data is stored in subpaths per year or month then specify the string
         that should be used in datetime.datetime.strftime to get the subpath for a file.
         Default: ''
+    chunk_minutes: int, optional
+        How many minutes should a chunk of data cover.
     """
 
-    def __init__(self, path, month_path_str=''):
+    def __init__(self, path, month_path_str='', chunk_minutes=100):
         day_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPA+ASCAT_C_EUMC_%Y%m%d*_125_ssm_l2.bin'
         file_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPA+ASCAT_C_EUMC_{datetime}*_125_ssm_l2.bin'
         datetime_format = '%Y%m%d%H%M%S'
@@ -137,7 +139,8 @@ class AscatAL2Ssm125PDUChunked(AscatL2SsmBufrChunked):
                                                        day_search_str=day_search_str,
                                                        file_search_str=file_search_str,
                                                        datetime_format=datetime_format,
-                                                       filename_datetime_format=filename_datetime_format)
+                                                       filename_datetime_format=filename_datetime_format,
+                                                       chunk_minutes=chunk_minutes)
 
 
 class AscatBL2Ssm125PDU(AscatL2SsmBufr):
@@ -179,9 +182,11 @@ class AscatBL2Ssm125PDUChunked(AscatL2SsmBufrChunked):
         If the data is stored in subpaths per year or month then specify the string
         that should be used in datetime.datetime.strftime to get the subpath for a file.
         Default: ''
+    chunk_minutes: int, optional
+        How many minutes should a chunk of data cover.
     """
 
-    def __init__(self, path, month_path_str=''):
+    def __init__(self, path, month_path_str='', chunk_minutes=100):
         day_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.bin'
         file_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_{datetime}*_125_ssm_l2.bin'
         datetime_format = '%Y%m%d%H%M%S'
@@ -190,7 +195,8 @@ class AscatBL2Ssm125PDUChunked(AscatL2SsmBufrChunked):
                                                        day_search_str=day_search_str,
                                                        file_search_str=file_search_str,
                                                        datetime_format=datetime_format,
-                                                       filename_datetime_format=filename_datetime_format)
+                                                       filename_datetime_format=filename_datetime_format,
+                                                       chunk_minutes=chunk_minutes)
 
 
 class AscatAL2Ssm250(AscatL2SsmBufr):
@@ -283,9 +289,11 @@ class AscatAL2Ssm250PDUChunked(AscatL2SsmBufrChunked):
         If the data is stored in subpaths per year or month then specify the string
         that should be used in datetime.datetime.strftime to get the subpath for a file.
         Default: ''
+    chunk_minutes: int, optional
+        How many minutes should a chunk of data cover.
     """
 
-    def __init__(self, path, month_path_str=''):
+    def __init__(self, path, month_path_str='', chunk_minutes=100):
         day_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPA+ASCAT_C_EUMC_%Y%m%d*_250_ssm_l2.bin'
         file_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPA+ASCAT_C_EUMC_{datetime}*_250_ssm_l2.bin'
         datetime_format = '%Y%m%d%H%M%S'
@@ -294,7 +302,8 @@ class AscatAL2Ssm250PDUChunked(AscatL2SsmBufrChunked):
                                                        day_search_str=day_search_str,
                                                        file_search_str=file_search_str,
                                                        datetime_format=datetime_format,
-                                                       filename_datetime_format=filename_datetime_format)
+                                                       filename_datetime_format=filename_datetime_format,
+                                                       chunk_minutes=chunk_minutes)
 
 
 class AscatBL2Ssm250PDU(AscatL2SsmBufr):
@@ -335,9 +344,11 @@ class AscatBL2Ssm250PDUChunked(AscatL2SsmBufrChunked):
         If the data is stored in subpaths per year or month then specify the string
         that should be used in datetime.datetime.strftime to get the subpath for a file.
         Default: ''
+    chunk_minutes: int, optional
+        How many minutes should a chunk of data cover.
     """
 
-    def __init__(self, path, month_path_str=''):
+    def __init__(self, path, month_path_str='', chunk_minutes=100):
         day_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_%Y%m%d*_250_ssm_l2.bin'
         file_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_{datetime}*_250_ssm_l2.bin'
         datetime_format = '%Y%m%d%H%M%S'
@@ -346,7 +357,8 @@ class AscatBL2Ssm250PDUChunked(AscatL2SsmBufrChunked):
                                                        day_search_str=day_search_str,
                                                        file_search_str=file_search_str,
                                                        datetime_format=datetime_format,
-                                                       filename_datetime_format=filename_datetime_format)
+                                                       filename_datetime_format=filename_datetime_format,
+                                                       chunk_minutes=chunk_minutes)
 
 
 class AscatAL2Ssm125Nc(AscatL2SsmNc):
