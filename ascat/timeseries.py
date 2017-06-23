@@ -40,6 +40,7 @@ from pygeobase.object_base import TS
 from glob import glob
 
 import pygeogrids.grids as grids
+import pygeogrids.netcdf as ncgrid
 
 from datetime import datetime
 from ascat.utils import doy
@@ -1061,3 +1062,52 @@ class Ascat_SWI(Ascat_data):
                     df[self.T_QFLAG[key]][masked] = np.NAN
 
         return ASCATTimeSeries(gpi, lon, lat, cell, df)
+
+
+class AscatVODTs(GriddedNcContiguousRaggedTs):
+    """
+    Class that provides access to ASCAT VOD data stored in netCDF format.
+
+    Parameters
+    ----------
+    path : string
+        path to data folder which contains the zip files from the FTP server
+    grid_path : string
+        path to grid_info folder which contains a netcdf file with information about
+        grid point index,latitude, longitude and cell
+    grid_info_filename : string, optional
+        name of the grid info netCDF file in grid_path
+        default 'TUW_WARP5_grid_info_2_1.nc'
+
+    Attributes
+    ----------
+    path : string
+        path to data folder which contains the zip files from the FTP server
+    grid_path : string
+        path to grid_info folder which contains txt files with information about
+        grid point index,latitude, longitude and cell
+    grid_info_filename : string, optional
+        name of the grid info netCDF file in grid_path
+        default 'TUW_WARP5_grid_info_2_1.nc'
+    grid : grids.CellGrid object
+        CellGrid object, which provides nearest neighbor search and other features
+    variables : list of string        
+    """
+
+    def __init__(self, path, grid_path,
+                 grid_info_filename='TUW_WARP5_grid_info_2_1.nc',
+                 variables=None):
+
+        grid = ncgrid.load_grid(os.path.join(grid_path, grid_info_filename),
+                                subset_flag='land')
+
+        self.path = path
+        self.grid_path = grid_path
+        self.grid_info_filename = grid_info_filename
+
+        self.variables = variables
+
+        if self.variables is None:
+            self.variables = ['vod']
+
+        super(AscatVODTs, self).__init__(path, grid)

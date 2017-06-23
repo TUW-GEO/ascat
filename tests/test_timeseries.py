@@ -45,15 +45,15 @@ class TestAscat(unittest.TestCase):
 
     def setUp(self):
         self.ascat_folder = os.path.join(os.path.dirname(__file__),
-                                          'test-data', 'sat', 'ascat', 'SSM')
+                                         'test-data', 'sat', 'ascat', 'SSM')
 
         self.ascat_adv_folder = os.path.join(os.path.dirname(__file__),
-                                              'test-data', 'sat', 'ascat',
+                                             'test-data', 'sat', 'ascat',
                                              'advisory_flags')
 
         # grid info file is too big to include on github
         self.ascat_grid_folder = os.path.join(os.path.dirname(__file__),
-                                               'test-data', 'sat',
+                                              'test-data', 'sat',
                                               'ascat', 'grid')
 
         # init the ASCAT_SSM reader with the paths
@@ -92,11 +92,11 @@ class TestAscatNetCDF(unittest.TestCase):
 
     def setUp(self):
         self.ascat_folder = os.path.join(os.path.dirname(__file__),
-                                          'test-data', 'sat',
+                                         'test-data', 'sat',
                                          'ascat', 'netcdf', '55R12')
 
         self.ascat_grid_folder = os.path.join(os.path.dirname(__file__),
-                                               'test-data', 'sat',
+                                              'test-data', 'sat',
                                               'ascat', 'netcdf', 'grid')
 
         # init the ASCAT_SSM reader with the paths
@@ -208,11 +208,11 @@ class TestAscatNetCDF_V5521(unittest.TestCase):
     def setUp(self):
 
         self.ascat_folder = os.path.join(os.path.dirname(__file__),
-                                          'test-data', 'sat',
+                                         'test-data', 'sat',
                                          'ascat', 'netcdf', '55R21')
 
         self.ascat_grid_folder = os.path.join(os.path.dirname(__file__),
-                                               'test-data', 'sat',
+                                              'test-data', 'sat',
                                               'ascat', 'netcdf', 'grid')
         # init the ASCAT_SSM reader with the paths
         self.ascat_SSM_reader = ascat.AscatH25_SSM(self.ascat_folder,
@@ -269,11 +269,11 @@ class TestAscatNetCDF_V5522(unittest.TestCase):
     def setUp(self):
 
         self.ascat_folder = os.path.join(os.path.dirname(__file__),
-                                          'test-data', 'sat',
+                                         'test-data', 'sat',
                                          'ascat', 'netcdf', '55R22')
 
         self.ascat_grid_folder = os.path.join(os.path.dirname(__file__),
-                                               'test-data', 'sat',
+                                              'test-data', 'sat',
                                               'ascat', 'netcdf', 'grid')
         # init the ASCAT_SSM reader with the paths
         self.ascat_SSM_reader = ascat.AscatH25_SSM(self.ascat_folder,
@@ -323,5 +323,39 @@ class TestAscatNetCDF_V5522(unittest.TestCase):
             result.porosity_gldas, 0.539999, significant=5)
         np.testing.assert_approx_equal(
             result.porosity_hwsd, 0.4299994, significant=5)
+
+
+class TestAscatVODTs(unittest.TestCase):
+
+    def setUp(self):
+        self.ascat_folder = os.path.join(os.path.dirname(__file__),
+                                         'test-data', 'sat',
+                                         'ascat', 'netcdf', 'vod')
+
+        self.ascat_grid_folder = os.path.join(os.path.dirname(__file__),
+                                              'test-data', 'sat',
+                                              'ascat', 'netcdf', 'grid')
+
+        # init the ASCAT_SSM reader with the paths
+        self.ascat_VOD_reader = ascat.AscatVODTs(self.ascat_folder,
+                                                 self.ascat_grid_folder)
+
+    def test_read_vod(self):
+        gpi = 2199945
+        data = self.ascat_VOD_reader.read(gpi)
+        lon, lat = self.ascat_VOD_reader.grid.gpi2lonlat(gpi)
+        np.testing.assert_approx_equal(lon, 9.1312, significant=4)
+        np.testing.assert_approx_equal(lat, 42.5481, significant=4)
+
+        assert list(data.columns) == ['vod']
+        assert len(data) == 4018
+        assert data.ix[15].name == datetime(2007, 1, 16, 12, 0, 0)
+        assert data.ix[15]['vod'] == np.float32(0.62470651)
+
+    def test_neighbor_search(self):
+        gpi, distance = self.ascat_VOD_reader.grid.find_nearest_gpi(
+            3.25, 46.13)
+        assert gpi == 2346869
+        np.testing.assert_approx_equal(distance, 2267.42, significant=2)
 if __name__ == '__main__':
     unittest.main()
