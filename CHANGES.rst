@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 0.8
+===========
+
+- Add reader for ASCAT VOD time series data
+
 Version 0.7
 ===========
 
