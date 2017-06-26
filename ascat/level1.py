@@ -208,7 +208,8 @@ class AscatL1NcFile(ImageBase):
     def read_masked_data(self, **kwargs):
         orbit = self.read(**kwargs)
 
-        valid = np.ones(orbit.data[orbit.data.keys()[0]].shape, dtype=np.bool)
+        valid = np.ones(orbit.data[list(orbit.data.keys())[0]].shape,
+                        dtype=np.bool)
 
         for b in self.beams:
             valid = (valid & (orbit.data['f_usable' + b] < 2))
