@@ -144,9 +144,10 @@ class H08Single(ImageBase):
             if lon_jump_ind.size > 1:
                 print("More than one jump in longitude")
             if lon_jump_ind.size == 1:
+                lon_jump_ind = lon_jump_ind[0]
                 diff_lon_jump = np.abs(
                     lons_dim[lon_jump_ind] - lons_dim[lon_jump_ind + 1])
-                missing_elements = np.round(diff_lon_jump / 0.00416666)
+                missing_elements = int(np.round(diff_lon_jump / 0.00416666))
                 missing_lons = np.linspace(lons_dim[lon_jump_ind],
                                            lons_dim[
                                                lon_jump_ind + 1], missing_elements,
@@ -311,7 +312,8 @@ class H08img(MultiTemporalImageBase):
         for filename in file_list:
             timestamps.append(self._get_orbit_start_date(filename))
 
-        timestamps = [dt for dt in timestamps if dt >= startdate and dt <= enddate]
+        timestamps = [dt for dt in timestamps if dt >=
+                      startdate and dt <= enddate]
         return timestamps
 
 
