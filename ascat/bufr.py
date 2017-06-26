@@ -170,7 +170,7 @@ class BUFRReader(object):
             self.kelem_guess = decoded_values
             decoded_msg = ksup[5]
             # calculate first dimension of 2D array
-            factor = kvals / kelem
+            factor = int(kvals / kelem)
 
             # reshape and trim the array to the actual size of the data
             values = self.init_values.reshape((factor, kelem))
