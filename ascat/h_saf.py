@@ -1,10 +1,11 @@
-# Copyright (c) 2014,Vienna University of Technology, Department of Geodesy and Geoinformation
+# Copyright (c) 2014,Vienna University of Technology, Department of Geodesy
+# and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
-#   * Redistributions of source code must retain the above copyright
-#     notice, this list of conditions and the following disclaimer.
+#    * Redistributions of source code must retain the above copyright
+#      notice, this list of conditions and the following disclaimer.
 #    * Redistributions in binary form must reproduce the above copyright
 #      notice, this list of conditions and the following disclaimer in the
 #      documentation and/or other materials provided with the distribution.
@@ -13,28 +14,29 @@
 #      used to endorse or promote products derived from this software without
 #      specific prior written permission.
 
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL VIENNA UNIVERSITY OF TECHNOLOGY,
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL VIENNA UNIVERSITY OF TECHNOLOGY,
 # DEPARTMENT OF GEODESY AND GEOINFORMATION BE LIABLE FOR ANY
 # DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
 # (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
 # LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 # ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+# THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-'''
-Created on May 21, 2014
-
-@author: Christoph Paulik christoph.paulik@geo.tuwien.ac.at
-'''
-
+import sys
 import os
-from datetime import datetime, timedelta
-import numpy as np
 import warnings
+from datetime import datetime, timedelta
+
+import numpy as np
+try:
+    import pygrib
+except ImportError:
+    warnings.warn(
+        'pygrib can not be imported GRIB files (H14) can not be read.')
 
 from pygeobase.io_base import ImageBase
 from pygeobase.io_base import MultiTemporalImageBase
@@ -42,12 +44,7 @@ from pygeobase.object_base import Image
 
 import ascat.bufr as bufr_reader
 from ascat.level2 import AscatL2SsmBufr
-try:
-    import pygrib
-except ImportError:
-    warnings.warn('pygrib can not be imported H14 images can not be read.')
 
-import sys
 if sys.version_info < (3, 0):
     range = xrange
 
@@ -87,12 +84,14 @@ class H08Single(ImageBase):
         """
 
         with bufr_reader.BUFRReader(self.filename) as bufr:
+
             lons = []
             ssm = []
             ssm_noise = []
             ssm_corr_flag = []
             ssm_proc_flag = []
             data_in_bbox = True
+
             for i, message in enumerate(bufr.messages()):
                 if i == 0:
                     # first message is just lat, lon extent
@@ -100,19 +99,20 @@ class H08Single(ImageBase):
                     if lat_lon_bbox is not None:
                         lon_min, lon_max = message[0, 2], message[0, 3]
                         lat_min, lat_max = message[0, 4], message[0, 5]
-                        if (lat_lon_bbox[0] > lat_max or lat_lon_bbox[1] < lat_min or
-                                lat_lon_bbox[2] > lon_max or lat_lon_bbox[3] < lon_min):
+                        if (lat_lon_bbox[0] > lat_max or
+                            lat_lon_bbox[1] < lat_min or
+                            lat_lon_bbox[2] > lon_max or
+                                lat_lon_bbox[3] < lon_min):
                             data_in_bbox = False
                             break
-                    # print 'columns', math.ceil((message[:, 3] - message[:, 2]) / 0.00416667)
-                    # print 'rows', math.ceil((message[:, 5] - message[:, 4]) /
-                    # 0.00416667)
+
                 elif data_in_bbox:
-                    # first 5 elements are there only once, after that, 4 elements are repeated
-                    # till the end of the array these 4 are ssm, ssm_noise, ssm_corr_flag and
-                    # ssm_proc_flag
-                    # each message contains the values for 120 lons between lat_min and lat_max
-                    # the grid spacing is 0.00416667 degrees
+                    # first 5 elements are there only once, after that,
+                    # 4 elements are repeated till the end of the array
+                    # these 4 are ssm, ssm_noise, ssm_corr_flag and
+                    # ssm_proc_flag each message contains the values for
+                    # 120 lons between lat_min and lat_max the grid spacing
+                    # is 0.00416667 degrees
                     lons.append(message[:, 0])
                     lat_min = message[0, 1]
                     lat_max = message[0, 2]
@@ -122,6 +122,7 @@ class H08Single(ImageBase):
                     ssm_proc_flag.append(message[:, 7::4])
 
         if data_in_bbox:
+
             ssm = np.rot90(np.vstack(ssm)).astype(np.float32)
             ssm_noise = np.rot90(np.vstack(ssm_noise)).astype(np.float32)
             ssm_corr_flag = np.rot90(
@@ -137,53 +138,63 @@ class H08Single(ImageBase):
                     'corr_flag': ssm_corr_flag
                     }
 
-            # if there are is a gap in the image it is not a 2D array in lon, lat space
-            # but has a jump in latitude or longitude
+            # if there are is a gap in the image it is not a 2D array in
+            # lon, lat space but has a jump in latitude or longitude
             # detect a jump in lon or lat spacing
+
             lon_jump_ind = np.where(np.diff(lons_dim) > 0.00418)[0]
+
             if lon_jump_ind.size > 1:
                 print("More than one jump in longitude")
+
             if lon_jump_ind.size == 1:
                 lon_jump_ind = lon_jump_ind[0]
                 diff_lon_jump = np.abs(
                     lons_dim[lon_jump_ind] - lons_dim[lon_jump_ind + 1])
                 missing_elements = int(np.round(diff_lon_jump / 0.00416666))
                 missing_lons = np.linspace(lons_dim[lon_jump_ind],
-                                           lons_dim[
-                                               lon_jump_ind + 1], missing_elements,
+                                           lons_dim[lon_jump_ind + 1],
+                                           missing_elements,
                                            endpoint=False)
 
                 # fill up longitude dimension to full grid
-                lons_dim = np.concatenate(
-                    [lons_dim[:lon_jump_ind], missing_lons, lons_dim[lon_jump_ind + 1:]])
+                lons_dim = np.concatenate([lons_dim[:lon_jump_ind],
+                                           missing_lons,
+                                           lons_dim[lon_jump_ind + 1:]])
+
                 # fill data with NaN values
                 empty = np.empty((lats_dim.shape[0], missing_elements))
                 empty.fill(1e38)
                 for key in data:
                     data[key] = np.concatenate(
-                        [data[key][:, :lon_jump_ind], empty, data[key][:, lon_jump_ind + 1:]], axis=1)
+                        [data[key][:, :lon_jump_ind],
+                         empty, data[key][:, lon_jump_ind + 1:]], axis=1)
 
             lat_jump_ind = np.where(np.diff(lats_dim) > 0.00418)[0]
+
             if lat_jump_ind.size > 1:
                 print("More than one jump in latitude")
+
             if lat_jump_ind.size == 1:
                 diff_lat_jump = np.abs(
                     lats_dim[lat_jump_ind] - lats_dim[lat_jump_ind + 1])
                 missing_elements = np.round(diff_lat_jump / 0.00416666)
                 missing_lats = np.linspace(lats_dim[lat_jump_ind],
-                                           lats_dim[
-                                               lat_jump_ind + 1], missing_elements,
+                                           lats_dim[lat_jump_ind + 1],
+                                           missing_elements,
                                            endpoint=False)
 
                 # fill up longitude dimension to full grid
                 lats_dim = np.concatenate(
-                    [lats_dim[:lat_jump_ind], missing_lats, lats_dim[lat_jump_ind + 1:]])
+                    [lats_dim[:lat_jump_ind], missing_lats,
+                     lats_dim[lat_jump_ind + 1:]])
                 # fill data with NaN values
                 empty = np.empty((missing_elements, lons_dim.shape[0]))
                 empty.fill(1e38)
                 for key in data:
                     data[key] = np.concatenate(
-                        [data[key][:lat_jump_ind, :], empty, data[key][lat_jump_ind + 1:, :]], axis=0)
+                        [data[key][:lat_jump_ind, :], empty,
+                         data[key][lat_jump_ind + 1:, :]], axis=0)
 
             lons, lats = np.meshgrid(lons_dim, lats_dim)
             # only return data in bbox
@@ -195,10 +206,13 @@ class H08Single(ImageBase):
                 # indexing returns 1d array
                 # get shape of lats_dim and lons_dim to be able to reshape
                 # the 1d arrays to the correct 2d shapes
-                lats_dim_shape = np.where((lats_dim >= lat_lon_bbox[0]) &
-                                          (lats_dim <= lat_lon_bbox[1]))[0].shape[0]
-                lons_dim_shape = np.where((lons_dim >= lat_lon_bbox[2]) &
-                                          (lons_dim <= lat_lon_bbox[3]))[0].shape[0]
+                lats_dim_shape = \
+                    np.where((lats_dim >= lat_lon_bbox[0]) &
+                             (lats_dim <= lat_lon_bbox[1]))[0].shape[0]
+
+                lons_dim_shape = \
+                    np.where((lons_dim >= lat_lon_bbox[2]) &
+                             (lons_dim <= lat_lon_bbox[3]))[0].shape[0]
 
                 lons = lons[data_ind].reshape(lats_dim_shape, lons_dim_shape)
                 lats = lats[data_ind].reshape(lats_dim_shape, lons_dim_shape)
@@ -224,25 +238,27 @@ class H08Single(ImageBase):
 class H08img(MultiTemporalImageBase):
 
     """
-    Reads HSAF H08 images. The images have to be uncompressed in the following folder structure
-    path - month_path_str (default 'h08_%Y%m_buf')
+    Reads H SAF H08 images. The images have to be uncompressed in the
+    following folder structure path - month_path_str (default 'h08_%Y%m_buf')
 
-    For example if path is set to /home/user/hsaf08 and month_path_str is left to the default 'h08_%Y%m_buf'
-    then the images for March 2012 have to be in
-    the folder /home/user/hsaf08/h08_201203_buf/
+    For example if path is set to /home/user/hsaf08 and month_path_str
+    is left to the default 'h08_%Y%m_buf' then the images for March 2012
+    have to be in the folder /home/user/hsaf08/h08_201203_buf/
 
     Parameters
     ----------
     path: string
         path where the data is stored
     month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on the HSAF FTP Server
-        then please specify the string that should be used in datetime.datetime.strftime
+        if the files are stored in folders by month as is the standard on
+        the H SAF FTP Server then please specify the string that should be
+        used in datetime.datetime.strftime
         Default: 'h08_%Y%m_buf'
     day_search_str: string, optional
-        to provide an iterator over all images of a day the method _get_possible_timestamps
-        looks for all available images on a day on the harddisk. This string is used in
-        datetime.datetime.strftime and in glob.glob to search for all files on a day.
+        to provide an iterator over all images of a day the method
+        _get_possible_timestamps looks for all available images on a day on
+        the harddisk. This string is used in datetime.datetime.strftime and
+        in glob.glob to search for all files on a day.
         Default : 'h08_%Y%m%d_*.buf'
     file_search_str: string, optional
         this string is used in datetime.datetime.strftime and glob.glob to find
@@ -258,20 +274,25 @@ class H08img(MultiTemporalImageBase):
                  file_search_str='h08_{datetime}*.buf',
                  datetime_format='%Y%m%d_%H%M%S',
                  filename_datetime_format=(4, 19, '%Y%m%d_%H%M%S')):
+
         self.path = path
         self.month_path_str = month_path_str
         self.day_search_str = day_search_str
         self.file_search_str = file_search_str
         self.filename_datetime_format = filename_datetime_format
-        super(H08img, self).__init__(path, H08Single, subpath_templ=[month_path_str],
+
+        super(H08img, self).__init__(path, H08Single,
+                                     subpath_templ=[month_path_str],
                                      fname_templ=file_search_str,
                                      datetime_format=datetime_format,
                                      exact_templ=False)
 
     def _get_orbit_start_date(self, filename):
+
         orbit_start_str = \
             os.path.basename(filename)[self.filename_datetime_format[0]:
                                        self.filename_datetime_format[1]]
+
         return datetime.strptime(orbit_start_str,
                                  self.filename_datetime_format[2])
 
@@ -322,93 +343,113 @@ class H07img(AscatL2SsmBufr):
 
 
 class H16img(AscatL2SsmBufr):
+
     """
     Parameters
     ----------
     path: string
         path where the data is stored
     month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on the HSAF FTP Server
-        then please specify the string that should be used in datetime.datetime.strftime
+        if the files are stored in folders by month as is the standard on
+        the H SAF FTP Server then please specify the string that should be
+        used in datetime.datetime.strftime
         Default: 'h16_%Y%m_buf'
     """
 
     def __init__(self, path, month_path_str='h16_%Y%m_buf'):
+
         day_search_str = 'h16_%Y%m%d_*.buf'
         file_search_str = 'h16_{datetime}*.buf'
+
         super(H16img, self).__init__(path, month_path_str=month_path_str,
                                      day_search_str=day_search_str,
                                      file_search_str=file_search_str)
 
 
 class H101img(AscatL2SsmBufr):
+
     """
     Parameters
     ----------
     path: string
         path where the data is stored
     month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on the HSAF FTP Server
-        then please specify the string that should be used in datetime.datetime.strftime
+        if the files are stored in folders by month as is the standard on
+        the H SAF FTP Server then please specify the string that should
+        be used in datetime.datetime.strftime
         Default: 'h101_%Y%m_buf'
     """
 
     def __init__(self, path, month_path_str='h101_%Y%m_buf'):
+
         day_search_str = 'h101_%Y%m%d_*.buf'
         file_search_str = 'h101_{datetime}*.buf'
-        filename_datetime_format = (5, 20, '%Y%m%d_%H%M%S')
+        fn_datetime_fmt = (5, 20, '%Y%m%d_%H%M%S')
+
         super(H101img, self).__init__(path, month_path_str=month_path_str,
                                       day_search_str=day_search_str,
                                       file_search_str=file_search_str,
-                                      filename_datetime_format=filename_datetime_format)
+                                      filename_datetime_format=fn_datetime_fmt)
 
 
 class H102img(AscatL2SsmBufr):
+
     """
     Parameters
     ----------
     path: string
         path where the data is stored
     month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on the HSAF FTP Server
-        then please specify the string that should be used in datetime.datetime.strftime
+        if the files are stored in folders by month as is the standard on
+        the H SAF FTP Server then please specify the string that should be
+        used in datetime.datetime.strftime
         Default: 'h102_%Y%m_buf'
     """
 
     def __init__(self, path, month_path_str='h102_%Y%m_buf'):
+
         day_search_str = 'h102_%Y%m%d_*.buf'
         file_search_str = 'h102_{datetime}*.buf'
-        filename_datetime_format = (5, 20, '%Y%m%d_%H%M%S')
+        fn_datetime_fmt = (5, 20, '%Y%m%d_%H%M%S')
+
         super(H102img, self).__init__(path, month_path_str=month_path_str,
                                       day_search_str=day_search_str,
                                       file_search_str=file_search_str,
-                                      filename_datetime_format=filename_datetime_format)
+                                      filename_datetime_format=fn_datetime_fmt)
 
 
 class H103img(AscatL2SsmBufr):
+
     """
+    Class reading H103 Metop-A ASCAT soil moisture in BUFR format.
+
     Parameters
     ----------
     path: string
         path where the data is stored
     month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on the HSAF FTP Server
-        then please specify the string that should be used in datetime.datetime.strftime
+        if the files are stored in folders by month as is the standard on
+        the H SAF FTP Server then please specify the string that should be
+        used in datetime.datetime.strftime
         Default: 'h103_%Y%m_buf'
     """
 
     def __init__(self, path, month_path_str='h103_%Y%m_buf'):
+
         day_search_str = 'h103_%Y%m%d_*.buf'
         file_search_str = 'h103_{datetime}*.buf'
-        filename_datetime_format = (5, 20, '%Y%m%d_%H%M%S')
+        fn_datetime_fmt = (5, 20, '%Y%m%d_%H%M%S')
+
         super(H103img, self).__init__(path, month_path_str=month_path_str,
                                       day_search_str=day_search_str,
                                       file_search_str=file_search_str,
-                                      filename_datetime_format=filename_datetime_format)
+                                      filename_datetime_format=fn_datetime_fmt)
 
 
 class H14Single(ImageBase):
+
     """
+    Class reading H14 soil moisture in GRIB format.
 
     Parameters
     ----------
@@ -422,11 +463,12 @@ class H14Single(ImageBase):
     """
 
     def __init__(self, filename, mode='r', expand_grid=True,
-                 metadata_fields=['units',
-                                  'name']):
+                 metadata_fields=['units', 'name']):
+
         self.expand_grid = expand_grid
         self.metadata_fields = metadata_fields
         self.pygrib1 = True
+
         if int(pygrib.__version__[0]) > 1:
             self.pygrib1 = False
 
@@ -466,10 +508,11 @@ class H14Single(ImageBase):
                            '43': 'SM_layer4_100-289cm'}
 
         else:
-            param_names = {'SWI1 Soil wetness index in layer 1': 'SM_layer1_0-7cm',
-                           'SWI2 Soil wetness index in layer 2': 'SM_layer2_7-28cm',
-                           'SWI3 Soil wetness index in layer 3': 'SM_layer3_28-100cm',
-                           'SWI4 Soil wetness index in layer 4': 'SM_layer4_100-289cm'}
+            param_names = {
+                'SWI1 Soil wetness index in layer 1': 'SM_layer1_0-7cm',
+                'SWI2 Soil wetness index in layer 2': 'SM_layer2_7-28cm',
+                'SWI3 Soil wetness index in layer 3': 'SM_layer3_28-100cm',
+                'SWI4 Soil wetness index in layer 4': 'SM_layer4_100-289cm'}
         data = {}
         metadata = {}
 
@@ -502,24 +545,27 @@ class H14Single(ImageBase):
 class H14img(MultiTemporalImageBase):
 
     """
-    Class for reading HSAF H14 SM DAS 2 products in grib format
+    Class for reading H SAF H14 SM DAS 2 products in grib format.
+
     The images have to be uncompressed in the following folder structure
     path - month_path_str (default 'h14_%Y%m_grib')
 
-    For example if path is set to /home/user/hsaf14 and month_path_str is left to the default 'h14_%Y%m_grib'
-    then the images for March 2012 have to be in
-    the folder /home/user/hsaf14/h14_201203_grib/
+    For example if path is set to /home/user/hsaf14 and month_path_str is
+    left to the default 'h14_%Y%m_grib' then the images for March 2012 have
+    to be in the folder /home/user/hsaf14/h14_201203_grib/
 
     Parameters
     ----------
     path: string
         path where the data is stored
     month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on the HSAF FTP Server
-        then please specify the string that should be used in datetime.datetime.strftime
+        if the files are stored in folders by month as is the standard on
+        the H SAF FTP Server then please specify the string that should be
+        used in datetime.datetime.strftime
         Default: 'h14_%Y%m_grib'
     file_str: string, optional
-        this string is used in datetime.datetime.strftime to get the filename of a H14 daily grib file
+        this string is used in datetime.datetime.strftime to get the
+        filename of a H14 daily grib file
         Default: 'H14_%Y%m%d00.grib'
     datetime_format: string, optional
         datetime format by which {datetime} will be replaced in file_str
@@ -527,12 +573,13 @@ class H14img(MultiTemporalImageBase):
     """
 
     def __init__(self, path, month_path_str='h14_%Y%m_grib',
-                 file_str='H14_{datetime}00.grib',
-                 datetime_format='%Y%m%d',
+                 file_str='H14_{datetime}00.grib', datetime_format='%Y%m%d',
                  expand_grid=True):
+
         self.path = path
         self.month_path_str = month_path_str
         self.file_search_str = file_str
+
         super(H14img, self).__init__(path, H14Single,
                                      subpath_templ=[month_path_str],
                                      fname_templ=file_str,
