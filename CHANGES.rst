@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 0.7
+===========
+
+- Fix bugs in BUFR reading with newer numpy versions.
+
 Version 0.6
 ===========
 
