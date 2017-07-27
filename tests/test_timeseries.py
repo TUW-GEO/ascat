@@ -40,14 +40,12 @@ class TestAscatNcV55R12(unittest.TestCase):
 
     def setUp(self):
 
-        # path = os.path.dirname(__file__)
-        path = '/data/shahn/swdvlp/ascat/tests'
+        path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'test-data', 'sat', 'ascat', 'netcdf',
+        cdr_path = os.path.join(path, 'test-data', 'tuw', 'ascat', 'ssm',
                                 '55R12')
 
-        grid_path = os.path.join(path, 'test-data', 'sat', 'ascat', 'netcdf',
-                                 'grid')
+        grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
 
         ioclass_kws = {'loc_dim_name': 'gp', 'loc_ids_name': 'gpi'}
 
@@ -85,14 +83,12 @@ class TestAscatNcV55R21(unittest.TestCase):
 
     def setUp(self):
 
-        # path = os.path.dirname(__file__)
-        path = '/data/shahn/swdvlp/ascat/tests'
+        path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'test-data', 'sat', 'ascat', 'netcdf',
+        cdr_path = os.path.join(path, 'test-data', 'tuw', 'ascat', 'ssm',
                                 '55R21')
 
-        grid_path = os.path.join(path, 'test-data', 'sat', 'ascat', 'netcdf',
-                                 'grid')
+        grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
 
         self.ascat_reader = ascat.AscatSsmCdr(cdr_path, grid_path)
 
@@ -148,14 +144,12 @@ class TestAscatNcV55R22(unittest.TestCase):
 
     def setUp(self):
 
-        # path = os.path.dirname(__file__)
-        path = '/data/shahn/swdvlp/ascat/tests'
+        path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'test-data', 'sat', 'ascat', 'netcdf',
+        cdr_path = os.path.join(path, 'test-data', 'tuw', 'ascat', 'ssm',
                                 '55R22')
 
-        grid_path = os.path.join(path, 'test-data', 'sat', 'ascat', 'netcdf',
-                                 'grid')
+        grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
 
         self.ascat_reader = ascat.AscatSsmCdr(cdr_path, grid_path)
 
@@ -208,80 +202,6 @@ class TestAscatNcV55R22(unittest.TestCase):
     def test_neighbor_search(self):
 
         gpi, distance = self.ascat_reader.grid.find_nearest_gpi(3.25, 46.13)
-        assert gpi == 2346869
-        np.testing.assert_approx_equal(distance, 2267.42, significant=2)
-
-
-def mytest_new_intf():
-
-    import matplotlib.pyplot as plt
-
-    hsaf_path = os.path.join('/media', 'sf_R', 'Datapool_raw', 'HSAF',
-                             'datasets')
-    h25_path = os.path.join(hsaf_path, 'H25')
-    h111_path = os.path.join(hsaf_path, 'H111')
-    warp5_grid_path = os.path.join(hsaf_path, 'warp5_grid')
-
-    slayer_path = os.path.join(hsaf_path, 'static_layer')
-
-    gpi = 2404159
-
-    # grid_filename = os.path.join(warp5_grid_path, 'TUW_WARP5_grid_info_2_1.nc')
-    # cdr_reader = ascat.AscatNc(h25_path, fn_format, grid_filename)
-
-    # slayer = ascat.StaticLayers(slayer_path, grid_filename)
-    # print(slayer.topo.read(gpi))
-    # print(slayer.snow_prob.read(gpi))
-
-    # cdr_reader = ascat.AscatSsmCdr(h111_path, warp5_grid_path,
-    #                                static_layer_path=slayer_path)
-
-    cdr_reader = ascat.AscatSsmCdr(h111_path, warp5_grid_path)
-
-    ts = cdr_reader.read(gpi, mask_ssf=True, absolute_sm=True)
-
-    fig, ax = plt.subplots(1, 1)
-    # h111_ts['sm'].plot(ax=ax)
-    ts.data['sm'].plot(ax=ax)
-    ts.data['snow_prob'].plot(ax=ax)
-    ts.data['frozen_prob'].plot(ax=ax)
-
-    fig, ax = plt.subplots(1, 1)
-    ts.data['abs_sm_gldas'].plot(ax=ax)
-    ts.data['abs_sm_hwsd'].plot(ax=ax)
-    plt.show()
-
-
-class TestAscatVODTs(unittest.TestCase):
-
-    def setUp(self):
-        self.ascat_folder = os.path.join(os.path.dirname(__file__),
-                                         'test-data', 'sat',
-                                         'ascat', 'netcdf', 'vod')
-
-        self.ascat_grid_folder = os.path.join(os.path.dirname(__file__),
-                                              'test-data', 'sat',
-                                              'ascat', 'netcdf', 'grid')
-
-        # init the ASCAT_SSM reader with the paths
-        self.ascat_VOD_reader = ascat.AscatVODTs(self.ascat_folder,
-                                                 self.ascat_grid_folder)
-
-    def test_read_vod(self):
-        gpi = 2199945
-        data = self.ascat_VOD_reader.read(gpi)
-        lon, lat = self.ascat_VOD_reader.grid.gpi2lonlat(gpi)
-        np.testing.assert_approx_equal(lon, 9.1312, significant=4)
-        np.testing.assert_approx_equal(lat, 42.5481, significant=4)
-
-        assert list(data.columns) == ['vod']
-        assert len(data) == 4018
-        assert data.ix[15].name == datetime(2007, 1, 16, 12, 0, 0)
-        assert data.ix[15]['vod'] == np.float32(0.62470651)
-
-    def test_neighbor_search(self):
-        gpi, distance = self.ascat_VOD_reader.grid.find_nearest_gpi(
-            3.25, 46.13)
         assert gpi == 2346869
         np.testing.assert_approx_equal(distance, 2267.42, significant=2)
 
