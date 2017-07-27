@@ -50,8 +50,8 @@ from ascat.eumetsat import AscatAL2Ssm250Nc, AscatBL2Ssm250Nc
 class Test_ASCAT_A_L2_SSM_125_BUFR(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_125', 'bufr')
+        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+                                 'eumetsat', 'ASCAT_L2_SM_125', 'bufr')
         self.reader = AscatAL2Ssm125(data_path)
 
     def tearDown(self):
@@ -100,7 +100,8 @@ class Test_ASCAT_B_L2_SSM_125_BUFR(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_125', 'bufr')
+            os.path.dirname(__file__),  'test-data', 'eumetsat',
+            'ASCAT_L2_SM_125', 'bufr')
         self.reader = AscatBL2Ssm125(data_path)
 
     def tearDown(self):
@@ -149,8 +150,8 @@ class Test_ASCAT_B_L2_SSM_125_BUFR(unittest.TestCase):
 class Test_ASCAT_A_L2_SSM_125_BUFR_PDU(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_125', 'PDU')
+        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+                                 'eumetsat', 'ASCAT_L2_SM_125', 'PDU')
         self.reader = AscatAL2Ssm125PDU(data_path)
 
     def tearDown(self):
@@ -199,8 +200,8 @@ class Test_ASCAT_A_L2_SSM_125_BUFR_PDU(unittest.TestCase):
 class Test_ASCAT_B_L2_SSM_125_BUFR_PDU(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_125', 'PDU')
+        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+                                 'eumetsat', 'ASCAT_L2_SM_125', 'PDU')
         self.reader = AscatBL2Ssm125PDU(data_path)
 
     def tearDown(self):
@@ -251,8 +252,8 @@ class Test_ASCAT_B_L2_SSM_125_BUFR_PDU(unittest.TestCase):
 class Test_ASCAT_A_L2_SSM_250_BUFR(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_250', 'bufr')
+        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+                                 'eumetsat', 'ASCAT_L2_SM_250', 'bufr')
         self.reader = AscatAL2Ssm250(data_path)
 
     def tearDown(self):
@@ -301,8 +302,8 @@ class Test_ASCAT_A_L2_SSM_250_BUFR(unittest.TestCase):
 class Test_ASCAT_B_L2_SSM_250_BUFR(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_250', 'bufr')
+        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+                                 'eumetsat', 'ASCAT_L2_SM_250', 'bufr')
         self.reader = AscatBL2Ssm250(data_path)
 
     def tearDown(self):
@@ -351,8 +352,8 @@ class Test_ASCAT_B_L2_SSM_250_BUFR(unittest.TestCase):
 class Test_ASCAT_A_L2_SSM_250_BUFR_PDU(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_250', 'PDU')
+        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+                                 'eumetsat', 'ASCAT_L2_SM_250', 'PDU')
         self.reader = AscatAL2Ssm250PDU(data_path)
 
     def tearDown(self):
@@ -402,8 +403,8 @@ class Test_ASCAT_A_L2_SSM_250_BUFR_PDU(unittest.TestCase):
 class Test_ASCAT_B_L2_SSM_250_BUFR_PDU(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_250', 'PDU')
+        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+                                 'eumetsat', 'ASCAT_L2_SM_250', 'PDU')
         self.reader = AscatBL2Ssm250PDU(data_path)
 
     def tearDown(self):
@@ -453,8 +454,8 @@ class Test_ASCAT_B_L2_SSM_250_BUFR_PDU(unittest.TestCase):
 class Test_ASCAT_A_L2_SSM_125_NC(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_125', 'nc')
+        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+                                 'eumetsat', 'ASCAT_L2_SM_125', 'nc')
         self.reader = AscatAL2Ssm125Nc(data_path)
 
     def tearDown(self):
@@ -501,8 +502,8 @@ class Test_ASCAT_A_L2_SSM_125_NC(unittest.TestCase):
 class Test_ASCAT_B_L2_SSM_125_NC(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_125', 'nc')
+        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+                                 'eumetsat', 'ASCAT_L2_SM_125', 'nc')
         self.reader = AscatBL2Ssm125Nc(data_path)
 
     def tearDown(self):
@@ -550,8 +551,8 @@ class Test_ASCAT_B_L2_SSM_125_NC(unittest.TestCase):
 class Test_ASCAT_A_L2_SSM_250_NC(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_250', 'nc')
+        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+                                 'eumetsat', 'ASCAT_L2_SM_250', 'nc')
         self.reader = AscatAL2Ssm250Nc(data_path)
 
     def tearDown(self):
@@ -599,8 +600,8 @@ class Test_ASCAT_A_L2_SSM_250_NC(unittest.TestCase):
 class Test_ASCAT_B_L2_SSM_250_NC(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'sat', 'eumetsat', 'ASCAT_L2_SM_250', 'nc')
+        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+                                 'eumetsat', 'ASCAT_L2_SM_250', 'nc')
         self.reader = AscatBL2Ssm250Nc(data_path)
 
     def tearDown(self):
@@ -616,6 +617,7 @@ class Test_ASCAT_B_L2_SSM_250_NC(unittest.TestCase):
         assert sorted(timestamps) == sorted(timestamps_should)
 
     def test_image_reading(self):
+
         data, meta, timestamp, lons, lats, time_var = self.reader.read(
             datetime.datetime(2017, 2, 20, 5, 9))
 
@@ -643,3 +645,7 @@ class Test_ASCAT_B_L2_SSM_250_NC(unittest.TestCase):
         nptest.assert_allclose(data['mean_soil_moisture'][:25],
                                ssm_mean_should,
                                atol=0.1)
+
+
+if __name__ == '__main__':
+    unittest.main()
