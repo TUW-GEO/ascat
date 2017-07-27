@@ -38,7 +38,7 @@ import pygeogrids.grids as grids
 import pygeogrids.netcdf as ncgrid
 from pynetcf.time_series import GriddedNcContiguousRaggedTs
 
-from ascat.timeseries import ASCATTimeSeries
+from ascat.timeseries import AscatTimeSeries
 
 
 class Ascat_data(object):
@@ -428,8 +428,8 @@ class Ascat_SSM(Ascat_data):
 
         Returns
         -------
-        ASCATTimeSeries : object
-            :class:`ascat.ASCATTimeSeries` instance
+        AscatTimeSeries : object
+            :class:`ascat.AscatTimeSeries` instance
         """
         df, gpi, lon, lat, cell = super(
             Ascat_SSM, self)._read_ts(*args, **kwargs)
@@ -438,7 +438,7 @@ class Ascat_SSM(Ascat_data):
             if mask_ssf:
                 df = df[df['SSF'] == 1]
 
-        return ASCATTimeSeries(gpi, lon, lat, cell, df)
+        return AscatTimeSeries(gpi, lon, lat, cell, df)
 
 
 class Ascat_SWI(Ascat_data):
@@ -620,7 +620,7 @@ class Ascat_SWI(Ascat_data):
                     df[self.T_SWI[key]][masked] = np.NAN
                     df[self.T_QFLAG[key]][masked] = np.NAN
 
-        return ASCATTimeSeries(gpi, lon, lat, cell, df)
+        return AscatTimeSeries(gpi, lon, lat, cell, df)
 
 
 class AscatVodTs(GriddedNcContiguousRaggedTs):
