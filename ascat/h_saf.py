@@ -44,6 +44,7 @@ from pygeobase.object_base import Image
 
 import ascat.bufr as bufr_reader
 from ascat.level2 import AscatL2SsmBufr
+from ascat.timeseries import AscatNc
 
 if sys.version_info < (3, 0):
     range = xrange
@@ -585,3 +586,88 @@ class H14img(MultiTemporalImageBase):
                                      fname_templ=file_str,
                                      datetime_format=datetime_format,
                                      ioclass_kws={'expand_grid': expand_grid})
+
+
+class H25Ts(AscatNc):
+
+    """
+    Class reading H25 soil moisture climate data record (CDR).
+    """
+
+    def __init__(self, cdr_path, grid_path,
+                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 static_layer_path=None, **kwargs):
+
+        fn_format = 'H25_{:04d}'
+        grid_filename = os.path.join(grid_path, grid_filename)
+
+        super(H25Ts, self).__init__(cdr_path, fn_format, grid_filename,
+                                    static_layer_path, **kwargs)
+
+
+class H108Ts(AscatNc):
+
+    """
+    Class reading H108 soil moisture climate data record (CDR) extension.
+    """
+
+    def __init__(self, cdr_path, grid_path,
+                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 static_layer_path=None, **kwargs):
+
+        fn_format = 'H108_{:04d}'
+        grid_filename = os.path.join(grid_path, grid_filename)
+
+        super(H108Ts, self).__init__(cdr_path, fn_format, grid_filename,
+                                     static_layer_path, **kwargs)
+
+
+class H109Ts(AscatNc):
+
+    """
+    Class reading H109 soil moisture climate data record (CDR).
+    """
+
+    def __init__(self, cdr_path, grid_path,
+                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 static_layer_path=None, **kwargs):
+
+        fn_format = 'H109_{:04d}'
+        grid_filename = os.path.join(grid_path, grid_filename)
+
+        super(H109Ts, self).__init__(cdr_path, fn_format, grid_filename,
+                                     static_layer_path, **kwargs)
+
+
+class H110Ts(AscatNc):
+
+    """
+    Class reading H110 soil moisture climate data record (CDR) extension.
+    """
+
+    def __init__(self, cdr_path, grid_path,
+                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 static_layer_path=None, **kwargs):
+
+        fn_format = 'H110_{:04d}'
+        grid_filename = os.path.join(grid_path, grid_filename)
+
+        super(H110Ts, self).__init__(cdr_path, fn_format, grid_filename,
+                                     static_layer_path, **kwargs)
+
+
+class H111Ts(AscatNc):
+
+    """
+    Class reading H111 soil moisture climate data record (CDR).
+    """
+
+    def __init__(self, cdr_path, grid_path,
+                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 static_layer_path=None, **kwargs):
+
+        fn_format = 'H111_{:04d}'
+        grid_filename = os.path.join(grid_path, grid_filename)
+
+        super(H111Ts, self).__init__(cdr_path, fn_format, grid_filename,
+                                     static_layer_path, **kwargs)
