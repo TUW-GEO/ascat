@@ -82,7 +82,6 @@ class TestAscatNcV55R12(unittest.TestCase):
 class TestAscatNcV55R21(unittest.TestCase):
 
     def setUp(self):
-
         path = os.path.dirname(__file__)
 
         cdr_path = os.path.join(path, 'test-data', 'tuw', 'ascat', 'ssm',
@@ -90,12 +89,16 @@ class TestAscatNcV55R21(unittest.TestCase):
 
         grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
 
-        self.ascat_reader = ascat.AscatSsmCdr(cdr_path, grid_path)
+        static_layer_path = os.path.join(path, 'test-data', 'hsaf',
+                                         'static_layer')
+
+        self.ascat_reader = ascat.AscatSsmCdr(
+            cdr_path, grid_path, static_layer_path=static_layer_path)
 
     def test_read(self):
 
         gpi = 2329253
-        result = self.ascat_reader.read(gpi)
+        result = self.ascat_reader.read(gpi, absolute_sm=True)
         assert result.gpi == gpi
         np.testing.assert_approx_equal(
             result.longitude, 14.28413, significant=4)
@@ -107,31 +110,30 @@ class TestAscatNcV55R21(unittest.TestCase):
         assert result.data.ix[15]['sm'] == 55
         assert result.data.ix[15]['ssf'] == 1
         assert result.data.ix[15]['sm_noise'] == 7
-        # assert result.data.ix[15]['frozen_prob'] == 29
-        # assert result.data.ix[15]['snow_prob'] == 0
+        assert result.data.ix[15]['frozen_prob'] == 29
+        assert result.data.ix[15]['snow_prob'] == 0
         assert result.data.ix[15]['orbit_dir'].decode('utf-8') == 'A'
         assert result.data.ix[15]['proc_flag'] == 0
 
-        # np.testing.assert_approx_equal(
-        #     result.data.ix[15]['sm_por_gldas'], 0.2969999, significant=6)
+        np.testing.assert_approx_equal(
+            result.data.ix[15]['abs_sm_gldas'], 0.2969999, significant=6)
 
-        # np.testing.assert_approx_equal(
-        #     result.data.ix[15]['sm_noise_por_gldas'], 0.03779999,
-        #     significant=6)
+        np.testing.assert_approx_equal(
+            result.data.ix[15]['abs_sm_noise_gldas'], 0.03779999,
+            significant=6)
 
-        # np.testing.assert_approx_equal(
+        np.testing.assert_approx_equal(
+            result.data.ix[15]['abs_sm_hwsd'], 0.2364999, significant=6)
+        np.testing.assert_approx_equal(
+            result.data.ix[15]['abs_sm_noise_hwsd'], 0.030100, significant=6)
 
-        #     result.data.ix[15]['sm_por_hwsd'], 0.2364999, significant=6)
-        # np.testing.assert_approx_equal(
-        #     result.data.ix[15]['sm_noise_por_hwsd'], 0.0300999, significant=6)
+        assert result.topo_complex == 14
+        assert result.wetland_frac == 0
 
-        # assert result.topo_complex == 14
-        # assert result.wetland_frac == 0
-
-        # np.testing.assert_approx_equal(
-        #     result.porosity_gldas, 0.539999, significant=5)
-        # np.testing.assert_approx_equal(
-        #     result.porosity_hwsd, 0.4299994, significant=5)
+        np.testing.assert_approx_equal(
+            result.porosity_gldas, 0.539999, significant=5)
+        np.testing.assert_approx_equal(
+            result.porosity_hwsd, 0.4299994, significant=5)
 
     def test_neighbor_search(self):
 
@@ -151,53 +153,58 @@ class TestAscatNcV55R22(unittest.TestCase):
 
         grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
 
-        self.ascat_reader = ascat.AscatSsmCdr(cdr_path, grid_path)
+        static_layer_path = os.path.join(path, 'test-data', 'hsaf',
+                                         'static_layer')
+
+        self.ascat_reader = ascat.AscatSsmCdr(
+            cdr_path, grid_path, static_layer_path=static_layer_path)
 
     def test_read(self):
 
         gpi = 2329253
-        result = self.ascat_reader.read(gpi)
+        result = self.ascat_reader.read(gpi, absolute_sm=True)
         assert result.gpi == gpi
         np.testing.assert_approx_equal(result.longitude, 14.28413,
                                        significant=4)
         np.testing.assert_approx_equal(result.latitude, 45.698074,
                                        significant=4)
 
-        # assert list(result.data.columns) == ['orbit_dir', 'proc_flag',
-        #                                      'sm', 'sm_noise', 'ssf',
-        #                                      'sm_por_gldas',
-        #                                      'sm_noise_por_gldas',
-        #                                      'sm_por_hwsd',
-        #                                      'sm_noise_por_hwsd',
-        #                                      'frozen_prob',
-        #                                      'snow_prob']
+        assert list(result.data.columns) == ['orbit_dir', 'proc_flag',
+                                             'sm', 'sm_noise', 'ssf',
+                                             'snow_prob', 'frozen_prob',
+                                             'abs_sm_gldas',
+                                             'abs_sm_noise_gldas',
+                                             'abs_sm_hwsd',
+                                             'abs_sm_noise_hwsd']
+
         assert len(result.data) == 2642
         assert result.data.ix[15].name == datetime(2007, 1, 15, 19, 34, 41, 5)
         assert result.data.ix[15]['sm'] == 55
         assert result.data.ix[15]['ssf'] == 1
         assert result.data.ix[15]['sm_noise'] == 7
-        # assert result.data.ix[15]['frozen_prob'] == 29
-        # assert result.data.ix[15]['snow_prob'] == 0
+        assert result.data.ix[15]['frozen_prob'] == 29
+        assert result.data.ix[15]['snow_prob'] == 0
         assert result.data.ix[15]['orbit_dir'].decode('utf-8') == 'A'
         assert result.data.ix[15]['proc_flag'] == 0
 
-        # np.testing.assert_approx_equal(
-        #     result.data.ix[15]['sm_por_gldas'], 0.2969999, significant=6)
+        np.testing.assert_approx_equal(
+            result.data.ix[15]['abs_sm_gldas'], 0.2969999, significant=6)
+        np.testing.assert_approx_equal(
+            result.data.ix[15]['abs_sm_noise_gldas'], 0.03779999,
+            significant=6)
 
-        # np.testing.assert_approx_equal(
-        #     result.data.ix[15]['sm_noise_por_gldas'], 0.03779999,
-        #     significant=6)
+        np.testing.assert_approx_equal(
+            result.data.ix[15]['abs_sm_hwsd'], 0.2364999, significant=6)
+        np.testing.assert_approx_equal(
+            result.data.ix[15]['abs_sm_noise_hwsd'], 0.0301000, significant=6)
 
-        # np.testing.assert_approx_equal(
-        #     result.data.ix[15]['sm_por_hwsd'], 0.2364999, significant=6)
-        # np.testing.assert_approx_equal(
-        #     result.data.ix[15]['sm_noise_por_hwsd'], 0.0300999, significant=6)
-        # assert result.topo_complex == 14
-        # assert result.wetland_frac == 0
-        # np.testing.assert_approx_equal(
-        #     result.porosity_gldas, 0.539999, significant=5)
-        # np.testing.assert_approx_equal(
-        #     result.porosity_hwsd, 0.4299994, significant=5)
+        assert result.topo_complex == 14
+        assert result.wetland_frac == 0
+
+        np.testing.assert_approx_equal(
+            result.porosity_gldas, 0.539999, significant=5)
+        np.testing.assert_approx_equal(
+            result.porosity_hwsd, 0.4299994, significant=5)
 
     def test_neighbor_search(self):
 

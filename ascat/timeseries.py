@@ -224,7 +224,7 @@ class AscatNc(GriddedNcContiguousRaggedTs):
 
         grid = load_grid(grid_filename)
 
-        self.thresholds = {'topo_complex': 5, 'wetland_frac': 5}
+        self.thresholds = {'topo_complex': 50, 'wetland_frac': 50}
 
         if thresholds is not None:
             self.thresholds.update(thresholds)
@@ -289,11 +289,23 @@ class AscatNc(GriddedNcContiguousRaggedTs):
             data['frozen_prob'] = np.nan
 
         if absolute_sm:
+            # no error assumed for porosity values, i.e. variance = 0
+            por_var = 0.
+
             data['abs_sm_gldas'] = data['sm'] / 100.0 * porosity_gldas
+            data['abs_sm_noise_gldas'] = np.sqrt(
+                por_var * (data['sm'] / 100.0)**2 + data['sm_noise']**2 *
+                (porosity_gldas / 100.0)**2)
+
             data['abs_sm_hwsd'] = data['sm'] / 100.0 * porosity_hwsd
+            data['abs_sm_noise_hwsd'] = np.sqrt(
+                por_var * (data['sm'] / 100.0)**2 + data['sm_noise']**2 *
+                (porosity_hwsd / 100.0)**2)
         else:
             data['abs_sm_gldas'] = np.nan
+            data['abs_sm_noise_gldas'] = np.nan
             data['abs_sm_hwsd'] = np.nan
+            data['abs_sm_noise_hwsd'] = np.nan
 
         if mask_ssf is not None:
             data = data[data['ssf'] < 2]
