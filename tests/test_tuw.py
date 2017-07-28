@@ -32,7 +32,52 @@ from datetime import datetime
 
 import numpy as np
 
-from ascat.tuw import AscatVodTs
+from ascat.tuw import AscatVodTs, Ascat_SSM
+
+
+class TestAscat(unittest.TestCase):
+
+    def setUp(self):
+        self.ascat_folder = os.path.join(os.path.dirname(__file__),
+                                         'test-data', 'tuw', 'ascat', 'ssm')
+
+        self.ascat_adv_folder = os.path.join(os.path.dirname(__file__),
+                                             'test-data', 'tuw',
+                                             'advisory_flags')
+
+        self.ascat_grid_folder = os.path.join(os.path.dirname(__file__),
+                                              'test-data', 'tuw',
+                                              'grid')
+
+        # init the ASCAT_SSM reader with the paths
+        self.ascat_SSM_reader = Ascat_SSM(
+            self.ascat_folder, self.ascat_grid_folder,
+            advisory_flags_path=self.ascat_adv_folder)
+
+    def test_read_ssm(self):
+
+        gpi = 2329253
+        result = self.ascat_SSM_reader.read_ssm(gpi)
+        assert result.gpi == gpi
+        assert result.longitude == 14.28413
+        assert result.latitude == 45.698074
+        assert list(result.data.columns) == [
+            'ERR', 'SSF', 'SSM', 'frozen_prob', 'snow_prob']
+        assert len(result.data) == 2058
+        assert result.data.ix[15].name == datetime(2007, 1, 15, 19)
+        assert result.data.ix[15]['ERR'] == 7
+        assert result.data.ix[15]['SSF'] == 1
+        assert result.data.ix[15]['SSM'] == 53
+        assert result.data.ix[15]['frozen_prob'] == 29
+        assert result.data.ix[15]['snow_prob'] == 0
+
+    def test_neighbor_search(self):
+
+        self.ascat_SSM_reader._load_grid_info()
+        gpi, distance = self.ascat_SSM_reader.grid.find_nearest_gpi(
+            3.25, 46.13)
+        assert gpi == 2346869
+        np.testing.assert_approx_equal(distance, 2267.42, significant=2)
 
 
 class TestAscatVodTs(unittest.TestCase):
