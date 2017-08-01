@@ -1,12 +1,12 @@
 name: ascat-docs
 channels:
-  - cpaulik
   - conda-forge
 dependencies:
-- pybufr-ecmwf=0.81=np111py27_0
-- netcdf4=1.2.2=np111py27_0
-- numpy=1.11.1=py27_0
-- sphinx>1.5
-- pip:
-    - pynetcf
-    - pygeobase
+- pybufr-ecmwf=0.82
+- netcdf4
+- numpy
+- sphinx
+- pykdtree
+- pandas
+- pyproj
+- python=3.6
