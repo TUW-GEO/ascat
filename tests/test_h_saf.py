@@ -415,7 +415,7 @@ class Test_H25Ts(unittest.TestCase):
         assert result.data.ix[15]['ssf'] == 1
         assert result.data.ix[15]['sm_noise'] == 6
         assert result.data.ix[15]['frozen_prob'] == 0
-        # assert result.data.ix[15]['snow_prob'] == np.nan
+        assert np.isnan(result.data.ix[15]['snow_prob']) == True
         assert result.data.ix[15]['orbit_dir'].decode('utf-8') == 'D'
         assert result.data.ix[15]['proc_flag'] == 0
 
@@ -471,7 +471,7 @@ class Test_H108Ts(unittest.TestCase):
         assert result.data.ix[15]['ssf'] == 2
         assert result.data.ix[15]['sm_noise'] == 6
         assert result.data.ix[15]['frozen_prob'] == 0
-        # assert result.data.ix[15]['snow_prob'] == np.nan
+        assert np.isnan(result.data.ix[15]['snow_prob']) == True
         assert result.data.ix[15]['orbit_dir'].decode('utf-8') == 'D'
         assert result.data.ix[15]['proc_flag'] == 0
 
@@ -527,7 +527,7 @@ class Test_H109Ts(unittest.TestCase):
         assert result.data.ix[15]['ssf'] == 1
         assert result.data.ix[15]['sm_noise'] == 5
         assert result.data.ix[15]['frozen_prob'] == 0
-        # assert result.data.ix[15]['snow_prob'] == np.nan
+        assert np.isnan(result.data.ix[15]['snow_prob']) == True
         assert result.data.ix[15]['dir'] == 1
         assert result.data.ix[15]['proc_flag'] == 0
         assert result.data.ix[15]['corr_flag'] == 16
@@ -585,7 +585,7 @@ class Test_H110Ts(unittest.TestCase):
         assert result.data.ix[15]['ssf'] == 1
         assert result.data.ix[15]['sm_noise'] == 5
         assert result.data.ix[15]['frozen_prob'] == 0
-        # assert result.data.ix[15]['snow_prob'] == np.nan
+        assert np.isnan(result.data.ix[15]['snow_prob']) == True
         assert result.data.ix[15]['dir'] == 0
         assert result.data.ix[15]['proc_flag'] == 0
         assert result.data.ix[15]['corr_flag'] == 0
@@ -643,7 +643,7 @@ class Test_H111Ts(unittest.TestCase):
         assert result.data.ix[15]['ssf'] == 1
         assert result.data.ix[15]['sm_noise'] == 5
         assert result.data.ix[15]['frozen_prob'] == 0
-        # assert result.data.ix[15]['snow_prob'] == np.nan
+        assert np.isnan(result.data.ix[15]['snow_prob']) == True
         assert result.data.ix[15]['dir'] == 1
         assert result.data.ix[15]['proc_flag'] == 0
         assert result.data.ix[15]['corr_flag'] == 4
