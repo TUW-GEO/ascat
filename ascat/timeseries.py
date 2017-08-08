@@ -188,6 +188,15 @@ class StaticLayers(object):
         fn_format = 'porosity.nc'
         self.porosity = GriddedPointData(path, grid, fn_format=fn_format)
 
+    def close(self):
+        """
+        Close all file objects.
+        """
+        self.topo_complex.close()
+        self.wetland_frac.close()
+        self.frozen_prob.close()
+        self.porosity.close()
+
 
 class AscatNc(GriddedNcContiguousRaggedTs):
 
@@ -332,6 +341,15 @@ class AscatNc(GriddedNcContiguousRaggedTs):
                              wetland_frac, porosity_gldas, porosity_hwsd)
 
         return ts
+
+    def close(self):
+        """
+        Close file-like objects.
+        """
+        if self.slayer is not None:
+            self.slayer.close()
+
+        super(AscatNc, self).close()
 
 
 class AscatSsmCdr(AscatNc):

@@ -397,6 +397,9 @@ class Test_H25Ts(unittest.TestCase):
         self.ascat_reader = H_SAF.H25Ts(cdr_path, grid_path,
                                         static_layer_path=static_layer_path)
 
+    def tearDown(self):
+        self.ascat_reader.close()
+
     def test_read(self):
 
         gpi = 3066159
@@ -409,7 +412,7 @@ class Test_H25Ts(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 7737
-        assert result.data.ix[15].name.to_datetime() == \
+        assert result.data.ix[15].name.to_pydatetime() == \
             datetime(2007, 1, 7, 10, 49, 9, 4)
         assert result.data.ix[15]['sm'] == 22
         assert result.data.ix[15]['ssf'] == 1
@@ -453,6 +456,9 @@ class Test_H108Ts(unittest.TestCase):
         self.ascat_reader = H_SAF.H108Ts(cdr_path, grid_path,
                                          static_layer_path=static_layer_path)
 
+    def tearDown(self):
+        self.ascat_reader.close()
+
     def test_read(self):
 
         gpi = 3066159
@@ -465,7 +471,7 @@ class Test_H108Ts(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 8222
-        assert result.data.ix[15].name.to_datetime() == \
+        assert result.data.ix[15].name.to_pydatetime() == \
             datetime(2007, 1, 7, 10, 49, 9, 4)
         assert result.data.ix[15]['sm'] == 22
         assert result.data.ix[15]['ssf'] == 2
@@ -509,6 +515,9 @@ class Test_H109Ts(unittest.TestCase):
         self.ascat_reader = H_SAF.H109Ts(cdr_path, grid_path,
                                          static_layer_path=static_layer_path)
 
+    def tearDown(self):
+        self.ascat_reader.close()
+
     def test_read(self):
 
         gpi = 3066159
@@ -521,7 +530,7 @@ class Test_H109Ts(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 11736
-        assert result.data.ix[15].name.to_datetime() == \
+        assert result.data.ix[15].name.to_pydatetime() == \
             datetime(2007, 1, 7, 10, 49, 9, 379200)
         assert result.data.ix[15]['sm'] == 27
         assert result.data.ix[15]['ssf'] == 1
@@ -567,6 +576,9 @@ class Test_H110Ts(unittest.TestCase):
         self.ascat_reader = H_SAF.H110Ts(cdr_path, grid_path,
                                          static_layer_path=static_layer_path)
 
+    def tearDown(self):
+        self.ascat_reader.close()
+
     def test_read(self):
 
         gpi = 3066159
@@ -579,7 +591,7 @@ class Test_H110Ts(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 1148
-        assert result.data.ix[15].name.to_datetime() == \
+        assert result.data.ix[15].name.to_pydatetime() == \
             datetime(2016, 1, 3, 19, 34, 28, 99200)
         assert result.data.ix[15]['sm'] == 48
         assert result.data.ix[15]['ssf'] == 1
@@ -625,6 +637,9 @@ class Test_H111Ts(unittest.TestCase):
         self.ascat_reader = H_SAF.H111Ts(cdr_path, grid_path,
                                          static_layer_path=static_layer_path)
 
+    def tearDown(self):
+        self.ascat_reader.close()
+
     def test_read(self):
 
         gpi = 3066159
@@ -637,7 +652,7 @@ class Test_H111Ts(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 13715
-        assert result.data.ix[15].name.to_datetime() == \
+        assert result.data.ix[15].name.to_pydatetime() == \
             datetime(2007, 1, 7, 10, 49, 9, 379200)
         assert result.data.ix[15]['sm'] == 28
         assert result.data.ix[15]['ssf'] == 1

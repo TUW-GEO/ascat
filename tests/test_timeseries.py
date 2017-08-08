@@ -95,6 +95,9 @@ class TestAscatNcV55R21(unittest.TestCase):
         self.ascat_reader = ascat.AscatSsmCdr(
             cdr_path, grid_path, static_layer_path=static_layer_path)
 
+    def tearDown(self):
+        self.ascat_reader.close()
+
     def test_read(self):
 
         gpi = 2329253
@@ -158,6 +161,9 @@ class TestAscatNcV55R22(unittest.TestCase):
 
         self.ascat_reader = ascat.AscatSsmCdr(
             cdr_path, grid_path, static_layer_path=static_layer_path)
+
+    def tearDown(self):
+        self.ascat_reader.close()
 
     def test_read(self):
 
