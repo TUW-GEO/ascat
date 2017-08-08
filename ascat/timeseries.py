@@ -198,6 +198,9 @@ class StaticLayers(object):
         self.snow_prob.close()
         self.porosity.close()
 
+    def __del__(self):
+        self.close()
+
 
 class AscatNc(GriddedNcContiguousRaggedTs):
 
