@@ -195,6 +195,7 @@ class StaticLayers(object):
         self.topo_complex.close()
         self.wetland_frac.close()
         self.frozen_prob.close()
+        self.snow_prob.close()
         self.porosity.close()
 
 
