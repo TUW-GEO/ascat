@@ -293,7 +293,23 @@ class Ascat_data(object):
         return df, gpi, lon, lat, cell
 
     def _read_lonlat(self, lon, lat, **kwargs):
-        return self._read_gp(self.grid.find_nearest_gpi(lon, lat), **kwargs)
+        """
+        Get nearest grid point and read data.
+
+        Parameters
+        ----------
+        lon : float
+          Longitude.
+        lat : float
+          Latitude.
+
+        Returns
+        -------
+        data : numpy.ndarray
+          Read data.
+        """
+        gpi, dist = self.grid.find_nearest_gpi(lon, lat)
+        return self._read_gp(int(gpi), **kwargs)
 
     def read_advisory_flags(self, gpi):
         """
