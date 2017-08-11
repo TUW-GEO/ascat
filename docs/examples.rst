@@ -19,10 +19,6 @@ The following CDR extensions are also provided by H SAF:
 * H110 - Metop ASCAT SSM CDR2015-EXT : Metop ASCAT Surface Soil Moisture CDR2015-EXT time series 12.5 km sampling
 * H112 - Metop ASCAT SSM CDR2016-EXT : Metop ASCAT Surface Soil Moisture CDR2016-EXT time series 12.5 km sampling
 
-This Example script reads and plots Metop ASCAT H111 SSM CDR data with different
-masking options and also converts the data to absolute values using the included
-porosity data.
-
 .. include::
    read_hsaf_cdr.rst
 
@@ -53,9 +49,12 @@ surface soil moisture products:
 * H16 - SSM ASCAT-B NRT O12.5 : Metop-B ASCAT NRT Surface Soil Moisture 12.5 km sampling
 * H103 - SSM ASCAT-B NRT O25 : Metop-B ASCAT NRT Surface Soil Moisture 25 km sampling
 
-The products (H07 - discontinued), H101, H102, H16, H103 come in BUFR format and
-can be read by the same reader. So examples for the H16 product are equally
-valid for the other products.
+The products H101, H102, H16, H103 come in BUFR format and can be read by the
+same reader. So examples for the H16 product are equally valid for the other
+products.
+
+The product H07 is discontinued and replaced by Metop-A (H101, H102) and Metop-B
+(H103, H16), both available in two different resolutions.
 
 The following example will show how to read and plot each of them.
 

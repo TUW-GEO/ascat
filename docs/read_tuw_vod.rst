@@ -1,6 +1,6 @@
 
-Reading TU Wien Vegetation Optical Depth (VOD)
-==============================================
+Example Vegetation Optical Depth (VOD)
+--------------------------------------
 
 In this Example we will read and plot Metop ASCAT Vegetation Optical
 Depth (VOD) using the test data included in the ascat package.

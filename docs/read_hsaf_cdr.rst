@@ -1,6 +1,6 @@
 
-Reading H SAF Surface Soil Moisture CDR products
-================================================
+Example H SAF SSM CDR products
+------------------------------
 
 In this Example we will read and plot the H SAF SSM CDR products H109,
 H110 and H111 using the test data included in the ascat package.
@@ -226,7 +226,7 @@ A soil moisture time series is read for a specific grid point. The
 
 
 Time series plots of grid points
---------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A simple time series plot of surface soil moisture can be created using
 ``matplotlib``.
@@ -287,7 +287,7 @@ the time series.
 
 
 Masking invalid soil moisture measurements
-------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In order to mask invalid/suspicious soil moisture measurements, the
 confidence flag can be used. It masks soil moisture measurements with a
@@ -309,7 +309,7 @@ frozen or snow cover probability > 50% and using th eSurface State Flag
 
 
 Differentiate between Metop-A and Metop-B soil moisture
--------------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The ``sat_id`` field can be used to differentiate between Metop-A
 (``sat_id``\ =3) and Metop-B (``sat_id``\ =4) measurements.
@@ -332,7 +332,7 @@ The ``sat_id`` field can be used to differentiate between Metop-A
 
 
 Convert to absolute surface soil moisture
------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 It is possible to convert relative surface soil moisture given in degree
 of saturation into absolute soil moisture (:math:`m^3 m^{-3}`) using the
@@ -360,5 +360,6 @@ is used to produce volumetric surface soil moisture expressed in
 
 
 .. image:: read_hsaf_cdr_files/read_hsaf_cdr_20_0.png
+
 
 

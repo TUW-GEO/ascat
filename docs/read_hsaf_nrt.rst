@@ -1,6 +1,6 @@
 
-Reading H SAF NRT Surface Soil Moisture products
-================================================
+Example H SAF NRT SSM products
+------------------------------
 
 In this Example we will read and plot images of the H SAF NRT products
 H08, H14 and H16 using the test images included in the ascat package.
@@ -24,7 +24,7 @@ H08, H14 and H16 using the test images included in the ascat package.
     h16_reader = h_saf.H16img(h16_path, month_path_str='')
 
 Reading H08 product
--------------------
+~~~~~~~~~~~~~~~~~~~
 
 H08 data has a much higher resolution and comes on a 0.00416 degree
 grid.
@@ -109,7 +109,7 @@ Let's plot it.
 
 
 Reading a Region Of Interest (ROI) of H08
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 H08 has a very high resolution and users might want to read only data
 for their area of interest. This can be done using the lat\_lon\_bbox
@@ -153,7 +153,7 @@ keyword
 
 
 Reading H14 product
--------------------
+~~~~~~~~~~~~~~~~~~~
 
 The H14 product is a global product on a reduced gaussian grid with a
 resolution of approx. 25km.
@@ -233,7 +233,7 @@ Let's plot all layers in the H14 product
 
 
 Reading H16 product
--------------------
+~~~~~~~~~~~~~~~~~~~
 
 The products H16, H101, H102, H103 come in the same BUFR format. Since
 the default filenames are slightly different the following readers
@@ -352,7 +352,14 @@ plotting
     plt.show()
 
 
+.. parsed-literal::
 
-.. image:: read_hsaf_nrt_files/read_hsaf_nrt_23_0.png
+    /home/shahn/.pyenv/versions/miniconda2-latest/envs/test-environment/lib/python2.7/site-packages/pytesmo/grid/resample.py:270: MaskedArrayFutureWarning: setting an item on a masked array which has a shared mask will not copy the mask and also change the original mask array in the future.
+    Check the NumPy 1.11 release notes for more information.
+      output_array[~mask] = data
+
+
+
+.. image:: read_hsaf_nrt_files/read_hsaf_nrt_23_1.png
 
 

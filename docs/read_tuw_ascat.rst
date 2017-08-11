@@ -1,6 +1,6 @@
 
-Reading TU Wien Soil Moisture time series
-=========================================
+Example TU Wien Soil Moisture time series
+-----------------------------------------
 
 In this Example we will read and plot TU Wien soil moisture time series
 using the test data included in the ascat package.

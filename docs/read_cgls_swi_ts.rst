@@ -1,6 +1,6 @@
 
-Reading SWI from Copernicus Global Land Service (CGLS)
-======================================================
+Example CGLS SWI time series
+----------------------------
 
 .. code:: ipython2
 
@@ -19,7 +19,7 @@ and the unzipped SWI-TS products in one folder like so:
 
 .. parsed-literal::
 
-    c_gls_SWI-STATIC-DGG_201501010000_GLOBE_ASCAT_V3.0.1.nc
+    [0m[01;32mc_gls_SWI-STATIC-DGG_201501010000_GLOBE_ASCAT_V3.0.1.nc[0m*
     c_gls_SWI-TS_201612310000_C0375_ASCAT_V3.0.1.nc
 
 
