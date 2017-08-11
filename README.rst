@@ -14,6 +14,9 @@ ascat
 .. image:: https://zenodo.org/badge/12761/TUW-GEO/ascat.svg
    :target: https://zenodo.org/badge/latestdoi/12761/TUW-GEO/ascat
 
+.. image:: https://readthedocs.org/projects/ascat/badge/?version=latest
+   :target: http://ascat.readthedocs.org/
+
 Read and convert data acquired by ASCAT on-board the series of Metop satellites. Written in Python.
 
 Works great in combination with `pytesmo <https://github.com/TUW-GEO/pytesmo>`_.
@@ -91,14 +94,6 @@ EUMETSAT provides ASCAT Level 1 and Level 2 data among others through the `EUMET
   and :py:class:`ascat.eumetsat.AscatBL2Ssm250PDUChunked`
 * ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in netCDF format
   :py:class:`ascat.eumetsat.AscatAL2Ssm250Nc` and :py:class:`ascat.eumetsat.AscatBL2Ssm250Nc`.
-
-Documentation
-=============
-
-|Documentation Status|
-
-.. |Documentation Status| image:: https://readthedocs.org/projects/ascat/badge/?version=latest
-   :target: http://ascat.readthedocs.org/
 
 Installation
 ============
