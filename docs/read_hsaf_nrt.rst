@@ -352,13 +352,6 @@ plotting
     plt.show()
 
 
-.. parsed-literal::
-
-    /home/shahn/.pyenv/versions/miniconda2-latest/envs/test-environment/lib/python2.7/site-packages/pytesmo/grid/resample.py:270: MaskedArrayFutureWarning: setting an item on a masked array which has a shared mask will not copy the mask and also change the original mask array in the future.
-    Check the NumPy 1.11 release notes for more information.
-      output_array[~mask] = data
-
-
 
 .. image:: read_hsaf_nrt_files/read_hsaf_nrt_23_1.png
 
