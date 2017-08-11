@@ -10,3 +10,4 @@ dependencies:
 - pandas
 - pyproj
 - python=3.6
+- ipython
