@@ -76,21 +76,24 @@ Let's plot it.
     import numpy as np
     import cartopy
     import matplotlib.pyplot as plt
+    %matplotlib inline
     
     plot_crs = cartopy.crs.Mercator()
     data_crs = cartopy.crs.PlateCarree()
+    
     
     fig = plt.figure(figsize=(8, 10))
     ax = fig.add_axes([0.05, 0.2, 0.6, 0.7], projection=plot_crs)
     
     ax.set_title('H08 example')
-        
-    ax.add_feature(cartopy.feature.LAND)
-    ax.add_feature(cartopy.feature.OCEAN)
-    ax.add_feature(cartopy.feature.COASTLINE)
+    
+    blue = '#4b92db'
+    ax.background_patch.set_facecolor(blue)
+    ax.add_feature(cartopy.feature.GSHHSFeature(scale='low', facecolor='#efefdb'))
     ax.add_feature(cartopy.feature.BORDERS, linestyle=':')
-    ax.add_feature(cartopy.feature.LAKES, alpha=0.5)
+    ax.add_feature(cartopy.feature.LAKES)
     ax.add_feature(cartopy.feature.RIVERS)
+    
     ax.set_extent([10, 47, 50, 75])
     
     data = np.ma.masked_greater(np.flipud(h08_data['ssm']), 100)
@@ -129,12 +132,13 @@ keyword
     # initialize the readers with the path
     ax.set_title('H08 ROI example')
         
-    ax.add_feature(cartopy.feature.LAND)
-    ax.add_feature(cartopy.feature.OCEAN)
-    ax.add_feature(cartopy.feature.COASTLINE)
+    blue = '#4b92db'
+    ax.background_patch.set_facecolor(blue)
+    ax.add_feature(cartopy.feature.GSHHSFeature(scale='low', facecolor='#efefdb'))
     ax.add_feature(cartopy.feature.BORDERS, linestyle=':')
-    ax.add_feature(cartopy.feature.LAKES, alpha=0.5)
+    ax.add_feature(cartopy.feature.LAKES)
     ax.add_feature(cartopy.feature.RIVERS)
+    
     ax.set_extent([10, 47, 50, 75])
     
     data = np.ma.masked_greater(np.flipud(h08_roi['ssm']), 100)
@@ -287,9 +291,9 @@ Plot the SSM data as individual points
     ax = fig.add_axes([0.1, 0.1, 0.8, 0.8], projection=plot_crs)
     ax.set_title('H16 example - Original data')
        
-    ax.add_feature(cartopy.feature.LAND)
-    ax.add_feature(cartopy.feature.OCEAN)
-    ax.add_feature(cartopy.feature.COASTLINE)
+    blue = '#4b92db'
+    ax.background_patch.set_facecolor(blue)
+    ax.add_feature(cartopy.feature.GSHHSFeature(scale='low', facecolor='#efefdb'))
     ax.add_feature(cartopy.feature.BORDERS, linestyle=':')
     ax.add_feature(cartopy.feature.LAKES, alpha=0.5)
     ax.add_feature(cartopy.feature.RIVERS)
@@ -321,7 +325,7 @@ plotting
     # lets resample to a 0.1 degree grid
     # define the grid points in latitude and logitude
     lats_dim = np.arange(-80, 80, 0.1)
-    lons_dim = np.arange(-160, 160, 0.1)
+    lons_dim = np.arange(-160, 170, 0.1)
     
     # make 2d grid out the 1D grid spacings
     lons_grid, lats_grid = np.meshgrid(lons_dim, lats_dim)
@@ -333,9 +337,9 @@ plotting
     ax = fig.add_axes([0.1, 0.1, 0.8, 0.8], projection=plot_crs)
     ax.set_title('H16 example - Resampled to 0.1 x 0.1 grid')
        
-    ax.add_feature(cartopy.feature.LAND)
-    ax.add_feature(cartopy.feature.OCEAN)
-    ax.add_feature(cartopy.feature.COASTLINE)
+    blue = '#4b92db'
+    ax.background_patch.set_facecolor(blue)
+    ax.add_feature(cartopy.feature.GSHHSFeature(scale='low', facecolor='#efefdb'))
     ax.add_feature(cartopy.feature.BORDERS, linestyle=':')
     ax.add_feature(cartopy.feature.LAKES, alpha=0.5)
     ax.add_feature(cartopy.feature.RIVERS)
@@ -353,6 +357,6 @@ plotting
 
 
 
-.. image:: read_hsaf_nrt_files/read_hsaf_nrt_23_1.png
+.. image:: read_hsaf_nrt_files/read_hsaf_nrt_23_0.png
 
 
