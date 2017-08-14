@@ -5,7 +5,8 @@ Changelog
 Version 0.8
 ===========
 
-- Add reader for ASCAT VOD time series data
+- Add reader for ASCAT VOD time series data.
+- Add readers for all H-SAF time series products.
 
 Version 0.7
 ===========
