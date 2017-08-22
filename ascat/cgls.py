@@ -19,6 +19,7 @@ import pynetcf.time_series as netcdf_dataset
 import pygeogrids.netcdf as netcdf
 
 import os
+import glob
 import numpy as np
 
 
@@ -34,9 +35,13 @@ class SWI_TS(netcdf_dataset.GriddedNcOrthoMultiTs):
     parameters: list
         list of parameters to read from netCDF file
     dt: string, optional
-        datetime in the filenames of the cells
+        datetime in the filenames of the cells.
+        If not given it is detected from the files in the data_path.
+        Automatic detection only works if the files follow the CGLS naming convention.
     version: string, optional
         version number of the files
+        If not given it is detected from the files in the data_path.
+        Automatic detection only works if the files follow the CGLS naming convention.
     grid_fname: string, optional
         filename + path of the grid netCDF file,
         default is the standard grid file (c_gls_SWI-STATIC-DGG_201501010000_GLOBE_ASCAT_V3.0.1.nc)
@@ -45,24 +50,42 @@ class SWI_TS(netcdf_dataset.GriddedNcOrthoMultiTs):
         if set to true then a complete 5x5 degree cell will be read at once
         providing speedup if the complete data is needed.
     fname_template: string, optional
-        Filename template. Has to have two slots for {dt} and {version} and a
-        slot for the cell number that is available for further formatting.
-        Because of this the cell number location has to be written as '{{:04d}}'.
+        Filename template. Has to have three slots for {dt}, {version} and a
+        slot for the {cell} number that is available for further formatting.
         The has to be without the .nc ending since this is added during reading.
+    cell_fn: string, optional
+        cell number in the fname_template.
     """
 
     def __init__(self, data_path, parameters=['SWI_001', 'SWI_005', 'SWI_010',
                                               'SWI_015', 'SWI_020', 'SWI_040',
                                               'SWI_060', 'SWI_100', 'SSF'],
-                 dt='201612310000', version='3.0.1',
+                 dt=None, version=None,
                  grid_fname=None, read_bulk=True,
-                 fname_template='c_gls_SWI-TS_{dt}_C{{:04d}}_ASCAT_V{version}'):
+                 fname_template='c_gls_SWI-TS_{dt}_C{cell}_ASCAT_V{version}',
+                 cell_fn='{:04d}'):
 
         if grid_fname is None:
             grid_fname = os.path.join(
                 data_path, 'c_gls_SWI-STATIC-DGG_201501010000_GLOBE_ASCAT_V3.0.1.nc')
         grid = netcdf.load_grid(grid_fname, location_var_name='location_id',
                                 subset_flag='land_flag')
+
+        # detect datetime and version if not given
+        if dt is None or version is None:
+            globstring = fname_template.format(dt="*",
+                                               cell="*",
+                                               version="*")
+            found_files = glob.glob(os.path.join(data_path, globstring))
+            fn = found_files[0]
+            fn = os.path.splitext(os.path.basename(fn))[0]
+            parts = fn.split('_')
+        if dt is None:
+            # this only works if the files follow the CGLS naming convention
+            # for everything else dt should be given as a keyword
+            dt = parts[3]
+        if version is None:
+            version = parts[-1][1:]
 
         scale_factors = {'SWI_001': 0.5,
                          'SWI_005': 0.5,
@@ -102,7 +125,8 @@ class SWI_TS(netcdf_dataset.GriddedNcOrthoMultiTs):
 
         super(SWI_TS, self).__init__(
             data_path, grid,
-            fn_format=fname_template.format(dt=dt, version=version),
+            fn_format=fname_template.format(dt=dt, version=version,
+                                            cell=cell_fn),
             parameters=parameters, scale_factors=scale_factors,
             dtypes=dtypes, autoscale=False,
             automask=False, ioclass_kws={'read_bulk': read_bulk,
