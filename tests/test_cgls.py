@@ -19,6 +19,7 @@ from ascat.cgls import SWI_TS
 import os
 import pandas as pd
 import numpy as np
+import pytest
 
 
 def test_swi_ts_reader():
@@ -48,6 +49,16 @@ def test_swi_ts_reader():
     assert len(data) == len(reference_index)
     assert np.all(data_sorted.index == reference_index)
 
+
+def test_swi_ts_reader_no_data_in_folder():
+    """
+    Test SWI time series reader when no data is in folder.
+    """
+    data_path = os.path.join(
+        os.path.dirname(__file__), 'test-data', 'cglops', 'swi_ts_non_existing')
+
+    with pytest.raises(IOError):
+        SWI_TS(data_path)
 
 def test_swi_ts_qflag_reading():
     """

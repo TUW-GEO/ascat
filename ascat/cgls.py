@@ -77,6 +77,8 @@ class SWI_TS(netcdf_dataset.GriddedNcOrthoMultiTs):
                                                cell="*",
                                                version="*")
             found_files = glob.glob(os.path.join(data_path, globstring))
+            if len(found_files) == 0:
+                raise IOError("No data found in {}".format(data_path))
             fn = found_files[0]
             fn = os.path.splitext(os.path.basename(fn))[0]
             parts = fn.split('_')
