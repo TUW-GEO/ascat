@@ -683,6 +683,20 @@ class Test_H111Ts(unittest.TestCase):
         np.testing.assert_approx_equal(
             result.porosity_hwsd, 0.49000001, significant=5)
 
+    def test_read_2points_cell_switch(self):
+        """
+        Test reading of two points in two different cells.
+        This did not work in the past when the static layer class
+        was closed too soon.
+        """
+
+        gpi = 3066159
+        result = self.ascat_reader.read(gpi, absolute_sm=True)
+        assert result.gpi == gpi
+        gpi = 2577735
+        result = self.ascat_reader.read(gpi, absolute_sm=True)
+        assert result.gpi == gpi
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 0.9
+===========
+
+- Fix bug in H-SAF static layer readers. It was not possible to read data over
+  multiple cells.
+
 Version 0.8
 ===========
 
