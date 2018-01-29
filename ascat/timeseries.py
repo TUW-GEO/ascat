@@ -128,7 +128,7 @@ def load_grid(grid_filename):
         land_gp = np.where(grid_nc.variables['land_flag'][:] == 1)[0]
         lons = grid_nc.variables['lon'][:]
         lats = grid_nc.variables['lat'][:]
-        gpis = np.int32(grid_nc.variables['gpi'][:])
+        gpis = grid_nc.variables['gpi'][:]
         cells = grid_nc.variables['cell'][:]
 
     grid = grids.CellGrid(lons[land_gp], lats[land_gp], cells[land_gp],
