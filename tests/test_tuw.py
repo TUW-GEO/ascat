@@ -63,12 +63,12 @@ class TestAscat(unittest.TestCase):
         assert list(result.data.columns) == [
             'ERR', 'SSF', 'SSM', 'frozen_prob', 'snow_prob']
         assert len(result.data) == 2058
-        assert result.data.ix[15].name == datetime(2007, 1, 15, 19)
-        assert result.data.ix[15]['ERR'] == 7
-        assert result.data.ix[15]['SSF'] == 1
-        assert result.data.ix[15]['SSM'] == 53
-        assert result.data.ix[15]['frozen_prob'] == 29
-        assert result.data.ix[15]['snow_prob'] == 0
+        assert result.data.iloc[15].name == datetime(2007, 1, 15, 19)
+        assert result.data.iloc[15]['ERR'] == 7
+        assert result.data.iloc[15]['SSF'] == 1
+        assert result.data.iloc[15]['SSM'] == 53
+        assert result.data.iloc[15]['frozen_prob'] == 29
+        assert result.data.iloc[15]['snow_prob'] == 0
 
     def test_neighbor_search(self):
 
@@ -101,8 +101,8 @@ class TestAscatVodTs(unittest.TestCase):
 
         assert list(data.columns) == ['vod']
         assert len(data) == 4018
-        assert data.ix[15].name == datetime(2007, 1, 16, 12, 0, 0)
-        assert data.ix[15]['vod'] == np.float32(0.62470651)
+        assert data.iloc[15].name == datetime(2007, 1, 16, 12, 0, 0)
+        assert data.iloc[15]['vod'] == np.float32(0.62470651)
 
     def test_neighbor_search(self):
         gpi, distance = self.ascat_VOD_reader.grid.find_nearest_gpi(

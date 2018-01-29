@@ -426,32 +426,31 @@ class Test_H25Ts(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 7737
-        assert result.data.ix[15].name.to_pydatetime() == \
+        assert result.data.iloc[15].name.to_pydatetime() == \
             datetime(2007, 1, 7, 10, 49, 9, 4)
-        assert result.data.ix[15]['sm'] == 22
-        assert result.data.ix[15]['ssf'] == 1
-        assert result.data.ix[15]['sm_noise'] == 6
-        assert result.data.ix[15]['frozen_prob'] == 0
-        assert np.isnan(result.data.ix[15]['snow_prob']) == True
-        assert result.data.ix[15]['orbit_dir'].decode('utf-8') == 'D'
-        assert result.data.ix[15]['proc_flag'] == 0
+        assert result.data.iloc[15]['sm'] == 22
+        assert result.data.iloc[15]['ssf'] == 1
+        assert result.data.iloc[15]['sm_noise'] == 6
+        assert result.data.iloc[15]['frozen_prob'] == 0
+        assert result.data.iloc[15]['snow_prob'] == 127
+        assert result.data.iloc[15]['orbit_dir'].decode('utf-8') == 'D'
+        assert result.data.iloc[15]['proc_flag'] == 0
+
+        np.testing.assert_equal(
+            result.data.iloc[15]['abs_sm_gldas'], np.nan)
+        np.testing.assert_approx_equal(
+            result.data.iloc[15]['abs_sm_noise_gldas'], np.nan)
 
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_gldas'], -0.22, significant=6)
+            result.data.iloc[15]['abs_sm_hwsd'], 0.1078, significant=6)
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_gldas'], 0.06,
-            significant=6)
-
-        np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_hwsd'], 0.1078, significant=6)
-        np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_hwsd'], 0.0294, significant=6)
+            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.0294, significant=6)
 
         assert result.topo_complex == 9
         assert result.wetland_frac == 41
 
         np.testing.assert_approx_equal(
-            result.porosity_gldas, -1, significant=5)
+            result.porosity_gldas, np.nan, significant=5)
         np.testing.assert_approx_equal(
             result.porosity_hwsd, 0.49000001, significant=5)
 
@@ -485,32 +484,31 @@ class Test_H108Ts(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 8222
-        assert result.data.ix[15].name.to_pydatetime() == \
+        assert result.data.iloc[15].name.to_pydatetime() == \
             datetime(2007, 1, 7, 10, 49, 9, 4)
-        assert result.data.ix[15]['sm'] == 22
-        assert result.data.ix[15]['ssf'] == 2
-        assert result.data.ix[15]['sm_noise'] == 6
-        assert result.data.ix[15]['frozen_prob'] == 0
-        assert np.isnan(result.data.ix[15]['snow_prob']) == True
-        assert result.data.ix[15]['orbit_dir'].decode('utf-8') == 'D'
-        assert result.data.ix[15]['proc_flag'] == 0
+        assert result.data.iloc[15]['sm'] == 22
+        assert result.data.iloc[15]['ssf'] == 2
+        assert result.data.iloc[15]['sm_noise'] == 6
+        assert result.data.iloc[15]['frozen_prob'] == 0
+        assert result.data.iloc[15]['snow_prob'] == 127
+        assert result.data.iloc[15]['orbit_dir'].decode('utf-8') == 'D'
+        assert result.data.iloc[15]['proc_flag'] == 0
+
+        np.testing.assert_equal(
+            result.data.iloc[15]['abs_sm_gldas'], np.nan)
+        np.testing.assert_approx_equal(
+            result.data.iloc[15]['abs_sm_noise_gldas'], np.nan)
 
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_gldas'], -0.22, significant=6)
+            result.data.iloc[15]['abs_sm_hwsd'], 0.1078, significant=6)
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_gldas'], 0.06,
-            significant=6)
-
-        np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_hwsd'], 0.1078, significant=6)
-        np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_hwsd'], 0.0294, significant=6)
+            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.0294, significant=6)
 
         assert result.topo_complex == 9
         assert result.wetland_frac == 41
 
-        np.testing.assert_approx_equal(
-            result.porosity_gldas, -1, significant=5)
+        np.testing.assert_equal(
+            result.porosity_gldas, np.nan)
         np.testing.assert_approx_equal(
             result.porosity_hwsd, 0.49000001, significant=5)
 
@@ -544,34 +542,33 @@ class Test_H109Ts(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 11736
-        assert result.data.ix[15].name.to_pydatetime() == \
+        assert result.data.iloc[15].name.to_pydatetime() == \
             datetime(2007, 1, 7, 10, 49, 9, 379200)
-        assert result.data.ix[15]['sm'] == 27
-        assert result.data.ix[15]['ssf'] == 1
-        assert result.data.ix[15]['sm_noise'] == 5
-        assert result.data.ix[15]['frozen_prob'] == 0
-        assert np.isnan(result.data.ix[15]['snow_prob']) == True
-        assert result.data.ix[15]['dir'] == 1
-        assert result.data.ix[15]['proc_flag'] == 0
-        assert result.data.ix[15]['corr_flag'] == 16
-        assert result.data.ix[15]['sat_id'] == 3
+        assert result.data.iloc[15]['sm'] == 27
+        assert result.data.iloc[15]['ssf'] == 1
+        assert result.data.iloc[15]['sm_noise'] == 5
+        assert result.data.iloc[15]['frozen_prob'] == 0
+        assert result.data.iloc[15]['snow_prob'] == 127
+        assert result.data.iloc[15]['dir'] == 1
+        assert result.data.iloc[15]['proc_flag'] == 0
+        assert result.data.iloc[15]['corr_flag'] == 16
+        assert result.data.iloc[15]['sat_id'] == 3
+
+        np.testing.assert_equal(
+            result.data.iloc[15]['abs_sm_gldas'], np.nan)
+        np.testing.assert_approx_equal(
+            result.data.iloc[15]['abs_sm_noise_gldas'], np.nan)
 
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_gldas'], -0.27, significant=6)
+            result.data.iloc[15]['abs_sm_hwsd'], 0.1323, significant=6)
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_gldas'], 0.05,
-            significant=6)
-
-        np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_hwsd'], 0.1323, significant=6)
-        np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
+            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
 
         assert result.topo_complex == 9
         assert result.wetland_frac == 41
 
-        np.testing.assert_approx_equal(
-            result.porosity_gldas, -1, significant=5)
+        np.testing.assert_equal(
+            result.porosity_gldas, np.nan)
         np.testing.assert_approx_equal(
             result.porosity_hwsd, 0.49000001, significant=5)
 
@@ -605,34 +602,33 @@ class Test_H110Ts(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 1148
-        assert result.data.ix[15].name.to_pydatetime() == \
+        assert result.data.iloc[15].name.to_pydatetime() == \
             datetime(2016, 1, 3, 19, 34, 28, 99200)
-        assert result.data.ix[15]['sm'] == 48
-        assert result.data.ix[15]['ssf'] == 1
-        assert result.data.ix[15]['sm_noise'] == 5
-        assert result.data.ix[15]['frozen_prob'] == 0
-        assert np.isnan(result.data.ix[15]['snow_prob']) == True
-        assert result.data.ix[15]['dir'] == 0
-        assert result.data.ix[15]['proc_flag'] == 0
-        assert result.data.ix[15]['corr_flag'] == 0
-        assert result.data.ix[15]['sat_id'] == 4
+        assert result.data.iloc[15]['sm'] == 48
+        assert result.data.iloc[15]['ssf'] == 1
+        assert result.data.iloc[15]['sm_noise'] == 5
+        assert result.data.iloc[15]['frozen_prob'] == 0
+        assert result.data.iloc[15]['snow_prob'] == 127
+        assert result.data.iloc[15]['dir'] == 0
+        assert result.data.iloc[15]['proc_flag'] == 0
+        assert result.data.iloc[15]['corr_flag'] == 0
+        assert result.data.iloc[15]['sat_id'] == 4
+
+        np.testing.assert_equal(
+            result.data.iloc[15]['abs_sm_gldas'], np.nan)
+        np.testing.assert_approx_equal(
+            result.data.iloc[15]['abs_sm_noise_gldas'], np.nan)
 
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_gldas'], -0.48, significant=6)
+            result.data.iloc[15]['abs_sm_hwsd'], 0.2352, significant=6)
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_gldas'], 0.05,
-            significant=6)
-
-        np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_hwsd'], 0.2352, significant=6)
-        np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
+            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
 
         assert result.topo_complex == 9
         assert result.wetland_frac == 41
 
-        np.testing.assert_approx_equal(
-            result.porosity_gldas, -1, significant=5)
+        np.testing.assert_equal(
+            result.porosity_gldas, np.nan)
         np.testing.assert_approx_equal(
             result.porosity_hwsd, 0.49000001, significant=5)
 
@@ -666,34 +662,33 @@ class Test_H111Ts(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 13715
-        assert result.data.ix[15].name.to_pydatetime() == \
+        assert result.data.iloc[15].name.to_pydatetime() == \
             datetime(2007, 1, 7, 10, 49, 9, 379200)
-        assert result.data.ix[15]['sm'] == 28
-        assert result.data.ix[15]['ssf'] == 1
-        assert result.data.ix[15]['sm_noise'] == 5
-        assert result.data.ix[15]['frozen_prob'] == 0
-        assert np.isnan(result.data.ix[15]['snow_prob']) == True
-        assert result.data.ix[15]['dir'] == 1
-        assert result.data.ix[15]['proc_flag'] == 0
-        assert result.data.ix[15]['corr_flag'] == 4
-        assert result.data.ix[15]['sat_id'] == 3
+        assert result.data.iloc[15]['sm'] == 28
+        assert result.data.iloc[15]['ssf'] == 1
+        assert result.data.iloc[15]['sm_noise'] == 5
+        assert result.data.iloc[15]['frozen_prob'] == 0
+        assert result.data.iloc[15]['snow_prob'] == 127
+        assert result.data.iloc[15]['dir'] == 1
+        assert result.data.iloc[15]['proc_flag'] == 0
+        assert result.data.iloc[15]['corr_flag'] == 4
+        assert result.data.iloc[15]['sat_id'] == 3
+
+        np.testing.assert_equal(
+            result.data.iloc[15]['abs_sm_gldas'], np.nan)
+        np.testing.assert_approx_equal(
+            result.data.iloc[15]['abs_sm_noise_gldas'], np.nan)
 
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_gldas'], -0.28, significant=6)
+            result.data.iloc[15]['abs_sm_hwsd'], 0.1372, significant=6)
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_gldas'], 0.05,
-            significant=6)
-
-        np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_hwsd'], 0.1372, significant=6)
-        np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
+            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
 
         assert result.topo_complex == 9
         assert result.wetland_frac == 41
 
-        np.testing.assert_approx_equal(
-            result.porosity_gldas, -1, significant=5)
+        np.testing.assert_equal(
+            result.porosity_gldas, np.nan)
         np.testing.assert_approx_equal(
             result.porosity_hwsd, 0.49000001, significant=5)
 

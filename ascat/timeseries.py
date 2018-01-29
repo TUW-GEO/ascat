@@ -36,8 +36,6 @@ from pygeobase.object_base import TS
 import pygeogrids.grids as grids
 
 from pynetcf.time_series import GriddedNcContiguousRaggedTs
-from pynetcf.time_series import GriddedNcOrthoMultiTs
-from pynetcf.point_data import GriddedPointData
 
 
 class AscatTimeSeries(TS):
@@ -130,7 +128,7 @@ def load_grid(grid_filename):
         land_gp = np.where(grid_nc.variables['land_flag'][:] == 1)[0]
         lons = grid_nc.variables['lon'][:]
         lats = grid_nc.variables['lat'][:]
-        gpis = grid_nc.variables['gpi'][:]
+        gpis = np.int32(grid_nc.variables['gpi'][:])
         cells = grid_nc.variables['cell'][:]
 
     grid = grids.CellGrid(lons[land_gp], lats[land_gp], cells[land_gp],
@@ -148,8 +146,6 @@ class StaticLayers(object):
     ----------
     path : str
         Path of static layer files.
-    grid_filename : str
-        Grid filename.
 
     Attributes
     ----------
@@ -165,33 +161,19 @@ class StaticLayers(object):
         Soil porosity information.
     """
 
-    def __init__(self, path, grid_filename):
+    def __init__(self, path):
 
-        grid = load_grid(grid_filename)
-        grid.arrcell[:] = 0
+        self.topo_wetland = netCDF4.Dataset(
+            os.path.join(path, 'topo_wetland.nc'))
 
-        fn_format = 'topographic_complexity.nc'
-        self.topo_complex = GriddedPointData(path, grid, fn_format=fn_format)
+        self.frozen_snow_prob = netCDF4.Dataset(
+            os.path.join(path, 'frozen_snow_probability.nc'))
 
-        fn_format = 'inundation_and_wetlands.nc'
-        self.wetland_frac = GriddedPointData(path, grid, fn_format=fn_format)
-
-        fn_format = 'frozen_probability'
-        self.frozen_prob = GriddedNcOrthoMultiTs(path, grid,
-                                                 fn_format=fn_format)
-
-        fn_format = 'snow_probability'
-        self.snow_prob = GriddedNcOrthoMultiTs(path, grid,
-                                               fn_format=fn_format)
-
-        fn_format = 'porosity.nc'
-        self.porosity = GriddedPointData(path, grid, fn_format=fn_format)
+        self.porosity = netCDF4.Dataset(os.path.join(path, 'porosity.nc'))
 
     def __del__(self):
-        self.topo_complex.close()
-        self.wetland_frac.close()
-        self.frozen_prob.close()
-        self.snow_prob.close()
+        self.topo_wetland.close()
+        self.frozen_snow_prob.close()
         self.porosity.close()
 
 
@@ -236,7 +218,7 @@ class AscatNc(GriddedNcContiguousRaggedTs):
             self.thresholds.update(thresholds)
 
         if static_layer_path is not None:
-            self.slayer = StaticLayers(static_layer_path, grid_filename)
+            self.slayer = StaticLayers(static_layer_path)
         else:
             self.slayer = None
 
@@ -277,15 +259,25 @@ class AscatNc(GriddedNcContiguousRaggedTs):
         cell = self.grid.gpi2cell(gpi)
 
         if self.slayer is not None:
-            topo_complex = self.slayer.topo_complex.read(gpi)['topo'][0]
-            wetland_frac = self.slayer.wetland_frac.read(gpi)['in_wet'][0]
-            snow_prob = self.slayer.snow_prob.read(gpi)['snow_prob']
-            frozen_prob = self.slayer.frozen_prob.read(gpi)['frozen_prob']
-            porosity_gldas = self.slayer.porosity.read(gpi)['por_gldas'][0]
-            porosity_hwsd = self.slayer.porosity.read(gpi)['por_hwsd'][0]
+            topo_complex = self.slayer.topo_wetland.variables[
+                'topo'][gpi]
+            wetland_frac = self.slayer.topo_wetland.variables[
+                'wetland'][gpi]
+            snow_prob = self.slayer.frozen_snow_prob.variables[
+                'snow_prob'][gpi, :]
+            frozen_prob = self.slayer.frozen_snow_prob.variables[
+                'frozen_prob'][gpi, :]
+            porosity_gldas = self.slayer.porosity.variables['por_gldas'][gpi]
+            porosity_hwsd = self.slayer.porosity.variables['por_hwsd'][gpi]
 
-            data['snow_prob'] = snow_prob[data.index.dayofyear - 1].values
-            data['frozen_prob'] = frozen_prob[data.index.dayofyear - 1].values
+            if np.ma.is_masked(porosity_gldas):
+                porosity_gldas = np.nan
+
+            if np.ma.is_masked(porosity_hwsd):
+                porosity_hwsd = np.nan
+
+            data['snow_prob'] = snow_prob[data.index.dayofyear - 1]
+            data['frozen_prob'] = frozen_prob[data.index.dayofyear - 1]
         else:
             topo_complex = np.nan
             wetland_frac = np.nan
@@ -363,7 +355,7 @@ class AscatSsmCdr(AscatNc):
     """
 
     def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
                  static_layer_path=None, **kwargs):
 
         first_file = glob.glob(os.path.join(cdr_path, '*.nc'))[0]

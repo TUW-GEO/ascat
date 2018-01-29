@@ -150,7 +150,7 @@ class Ascat_data(object):
 
         self.grid = grids.CellGrid(grid_info[:, 2], grid_info[:, 1],
                                    grid_info[:, 3].astype(np.int16),
-                                   gpis=grid_info[:, 0])
+                                   gpis=grid_info[:, 0].astype(np.int32))
 
         self.grid_info_loaded = True
 
@@ -238,7 +238,7 @@ class Ascat_data(object):
             plus frozen_prob and snow_prob if a path to advisory flags was
             set during initialization
         """
-        cell = self.grid.gpi2cell(gpi)
+        cell = self.grid.gpi2cell(int(gpi))
 
         gp_file = os.path.join(
             self.path, '%4d' % cell, self.gp_filename_template % gpi)

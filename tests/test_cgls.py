@@ -93,3 +93,4 @@ def test_swi_ts_qflag_reading():
 if __name__ == "__main__":
     test_swi_ts_reader()
     test_swi_ts_qflag_reading()
+    test_swi_ts_reader_no_data_in_folder()

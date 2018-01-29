@@ -63,13 +63,13 @@ class TestAscatNcV55R12(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 2292
-        assert result.data.ix[15].name == datetime(2007, 1, 15, 19, 34, 41,
+        assert result.data.iloc[15].name == datetime(2007, 1, 15, 19, 34, 41,
                                                    771032)
-        assert result.data.ix[15]['sm'] == 52
-        assert result.data.ix[15]['ssf'] == 1
-        assert result.data.ix[15]['sm_noise'] == 7
-        assert result.data.ix[15]['orbit_dir'].decode('utf-8') == 'A'
-        assert result.data.ix[15]['proc_flag'] == 0
+        assert result.data.iloc[15]['sm'] == 52
+        assert result.data.iloc[15]['ssf'] == 1
+        assert result.data.iloc[15]['sm_noise'] == 7
+        assert result.data.iloc[15]['orbit_dir'].decode('utf-8') == 'A'
+        assert result.data.iloc[15]['proc_flag'] == 0
 
     def test_neighbor_search(self):
 
@@ -108,26 +108,26 @@ class TestAscatNcV55R21(unittest.TestCase):
             result.latitude, 45.698074, significant=4)
 
         assert len(result.data) == 2457
-        assert result.data.ix[15].name == datetime(2007, 1, 15, 19, 34, 41, 5)
-        assert result.data.ix[15]['sm'] == 55
-        assert result.data.ix[15]['ssf'] == 1
-        assert result.data.ix[15]['sm_noise'] == 7
-        assert result.data.ix[15]['frozen_prob'] == 29
-        assert result.data.ix[15]['snow_prob'] == 0
-        assert result.data.ix[15]['orbit_dir'].decode('utf-8') == 'A'
-        assert result.data.ix[15]['proc_flag'] == 0
+        assert result.data.iloc[15].name == datetime(2007, 1, 15, 19, 34, 41, 5)
+        assert result.data.iloc[15]['sm'] == 55
+        assert result.data.iloc[15]['ssf'] == 1
+        assert result.data.iloc[15]['sm_noise'] == 7
+        assert result.data.iloc[15]['frozen_prob'] == 29
+        assert result.data.iloc[15]['snow_prob'] == 0
+        assert result.data.iloc[15]['orbit_dir'].decode('utf-8') == 'A'
+        assert result.data.iloc[15]['proc_flag'] == 0
 
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_gldas'], 0.2969999, significant=6)
+            result.data.iloc[15]['abs_sm_gldas'], 0.2969999, significant=6)
 
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_gldas'], 0.03779999,
+            result.data.iloc[15]['abs_sm_noise_gldas'], 0.03779999,
             significant=6)
 
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_hwsd'], 0.2364999, significant=6)
+            result.data.iloc[15]['abs_sm_hwsd'], 0.2364999, significant=6)
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_hwsd'], 0.030100, significant=6)
+            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.030100, significant=6)
 
         assert result.topo_complex == 14
         assert result.wetland_frac == 0
@@ -183,25 +183,25 @@ class TestAscatNcV55R22(unittest.TestCase):
                                              'abs_sm_noise_hwsd']
 
         assert len(result.data) == 2642
-        assert result.data.ix[15].name == datetime(2007, 1, 15, 19, 34, 41, 5)
-        assert result.data.ix[15]['sm'] == 55
-        assert result.data.ix[15]['ssf'] == 1
-        assert result.data.ix[15]['sm_noise'] == 7
-        assert result.data.ix[15]['frozen_prob'] == 29
-        assert result.data.ix[15]['snow_prob'] == 0
-        assert result.data.ix[15]['orbit_dir'].decode('utf-8') == 'A'
-        assert result.data.ix[15]['proc_flag'] == 0
+        assert result.data.iloc[15].name == datetime(2007, 1, 15, 19, 34, 41, 5)
+        assert result.data.iloc[15]['sm'] == 55
+        assert result.data.iloc[15]['ssf'] == 1
+        assert result.data.iloc[15]['sm_noise'] == 7
+        assert result.data.iloc[15]['frozen_prob'] == 29
+        assert result.data.iloc[15]['snow_prob'] == 0
+        assert result.data.iloc[15]['orbit_dir'].decode('utf-8') == 'A'
+        assert result.data.iloc[15]['proc_flag'] == 0
 
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_gldas'], 0.2969999, significant=6)
+            result.data.iloc[15]['abs_sm_gldas'], 0.2969999, significant=6)
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_gldas'], 0.03779999,
+            result.data.iloc[15]['abs_sm_noise_gldas'], 0.03779999,
             significant=6)
 
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_hwsd'], 0.2364999, significant=6)
+            result.data.iloc[15]['abs_sm_hwsd'], 0.2364999, significant=6)
         np.testing.assert_approx_equal(
-            result.data.ix[15]['abs_sm_noise_hwsd'], 0.0301000, significant=6)
+            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.0301000, significant=6)
 
         assert result.topo_complex == 14
         assert result.wetland_frac == 0
