@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 0.10
+============
+
+- Add reader for H112, H113 and H114
+
 Version 0.9
 ===========
 

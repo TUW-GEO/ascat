@@ -21,6 +21,14 @@ Read and convert data acquired by ASCAT on-board the series of Metop satellites.
 
 Works great in combination with `pytesmo <https://github.com/TUW-GEO/pytesmo>`_.
 
+Citation
+========
+
+If you use the software in a publication then please cite it using the Zenodo DOI:
+
+.. image:: https://zenodo.org/badge/12761/TUW-GEO/ascat.svg
+   :target: https://zenodo.org/badge/latestdoi/12761/TUW-GEO/ascat
+
 Supported Products
 ==================
 
@@ -136,14 +144,6 @@ If you want to contribute please follow these steps:
 - Add your feature
 - Please include tests for your contributions in one of the test directories. We use py.test so a simple function called test_my_feature is enough
 - submit a pull request to our master branch
-
-Citation
-========
-
-If you use the software in a publication then please cite it using the Zenodo DOI:
-
-.. image:: https://zenodo.org/badge/12761/TUW-GEO/ascat.svg
-   :target: https://zenodo.org/badge/latestdoi/12761/TUW-GEO/ascat
 
 Note
 ====
