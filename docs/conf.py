@@ -70,7 +70,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'ascat'
-copyright = u'2017, TU Wien'
+copyright = u'2018, TU Wien Department of Geodesy and Geoinformation'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
