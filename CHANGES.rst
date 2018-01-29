@@ -7,6 +7,7 @@ Version 0.10
 
 - Add reader for H112, H113 and H114
 - Update copyright year
+- Update of ascat test data fixing netCDF4 valid_range issue
 
 Version 0.9
 ===========

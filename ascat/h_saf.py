@@ -594,7 +594,7 @@ class H25Ts(AscatNc):
     """
 
     def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
                  static_layer_path=None, **kwargs):
 
         fn_format = 'H25_{:04d}'
@@ -611,7 +611,7 @@ class H108Ts(AscatNc):
     """
 
     def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
                  static_layer_path=None, **kwargs):
 
         fn_format = 'H108_{:04d}'
@@ -628,7 +628,7 @@ class H109Ts(AscatNc):
     """
 
     def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
                  static_layer_path=None, **kwargs):
 
         fn_format = 'H109_{:04d}'
@@ -645,7 +645,7 @@ class H110Ts(AscatNc):
     """
 
     def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
                  static_layer_path=None, **kwargs):
 
         fn_format = 'H110_{:04d}'
@@ -662,7 +662,7 @@ class H111Ts(AscatNc):
     """
 
     def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
                  static_layer_path=None, **kwargs):
 
         fn_format = 'H111_{:04d}'
@@ -679,7 +679,7 @@ class H112Ts(AscatNc):
     """
 
     def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
                  static_layer_path=None, **kwargs):
 
         fn_format = 'H112_{:04d}'
@@ -696,7 +696,7 @@ class H113Ts(AscatNc):
     """
 
     def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
                  static_layer_path=None, **kwargs):
 
         fn_format = 'H113_{:04d}'
@@ -713,7 +713,7 @@ class H114Ts(AscatNc):
     """
 
     def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
                  static_layer_path=None, **kwargs):
 
         fn_format = 'H114_{:04d}'
