@@ -671,3 +671,54 @@ class H111Ts(AscatNc):
 
         super(H111Ts, self).__init__(cdr_path, fn_format, grid_filename,
                                      static_layer_path, **kwargs)
+
+
+class H112Ts(AscatNc):
+
+    """
+    Class reading H112 soil moisture climate data record (CDR).
+    """
+
+    def __init__(self, cdr_path, grid_path,
+                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 static_layer_path=None, **kwargs):
+
+        fn_format = 'H112_{:04d}'
+        grid_filename = os.path.join(grid_path, grid_filename)
+
+        super(H111Ts, self).__init__(cdr_path, fn_format, grid_filename,
+                                     static_layer_path, **kwargs)
+
+
+class H113Ts(AscatNc):
+
+    """
+    Class reading H113 soil moisture climate data record (CDR).
+    """
+
+    def __init__(self, cdr_path, grid_path,
+                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 static_layer_path=None, **kwargs):
+
+        fn_format = 'H113_{:04d}'
+        grid_filename = os.path.join(grid_path, grid_filename)
+
+        super(H111Ts, self).__init__(cdr_path, fn_format, grid_filename,
+                                     static_layer_path, **kwargs)
+
+
+class H114Ts(AscatNc):
+
+    """
+    Class reading H114 soil moisture climate data record (CDR).
+    """
+
+    def __init__(self, cdr_path, grid_path,
+                 grid_filename='TUW_WARP5_grid_info_2_1.nc',
+                 static_layer_path=None, **kwargs):
+
+        fn_format = 'H114_{:04d}'
+        grid_filename = os.path.join(grid_path, grid_filename)
+
+        super(H111Ts, self).__init__(cdr_path, fn_format, grid_filename,
+                                     static_layer_path, **kwargs)
