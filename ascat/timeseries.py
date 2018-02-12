@@ -149,14 +149,10 @@ class StaticLayers(object):
 
     Attributes
     ----------
-    topo_complex : pynetcf.point_data.GriddedPointData
-        Topographic complexity.
-    wetland_frac : pynetcf.point_data.GriddedPointData
-        Inundation and wetland fraction.
-    frozen_prob : pynetcf.time_series.GriddedNcOrthoMultiTs
-        Frozen soil/canopy probability.
-    snow_prob : pynetcf.time_series.GriddedNcOrthoMultiTs
-        Snow cover probability.
+    topo_wetland : pynetcf.point_data.GriddedPointData
+        Topographic complexity and inundation and wetland fraction.
+    frozen_snow_prob : pynetcf.time_series.GriddedNcOrthoMultiTs
+        Frozen soil/canopy probability and snow cover probability.
     porosity : pynetcf.time_series.GriddedNcOrthoMultiTs
         Soil porosity information.
     """
@@ -172,6 +168,9 @@ class StaticLayers(object):
         self.porosity = netCDF4.Dataset(os.path.join(path, 'porosity.nc'))
 
     def __del__(self):
+        """
+        Close files when object is deleted.
+        """
         self.topo_wetland.close()
         self.frozen_snow_prob.close()
         self.porosity.close()
@@ -218,7 +217,8 @@ class AscatNc(GriddedNcContiguousRaggedTs):
             self.thresholds.update(thresholds)
 
         if static_layer_path is not None:
-            self.slayer = StaticLayers(static_layer_path)
+            if self.slayer is None:
+                self.slayer = StaticLayers(static_layer_path)
         else:
             self.slayer = None
 
