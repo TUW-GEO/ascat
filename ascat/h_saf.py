@@ -685,7 +685,7 @@ class H112Ts(AscatNc):
         fn_format = 'H112_{:04d}'
         grid_filename = os.path.join(grid_path, grid_filename)
 
-        super(H111Ts, self).__init__(cdr_path, fn_format, grid_filename,
+        super(H112Ts, self).__init__(cdr_path, fn_format, grid_filename,
                                      static_layer_path, **kwargs)
 
 
@@ -702,7 +702,7 @@ class H113Ts(AscatNc):
         fn_format = 'H113_{:04d}'
         grid_filename = os.path.join(grid_path, grid_filename)
 
-        super(H111Ts, self).__init__(cdr_path, fn_format, grid_filename,
+        super(H113Ts, self).__init__(cdr_path, fn_format, grid_filename,
                                      static_layer_path, **kwargs)
 
 
@@ -719,5 +719,5 @@ class H114Ts(AscatNc):
         fn_format = 'H114_{:04d}'
         grid_filename = os.path.join(grid_path, grid_filename)
 
-        super(H111Ts, self).__init__(cdr_path, fn_format, grid_filename,
+        super(H114Ts, self).__init__(cdr_path, fn_format, grid_filename,
                                      static_layer_path, **kwargs)

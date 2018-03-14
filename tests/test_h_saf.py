@@ -707,5 +707,16 @@ class Test_H111Ts(unittest.TestCase):
         assert result.gpi == gpi
 
 
+def test_hsaf_ts_class_init():
+    """
+    Test for initialization of the classes that change nothing but the setup code.
+    """
+
+    path = os.path.dirname(__file__)
+    grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
+    H_SAF.H112Ts('Test', grid_path)
+    H_SAF.H113Ts('Test', grid_path)
+    H_SAF.H114Ts('Test', grid_path)
+
 if __name__ == "__main__":
     unittest.main()

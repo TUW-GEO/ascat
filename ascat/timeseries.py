@@ -216,11 +216,10 @@ class AscatNc(GriddedNcContiguousRaggedTs):
         if thresholds is not None:
             self.thresholds.update(thresholds)
 
+        self.slayer = None
         if static_layer_path is not None:
             if self.slayer is None:
                 self.slayer = StaticLayers(static_layer_path)
-        else:
-            self.slayer = None
 
         super(AscatNc, self).__init__(path, grid, fn_format=fn_format,
                                       **kwargs)
