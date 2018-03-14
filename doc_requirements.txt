@@ -3,3 +3,5 @@ numpy
 pandas
 pygeobase
 docutils==0.12
+sphinx_rtd_theme
+sphinx==1.5.6
