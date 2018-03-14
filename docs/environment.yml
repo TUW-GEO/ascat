@@ -5,7 +5,7 @@ dependencies:
 - pybufr-ecmwf=0.82
 - netcdf4
 - numpy
-- sphinx
+- sphinx=1.6
 - pykdtree
 - pandas
 - pyproj
