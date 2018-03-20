@@ -12,3 +12,5 @@ dependencies:
 - python=3.6
 - ipython
 - setuptools=38
+- pip:
+  - pynetcf
