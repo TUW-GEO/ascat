@@ -37,7 +37,7 @@ install:
   # Useful for debugging any issues with conda
   - conda info -a
 
-  - conda create -q -n test-environment -c conda-forge python=$TRAVIS_PYTHON_VERSION numpy pandas netCDF4 pytest pip pyproj pybufr-ecmwf setuptools=35
+  - conda create -q -n test-environment -c conda-forge python=$TRAVIS_PYTHON_VERSION numpy pandas netCDF4 pytest pip pyproj pybufr-ecmwf
   - source activate test-environment
   - if [[ "$PYGRIB" == "1.9.9" ]]; then
       pip install pygrib==1.9.9;
