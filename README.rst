@@ -29,6 +29,25 @@ If you use the software in a publication then please cite it using the Zenodo DO
 .. image:: https://zenodo.org/badge/12761/TUW-GEO/ascat.svg
    :target: https://zenodo.org/badge/latestdoi/12761/TUW-GEO/ascat
 
+Installation
+============
+
+The packages you have to install depend on the features you want to use. The H SAF soil moisture NRT products are disseminated in BUFR (H16, H103, H101, H102, H08) or GRIB (H14) format. So to read them you will have to install the appropriate packages which will be explained shortly. Unfortunately neither BUFR nor GRIB readers work on Windows so if you need these formats then Linux or OS X are your only options.
+
+For installation we recommend `Miniconda <http://conda.pydata.org/miniconda.html>`_. So please install it according to the official installation instructions. As soon as you have the ``conda`` command in your shell you can continue.
+
+The following script will download and install all the needed packages.
+
+.. code::
+
+    conda create -q -n ascat python=2 numpy pandas netCDF4 pytest pip pyproj
+    source activate ascat
+    conda install -c conda-forge pybufr-ecmwf # for reading BUFR files
+    conda install -c conda-forge pygrib=2.0.1 # for reading GRIB files
+    pip install ascat
+
+This script should work on Windows, Linux or OSX but on Windows you will get errors for the installation commands of pybufr-ecmwf and pygrib.
+
 Supported Products
 ==================
 
@@ -46,7 +65,7 @@ Time Series Products
 
 * CGLS SWI(Soil Water Index) Time Series (SWI_TS)
 
-  Available from the `Copernicus Global Land Service (CGLS) <http://land.copernicus.eu/global/products/swi>`_ 
+  Available from the `Copernicus Global Land Service (CGLS) <http://land.copernicus.eu/global/products/swi>`_
 
 
 * ASCAT SWI(Soil Water Index) Time Series
@@ -102,26 +121,6 @@ EUMETSAT provides ASCAT Level 1 and Level 2 data among others through the `EUMET
   and :py:class:`ascat.eumetsat.AscatBL2Ssm250PDUChunked`
 * ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in netCDF format
   :py:class:`ascat.eumetsat.AscatAL2Ssm250Nc` and :py:class:`ascat.eumetsat.AscatBL2Ssm250Nc`.
-
-Installation
-============
-
-The packages you have to install depend on the features you want to use. The H SAF soil moisture NRT products are disseminated in BUFR (H16, H103, H101, H102, H08) or GRIB (H14) format. So to read them you will have to install the appropriate packages which will be explained shortly. Unfortunately neither BUFR nor GRIB readers work on Windows so if you need these formats then Linux or OS X are your only options.
-
-For installation we recommend `Miniconda <http://conda.pydata.org/miniconda.html>`_. So please install it according to the official installation instructions. As soon as you have the ``conda`` command in your shell you can continue.
-
-The following script will download and install all the needed packages.
-
-.. code::
-
-    conda create -q -n ascat python=2 numpy pandas netCDF4 pytest pip pyproj
-    source activate ascat
-    conda install -c conda-forge pybufr-ecmwf # for reading BUFR files
-    conda install -c conda-forge pygrib=2.0.1 # for reading GRIB files
-    pip install ascat
-
-This script should work on Windows, Linux or OSX but on Windows you will get errors for the installation commands of pybufr-ecmwf and pygrib.
-
 
 Contribute
 ==========

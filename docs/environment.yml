@@ -1,3 +1,4 @@
+#this file is not used at the moment
 name: ascat-docs
 channels:
   - conda-forge
@@ -11,6 +12,3 @@ dependencies:
 - pyproj
 - python=3.6
 - ipython
-- setuptools=38
-- pip:
-  - pynetcf
