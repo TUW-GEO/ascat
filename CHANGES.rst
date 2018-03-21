@@ -2,6 +2,13 @@
 Changelog
 =========
 
+Version 0.XX
+============
+
+- Update readme structure
+- Fix read the docs error
+- Adding cython to travis requirements
+
 Version 0.10
 ============
 
