@@ -1,0 +1,16 @@
+name: ascat-docs
+channels:
+  - conda-forge
+dependencies:
+- pybufr-ecmwf=0.82
+- netcdf4
+- numpy
+- sphinx=1.6.6
+- pykdtree
+- pandas
+- pyproj
+- python=3.6
+- ipython
+- setuptools=38
+- pip:
+  - pynetcf
