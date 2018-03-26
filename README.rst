@@ -11,9 +11,6 @@ ascat
 .. image:: https://badge.fury.io/py/ascat.svg
     :target: http://badge.fury.io/py/ascat
 
-.. image:: https://zenodo.org/badge/12761/TUW-GEO/ascat.svg
-   :target: https://zenodo.org/badge/latestdoi/12761/TUW-GEO/ascat
-
 .. image:: https://readthedocs.org/projects/ascat/badge/?version=latest
    :target: http://ascat.readthedocs.org/
 
@@ -24,10 +21,17 @@ Works great in combination with `pytesmo <https://github.com/TUW-GEO/pytesmo>`_.
 Citation
 ========
 
-If you use the software in a publication then please cite it using the Zenodo DOI:
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.596434.svg
+   :target: https://doi.org/10.5281/zenodo.596434
 
-.. image:: https://zenodo.org/badge/12761/TUW-GEO/ascat.svg
-   :target: https://zenodo.org/badge/latestdoi/12761/TUW-GEO/ascat
+If you use the software in a publication then please cite it using the Zenodo DOI.
+Be aware that this badge links to the latest package version.
+
+Please select your specific version at https://doi.org/10.5281/zenodo.596434 to get the DOI of that version.
+You should normally always use the DOI for the specific version of your record in citations.
+This is to ensure that other researchers can access the exact research artefact you used for reproducibility.
+
+You can find additional information regarding DOI versioning at http://help.zenodo.org/#versioning
 
 Installation
 ============
