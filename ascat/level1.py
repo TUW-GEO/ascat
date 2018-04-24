@@ -26,12 +26,6 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-import lxml.etree as etree
-from tempfile import NamedTemporaryFile
-from gzip import GzipFile
-from collections import OrderedDict
-
-import numpy as np
 
 from pygeobase.io_base import ImageBase
 from pygeobase.object_base import Image
@@ -45,13 +39,13 @@ class AscatL1Image(ImageBase):
     """
     General Level 1 Image
     """
-    def __init__(self, filename, mode='r', **kwargs):
+    def __init__(self, filename, mode='rb', **kwargs):
         """
         Initialization of i/o object.
         """
         super(AscatL1Image, self).__init__(filename, mode=mode, **kwargs)
 
-    def read(self, timestamp=None, **kwargs):
+    def read(self, *args, **kwargs):
         file_format = get_file_format(self.filename)
         if file_format == ".nat":
             data = read_eps(self.filename)
@@ -94,10 +88,10 @@ def read_eps(filename):
     if basename.startswith("ASCA_SZR") or basename.startswith(
             "ASCA_SZO"):
         data = read_eps_szx.read_eps_szx(filename)
-        return Image()
+        return data
     elif basename.startswith("ASCA_SZF"):
         data = read_eps_szf(filename)
-        return Image()
+        return data
 
 def read_netCDF(filename):
     pass
@@ -106,7 +100,7 @@ def read_bufr(filename):
     pass
 
 def test_level1():
-    test = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20160101000900Z_20160101015058Z_N_O_20160101005610Z.nat')
+    test = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
     test.read()
 
 if __name__ == '__main__':

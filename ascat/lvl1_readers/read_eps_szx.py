@@ -1,4 +1,5 @@
 import os
+import fnmatch
 import lxml.etree as etree
 from tempfile import NamedTemporaryFile
 from gzip import GzipFile
@@ -115,22 +116,6 @@ def read_mphr(fid, grh):
     mphr = fid.read(grh['record_size'] - grh.itemsize)
     mphr_dict = OrderedDict(item.replace(' ', '').split('=')
                             for item in mphr.split('\n')[:-1])
-    #
-    # product_xml_table = {'ASCA_SZF_1B_9': 'eps_ascatl1bszf_9.0.xml',
-    #                      'ASCA_SZR_1B_9': 'eps_ascatl1bszr_9.0.xml',
-    #                      'ASCA_SZR_1B_10': 'eps_ascatl1bszr_9.0.xml',
-    #                      'ASCA_SZO_1B_9': 'eps_ascatl1bszo_9.0.xml',
-    #                      'ASCA_SMR_02_4': 'eps_ascatl2smr_4.xml',
-    #                      'ASCA_SMR_02_5': 'eps_ascatl2smr_4.xml'}
-    #
-    # key = '{:}_{:}_{:}_{:}'.format(mphr_dict['INSTRUMENT_ID'],
-    #                                mphr_dict['PRODUCT_TYPE'],
-    #                                mphr_dict['PROCESSING_LEVEL'],
-    #                                mphr_dict['PROCESSOR_MAJOR_VERSION'])
-    #
-    # # print('Product: {:}'.format(key))
-    # filename = product_xml_table[key]
-    # xml_file = os.path.join('..', '..', 'formats', filename)
 
     return mphr_dict
 
@@ -224,41 +209,36 @@ def read_eps_szx(filename):
 def get_eps_xml(mphr_dict):
     '''
     Find the corresponding eps xml file.
-    :param mphr_dict:
+
+    :param: mphr_dict
     :return: filename
     '''
-    format_path = os.path.join('..', '..', 'formats')
+    format_path = os.path.join(os.path.dirname(__file__), '..', '..', 'formats')
 
-    for filename in os.listdir(format_path):
-        if filename.startswith('eps_ascat'):
-            doc = etree.parse(os.path.join(format_path, filename))
-            file_extension = doc.xpath('//file-extensions')[0].getchildren()[0]
+    for filename in fnmatch.filter(os.listdir(format_path), 'eps_ascat*'):
+        doc = etree.parse(os.path.join(format_path, filename))
+        file_extension = doc.xpath('//file-extensions')[0].getchildren()[0]
 
-            format_version = doc.xpath('//format-version')
-            for elem in format_version:
-                major = elem.getchildren()[0]
-                minor = elem.getchildren()[1]
-                if major.text == mphr_dict['PROCESSOR_MAJOR_VERSION'] and \
-                        minor.text == mphr_dict['PROCESSOR_MINOR_VERSION'] and \
-                        mphr_dict['PROCESSING_LEVEL'] in file_extension.text and \
-                        mphr_dict['PRODUCT_TYPE'] in file_extension.text:
-                    return os.path.join(format_path, filename)
+        format_version = doc.xpath('//format-version')
+        for elem in format_version:
+            major = elem.getchildren()[0]
+            minor = elem.getchildren()[1]
+            if major.text == mphr_dict['FORMAT_MAJOR_VERSION'] and \
+                    minor.text == mphr_dict['FORMAT_MINOR_VERSION'] and \
+                    mphr_dict['PROCESSING_LEVEL'] in file_extension.text and \
+                    mphr_dict['PRODUCT_TYPE'] in file_extension.text:
+                return os.path.join(format_path, filename)
 
 
 def test_eps():
     """
     Test read EPS file.
     """
-    data = read_eps_szx('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat.gz')
-
+    data = read_eps_szx('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
     # data = read_eps_szx('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20160101000900Z_20160101015058Z_N_O_20160101005610Z.nat.gz')
-
+    data = read_eps_szx('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20070101010300Z_20070101024756Z_R_O_20140127103410Z.gz')
+    # data = read_eps_szx('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20140331235400Z_20140401013856Z_R_O_20140528192253Z.gz')
     # data = read_eps_szx('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20070101010300Z_20070101024759Z_R_O_20140127103401Z.gz')
-
-    # import pdb
-    # pdb.set_trace()
-    # pass
-
 
 if __name__ == '__main__':
     test_eps()
