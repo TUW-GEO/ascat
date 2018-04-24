@@ -1,0 +1,1171 @@
+<?xml version="1.0"?>
+<!DOCTYPE format SYSTEM "eps.dtd">
+<?xml-stylesheet type="text/xsl" href="eps.xsl"?>
+
+
+<!--
+    File: eps_ascatl1bszo_6.6.xml
+
+    Copyright (c) 2004, 2005 Eumetsat
+
+    This file is part of the EPSXML format specification generated
+    automatically using pfs2xml.
+
+    This XML description is distributed under the GPL license; you can
+    redistribute it and/or modify it under the terms of the GNU General
+    Public License as published by the Free Software Foundation; either
+    version 2 of the License, or (at your option) any later version.
+
+    This XML description is distributed in the hope that it will be
+    useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+    of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with the pfs2xml package; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+-->
+
+
+<format>
+
+
+<version-control>
+    <format-version>
+        <major>5</major><minor>0</minor>
+	<baseline>postnov05</baseline>
+    </format-version>
+    <format-version>
+        <major>10</major><minor>0</minor>
+	<baseline>launch</baseline>
+    </format-version>
+    <pfs-version>
+        <major>6</major><minor>6</minor>
+    </pfs-version>
+</version-control>
+
+
+<brief-description>EPS ASCAT Level SZO_1B Format</brief-description>
+
+
+<full-description>
+    This ASCAT SZO_1B description was generated using the ASCAT PFS Excel document Issue 6 Revision 6 (eps_ascatl1_6.6_names_masks.xls) and pfs2xml version 3.3
+</full-description>
+
+
+<file-extensions>
+    <glob>ASCA_SZO_1B_*Z*</glob>
+</file-extensions>
+
+
+<geolocation>
+    <name>Geolocation</name>
+    <description>ASCAT SZO L1B 50km Geolocation Coverage (Latitude, Longitude)</description>
+    <latitude>mdr-1b-50km[].LATITUDE[]</latitude>
+    <longitude>mdr-1b-50km[].LONGITUDE[]</longitude>
+</geolocation>
+
+
+<image>
+    <name>SIGMA0_TRIP FORE</name>
+    <description>ASCAT SZO L1B 50km SIGMA0_TRIP FORE</description>
+    <source>mdr-1b-50km[].SIGMA0_TRIP[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>SIGMA0_TRIP MID</name>
+    <description>ASCAT SZO L1B 50km SIGMA0_TRIP MID</description>
+    <source>mdr-1b-50km[].SIGMA0_TRIP[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>SIGMA0_TRIP AFT</name>
+    <description>ASCAT SZO L1B 50km SIGMA0_TRIP AFT</description>
+    <source>mdr-1b-50km[].SIGMA0_TRIP[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_KP FORE</name>
+    <description>ASCAT SZO L1B 50km KP Estimate Flag FORE</description>
+    <source>mdr-1b-50km[].F_KP[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_KP MID</name>
+    <description>ASCAT SZO L1B 50km KP Estimate Flag MID</description>
+    <source>mdr-1b-50km[].F_KP[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_KP AFT</name>
+    <description>ASCAT SZO L1B 50km KP Estimate Flag AFT</description>
+    <source>mdr-1b-50km[].F_KP[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_USABLE FORE</name>
+    <description>ASCAT SZO L1B 50km usability of averaged values FORE</description>
+    <source>mdr-1b-50km[].F_USABLE[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_USABLE MID</name>
+    <description>ASCAT SZO L1B 50km usability of averaged values MID</description>
+    <source>mdr-1b-50km[].F_USABLE[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_USABLE AFT</name>
+    <description>ASCAT SZO L1B 50km usability of averaged values AFT</description>
+    <source>mdr-1b-50km[].F_USABLE[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_F FORE</name>
+    <description>ASCAT SZO L1B 50km synthetic data used flag FORE</description>
+    <source>mdr-1b-50km[].F_F[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_F MID</name>
+    <description>ASCAT SZO L1B 50km synthetic data used flag MID</description>
+    <source>mdr-1b-50km[].F_F[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_F AFT</name>
+    <description>ASCAT SZO L1B 50km synthetic data used flag AFT</description>
+    <source>mdr-1b-50km[].F_F[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_V FORE</name>
+    <description>ASCAT SZO L1B 50km quality of synthetic data use flag FORE</description>
+    <source>mdr-1b-50km[].F_V[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_V MID</name>
+    <description>ASCAT SZO L1B 50km quality of synthetic data use flag MID</description>
+    <source>mdr-1b-50km[].F_V[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_V AFT</name>
+    <description>ASCAT SZO L1B 50km quality of synthetic data use flag AFT</description>
+    <source>mdr-1b-50km[].F_V[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_OA FORE</name>
+    <description>ASCAT SZO L1B 50km orbit attitdue quality flag FORE</description>
+    <source>mdr-1b-50km[].F_OA[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_OA MID</name>
+    <description>ASCAT SZO L1B 50km orbit attitdue quality flag MID</description>
+    <source>mdr-1b-50km[].F_OA[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_OA AFT</name>
+    <description>ASCAT SZO L1B 50km orbit attitdue quality flag AFT</description>
+    <source>mdr-1b-50km[].F_OA[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_SA FORE</name>
+    <description>ASCAT SZO L1B 50km solar array reflection contamination flag FORE</description>
+    <source>mdr-1b-50km[].F_SA[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_SA MID</name>
+    <description>ASCAT SZO L1B 50km solar array reflection contamination flag MID</description>
+    <source>mdr-1b-50km[].F_SA[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_SA AFT</name>
+    <description>ASCAT SZO L1B 50km solar array reflection contamination flag AFT</description>
+    <source>mdr-1b-50km[].F_SA[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_TEL FORE</name>
+    <description>ASCAT SZO L1B 50km telemtry quality flag FORE</description>
+    <source>mdr-1b-50km[].F_TEL[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_TEL MID</name>
+    <description>ASCAT SZO L1B 50km telemtry quality flag MID</description>
+    <source>mdr-1b-50km[].F_TEL[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_TEL AFT</name>
+    <description>ASCAT SZO L1B 50km telemtry quality flag AFT</description>
+    <source>mdr-1b-50km[].F_TEL[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_EXT_FIL FORE</name>
+    <description>ASCAT SZO L1B 50km presence of extrapolated reference functions flag FORE</description>
+    <source>mdr-1b-50km[].F_EXT_FIL[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_EXT_FIL MID</name>
+    <description>ASCAT SZO L1B 50km presence of extrapolated reference functions flag MID</description>
+    <source>mdr-1b-50km[].F_EXT_FIL[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_EXT_FIL AFT</name>
+    <description>ASCAT SZO L1B 50km presence of extrapolated reference functions flag AFT</description>
+    <source>mdr-1b-50km[].F_EXT_FIL[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_LAND FORE</name>
+    <description>ASCAT SZO L1B 50km use of measurements over land flag FORE</description>
+    <source>mdr-1b-50km[].F_LAND[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_LAND MID</name>
+    <description>ASCAT SZO L1B 50km use of measurements over land flag MID</description>
+    <source>mdr-1b-50km[].F_LAND[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_LAND AFT</name>
+    <description>ASCAT SZO L1B 50km use of measurements over land flag AFT</description>
+    <source>mdr-1b-50km[].F_LAND[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<protocol>eps-product</protocol>
+
+
+<product name="ASCAT-SZO_1B" version="Issue 6 Revision 6">
+
+
+
+    <mphr name="mphr" subclass="0" version="2" description="Main Product Header Record ">
+        <delimiter name="Product Details"/>
+        <field name="PRODUCT_NAME" type="string" length="67" description="Complete name of the product"/>
+        <field name="PARENT_PRODUCT_NAME_1" type="string" length="67" description="Name of the parent product from which this product has been produced. For Level 0 products, this field is filled with lower case x's."/>
+        <field name="PARENT_PRODUCT_NAME_2" type="string" length="67" description="Name of the parent product from which this product has been produced. For Level 0 products or products for which this is not appropriate, this field is filled with lower case x's."/>
+        <field name="PARENT_PRODUCT_NAME_3" type="string" length="67" description="Name of the parent product from which this product has been produced. For Level 0 products or products for which this is not appropriate, this field is filled with lower case x's."/>
+        <field name="PARENT_PRODUCT_NAME_4" type="string" length="67" description="Name of the parent product from which this product has been produced. For Level 0 products or products for which this is not appropriate, this field is filled with lower case x's."/>
+        <field name="INSTRUMENT_ID" type="enumerated" length="4" description="Instrument identification">
+            <item value="AMSA" name="AMSU-A"/>
+            <item value="ASCA" name="ASCAT"/>
+            <item value="ATOV" name="ATOVS" description="instruments: AVHRR/3, HIRS/4, AMSU-A, MHS"/>
+            <item value="AVHR" name="AVHRR/3"/>
+            <item value="GOME" name="GOME"/>
+            <item value="GRAS" name="GRAS"/>
+            <item value="HIRS" name="HIRS/4"/>
+            <item value="IASI" name="IASI"/>
+            <item value="MHSx" name="MHS"/>
+            <item value="NOAA" name="All NOAA" description="instruments specific to Level 0 NOAA product"/>
+            <item value="SEMx" name="SEM"/>
+            <item value="ADCS" name="ADCS"/>
+            <item value="SBUV" name="SBUV"/>
+            <item value="xxxx" name="No specific instrument"/>
+            <item value="HKTM" name="VCDU34" description="data specific to Level 0"/>
+        </field>
+        <field name="INSTRUMENT_MODEL" type="enumerated" length="3" description="Instrument Model identification">
+            <item value="0" name="Reserved"/>
+            <item value="1" name="Flight Model 1"/>
+            <item value="2" name="Flight Model 2"/>
+            <item value="3" name="Engineering Model"/>
+            <item value="4" name="Protoflight Model"/>
+        </field>
+        <field name="PRODUCT_TYPE" type="enumerated" length="3" description="Product Type">
+            <item value="ENG" description="IASI engineering data"/>
+            <item value="GAC" description="NOAC Global Area Coverage AVHRR data"/>
+            <item value="SND" description="Sounding Data"/>
+            <item value="SZF" description="ASCAT calibrated s0 data at full resolution"/>
+            <item value="SZO" description="ASCAT calibrated s0 data at operational resolution (50 km)"/>
+            <item value="SZR" description="ASCAT calibrated s0 data at research resolution (25 km)"/>
+            <item value="VER" description="IASI verification data"/>
+            <item value="xxx" description="No specific product type specified"/>
+            <item value="AIP" description="NOAA AIP/SAIP data"/>
+            <item value="TIP" description="NOAA TIP/STIP data"/>
+            <item value="HRP" description="HRPT data"/>
+            <item value="LRP" description="LRPT data"/>
+        </field>
+        <field name="PROCESSING_LEVEL" type="enumerated" length="2" description="Processing Level Identification">
+            <item value="00" name="Level 0"/>
+            <item value="01" name="Level 1"/>
+            <item value="1A" name="Level 1a"/>
+            <item value="1B" name="Level 1b"/>
+            <item value="1C" name="Level 1c"/>
+            <item value="02" name="Level 2"/>
+            <item value="03" name="Level 3"/>
+            <item value="xx" name="No Specific Level"/>
+        </field>
+        <field name="SPACECRAFT_ID" type="enumerated" length="3" description="Spacecraft identification">
+            <item value="xxx" description="No specific spacecraft"/>
+            <item value="M01" description="METOP 01"/>
+            <item value="M02" description="METOP 02"/>
+            <item value="M02" description="METOP 03"/>
+            <item value="N15" description="NOAA-K"/>
+            <item value="N16" description="NOAA-L"/>
+            <item value="N17" description="NOAA-M"/>
+            <item value="N18" description="NOAA-N"/>
+            <item value="N19" description="NOAA-N'"/>
+        </field>
+        <field name="SENSING_START" type="time" length="15" description="UTC Time of start of sensing data in this object (PDU, ROI or Full Product)"/>
+        <field name="SENSING_END" type="time" length="15" description="UTC Time of end of sensing data in this object (PDU, ROI or Full Product)"/>
+        <field name="SENSING_START_THEORETICAL" type="time" length="15" description="Theoretical UTC Time of start of sensing data in the dump from which this object is derived. This data is the predicted start time at the MPF level."/>
+        <field name="SENSING_END_THEORETICAL" type="time" length="15" description="Theoretical UTC Time of end of sensing data in the dump from which this object is derived. This data is the predicted end time at the MPF level."/>
+        <field name="PROCESSING_CENTRE" type="enumerated" length="4" description="Processing Centre Identification">
+            <item value="CGS1" description="First EUMETSAT EPS Core Ground Segment"/>
+            <item value="CGS2" description="Second EUMETSAT EPS Core Ground Segment"/>
+            <item value="CGS3" description="Third EUMETSAT EPS Core Ground Segment"/>
+            <item value="NSSx" description="NOAA/NESDIS"/>
+            <item value="RUSx" description="Reference User Station"/>
+            <item value="DMIx" description="DMI, Copenhagen (GRAS SAF)"/>
+            <item value="DWDx" description="DWD, Offenbach (Climate SAF)"/>
+            <item value="FMIx" description="FMI , Helsinki (Ozone SAF)"/>
+            <item value="IMPx" description="IMP, Lisbon  (Land SAF)"/>
+            <item value="INMx" description="INM, Madrid (NCW SAF)"/>
+            <item value="MFxx" description="MF, Lannion (OSI SAF)"/>
+            <item value="UKMO" description="UKMO, Bracknell (NWP SAF)"/>
+            <item value="ERF1" description="R-EPS reprocessing facility 1"/>
+            <item value="ERF2" description="R-EPS reprocessing facility 2"/>
+            <item value="ERF3" description="R-EPS reprocessing facility 3"/>
+        </field>
+        <field name="PROCESSOR_MAJOR_VERSION" type="uinteger" length="5" description="Processing chain major version number"/>
+        <field name="PROCESSOR_MINOR_VERSION" type="uinteger" length="5" description="Processing chain minor version number"/>
+        <field name="FORMAT_MAJOR_VERSION" type="uinteger" length="5" description="Dataset Format Major Version number"/>
+        <field name="FORMAT_MINOR_VERSION" type="uinteger" length="5" description="Dataset Format Minor Version number"/>
+        <field name="PROCESSING_TIME_START" type="time" length="15" description="UTC time of the processing at start of processing for the product"/>
+        <field name="PROCESSING_TIME_END" type="time" length="15" description="UTC time of the processing at end of processing for the product"/>
+        <field name="PROCESSING_MODE" type="enumerated" length="1" description="Identification of the mode of processing">
+            <item value="N" name="Nominal" description="NRT processing"/>
+            <item value="B" name="Backlog Processing"/>
+            <item value="R" name="Reprocessing"/>
+            <item value="V" name="Validation"/>
+        </field>
+        <field name="DISPOSITION_MODE" type="enumerated" length="1" description="Identification of the diposition mode">
+            <item value="T" name="Testing"/>
+            <item value="O" name="Operational"/>
+            <item value="C" name="Commissioning"/>
+        </field>
+        <field name="RECEIVING_GROUND_STATION" type="enumerated" length="3" description="Acquisition Station Identification">
+            <item value="SVL" description="Svalbard"/>
+            <item value="WAL" description="Wallops Island, Virginia"/>
+            <item value="FBK" description="Fairbanks, Alaska"/>
+            <item value="SOC" description="SOCC (NESDIS Satellite Operations Control Centre), Suitland, Maryland"/>
+            <item value="RUS" description="Reference User Station"/>
+        </field>
+        <field name="RECEIVE_TIME_START" type="time" length="15" description="UTC time of the reception at CDA for first Data Item"/>
+        <field name="RECEIVE_TIME_END" type="time" length="15" description="UTC time of the reception at CDA for last Data Item"/>
+        <field name="ORBIT_START" type="uinteger" length="5" description="Start Orbit Number, counted incrementally since launch"/>
+        <field name="ORBIT_END" type="uinteger" length="5" description="Stop Orbit Number"/>
+        <field name="ACTUAL_PRODUCT_SIZE" type="uinteger" length="11" units="bytes" description="Size of the complete product"/>
+        <delimiter name="ASCENDING NODE ORBIT PARAMETERS"/>
+        <field name="STATE_VECTOR_TIME" type="longtime" length="18" units="UTC" description="Epoch time (in UTC) of the orbital elements and the orbit state vector. this corresponds to the time of crossing the ascending node for ORBIT_START"/>
+        <field name="SEMI_MAJOR_AXIS" type="integer" length="11" units="mm" description="Semi major axis of orbit at time of the ascending node crossing."/>
+        <field name="ECCENTRICITY" type="integer" length="11" scaling-factor="10^6" description="Orbit eccentricity at time of the ascending node crossing"/>
+        <field name="INCLINATION" type="integer" length="11" scaling-factor="10^3" units="deg" description="Orbit inclination at time of the ascending node crossing"/>
+        <field name="PERIGEE_ARGUMENT" type="integer" length="11" scaling-factor="10^3" units="deg" description="Argument of perigee at time of the ascending node crossing"/>
+        <field name="RIGHT_ASCENSION" type="integer" length="11" scaling-factor="10^3" units="deg" description="Right ascension at time of the ascending node crossing"/>
+        <field name="MEAN_ANOMALY" type="integer" length="11" scaling-factor="10^3" units="deg" description="Mean anomaly at time of the ascending node crossing"/>
+        <field name="X_POSITION" type="integer" length="11" scaling-factor="10^3" units="m" description="X position of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="Y_POSITION" type="integer" length="11" scaling-factor="10^3" units="m" description="Y position of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="Z_POSITION" type="integer" length="11" scaling-factor="10^3" units="m" description="Z position of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="X_VELOCITY" type="integer" length="11" scaling-factor="10^3" units="m/s" description="X velocity of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="Y_VELOCITY" type="integer" length="11" scaling-factor="10^3" units="m/s" description="Y velocity of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="Z_VELOCITY" type="integer" length="11" scaling-factor="10^3" units="m/s" description="Z velocity of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="EARTH_SUN_DISTANCE_RATIO" type="integer" length="11" scaling-factor="10^6" description="Earth-Sun distance ratio - ratio of current Earth-Sun distance to Mean Earth-Sun distance"/>
+        <field name="LOCATION_TOLERANCE_RADIAL" type="integer" length="11" units="m" description="Nadir Earth location tolerance radial"/>
+        <field name="LOCATION_TOLERANCE_CROSSTRACK" type="integer" length="11" units="m" description="Nadir Earth location tolerance cross-track"/>
+        <field name="LOCATION_TOLERANCE_ALONGTRACK" type="integer" length="11" units="m" description="Nadir Earth location tolerance along-track"/>
+        <field name="YAW_ERROR" type="integer" length="11" scaling-factor="10^3" units="deg" description="Constant Yaw attitude error"/>
+        <field name="ROLL_ERROR" type="integer" length="11" scaling-factor="10^3" units="deg" description="Constant Roll attitude error"/>
+        <field name="PITCH_ERROR" type="integer" length="11" scaling-factor="10^3" units="deg" description="Constant Pitch attitude error"/>
+        <delimiter name="LOCATION SUMMARY"/>
+        <field name="SUBSAT_LATITUDE_START" type="integer" length="11" scaling-factor="10^3" units="Deg" description="Latitude of sub-satellite point at start of the data set"/>
+        <field name="SUBSAT_LONGITUDE_START" type="integer" length="11" scaling-factor="10^3" units="Deg" description="Longitude of sub-satellite point at start of the data set"/>
+        <field name="SUBSAT_LATITUDE_END" type="integer" length="11" scaling-factor="10^3" units="Deg" description="Latitude of sub-satellite point at end of the data set"/>
+        <field name="SUBSAT_LONGITUDE_END" type="integer" length="11" scaling-factor="10^3" units="Deg" description="Longitude of sub-satellite point at end of the data set"/>
+        <delimiter name="Leap Second Information"/>
+        <field name="LEAP_SECOND" type="integer" length="2" description="Occurence of Leap second within the product. Field is set to -1, 0 or +1 dependent upon occurrence of leap second and direction."/>
+        <field name="LEAP_SECOND_UTC" type="time" length="15" description="UTC time of occurrence of the Leap Second (If no leap second in the product, value is null)"/>
+        <delimiter name="Record counts"/>
+        <field name="TOTAL_RECORDS" type="uinteger" length="6" description="Total count of all records in the product"/>
+        <field name="TOTAL_MPHR" type="uinteger" length="6" description="Total count of all MPHRs in product (should always be 1!)"/>
+        <field name="TOTAL_SPHR" type="uinteger" length="6" description="Total count of all SPHRs in product (should be 0 or 1 only)"/>
+        <field name="TOTAL_IPR" type="uinteger" length="6" description="Total count of all IPRs in the product"/>
+        <field name="TOTAL_GEADR" type="uinteger" length="6" description="Total count of all GEADRs in the product"/>
+        <field name="TOTAL_GIADR" type="uinteger" length="6" description="Total count of all GIADRs in the product"/>
+        <field name="TOTAL_VEADR" type="uinteger" length="6" description="Total count of all VEADRs in the product"/>
+        <field name="TOTAL_VIADR" type="uinteger" length="6" description="Total count of all VIADRs in the product"/>
+        <field name="TOTAL_MDR" type="uinteger" length="6" description="Total count of all MDRs in the product"/>
+        <delimiter name="Record Based Generic Quality Flags"/>
+        <field name="COUNT_DEGRADED_INST_MDR" type="uinteger" length="6" description="Count of MDRs with degradation due to instrument problems"/>
+        <field name="COUNT_DEGRADED_PROC_MDR" type="uinteger" length="6" description="Count of MDRs with degradation due to processing problems"/>
+        <field name="COUNT_DEGRADED_INST_MDR_BLOCKS" type="uinteger" length="6" description="Count of the number of blocks of MDRs degraded due to degraded instrument"/>
+        <field name="COUNT_DEGRADED_PROC_MDR_BLOCKS" type="uinteger" length="6" description="Count of the number of blocks of MDRs degraded due to degraded processing"/>
+        <delimiter name="Time Based Generic Quality Flags"/>
+        <field name="DURATION_OF_PRODUCT" type="uinteger" length="8" units="ms" description="The duration of the product in milliseconds"/>
+        <field name="MILLISECONDS_OF_DATA_PRESENT" type="uinteger" length="8" units="ms" description="The total amount of data present in the product"/>
+        <field name="MILLISECONDS_OF_DATA_MISSING" type="uinteger" length="8" units="ms" description="The total amount of data missing from the prodcut"/>
+        <delimiter name="Regional Product Information"/>
+        <field name="SUBSETTED_PRODUCT" type="boolean" length="1" description="Set when product has been subsetted (e.g. geographically subsetted using a region of interest filter). Implies the presence of one or more UMARF GIADRs in GAD section for product retrieved from UMARF."/>
+    </mphr>
+
+
+
+    <geadr name="geadr-dk" subclass="1" version="1" instrument="ASCAT" description="See Deblooming Kernels Internal File in [AD2]"/>
+
+
+
+    <geadr name="geadr-3" subclass="4" version="1" instrument="ASCAT" description=""/>
+
+
+
+    <viadr name="viadr-tr" subclass="1" version="1" instrument="ASCAT" description="Transponder parameters">
+        <array name="TR_TRF" length="3" labels="x,y,z">
+            <array length="3" label="transponder">
+                <field type="integer8" scaling-factor="10^4" units="km" description="Transponders Terrestrial Reference Frame coordinates x, y and z"/>
+            </array>
+        </array>
+        <array name="TR_RBCS" length="3" label="transponder">
+            <field type="uinteger4" scaling-factor="10^4" units="dB m2" description="Transponders Radar Backscattering Cross-section"/>
+        </array>
+        <array name="TR_ID" length="3" label="transponder">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Transponders Internal Delay"/>
+        </array>
+        <array name="TR_OF" length="3" label="transponder">
+            <field type="boolean" description="Transponders Nominal Operations Flag"/>
+        </array>
+    </viadr>
+
+
+
+    <viadr name="viadr-ip" subclass="2" version="2" instrument="ASCAT" description="Instrument parameters">
+        <delimiter name="GENERAL"/>
+        <array name="CHIRP_RATE_MEAS" length="6" label="beam">
+            <field type="integer8" scaling-factor="10^8" units="Hz/s" description="Chirp Rate for the 6 beams, for Measurement Mode"/>
+        </array>
+        <array name="CHIRP_START_FWORD_MEAS" length="6" label="beam">
+            <field type="integer4" units="Hz" description="Chirp start frequency words for the 6 beams, for Measurement Mode"/>
+        </array>
+        <array name="DERAMP_START_FWORD_MEAS" length="6" label="beam">
+            <field type="integer4" units="Hz" description="Deramp start frequency words for the 6 beams, for Measurement Mode"/>
+        </array>
+        <array name="CHIRP_RATE_CAL" length="6" label="beam">
+            <field type="integer8" scaling-factor="10^8" units="Hz/s" description="Chirp Rate for the 6 beams, for Calibration Mode"/>
+        </array>
+        <array name="CHIRP_START_FWORD_CAL" length="6" label="beam">
+            <field type="integer4" units="Hz" description="Chirp start frequency words for the 6 beams, for Calibration Mode"/>
+        </array>
+        <array name="DERAMP_START_FWORD_CAL" length="6" label="beam">
+            <field type="integer4" units="Hz" description="Deramp start frequency words for the 6 beams, for Calibration Mode"/>
+        </array>
+        <array name="A_TX" length="4" labels="a0,a1,a2,a3">
+            <array length="6" label="beam">
+                <field type="integer4" scaling-factor="10^8" units="(see DESCRIPTION)" description="Pulse amplitude distortion model: 4 coefficients a(0), a(1), a(2) and a(3) for each one of the 6 beams. The units for a coefficient are 1/msec^i , i = 0,...3."/>
+            </array>
+        </array>
+        <field name="N_NOISE" type="uinteger2" units="count"/>
+        <field name="N_FIR" type="uinteger2" units="count" description="Number of echo windows averaged on-board"/>
+        <field name="O_ECHO_W" type="uinteger2" scaling-factor="10^2" units="%" description="Overlap of echo window"/>
+        <array name="FIR_COEFF" length="8">
+            <field type="uinteger4" scaling-factor="10^4" description="FIR Beta and g coefficients"/>
+        </array>
+        <array name="M" length="6" label="beam">
+            <field type="uinteger2" units="count" description="Number of range looks for every beam"/>
+        </array>
+        <array name="RL_COEFF" length="6" label="beam">
+            <array length="20" label="ro">
+                <array length="256" label="alpha">
+                    <field type="uinteger4" scaling-factor="10^4" description="Range Look Summation alpha and ro weights for every beam"/>
+                </array>
+            </array>
+        </array>
+        <array name="FIR_FUNC" length="2">
+            <field type="enumerated" description="2-dimension flag to denote the FIR-function shape and fractional overlaps. Values (0,0) in this flag denote a triangle shape with 50% overlap of adjacent echoes. This is the default value">
+                <item value="N/A" name="Undefined" description="Enumerated tags not defined"/>
+            </field>
+        </array>
+        <field name="T_RL" type="uinteger4" scaling-factor="10^8" units="ms" description="Range Look Duration = z_RAN"/>
+        <array name="X_RAN" length="6" label="beam">
+            <array length="20" label="range2">
+                <array length="20" label="range1">
+                    <field type="uinteger4" scaling-factor="10^7" units="%" description="Range look fractional overlaps"/>
+                </array>
+            </array>
+        </array>
+        <field name="V_ADC" type="uinteger4" scaling-factor="10^2" units="Hz" description="ADC frequency sampling discriminator signal"/>
+        <field name="V_HIGH" type="uinteger4" scaling-factor="10^2" units="Hz" description="Highest signal frequency effectively present in the discriminator signal"/>
+        <field name="N_FFT" type="uinteger2" units="count" description="Number of samples in the range look Fast Fourier Transform"/>
+        <field name="F_CAL" type="uinteger4" scaling-factor="10^2" units="Hz" description="Calibration Frequency"/>
+        <field name="F_ICALP" type="uinteger4" scaling-factor="10^4" units="Hz" description="Frequency of the sample above the calibration frequency"/>
+        <field name="F_ICALM" type="uinteger4" scaling-factor="10^4" units="Hz" description="Frequency of the sample below the calibration frequency"/>
+        <field name="ICALP" type="uinteger2" units="count" description="Sample index corresponding to F_ICALP"/>
+        <field name="ICALM" type="uinteger2" units="count" description="Sample index corresponding to F_ICALM"/>
+        <array name="L_CC" length="2">
+            <array length="6">
+                <field type="uinteger4" scaling-factor="10^9" description="Coupler to coupler loss for each beam and switch path"/>
+            </array>
+        </array>
+        <array name="F_T_LUT" length="2">
+            <array length="20">
+                <array length="200">
+                    <field type="uinteger8" scaling-factor="10^12" units="Watts" description="Instrument characterisation functions"/>
+                </array>
+            </array>
+        </array>
+        <array name="F_I_LUT" length="2">
+            <array length="20">
+                <array length="200">
+                    <field type="uinteger8" scaling-factor="10^12" units="Watts" description="Instrument characterisation functions"/>
+                </array>
+            </array>
+        </array>
+        <array name="F_R_LUT" length="2">
+            <array length="20">
+                <array length="200">
+                    <field type="uinteger8" scaling-factor="10^12" units="Watts" description="Instrument characterisation functions"/>
+                </array>
+            </array>
+        </array>
+        <array name="L_TX" length="2" label="loss">
+            <array length="6" label="beam">
+                <field type="uinteger4" scaling-factor="10^8" description="Transmit Path losses"/>
+            </array>
+        </array>
+        <array name="L_RX" length="2" label="loss">
+            <array length="6" label="beam">
+                <field type="uinteger4" scaling-factor="10^8" description="Receive Path losses"/>
+            </array>
+        </array>
+        <field name="DELTA_RADAR" type="uinteger4" scaling-factor="10^8" units="ms" description="Radar Internal Delay"/>
+        <field name="F_LO4" type="uinteger4" scaling-factor="10^2" units="Hz" description="LO4 mixer frequency"/>
+        <field name="GC_OFFSET" type="integer4" scaling-factor="10^4" description="Gain Compression Offset"/>
+        <delimiter name="MEASUREMENT_MODE"/>
+        <array name="GUARD_TIME_G0" length="2" labels="mid,side">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Guard Time for G0, for MID and SIDE antennas sequentially"/>
+        </array>
+        <array name="TX_PULSE_DURATION" length="2" labels="mid,side">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Transmit pulse duration for MID and SIDE antennas sequentially"/>
+        </array>
+        <array name="GUARD_TIME_G1" length="2" labels="mid,side">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Guard Time for G1, for MID and SIDE antennas sequentially"/>
+        </array>
+        <array name="ECHO_W" length="2" labels="mid,side">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Echo reception window for MID and SIDE antennas sequentially"/>
+        </array>
+        <array name="GUARD_TIME_G2" length="2" labels="mid,side">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Guard Time for G2, for MID and SIDE antennas sequentially"/>
+        </array>
+        <array name="CALIBRATION_W" length="2" labels="mid,side">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Calibration window for MID and SIDE antennas sequentially"/>
+        </array>
+        <array name="GUARD_TIME_G3" length="2" labels="mid,side">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Guard Time for G3, for MID and SIDE antennas sequentially"/>
+        </array>
+        <array name="NOISE_W" length="2" labels="mid,side">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Noise window for MID and SIDE antennas sequentially"/>
+        </array>
+        <array name="GUARD_TIME_G4" length="2" labels="mid,side">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Guard Time for G4, for MID and SIDE antennas sequentially"/>
+        </array>
+        <array name="DELTA_ECHO_MEAS" length="6" label="beam">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Time Offset"/>
+        </array>
+        <array name="DELTA_NOISE_MEAS" length="6" label="beam">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Time Offset"/>
+        </array>
+        <array name="C_M_E_MEAS" length="6" label="beam">
+            <field type="integer4" scaling-factor="10^6" description="Range Look Window Parameter c"/>
+        </array>
+        <array name="P_M_E_MEAS" length="6" label="beam">
+            <field type="integer4" scaling-factor="10^6" description="Range Look Window Parameter p"/>
+        </array>
+        <delimiter name="CALIBRATION_MODE"/>
+        <array name="GUARD_TIME_G0_CAL" length="4" labels="mid-cal,other,other,side-cal">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Guard Time for G0, for MID-CAL, OTHER, OTHER and SIDE-CAL antennas sequentially"/>
+        </array>
+        <array name="TX_PULSE_DURATION_CAL" length="4" labels="mid-cal,other,other,side-cal">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Transmit pulse duration for MID-CAL, OTHER, OTHER and SIDE-CAL antennas sequentially"/>
+        </array>
+        <array name="GUARD_TIME_G1_CAL" length="4" labels="mid-cal,other,other,side-cal">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Guard Time for G1, for MID-CAL, OTHER, OTHER and SIDE-CAL antennas sequentially"/>
+        </array>
+        <array name="ECHO_W_CAL" length="4" labels="mid-cal,other,other,side-cal">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Echo reception window for MID-CAL, OTHER, OTHER and SIDE-CAL antennas sequentially"/>
+        </array>
+        <array name="GUARD_TIME_G2_CAL" length="4" labels="mid-cal,other,other,side-cal">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Guard Time for G2, for MID-CAL, OTHER, OTHER and SIDE-CAL antennas sequentially"/>
+        </array>
+        <array name="CALIBRATION_W_CAL" length="4" labels="mid-cal,other,other,side-cal">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Calibration window for MID-CAL, OTHER, OTHER and SIDE-CAL antennas sequentially"/>
+        </array>
+        <array name="GUARD_TIME_G3_CAL" length="4" labels="mid-cal,other,other,side-cal">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Guard Time for G3, for MID-CAL, OTHER, OTHER and SIDE-CAL antennas sequentially"/>
+        </array>
+        <array name="NOISE_W_CAL" length="4" labels="mid-cal,other,other,side-cal">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Noise window for MID-CAL, OTHER, OTHER and SIDE-CAL antennas sequentially"/>
+        </array>
+        <array name="GUARD_TIME_G4_CAL" length="4" labels="mid-cal,other,other,side-cal">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Guard Time for G4, for MID-CAL, OTHER, OTHER and SIDE-CAL antennas sequentially"/>
+        </array>
+        <array name="DELTA_ECHO_CAL" length="6" label="beam">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Time Offset"/>
+        </array>
+        <array name="DELTA_NOISE_CAL" length="6" label="beam">
+            <field type="uinteger4" scaling-factor="10^6" units="ms" description="Time Offset"/>
+        </array>
+        <array name="C_M_E_CAL" length="6" label="beam">
+            <field type="integer4" scaling-factor="10^6" description="Range Look Window Parameter c"/>
+        </array>
+        <array name="P_M_E_CAL" length="6" label="beam">
+            <field type="integer4" scaling-factor="10^6" description="Range Look Window Parameter p"/>
+        </array>
+    </viadr>
+
+
+
+    <viadr name="viadr-pp" subclass="3" version="3" instrument="ASCAT" description="Processing parameters">
+        <field name="F_UC" type="uinteger4" scaling-factor="10^3" units="GHZ" description="Radar carrier frequency"/>
+        <field name="P_TX_P" type="uinteger4" scaling-factor="10^6" units="Watts" description="Nominal radar RF transmit power in pulse"/>
+        <field name="G_RX" type="uinteger8" scaling-factor="10^4" description="Nominal receive chain gain setting"/>
+        <array name="L_ATM" length="180">
+            <array length="360">
+                <field type="uinteger4" scaling-factor="10^10" units="dB/km" description="Nominal atmospheric loss per unit length"/>
+            </array>
+        </array>
+        <array name="H_ATM" length="180">
+            <array length="360">
+                <field type="uinteger2" scaling-factor="10^3" units="km" description="Nominal height of the atmosphere"/>
+            </array>
+        </array>
+        <field name="T_ORC" type="uinteger2" units="count" description="Threshold for Out-Of-Range count"/>
+        <field name="M_SEG" type="uinteger2" units="count" description="Number of noise source packets in a noise segment"/>
+        <field name="M_BLOCK" type="uinteger2" units="count" description="Number of noise segments in a noise block"/>
+        <field name="N_H_FIL" type="uinteger2" units="count" description="Number of samples in the filter which smoothes noise over frequencies"/>
+        <array name="ALPHA_FIL" length="11" label="coefficient">
+            <field type="integer4" scaling-factor="10^6" description="Coefficients of the filter which smoothes noise over frequencies"/>
+        </array>
+        <field name="S" type="uinteger2" units="count" description="Start sample number for noise power estimation"/>
+        <field name="E" type="uinteger2" units="count" description="End sample number for noise power estimation"/>
+        <field name="N_PG" type="uinteger2" units="count" description="Number of power gain values in the along track average"/>
+        <array name="C_CAL" length="6" label="factor">
+            <field type="uinteger8" scaling-factor="10^12" units="1/Watts" description="Normalisation factors for internal calibration (set at the start of commissioning)"/>
+        </array>
+        <field name="T_ON_OFF" type="boolean" description="Power gain estimation T on-off"/>
+        <field name="RX_FIL_ON_OFF" type="boolean" description="RX filter shape estimation method switch"/>
+        <field name="RX_FIL_X" type="uinteger2" units="count" description="RX filter shape estimation parameter X"/>
+        <delimiter name="REFERENCE_FUNCTION_THRESHOLDS_FOR_FLAGGING"/>
+        <field name="T_PG" type="uinteger2" scaling-factor="10^2" units="%" description="selectable percentage of synthetic power gain products before along-track averaging"/>
+        <field name="T_PG_CAL" type="uinteger2" scaling-factor="10^2" units="%" description="selectable percentage of synthetic power gain products before along-track averaging, for calibration source packets"/>
+        <field name="T_FILTER" type="uinteger2" scaling-factor="10^2" units="%" description="Sselectable percentage of synthetic noise for RX filter shape computation"/>
+        <field name="T_USABLE" type="uinteger2" scaling-factor="10^2" units="%" description="Threshold for usable sigma0 flag"/>
+        <field name="T_TIME" type="uinteger2" units="s" description="Threshold separation in time between last good and first good filter shapes in case of interruption of measureing sequence by a calibration sequence"/>
+        <field name="FL_COM_OP" type="boolean" description="Commissioning/Operations phase flag (see AD-2 for values)"/>
+        <field name="FL_CAL" type="boolean" description="Calibration good/bad flag (see AD-2 for values)"/>
+        <field name="FL_DEBLOOM" type="boolean" description="Deblooming on/off flag (see AD-2 for values)"/>
+        <field name="X_ORBIT" type="uinteger4" scaling-factor="10^2" units="m" description="Threshold for characterising the departure of the orbit from a reference orbit"/>
+        <field name="X_ATTITUDE" type="integer4" scaling-factor="10^8" description="Threshold for characterising the departure of theattitude from a reference attiitude"/>
+        <delimiter name="TELEMETRY_RANGES"/>
+        <array name="TEL_R_DPU_A_Volt" length="2">
+            <field type="integer2" description="Power bus voltage DPU A - range values"/>
+        </array>
+        <array name="TEL_R_DPU_B_Volt" length="2">
+            <field type="integer2" description="Power bus voltage DPU B - range values"/>
+        </array>
+        <array name="TEL_R_RFU_A_Volt" length="2">
+            <field type="integer2" description="Power bus voltage RFU A - range values"/>
+        </array>
+        <array name="TEL_R_RFU_B_Volt" length="2">
+            <field type="integer2" description="Power bus voltage RFU B - range values"/>
+        </array>
+        <array name="TEL_R_SFE_A_Volt" length="2">
+            <field type="integer2" description="Power bus voltage SFE A - range values"/>
+        </array>
+        <array name="TEL_R_SFE_B_Volt" length="2">
+            <field type="integer2" description="Power bus voltage SFE B - range values"/>
+        </array>
+        <array name="TEL_R_HPA_A_Volt" length="2">
+            <field type="integer2" description="Power bus voltage HPA A - range values"/>
+        </array>
+        <array name="TEL_R_HPA_B_Volt" length="2">
+            <field type="integer2" description="Power bus voltage HPA B - range values"/>
+        </array>
+        <array name="TEL_R_DPU_A_Pow" length="2">
+            <field type="integer2" description="Power bus power DPU A - range values"/>
+        </array>
+        <array name="TEL_R_DPU_B_Pow" length="2">
+            <field type="integer2" description="Power bus power DPU B - range values"/>
+        </array>
+        <array name="TEL_R_RFU_A_Pow" length="2">
+            <field type="integer2" description="Power bus power RFU A - range values"/>
+        </array>
+        <array name="TEL_R_RFU_B_Pow" length="2">
+            <field type="integer2" description="Power bus power RFU B - range values"/>
+        </array>
+        <array name="TEL_R_SFE_A_Pow" length="2">
+            <field type="integer2" description="Power bus power SFE A - range values"/>
+        </array>
+        <array name="TEL_R_SFE_B_Pow" length="2">
+            <field type="integer2" description="Power bus power SFE B - range values"/>
+        </array>
+        <array name="TEL_R_HPA_A_Pow" length="2">
+            <field type="integer2" description="Power bus power HPA A - range values"/>
+        </array>
+        <array name="TEL_R_HPA_B_Pow" length="2">
+            <field type="integer2" description="Power bus power HPA B - range values"/>
+        </array>
+        <array name="TEL_R_OFFSET_AD" length="2">
+            <field type="integer2" description="Offset references for equipment temperatures (AD590 channels) - range values"/>
+        </array>
+        <array name="TEL_R_GAIN_AD" length="2">
+            <field type="integer2" description="Gain references for equipment temperatures (AD590 channels) - range values"/>
+        </array>
+        <array name="TEL_R_FWD_CAL_ADC_VR1" length="2">
+            <field type="integer2" description="ref. Voltage 1 of Fwd/Cal PowerADC - range values"/>
+        </array>
+        <array name="TEL_R_FWD_CAL_ADC_VR2" length="2">
+            <field type="integer2" description="ref. Voltage 2 of Fwd/Cal PowerADC - range values"/>
+        </array>
+        <array name="TEL_R_REFL_ADC_VR1" length="2">
+            <field type="integer2" description="ref. Voltage 1 of Reflected PowerADC - range values"/>
+        </array>
+        <array name="TEL_R_REFL_ADC_VR2" length="2">
+            <field type="integer2" description="ref. Voltage 2 of Reflected PowerADC - range values"/>
+        </array>
+        <array name="TEL_R_MAIN_ADC_VR1_(TBC)" length="2">
+            <field type="integer2" description="TBD - range values"/>
+        </array>
+        <array name="TEL_R_MAIN_ADC_VR2_(TBC)" length="2">
+            <field type="integer2" description="TBD - range values"/>
+        </array>
+        <array name="TEL_R_T_SSPA1_A" length="2">
+            <field type="integer2" description="SSPA power stage temperature - range values"/>
+        </array>
+        <array name="TEL_R_T_SSPA2_A" length="2">
+            <field type="integer2" description="SSPA output isolator temperature - range values"/>
+        </array>
+        <array name="TEL_R_T_EPC_A" length="2">
+            <field type="integer2" description="EPC temperature - range values"/>
+        </array>
+        <array name="TEL_R_T_RFU_A" length="2">
+            <field type="integer2" description="RFU temperature - range values"/>
+        </array>
+        <array name="TEL_R_T_DPU_A" length="2">
+            <field type="integer2" description="DPU temperature - range values"/>
+        </array>
+        <array name="TEL_R_T_SSPA1_B" length="2">
+            <field type="integer2" description="SSPA power stage temperature - range values"/>
+        </array>
+        <array name="TEL_R_T_SSPA2_B" length="2">
+            <field type="integer2" description="SSPA output isolator temperature - range values"/>
+        </array>
+        <array name="TEL_R_T_EPC_B" length="2">
+            <field type="integer2" description="EPC temperature - range values"/>
+        </array>
+        <array name="TEL_R_T_RFU_B" length="2">
+            <field type="integer2" description="RFU temperature - range values"/>
+        </array>
+        <array name="TEL_R_T_DPU_B" length="2">
+            <field type="integer2" description="DPU temperature - range values"/>
+        </array>
+        <array name="TEL_R_T_PDU" length="2">
+            <field type="integer2" description="PDU temperature - range values"/>
+        </array>
+        <array name="TEL_R_T_ICU" length="2">
+            <field type="integer2" description="ICU internal thermistor - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_01" length="2">
+            <field type="integer2" description="Antenna temperature 1 - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_02" length="2">
+            <field type="integer2" description="Antenna temperature 2 - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_03" length="2">
+            <field type="integer2" description="Antenna temperature 3 - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_04" length="2">
+            <field type="integer2" description="Antenna temperature 4 - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_05" length="2">
+            <field type="integer2" description="Antenna temperature 5 - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_06" length="2">
+            <field type="integer2" description="Antenna temperature 6 - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_07" length="2">
+            <field type="integer2" description="Antenna temperature 7 - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_08" length="2">
+            <field type="integer2" description="Antenna temperature 8 - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_09" length="2">
+            <field type="integer2" description="Antenna temperature 9 - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_10" length="2">
+            <field type="integer2" description="Antenna temperature 10 - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_11" length="2">
+            <field type="integer2" description="Antenna temperature 11 - range values"/>
+        </array>
+        <array name="TEL_R_T_ANT_12" length="2">
+            <field type="integer2" description="Antenna temperature 12 - range values"/>
+        </array>
+        <array name="TEL_R_T_SFE_01" length="2">
+            <field type="integer2" description="SFE temperature 1 - range values"/>
+        </array>
+        <array name="TEL_R_T_SFE_02" length="2">
+            <field type="integer2" description="SFE temperature 2 - range values"/>
+        </array>
+        <array name="TEL_R_T_SFE_03" length="2">
+            <field type="integer2" description="SFE temperature 3 - range values"/>
+        </array>
+        <array name="TEL_R_T_SFE_04" length="2">
+            <field type="integer2" description="SFE temperature 4 - range values"/>
+        </array>
+        <array name="TEL_R_T_SFE_05" length="2">
+            <field type="integer2" description="SFE temperature 5 - range values"/>
+        </array>
+        <array name="TEL_R_T_SFE_06" length="2">
+            <field type="integer2" description="SFE temperature 6 - range values"/>
+        </array>
+        <delimiter name="SPATIAL_AVERAGING"/>
+        <array name="H_PAR_AL_25" length="41" label="parameter">
+            <array length="6" label="antenna">
+                <field type="integer4" description="Hamming Parameter Along Track for 25 km resolution spatial averaging"/>
+            </array>
+        </array>
+        <array name="H_PAR_AC_25" length="41" label="parameter">
+            <array length="6" label="antenna">
+                <field type="integer4" description="Hamming Parameter Across Track for 25 km spatial averaging"/>
+            </array>
+        </array>
+        <array name="H_WL_AL_25" length="41" label="parameter">
+            <array length="6" label="antenna">
+                <field type="uinteger4" scaling-factor="10^2" units="m" description="Hamming Window Length Along Track for 25 km resolution spatial averaging"/>
+            </array>
+        </array>
+        <array name="H_WL_AC_25" length="41" label="parameter">
+            <array length="6" label="antenna">
+                <field type="uinteger4" scaling-factor="10^2" units="m" description="Hamming Window Length Across Track for 25 km spatial resolution averaging"/>
+            </array>
+        </array>
+        <field name="D_ALONG_25" type="uinteger4" scaling-factor="10^2" units="m" description="Along Track 25 km resolution node spacing"/>
+        <field name="D_ACROSS_25" type="uinteger4" scaling-factor="10^2" units="m" description="Across Track 25 km resolution node spacing"/>
+        <array name="H_PAR_AL_50" length="21" label="parameter">
+            <array length="6" label="antenna">
+                <field type="integer4" description="Hamming Parameter Along Track for 50 km resolution spatial averaging"/>
+            </array>
+        </array>
+        <array name="H_PAR_AC_50" length="21" label="parameter">
+            <array length="6" label="antenna">
+                <field type="integer4" description="Hamming Parameter Across Track for 50 km resolution spatial averaging"/>
+            </array>
+        </array>
+        <array name="H_WL_AL_50" length="21" label="parameter">
+            <array length="6" label="antenna">
+                <field type="uinteger4" scaling-factor="10^2" units="m" description="Hamming Window Length Along Track for 50 km resolution spatial averaging"/>
+            </array>
+        </array>
+        <array name="H_WL_AC_50" length="21" label="parameter">
+            <array length="6" label="antenna">
+                <field type="uinteger4" scaling-factor="10^2" units="m" description="Hamming Window Length Across Track for 50 km resolution spatial averaging"/>
+            </array>
+        </array>
+        <field name="D_ALONG_50" type="uinteger4" scaling-factor="10^2" units="m" description="Along Track 50 km resolution node spacing"/>
+        <field name="D_ACROSS_50" type="uinteger4" scaling-factor="10^2" units="m" description="Across Track 50 km resolution node spacing"/>
+        <field name="THETA_LOOK_MID" type="uinteger2" scaling-factor="10^3" units="deg" description="Look angle defining position of node number 0 (mid swath)"/>
+        <field name="DELTA_T_FLN" type="uinteger2" units="s" description="Time delay after the first source packet time given to the processor, in order to generate the first node of nodes"/>
+        <delimiter name="GAP/AGPO"/>
+        <field name="GAP_GAIN_RANGE_PEAK" type="uinteger2" scaling-factor="10^2" units="dB" description="Antenna gain range below peak gain to be used when building GAP estimates dataset"/>
+        <field name="GAP_DELTA_TRANS" type="uinteger2" units="Hz" description="Integration range about the peak of transponder echos"/>
+        <array name="AGPO_DEG_POL" length="2" labels="n-elevation,m-azimuth">
+            <field type="uinteger2" description="Degree of the polynomial in  (1) n (elevation) and         (2) m (azimuth)"/>
+        </array>
+        <field name="AGPO_SCHEDULE" type="uinteger2" description="Codeword related to AGPO parameter refinement schedule (0 for default, as given in [AD2], successive numbers for later changes)"/>
+        <field name="AGPO_L_M_MAX_STEP" type="uinteger2" description="Maximum number of Steps in each Levenberg-Marquart Iteration"/>
+        <array name="AGPO_L_M_LAMBDA" length="3" labels="init-factor,reduc-factor,increm-factor">
+            <field type="uinteger2" scaling-factor="10^3" description="Lambda Parameter in Levelberg-Marquart Iteration:          (1) Initial factor,            (2) Reduction factor and   (3) Increment Factor"/>
+        </array>
+        <field name="AGPO_ALGO_FLAG" type="uinteger2" description="Flag indicating Linear (=0) or Exponential (=1) Temperature reduction in simulated annealing"/>
+        <field name="AGPO_SA_CALCYC" type="uinteger2" description="Number of calibration cycles for initalising simulated annealing"/>
+        <field name="AGPO_SA_TEMP" type="uinteger2" description="Number of temperatures to be used in simulated annealing"/>
+        <field name="AGPO_SA_CYC" type="uinteger2" description="Number of cycles at each temperature in simulated annealing"/>
+        <array name="AGPO_SA_SF" length="3">
+            <field type="uinteger2" scaling-factor="10^3" description="Scale factor for thermal fluctuations in simulated annealing"/>
+        </array>
+        <array name="AGPO_SA_AE" length="3">
+            <field type="uinteger2" scaling-factor="10^3" description="Probability of accepting energy increase in simulated annealing"/>
+        </array>
+        <array name="AGPO_SC" length="3">
+            <field type="uinteger2" scaling-factor="10^3" description="Value of energy measure set as stopping criterion"/>
+        </array>
+        <array name="AGPO_NOM_AGP_MID" length="16" label="parameter">
+            <array length="2" labels="amplitude,phase">
+                <field type="integer4" scaling-factor="10^4" units="dB for Amplitude and degrees for Phase" description="Parameters of the nominal theoretical antena gain pattern used for the Mid Beams, as defined in [AD2] : (1) Amplitude and (2) Phase"/>
+            </array>
+        </array>
+        <array name="AGPO_NOM_AGP_SIDE" length="12" label="parameter">
+            <array length="2" labels="amplitude,phase">
+                <field type="integer4" scaling-factor="10^4" units="dB for Amplitude and degrees for Phase" description="Parameters of the nominal theoretical antena gain pattern used for the Side Beams, as defined in [AD2]: (1) Amplitude and (2) Phase"/>
+            </array>
+        </array>
+        <field name="AGPO_TRA_REJECT" type="uinteger2" scaling-factor="10^2" units="dB" description="Threshold setting for transponder measurement rejection"/>
+        <array name="AGPO_DATA_RANGE_TIME" length="2">
+            <array length="50">
+                <array length="6">
+                    <field type="string" length="15" units="UTC" description="Time range or time ranges (up to 50) of data to be selected for use in iteration (for each of the 6 antennas)"/>
+                </array>
+            </array>
+        </array>
+        <array name="AGPO_TRANS_SET" length="3">
+            <array length="6">
+                <field type="boolean" description="Set of transponders to be used in AGPO estimation (for each of the 6 antennas)"/>
+            </array>
+        </array>
+        <array name="AGPO_PASS_SET" length="2">
+            <array length="6">
+                <field type="boolean" description="Set of ascending and/or descending passess to be used in AGPO estimation (for each of the 6 antennas)"/>
+            </array>
+        </array>
+        <array name="AGPO_GAIN_RANGE_PEAK" length="2">
+            <field type="uinteger2" scaling-factor="10^2" units="dB" description="Antenna gain range below peak gain to be used in this AGPO run (for each of the 6 antennas)"/>
+        </array>
+        <array name="AGPO_GAP_SELECTION" length="6">
+            <field type="uinteger2" description="Flag set to 1 if GAP data is to be edited out of the above selection / set to 0 otherwise"/>
+        </array>
+        <array name="AGPO_L" length="2">
+            <array length="6">
+                <field type="integer4" scaling-factor="10^4" units="db" description="Domain control function parameter for AGPO (theta and phi components)"/>
+            </array>
+        </array>
+        <array name="AGPO_DELTA" length="2">
+            <array length="6">
+                <field type="integer4" scaling-factor="10^4" units="db" description="Domain control function parameter for AGPO (theta and phi components)"/>
+            </array>
+        </array>
+        <delimiter name="DEBLOOMING"/>
+        <field name="DEB_RADIOUS" type="uinteger2" scaling-factor="10^4" units="km" description="Domain radious of the deblooming kernels"/>
+        <delimiter name="TX"/>
+        <array name="TX_FILTER_SHAPE" length="10" label="coefficient">
+            <field type="integer4" scaling-factor="10^4" description="Tx Filter shape function coefficients"/>
+        </array>
+        <delimiter name="GCM"/>
+        <field name="GCM_J_BEGIN" type="uinteger2" units="count" description="Start source packet for GCMN averaging"/>
+        <field name="GCM_J_END" type="uinteger2" units="count" description="End source packet for GCMN averaging"/>
+        <field name="GCM_T_TEST_GCM" type="uinteger4" scaling-factor="10^4" units="dB" description="Test threshold for normal GCM"/>
+        <field name="GCM_T_HIGH" type="uinteger4" scaling-factor="10^4" units="dB" description="Overdrive threshold for normal GCM"/>
+        <field name="GCM_T_LOW" type="uinteger4" scaling-factor="10^4" units="dB" description="Low threshold for normal GCM"/>
+        <field name="GCM_D_MIN" type="uinteger4" scaling-factor="10^4" units="dB" description="Minimum drive level for exceptional GCM"/>
+        <field name="GCM_D_MAX" type="uinteger4" scaling-factor="10^4" units="dB" description="Maximum drive level for exceptional GCM"/>
+    </viadr>
+
+
+
+    <viadr name="viadr-oa" subclass="4" version="2" instrument="ASCAT" description="Orbit/attitude parameters">
+        <field name="AC_UTC_TIME" type="longtime" length="8" units="UTC" description="Ascending node UTC time"/>
+        <array name="AC_SV_POSITION" length="3" labels="x,y,z">
+            <field type="integer8" scaling-factor="10^4" units="k m" description="State vector at Ascending Node - Position"/>
+        </array>
+        <array name="AC_SV_VELOCITY" length="3" labels="vx,vy,vz">
+            <field type="integer8" scaling-factor="10^4" units="m/s" description="State vector at Ascending Node - Velocity"/>
+        </array>
+        <array name="ATT_YS_LAW" length="3" labels="pitch,roll,yaw">
+            <field type="integer4" scaling-factor="10^6" units="radians" description="Attitude Yaw Steering Law: Amplitude parameters: Cx (pitch), Cy (roll) and Cz (yaw)"/>
+        </array>
+        <array name="ATT_DIST_LAW" length="4" label="attitude-angle">
+            <array length="3" label="value">
+                <array length="3" label="coefficient">
+                    <field type="integer4" scaling-factor="10^6" description="Attitude Distortion Law parameters, DIM1 is for 3 different coefficients, DIM3 is for 4 different values per coefficient, DIM2 is for three different attitude angles"/>
+                </array>
+            </array>
+        </array>
+    </viadr>
+
+
+
+    <viadr name="viadr-dump" subclass="5" version="2" instrument="ASCAT" description="Dump Identification and other dump-related information">
+        <field name="START_ORBIT_DUMP" type="uinteger4" units="count" description="Start orbit of the Dump"/>
+        <field name="STOP_ORBIT_DUMP" type="uinteger4" units="count" description="Stop orbit of the Dump"/>
+        <field name="DUMP_START_TIME" type="longtime" length="8" units="UTC" description="Start time of the dump"/>
+        <field name="DUMP_AC_STATION" type="enumerated" description="Acquisition station of the dump">
+            <item value="0" name="Svalbard" description="Svalbard"/>
+            <item value="1" name="Wallops" description="Wallops Island, Virginia"/>
+            <item value="2" name="Fairbanks" description="Fairbanks, Alaska"/>
+            <item value="3" name="SOCC" description="SOCC (NESDIS Satellite Operations Control Centre), Suitland, Maryland"/>
+        </field>
+    </viadr>
+
+
+
+    <mdr name="mdr-1b-50km" subclass="2" version="2" instrument="ASCAT" description="Only used in Level 1B 50 km products">
+        <delimiter name="LINE_OF_50_KM_RES_NODES_and_associated_data"/>
+        <field name="UTC_LINE_NODES" type="time" length="6" units="UTC" description="UTC time of line of 50 km nodes"/>
+        <field name="SAT_TRACK_AZI" type="uinteger2" scaling-factor="10^2" units="deg" description="Azimuth angle bearing of nadir track velocity"/>
+        <delimiter name="50_KM_RESOLUTION_NODE_and_associated_data"/>
+        <array name="NODE_NUM" length="42" label="node">
+            <field type="integer2" units="count" description="50 km node number as used in the PGF (ref AD-2]), i.e., (10 to -10) for the left swath in the left-to-right order, (-10 to 10) for the right swath in the left-to-right order, 0 corresponding to the mid swath position in both swaths."/>
+        </array>
+        <array name="SWATH_INDICATOR" length="42" label="node">
+            <field type="boolean" description="Swath (right or left)"/>
+        </array>
+        <array name="LATITUDE" length="42" label="node">
+            <field type="integer4" scaling-factor="10^6" units="deg" description="Latitude (-90 to 90 deg)"/>
+        </array>
+        <array name="LONGITUDE" length="42" label="node">
+            <field type="integer4" scaling-factor="10^6" units="deg" description="Longitude (0 to 360 deg)"/>
+        </array>
+        <array name="ATMOSPHERIC_HEIGHT" length="42" label="node">
+            <field type="uinteger2" scaling-factor="10^3" units="km" description="Height of atmowphere used"/>
+        </array>
+        <array name="ATMOSPHERIC_LOSS" length="42" label="node">
+            <field type="uinteger4" scaling-factor="10^10" units="dB/km" description="Atmospheric loss per unit length of atmosphere"/>
+        </array>
+        <delimiter name="50_KM_RESOLUTION_TRIPLET_COMPONENT_and_associated_data"/>
+        <array name="SIGMA0_TRIP" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="integer4" scaling-factor="10^6" units="dB" description="Smoothed to 50 km spatial resolution triplet (fore, mid, aft) sigma zero values"/>
+            </array>
+        </array>
+        <array name="KP" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="uinteger2" scaling-factor="10^4" description="Smoothed to 50 km spatial resolution triplet (fore, mid, aft) kp values (values between 0 and 1)"/>
+            </array>
+        </array>
+        <array name="INC_ANGLE_TRIP" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="uinteger2" scaling-factor="10^2" units="deg" description="Smoothed to 50 km spatial resolution triplet (fore, mid, aft) incidence angle values"/>
+            </array>
+        </array>
+        <array name="AZI_ANGLE_TRIP" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="integer2" scaling-factor="10^2" units="deg" description="Smoothed to 50 km spatial resolution triplet (fore, mid, aft) azimuth angle values"/>
+            </array>
+        </array>
+        <array name="F_KP" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="boolean" description="Flag related to the quality of the Kp estimate (ref. Ad-2)"/>
+            </array>
+        </array>
+        <array name="F_USABLE" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="enumerated" description="Flag related to the usability of the averaged value (ref. Ad-2)">
+                    <item value="0" name="GOOD"/>
+                    <item value="1" name="USABLE"/>
+                    <item value="2" name="NON USABLE"/>
+                </field>
+            </array>
+        </array>
+        <array name="F_F" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="uinteger2" scaling-factor="10^3" description="Flag related to the use of synthetic data in the generation of averaged value (ref. Ad-2) (value between 0 and 1)"/>
+            </array>
+        </array>
+        <array name="F_V" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="uinteger2" scaling-factor="10^3" description="Flag related to the quality of the used of synthetic data in the generation of averaged value (ref. Ad-2) (value between 0 and 1)"/>
+            </array>
+        </array>
+        <array name="F_OA" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="uinteger2" scaling-factor="10^3" description="Flag related to orbit/atticute quality in the generation of averaged value (ref. Ad-2) (value between 0 and 1)"/>
+            </array>
+        </array>
+        <array name="F_SA" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="uinteger2" scaling-factor="10^3" description="Flag related to solar array reflection contamination in the generation of averaged value (ref. Ad-2) (value between 0 and 1)"/>
+            </array>
+        </array>
+        <array name="F_TEL" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="uinteger2" scaling-factor="10^3" description="Flag related to telemtry quality in the generation of averaged value (ref. Ad-2) (value between 0 and 1)"/>
+            </array>
+        </array>
+        <array name="F_EXT_FIL" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="uinteger2" scaling-factor="10^3" description="Flag related to the presence of extrapolated reference functions in the generation of averaged value (ref. Ad-2) (value between 0 and 1)"/>
+            </array>
+        </array>
+        <array name="F_LAND" length="42" label="node">
+            <array length="3" labels="fore,mid,aft">
+                <field type="uinteger2" scaling-factor="10^3" description="Flag related to the use of measurements over land in the generation of averaged value (ref. Ad-2) (value between 0 and 1)"/>
+            </array>
+        </array>
+    </mdr>
+
+
+
+</product>
+
+
+</format>
