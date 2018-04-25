@@ -25,37 +25,63 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+"""
+General Level 1 data readers for ASCAT data in all formats. Not specific to distributor.
+"""
+
 import os
 
 from pygeobase.io_base import ImageBase
 from pygeobase.object_base import Image
 import ascat.lvl1_readers.read_eps_szx as read_eps_szx
 
-"""
-General Level 1 data readers for ASCAT data in all formats. Not specific to distributor.
-"""
 
 class AscatL1Image(ImageBase):
     """
     General Level 1 Image
     """
-    def __init__(self, filename, mode='rb', **kwargs):
+    def __init__(self, filename, **kwargs):
         """
         Initialization of i/o object.
         """
-        super(AscatL1Image, self).__init__(filename, mode=mode, **kwargs)
+        self.beams = ['f', 'm', 'a']
+        super(AscatL1Image, self).__init__(filename, **kwargs)
 
-    def read(self, *args, **kwargs):
-        file_format = get_file_format(self.filename)
+    def read(self, timestamp=None, file_format=None, **kwargs):
+        data = {}
+        metadata = {}
+
         if file_format == ".nat":
-            data = read_eps(self.filename)
-            return data
+            raw_data = read_eps(self.filename)
+
         elif file_format == ".nc":
-            data = read_netCDF(self.filename)
-            return data
+            raw_data = read_netCDF(self.filename)
+
         elif file_format == ".bfr":
-            data = read_bufr(self.filename)
-            return data
+            raw_data = read_bufr(self.filename)
+
+        fields = ['as_des_pass', 'swath_indicator', 'node_num',
+                  'sat_track_azi', 'line_num', 'jd',
+                  'spacecraft_id', 'abs_orbit_nr']
+        for field in fields:
+            data[field] = raw_data[field]
+
+        fields = ['azi', 'inc', 'sig', 'kp', 'f_land',
+                  'f_usable', 'f_kp', 'f_f', 'f_v', 'f_oa',
+                  'f_sa', 'f_tel', 'f_ref', 'num_val']
+        for field in fields:
+            for i, beam in enumerate(self.beams):
+                data[field + beam] = raw_data[field][:, i]
+
+        fields = ['processor_major_version',
+                  'processor_minor_version', 'format_major_version',
+                  'format_minor_version']
+        metadata = {}
+        for field in fields:
+            metadata[field] = raw_data[field]
+
+        return Image(raw_data['lon'], raw_data['lat'], data, metadata,
+                     timestamp, timekey='jd')
 
     def write(self, *args, **kwargs):
         pass
@@ -66,8 +92,10 @@ class AscatL1Image(ImageBase):
     def close(self):
         pass
 
+
 def read_eps_szf(filename):
     pass
+
 
 def get_file_format(filename):
     if os.path.splitext(filename)[1] == '.gz':
@@ -80,8 +108,10 @@ def get_file_format(filename):
 def read_netCDF_szx(filename):
     pass
 
+
 def read_bufr_szx(filename):
     pass
+
 
 def read_eps(filename):
     basename = os.path.basename(filename)
@@ -93,15 +123,19 @@ def read_eps(filename):
         data = read_eps_szf(filename)
         return data
 
+
 def read_netCDF(filename):
     pass
+
 
 def read_bufr(filename):
     pass
 
+
 def test_level1():
     test = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
     test.read()
+
 
 if __name__ == '__main__':
     test_level1()

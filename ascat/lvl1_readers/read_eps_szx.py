@@ -6,11 +6,20 @@ from gzip import GzipFile
 from collections import OrderedDict
 
 import numpy as np
+import pygenio.genio as genio
+import datetime as dt
+import matplotlib.dates as mpl_dates
 
 short_cds_time = np.dtype([('day', np.uint16), ('time', np.uint32)])
 
 long_cds_time = np.dtype([('day', np.uint16), ('ms', np.uint32),
                           ('mms', np.uint16)])
+
+long_nan = -2 ** 31
+ulong_nan = 2 ** 32 - 1
+int_nan = -2 ** 15
+uint_nan = 2 ** 16 - 1
+byte_nan = -2 ** 7
 
 
 def read_xml_mdr(filename):
@@ -131,7 +140,7 @@ def read_sphr(fid, grh):
     return sphr_dict
 
 
-def read_eps_szx(filename):
+def read_eps(filename):
     """
     Read EPS file.
     """
@@ -177,8 +186,6 @@ def read_eps_szx(filename):
 
         # mdr
         if record_class == 8:
-            # import pdb
-            # pdb.set_trace()
             mdr = read_record(fid, mdr_template)
             mdr_list.append(mdr)
 
@@ -204,7 +211,98 @@ def read_eps_szx(filename):
         else:
             sc_data[name] = data[name]
 
-    return sc_data
+
+
+    return sc_data, mphr
+
+
+def read_eps_szx(filename):
+    """
+        Read SZO/SZR format version 12.
+
+        Parameters
+        ----------
+        eps_file : EPSProduct object
+            EPS Product object.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            SZO/SZR data.
+        """
+    raw_data, mphr = read_eps(filename)
+    template = genio.GenericIO.get_template("SZX__002")
+    n_node_per_line = raw_data['LONGITUDE'].shape[1]
+    n_lines = raw_data['LONGITUDE'].shape[0]
+    n_records = raw_data['LONGITUDE'].size
+    data = np.repeat(template, n_records)
+    idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
+
+    data['jd'] = mpl_dates.num2julian(shortcdstime2dtordinal(
+        raw_data['UTC_LINE_NODES'].flatten()['day'],
+        raw_data['UTC_LINE_NODES'].flatten()['time']))[idx_nodes]
+
+    data['spacecraft_id'] = np.int8(mphr['SPACECRAFT_ID'][-1])
+    data['abs_orbit_nr'] = np.uint32(mphr['ORBIT_START'])
+
+    fields = [('processor_major_version', 'PROCESSOR_MAJOR_VERSION'),
+              ('processor_minor_version', 'PROCESSOR_MINOR_VERSION'),
+              ('format_major_version', 'FORMAT_MAJOR_VERSION'),
+              ('format_minor_version', 'FORMAT_MINOR_VERSION')]
+    for field in fields:
+        data[field[0]] = np.int16(mphr[field[1]])
+
+    fields = [('degraded_inst_mdr', 'DEGRADED_INST_MDR'),
+              ('degraded_proc_mdr','DEGRADED_PROC_MDR'),
+              ('sat_track_azi','SAT_TRACK_AZI'),
+              ('as_des_pass','AS_DES_PASS')]
+    for field in fields:
+        data[field[0]] = raw_data[field[1]].flatten()[idx_nodes]
+
+    fields = [('lon', 'LONGITUDE', long_nan),
+              ('lat', 'LATITUDE', long_nan),
+              ('swath_indicator', 'SWATH INDICATOR', byte_nan)]
+    for field in fields:
+        data[field[0]] = raw_data[field[1]].flatten()
+        valid = data[field[0]] != field[2]
+        data[field[0]][valid] = data[field[0]][valid]
+
+    fields = [('sig', 'SIGMA0_TRIP', long_nan),
+              ('inc', 'INC_ANGLE_TRIP', uint_nan),
+              ('azi', 'AZI_ANGLE_TRIP', int_nan),
+              ('kp', 'KP', uint_nan),
+              ('num_val', 'NUM_VAL_TRIP', ulong_nan),
+              ('f_kp', 'F_KP', byte_nan),
+              ('f_usable', 'F_USABLE', byte_nan),
+              ('f_f', 'F_F', uint_nan),
+              ('f_v', 'F_V', uint_nan),
+              ('f_oa', 'F_OA', uint_nan),
+              ('f_sa', 'F_SA', uint_nan),
+              ('f_tel', 'F_TEL', uint_nan),
+              ('f_ref', 'F_REF', uint_nan),
+              ('f_land', 'F_LAND', uint_nan)]
+    for field in fields:
+        data[field[0]] = raw_data[field[1]].reshape(n_records, 3)
+        valid = data[field[0]] != field[2]
+        data[field[0]][valid] = data[field[0]][valid]
+
+    # modify longitudes from (0, 360) to (-180,180)
+    mask = np.logical_and(data['lon'] != long_nan, data['lon'] > 180)
+    data['lon'][mask] += -360.
+
+    # modify azimuth from (-180, 180) to (0, 360)
+    mask = (data['azi'] != int_nan) & (data['azi'] < 0)
+    data['azi'][mask] += 360
+
+    data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
+                               n_lines)
+
+    data['line_num'] = idx_nodes
+
+    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
+
+    return data
+
 
 def get_eps_xml(mphr_dict):
     '''
@@ -229,6 +327,28 @@ def get_eps_xml(mphr_dict):
                     mphr_dict['PRODUCT_TYPE'] in file_extension.text:
                 return os.path.join(format_path, filename)
 
+
+def shortcdstime2dtordinal(days, milliseconds):
+    """
+    Converting shortcdstime to datetime ordinal.
+
+    Parameters
+    ----------
+    days : int
+        Days.
+    milliseconds : int
+        Milliseconds
+
+    Returns
+    -------
+    date : datetime.datetime
+        Ordinal datetime.
+    """
+    epoch = dt.datetime.strptime('2000-01-01 00:00:00',
+                                 '%Y-%m-%d %H:%M:%S').toordinal()
+    offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)
+
+    return epoch + offset
 
 def test_eps():
     """
