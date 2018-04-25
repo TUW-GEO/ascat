@@ -22,6 +22,19 @@ uint_nan = 2 ** 16 - 1
 byte_nan = -2 ** 7
 
 
+def read_eps_l1b(filename):
+    basename = os.path.basename(filename)
+    if basename.startswith("ASCA_SZR") or basename.startswith(
+            "ASCA_SZO"):
+        data = read_eps_szx(filename)
+        return data
+    elif basename.startswith("ASCA_SZF"):
+        data = read_eps_szf(filename)
+        return data
+    else:
+        raise RuntimeError("Couldn't detect product type from filename.")
+
+
 def read_xml_mdr(filename):
     """
     Read xml record.
@@ -72,7 +85,7 @@ def read_xml_mdr(filename):
             'integer': np.int32, 'uinteger': np.uint32, 'integer2': np.int16,
             'uinteger2': np.uint16, 'integer4': np.int32,
             'uinteger4': np.uint32, 'integer8': np.int64,
-            'enumerated': np.uint8, 'string': 'str'}
+            'enumerated': np.uint8, 'string': 'str', 'bitfield': np.uint8}
 
     scaling_factor = []
     scaled_dtype = []
@@ -139,6 +152,11 @@ def read_sphr(fid, grh):
 
     return sphr_dict
 
+def read_viadr(fid, grh):
+    """
+    Read (VIADR)
+    """
+    pass
 
 def read_eps(filename):
     """
@@ -174,15 +192,21 @@ def read_eps(filename):
         record_size = grh['record_size']
         record_class = grh['record_class']
 
+        # mphr
         if record_class == 1:
             mphr = read_mphr(fid, grh)
             xml_file = get_eps_xml(mphr)
             mdr_template, scaled_template, sfactor = read_xml_mdr(xml_file)
             continue
 
+        # sphr
         if record_class == 2:
             read_sphr(fid, grh)
             continue
+
+        # viadr
+        if record_class == 7:
+            read_viadr(fid, grh)
 
         # mdr
         if record_class == 8:
@@ -211,8 +235,6 @@ def read_eps(filename):
         else:
             sc_data[name] = data[name]
 
-
-
     return sc_data, mphr
 
 
@@ -222,8 +244,7 @@ def read_eps_szx(filename):
 
         Parameters
         ----------
-        eps_file : EPSProduct object
-            EPS Product object.
+        filename: filename of the eps product
 
         Returns
         -------
@@ -303,6 +324,83 @@ def read_eps_szx(filename):
 
     return data
 
+def read_eps_szf(filename):
+    """
+        Read SZF format version 12.
+
+        Parameters
+        ----------
+        filename: filename of the eps product
+
+        Returns
+        -------
+        data : numpy.ndarray
+            SZO/SZR data.
+        """
+    raw_data, mphr = read_eps(filename)
+    template = genio.GenericIO.get_template("SZF__001")
+    n_node_per_line = raw_data['LONGITUDE_FULL'].shape[1]
+    n_lines = raw_data['LONGITUDE_FULL'].shape[0]
+    n_records = raw_data['LONGITUDE_FULL'].size
+    data = np.repeat(template, n_records)
+    idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
+
+    data['jd'] = mpl_dates.num2julian(shortcdstime2dtordinal(
+        raw_data['UTC_LOCALISATION'].flatten()['day'],
+        raw_data['UTC_LOCALISATION'].flatten()['time']))[idx_nodes]
+
+    data['spacecraft_id'] = np.int8(mphr['SPACECRAFT_ID'][-1])
+
+    fields = [('processor_major_version', 'PROCESSOR_MAJOR_VERSION'),
+              ('processor_minor_version', 'PROCESSOR_MINOR_VERSION'),
+              ('format_major_version', 'FORMAT_MAJOR_VERSION'),
+              ('format_minor_version', 'FORMAT_MINOR_VERSION')]
+    for field in fields:
+        data[field[0]] = np.int16(mphr[field[1]])
+
+    fields = [('degraded_inst_mdr', 'DEGRADED_INST_MDR'),
+              ('degraded_proc_mdr','DEGRADED_PROC_MDR'),
+              ('sat_track_azi','SAT_TRACK_AZI'),
+              ('as_des_pass','AS_DES_PASS'),
+              ('beam_number', 'BEAM_NUMBER'),
+              ('flagfield_rf1', 'FLAGFIELD_RF1'),
+              ('flagfield_rf2', 'FLAGFIELD_RF2'),
+              ('flagfield_pl', 'FLAGFIELD_PL'),
+              ('flagfield_gen1', 'FLAGFIELD_GEN1')
+              ]
+    for field in fields:
+        data[field[0]] = raw_data[field[1]].flatten()[idx_nodes]
+
+    data['swath_indicator'] = np.int8(data['beam_number'].flatten() > 3)
+
+    fields = [('lon', 'LONGITUDE_FULL', long_nan),
+              ('lat', 'LATITUDE_FULL', long_nan),
+              ('sig', 'SIGMA0_FULL', long_nan),
+              ('inc', 'INC_ANGLE_FULL', uint_nan),
+              ('azi', 'AZI_ANGLE_FULL', int_nan),
+              ('land_frac', 'LAND_FRAC', uint_nan),
+              ('flagfield_gen2', 'FLAGFIELD_GEN2', byte_nan)]
+    for field in fields:
+        data[field[0]] = raw_data[field[1]].flatten()
+        valid = data[field[0]] != field[2]
+        data[field[0]][valid] = data[field[0]][valid]
+
+    # modify longitudes from (0, 360) to (-180,180)
+    mask = np.logical_and(data['lon'] != long_nan, data['lon'] > 180)
+    data['lon'][mask] += -360.
+
+    # modify azimuth from (-180, 180) to (0, 360)
+    mask = (data['azi'] != int_nan) & (data['azi'] < 0)
+    data['azi'][mask] += 360
+
+    data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
+                               n_lines)
+
+    data['line_num'] = idx_nodes
+
+    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
+
+    return data
 
 def get_eps_xml(mphr_dict):
     '''
@@ -354,11 +452,11 @@ def test_eps():
     """
     Test read EPS file.
     """
-    data = read_eps_szx('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
-    # data = read_eps_szx('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20160101000900Z_20160101015058Z_N_O_20160101005610Z.nat.gz')
-    data = read_eps_szx('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20070101010300Z_20070101024756Z_R_O_20140127103410Z.gz')
-    # data = read_eps_szx('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20140331235400Z_20140401013856Z_R_O_20140528192253Z.gz')
-    # data = read_eps_szx('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20070101010300Z_20070101024759Z_R_O_20140127103401Z.gz')
+    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
+    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20160101000900Z_20160101015058Z_N_O_20160101005610Z.nat.gz')
+    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20070101010300Z_20070101024756Z_R_O_20140127103410Z.gz')
+    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20140331235400Z_20140401013856Z_R_O_20140528192253Z.gz')
+    data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20070101010300Z_20070101024759Z_R_O_20140127103401Z.gz')
 
 if __name__ == '__main__':
     test_eps()

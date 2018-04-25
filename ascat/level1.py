@@ -33,7 +33,7 @@ import os
 
 from pygeobase.io_base import ImageBase
 from pygeobase.object_base import Image
-import ascat.lvl1_readers.read_eps_szx as read_eps_szx
+import ascat.lvl1_readers.read_eps as read_eps
 
 
 class AscatL1Image(ImageBase):
@@ -51,14 +51,19 @@ class AscatL1Image(ImageBase):
         data = {}
         metadata = {}
 
+        if file_format == None:
+            file_format = get_file_format(self.filename)
+
         if file_format == ".nat":
-            raw_data = read_eps(self.filename)
+            raw_data = read_eps.read_eps_l1b(self.filename)
 
         elif file_format == ".nc":
             raw_data = read_netCDF(self.filename)
 
         elif file_format == ".bfr":
             raw_data = read_bufr(self.filename)
+        else:
+            raise RuntimeError("Format not found, please indicate the file format.")
 
         fields = ['as_des_pass', 'swath_indicator', 'node_num',
                   'sat_track_azi', 'line_num', 'jd',
@@ -76,7 +81,6 @@ class AscatL1Image(ImageBase):
         fields = ['processor_major_version',
                   'processor_minor_version', 'format_major_version',
                   'format_minor_version']
-        metadata = {}
         for field in fields:
             metadata[field] = raw_data[field]
 
@@ -111,17 +115,6 @@ def read_netCDF_szx(filename):
 
 def read_bufr_szx(filename):
     pass
-
-
-def read_eps(filename):
-    basename = os.path.basename(filename)
-    if basename.startswith("ASCA_SZR") or basename.startswith(
-            "ASCA_SZO"):
-        data = read_eps_szx.read_eps_szx(filename)
-        return data
-    elif basename.startswith("ASCA_SZF"):
-        data = read_eps_szf(filename)
-        return data
 
 
 def read_netCDF(filename):
