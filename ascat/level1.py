@@ -40,12 +40,12 @@ class AscatL1Image(ImageBase):
     """
     General Level 1 Image
     """
-    def __init__(self, filename, **kwargs):
+    def __init__(self, *args, **kwargs):
         """
         Initialization of i/o object.
         """
         self.beams = ['f', 'm', 'a']
-        super(AscatL1Image, self).__init__(filename, **kwargs)
+        super(AscatL1Image, self).__init__(*args, **kwargs)
 
     def read(self, timestamp=None, file_format=None, **kwargs):
         data = {}
@@ -128,6 +128,8 @@ def read_bufr(filename):
 def test_level1():
     test = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
     test.read()
+    test1 = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20070101010300Z_20070101024756Z_R_O_20140127103410Z.gz')
+    test1.read(file_format='.nat')
 
 
 if __name__ == '__main__':
