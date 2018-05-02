@@ -21,96 +21,241 @@ int_nan = -2 ** 15
 uint_nan = 2 ** 16 - 1
 byte_nan = -2 ** 7
 
+class EPSProduct(object):
 
-def read_eps_l1b(filename):
-    raw_data, mphr = read_eps(filename)
-    fmv = int(mphr['FORMAT_MAJOR_VERSION'])
-    basename = os.path.basename(filename)
-    if basename.startswith("ASCA_SZR") or basename.startswith(
-            "ASCA_SZO"):
-        if fmv == 11:
-            return read_eps_szx_fmv11(raw_data, mphr)
-        if fmv == 12:
-            return read_eps_szx_fmv12(raw_data, mphr)
-
-    elif basename.startswith("ASCA_SZF"):
-        if fmv == 12:
-            return read_eps_szf_fmv12(raw_data, mphr)
-
-    raise ValueError("Format not supported or couldn't be autodetected.")
-
-
-def read_xml_mdr(filename):
     """
-    Read xml record.
+    Class for reading EPS products.
     """
-    doc = etree.parse(filename)
-    elements = doc.xpath('//mdr')
-    data = OrderedDict()
-    length = []
-    elem = elements[0]
 
-    for child in elem.getchildren():
+    def __init__(self, filename):
+        self.filename = filename
+        self.fid = None
+        self.grh = None
+        self.mphr = None
+        self.sphr = None
+        self.ipr = None
+        self.geadr = None
+        self.giadr_archive = None
+        self.veadr = None
+        self.viadr = None
+        self.viadr_grid = None
+        self.dummy_mdr = None
+        self.mdr = None
+        self.eor = 0
+        self.bor = 0
+        self.mdr_counter = 0
+        self.filesize = 0
+        self.xml_file = None
+        self.scaled_mdr = None
+        self.scaled_template = None
+        self.sfactor = None
 
-        if child.tag == 'delimiter':
-            continue
+    def read_product(self):
+        # record_class_dict = {1: 'MPHR', 2: 'SPHR', 3: 'IPR', 4: 'GEADR',
+        #                      5: 'GIADR', 6: 'VEADR', 7: 'VIADR', 8: 'MDR'}
 
-        child_items = dict(child.items())
-        name = child_items.pop('name')
+        mdr_template = None
 
-        try:
-            var_len = child_items.pop('length')
-            length.append(np.int(var_len))
-        except KeyError:
-            pass
+        self.fid = open(self.filename, 'rb')
+        self.filesize = os.path.getsize(self.filename)
+        self.eor = self.fid.tell()
 
-        data[name] = child_items
+        while self.eor < self.filesize:
 
-        if child.tag == 'array':
-            for arr in child.iterdescendants():
-                arr_items = dict(arr.items())
-                if arr.tag == 'field':
-                    data[name].update(arr_items)
+            # remember beginning of the record
+            self.bor = self.fid.tell()
+
+            # read grh of current record
+            self.grh = self._read_record(grh_record())[0]
+            record_size = self.grh['record_size']
+            record_class = self.grh['record_class']
+            record_subclass = self.grh['record_subclass']
+
+            # mphr
+            if record_class == 1:
+                self._read_mphr()
+                self.xml_file = self._get_eps_xml()
+                mdr_template, self.scaled_template, self.sfactor = self._read_xml_mdr()
+
+            # sphr
+            elif record_class == 2:
+                self._read_sphr()
+
+            # viadr
+            # elif record_class == 7:
+            #     if record_subclass == 8:
+            #         self._read_viadr_grid()
+            #     else:
+            #         self._read_viadr()
+
+            # mdr
+            elif record_class == 8:
+                mdr_element = self._read_record(mdr_template)
+                if self.mdr is None:
+                    self.mdr = [mdr_element]
                 else:
-                    try:
-                        var_len = arr_items.pop('length')
-                        length.append(np.int(var_len))
-                    except KeyError:
-                        pass
+                    self.mdr.append(mdr_element)
 
-        if length:
-            data[name].update({'length': length})
-        else:
-            data[name].update({'length': 1})
+            # return pointer to the beginning of the record
+            self.fid.seek(self.bor)
+            self.fid.seek(record_size, 1)
 
+            # determine number of bytes read
+            # end of record
+            self.eor = self.fid.tell()
+
+        self.fid.close()
+
+        data = np.hstack(self.mdr)
+        self.scaled_mdr = np.zeros_like(data, dtype=self.scaled_template)
+
+        for name, sf in zip(data.dtype.names, self.sfactor):
+            if sf != 1:
+                self.scaled_mdr[name] = data[name] / sf
+            else:
+                self.scaled_mdr[name] = data[name]
+
+    def _read_record(self, dtype, count=1):
+        """
+        Read record
+        """
+        record = np.fromfile(self.fid, dtype=dtype, count=count)
+        return record.newbyteorder('B')
+
+    def _read_mphr(self):
+        """
+        Read Main Product Header (MPHR).
+        """
+        mphr = self.fid.read(self.grh['record_size'] - self.grh.itemsize)
+        self.mphr = OrderedDict(item.replace(' ', '').split('=')
+                                for item in mphr.split('\n')[:-1])
+
+    def _read_sphr(self):
+        """
+        Read Special Product Header (SPHR).
+        """
+        sphr = self.fid.read(self.grh['record_size'] - self.grh.itemsize)
+        self.sphr = OrderedDict(item.replace(' ', '').split('=')
+                                for item in sphr.split('\n')[:-1])
+
+    def _read_viadr(self):
+        """
+        Read VIADR
+        """
+        pass
+
+    def _read_viadr_grid(self):
+        """
+        Read VIADR grid
+        """
+        pass
+
+    def _get_eps_xml(self):
+        '''
+        Find the corresponding eps xml file.
+
+        :param: mphr_dict
+        :return: filename
+        '''
+        format_path = os.path.join(os.path.dirname(__file__), '..', '..',
+                                   'formats')
+
+        for filename in fnmatch.filter(os.listdir(format_path), 'eps_ascat*'):
+            doc = etree.parse(os.path.join(format_path, filename))
+            file_extension = doc.xpath('//file-extensions')[0].getchildren()[0]
+
+            format_version = doc.xpath('//format-version')
+            for elem in format_version:
+                major = elem.getchildren()[0]
+                minor = elem.getchildren()[1]
+                if major.text == self.mphr['FORMAT_MAJOR_VERSION'] and \
+                        minor.text == self.mphr['FORMAT_MINOR_VERSION'] and \
+                        self.mphr[
+                            'PROCESSING_LEVEL'] in file_extension.text and \
+                        self.mphr['PRODUCT_TYPE'] in file_extension.text:
+                    return os.path.join(format_path, filename)
+
+    def _read_xml_viadr(self):
+        """
+        Read xml record.
+        """
+        doc = etree.parse(self.xml_file)
+        elements = doc.xpath('//viadr')
+        data = OrderedDict()
         length = []
+        elem = elements[0]
 
-    conv = {'longtime': long_cds_time, 'time': short_cds_time,
-            'boolean': np.uint8, 'integer1': np.int8, 'uinteger1': np.uint8,
-            'integer': np.int32, 'uinteger': np.uint32, 'integer2': np.int16,
-            'uinteger2': np.uint16, 'integer4': np.int32,
-            'uinteger4': np.uint32, 'integer8': np.int64,
-            'enumerated': np.uint8, 'string': 'str', 'bitfield': np.uint8}
+    def _read_xml_mdr(self):
+        """
+        Read xml record.
+        """
+        doc = etree.parse(self.xml_file)
+        elements = doc.xpath('//mdr')
+        data = OrderedDict()
+        length = []
+        elem = elements[0]
 
-    scaling_factor = []
-    scaled_dtype = []
-    dtype = []
+        for child in elem.getchildren():
 
-    for key, value in data.items():
+            if child.tag == 'delimiter':
+                continue
 
-        if 'scaling-factor' in value:
-            sf_dtype = np.float32
-            sf = eval(value['scaling-factor'].replace('^', '**'))
-        else:
-            sf_dtype = conv[value['type']]
-            sf = 1
+            child_items = dict(child.items())
+            name = child_items.pop('name')
 
-        scaling_factor.append(sf)
-        scaled_dtype.append((key, sf_dtype, value['length']))
-        dtype.append((key, conv[value['type']], value['length']))
+            try:
+                var_len = child_items.pop('length')
+                length.append(np.int(var_len))
+            except KeyError:
+                pass
 
-    return np.dtype(dtype), np.dtype(scaled_dtype), np.array(scaling_factor,
-                                                             dtype=np.float32)
+            data[name] = child_items
+
+            if child.tag == 'array':
+                for arr in child.iterdescendants():
+                    arr_items = dict(arr.items())
+                    if arr.tag == 'field':
+                        data[name].update(arr_items)
+                    else:
+                        try:
+                            var_len = arr_items.pop('length')
+                            length.append(np.int(var_len))
+                        except KeyError:
+                            pass
+
+            if length:
+                data[name].update({'length': length})
+            else:
+                data[name].update({'length': 1})
+
+            length = []
+
+        conv = {'longtime': long_cds_time, 'time': short_cds_time,
+                'boolean': np.uint8, 'integer1': np.int8, 'uinteger1': np.uint8,
+                'integer': np.int32, 'uinteger': np.uint32, 'integer2': np.int16,
+                'uinteger2': np.uint16, 'integer4': np.int32,
+                'uinteger4': np.uint32, 'integer8': np.int64,
+                'enumerated': np.uint8, 'string': 'str', 'bitfield': np.uint8}
+
+        scaling_factor = []
+        scaled_dtype = []
+        dtype = []
+
+        for key, value in data.items():
+
+            if 'scaling-factor' in value:
+                sf_dtype = np.float32
+                sf = eval(value['scaling-factor'].replace('^', '**'))
+            else:
+                sf_dtype = conv[value['type']]
+                sf = 1
+
+            scaling_factor.append(sf)
+            scaled_dtype.append((key, sf_dtype, value['length']))
+            dtype.append((key, conv[value['type']], value['length']))
+
+        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(scaling_factor,
+                                                                 dtype=np.float32)
 
 
 def grh_record():
@@ -127,61 +272,29 @@ def grh_record():
 
     return record_dtype
 
+def read_eps_l1b(filename):
+    eps_file = read_eps(filename)
+    ptype = eps_file.mphr['PRODUCT_TYPE']
+    fmv = int(eps_file.mphr['FORMAT_MAJOR_VERSION'])
 
-def read_record(fid, dtype, count=1):
-    """
-    Read record
-    """
-    record = np.fromfile(fid, dtype=dtype, count=count)
-    return record.newbyteorder('B')
+    if ptype == 'SZF':
+        if fmv == 12:
+            return read_szf_fmv_12(eps_file)
 
+    elif (ptype == 'SZR') or (ptype == 'SZO'):
+        if fmv == 11:
+            return read_szx_fmv_11(eps_file)
+        if fmv == 12:
+            return read_szx_fmv_12(eps_file)
 
-def read_mphr(fid, grh):
-    """
-    Read Main Product Header (MPHR).
-    """
-    mphr = fid.read(grh['record_size'] - grh.itemsize)
-    mphr_dict = OrderedDict(item.replace(' ', '').split('=')
-                            for item in mphr.split('\n')[:-1])
+    raise ValueError("Format not supported. Product type {:1}"
+                     " Format major version: {:2}".format(ptype, fmv))
 
-    return mphr_dict
-
-
-def read_sphr(fid, grh):
-    """
-    Read Special Product Header (SPHR).
-    """
-    sphr = fid.read(grh['record_size'] - grh.itemsize)
-    sphr_dict = OrderedDict(item.replace(' ', '').split('=')
-                            for item in sphr.split('\n')[:-1])
-
-    return sphr_dict
-
-def read_viadr(fid, grh):
-    """
-    Read VIADR
-    """
-    viadr = fid.read(grh['record_size'] - grh.itemsize)
-    viadr_dict = OrderedDict(item.replace(' ', '').split('=')
-                            for item in viadr.split('\n')[:-1])
-
-    return viadr_dict
-
-def read_viadr_grid(fid, grh):
-    """
-    Read VIADR grid
-    """
-    pass
 
 def read_eps(filename):
     """
     Read EPS file.
     """
-    # record_class_dict = {1: 'MPHR', 2: 'SPHR', 3: 'IPR', 4: 'GEADR',
-    #                      5: 'GIADR', 6: 'VEADR', 7: 'VIADR', 8: 'MDR'}
-
-    mdr_template = None
-    mdr_list = []
 
     zipped = False
     if os.path.splitext(filename)[1] == '.gz':
@@ -193,68 +306,16 @@ def read_eps(filename):
                 tmp_fid.write(gz_fid.read())
             filename = tmp_fid.name
 
-    fid = open(filename, 'rb')
-    filesize = os.path.getsize(filename)
-    eor = fid.tell()
-
-    while eor < filesize:
-
-        # remember beginning of the record
-        bor = fid.tell()
-
-        # read grh of current record
-        grh = read_record(fid, grh_record())[0]
-        record_size = grh['record_size']
-        record_class = grh['record_class']
-        record_subclass = grh['record_subclass']
-
-        # mphr
-        if record_class == 1:
-            mphr = read_mphr(fid, grh)
-            xml_file = get_eps_xml(mphr)
-            mdr_template, scaled_template, sfactor = read_xml_mdr(xml_file)
-
-        # sphr
-        elif record_class == 2:
-            read_sphr(fid, grh)
-
-        # viadr
-        elif record_class == 7:
-            if record_subclass == 8:
-                read_viadr_grid(fid, grh)
-            else:
-                read_viadr(fid, grh)
-
-        # mdr
-        elif record_class == 8:
-            mdr = read_record(fid, mdr_template)
-            mdr_list.append(mdr)
-
-        # return pointer to the beginning of the record
-        fid.seek(bor)
-        fid.seek(record_size, 1)
-
-        # determine number of bytes read
-        # end of record
-        eor = fid.tell()
-
-    fid.close()
+    prod = EPSProduct(filename)
+    prod.read_product()
 
     if zipped:
         os.remove(filename)
 
-    data = np.hstack(mdr_list)
-    sc_data = np.zeros_like(data, dtype=scaled_template)
+    return prod
 
-    for name, sf in zip(data.dtype.names, sfactor):
-        if sf != 1:
-            sc_data[name] = data[name] / sf
-        else:
-            sc_data[name] = data[name]
 
-    return sc_data, mphr
-
-def read_eps_szx_fmv11(raw_data, mphr):
+def read_szx_fmv_11(eps_file):
     """
             Read SZO/SZR format version 12.
 
@@ -267,6 +328,9 @@ def read_eps_szx_fmv11(raw_data, mphr):
             data : numpy.ndarray
                 SZO/SZR data.
             """
+    raw_data = eps_file.scaled_mdr
+    mphr = eps_file.mphr
+
     template = genio.GenericIO.get_template("SZX__002")
     n_node_per_line = raw_data['LONGITUDE'].shape[1]
     n_lines = raw_data['LONGITUDE'].shape[0]
@@ -334,7 +398,8 @@ def read_eps_szx_fmv11(raw_data, mphr):
 
     return data
 
-def read_eps_szx_fmv12(raw_data, mphr):
+
+def read_szx_fmv_12(eps_file):
     """
         Read SZO/SZR format version 12.
 
@@ -347,6 +412,9 @@ def read_eps_szx_fmv12(raw_data, mphr):
         data : numpy.ndarray
             SZO/SZR data.
         """
+    raw_data = eps_file.scaled_mdr
+    mphr = eps_file.mphr
+
     template = genio.GenericIO.get_template("SZX__002")
     n_node_per_line = raw_data['LONGITUDE'].shape[1]
     n_lines = raw_data['LONGITUDE'].shape[0]
@@ -418,7 +486,8 @@ def read_eps_szx_fmv12(raw_data, mphr):
 
     return data
 
-def read_eps_szf_fmv12(raw_data, mphr):
+
+def read_szf_fmv_12(eps_file):
     """
         Read SZF format version 12.
 
@@ -431,6 +500,9 @@ def read_eps_szf_fmv12(raw_data, mphr):
         data : numpy.ndarray
             SZF data.
         """
+    raw_data = eps_file.scaled_mdr
+    mphr = eps_file.mphr
+
     template = genio.GenericIO.get_template("SZF__001")
     n_node_per_line = raw_data['LONGITUDE_FULL'].shape[1]
     n_lines = raw_data['LONGITUDE_FULL'].shape[0]
@@ -494,29 +566,6 @@ def read_eps_szf_fmv12(raw_data, mphr):
 
     return data
 
-def get_eps_xml(mphr_dict):
-    '''
-    Find the corresponding eps xml file.
-
-    :param: mphr_dict
-    :return: filename
-    '''
-    format_path = os.path.join(os.path.dirname(__file__), '..', '..', 'formats')
-
-    for filename in fnmatch.filter(os.listdir(format_path), 'eps_ascat*'):
-        doc = etree.parse(os.path.join(format_path, filename))
-        file_extension = doc.xpath('//file-extensions')[0].getchildren()[0]
-
-        format_version = doc.xpath('//format-version')
-        for elem in format_version:
-            major = elem.getchildren()[0]
-            minor = elem.getchildren()[1]
-            if major.text == mphr_dict['FORMAT_MAJOR_VERSION'] and \
-                    minor.text == mphr_dict['FORMAT_MINOR_VERSION'] and \
-                    mphr_dict['PROCESSING_LEVEL'] in file_extension.text and \
-                    mphr_dict['PRODUCT_TYPE'] in file_extension.text:
-                return os.path.join(format_path, filename)
-
 
 def shortcdstime2dtordinal(days, milliseconds):
     """
@@ -540,6 +589,7 @@ def shortcdstime2dtordinal(days, milliseconds):
 
     return epoch + offset
 
+
 def test_eps():
     """
     Test read EPS file.
@@ -552,6 +602,7 @@ def test_eps():
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20140331235400Z_20140401013900Z_R_O_20140528192238Z.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20121212071500Z_20121212085659Z_N_O_20121212080501Z.nat')
+
 
 if __name__ == '__main__':
     test_eps()
