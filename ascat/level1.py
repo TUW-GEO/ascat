@@ -44,45 +44,22 @@ class AscatL1Image(ImageBase):
         """
         Initialization of i/o object.
         """
-        self.beams = ['f', 'm', 'a']
         super(AscatL1Image, self).__init__(*args, **kwargs)
 
     def read(self, timestamp=None, file_format=None, **kwargs):
-        data = {}
-        metadata = {}
 
         if file_format == None:
             file_format = get_file_format(self.filename)
 
         if file_format == ".nat":
-            raw_data = read_eps.read_eps_l1b(self.filename)
-
+            raw_data, data, metadata = read_eps.read_eps_l1b(self.filename)
         elif file_format == ".nc":
-            raw_data = read_netCDF(self.filename)
+            raw_data, data, metadata = read_netCDF(self.filename)
 
         elif file_format == ".bfr":
-            raw_data = read_bufr(self.filename)
+            raw_data, data, metadata = read_bufr(self.filename)
         else:
             raise RuntimeError("Format not found, please indicate the file format.")
-
-        fields = ['as_des_pass', 'swath_indicator', 'node_num',
-                  'sat_track_azi', 'line_num', 'jd',
-                  'spacecraft_id', 'abs_orbit_nr']
-        for field in fields:
-            data[field] = raw_data[field]
-
-        fields = ['azi', 'inc', 'sig', 'kp', 'f_land',
-                  'f_usable', 'f_kp', 'f_f', 'f_v', 'f_oa',
-                  'f_sa', 'f_tel', 'f_ref', 'num_val']
-        for field in fields:
-            for i, beam in enumerate(self.beams):
-                data[field + beam] = raw_data[field][:, i]
-
-        fields = ['processor_major_version',
-                  'processor_minor_version', 'format_major_version',
-                  'format_minor_version']
-        for field in fields:
-            metadata[field] = raw_data[field]
 
         return Image(raw_data['lon'], raw_data['lat'], data, metadata,
                      timestamp, timekey='jd')

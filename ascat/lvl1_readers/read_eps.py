@@ -75,30 +75,43 @@ class EPSProduct(object):
             if record_class == 1:
                 self._read_mphr()
                 self.xml_file = self._get_eps_xml()
-                mdr_template, self.scaled_template, self.sfactor = self._read_xml_mdr()
+                mdr_template, self.scaled_template, self.sfactor = self._template_from_xml(8)
 
             # sphr
             elif record_class == 2:
                 self._read_sphr()
 
             # viadr
-            # elif record_class == 7:
-            #     if record_subclass == 8:
-            #         self._read_viadr_grid()
-            #     else:
-            #         self._read_viadr()
+            elif record_class == 7:
+                template, scaled_template, sfactor = self._template_from_xml(record_class, record_subclass)
+                viadr_element = self._read_record(template)
+                if record_subclass == 8:
+                    if self.viadr_grid is None:
+                        self.viadr_grid = [viadr_element]
+                    else:
+                        self.viadr_grid.append(viadr_element)
+                else:
+                    if self.viadr is None:
+                        self.viadr = [viadr_element]
+                    else:
+                        self.viadr.append(viadr_element)
 
             # mdr
             elif record_class == 8:
-                mdr_element = self._read_record(mdr_template)
-                if self.mdr is None:
-                    self.mdr = [mdr_element]
+                if self.grh['instrument_group'] == 13:
+                    pass
                 else:
-                    self.mdr.append(mdr_element)
+                    mdr_element = self._read_record(mdr_template)
+                    if self.mdr is None:
+                        self.mdr = [mdr_element]
+                    else:
+                        self.mdr.append(mdr_element)
+                    self.mdr_counter += 1
 
             # return pointer to the beginning of the record
             self.fid.seek(self.bor)
             self.fid.seek(record_size, 1)
+
 
             # determine number of bytes read
             # end of record
@@ -106,14 +119,14 @@ class EPSProduct(object):
 
         self.fid.close()
 
-        data = np.hstack(self.mdr)
-        self.scaled_mdr = np.zeros_like(data, dtype=self.scaled_template)
+        self.mdr = np.hstack(self.mdr)
+        self.scaled_mdr = np.zeros_like(self.mdr, dtype=self.scaled_template)
 
-        for name, sf in zip(data.dtype.names, self.sfactor):
+        for name, sf in zip(self.mdr.dtype.names, self.sfactor):
             if sf != 1:
-                self.scaled_mdr[name] = data[name] / sf
+                self.scaled_mdr[name] = self.mdr[name] / sf
             else:
-                self.scaled_mdr[name] = data[name]
+                self.scaled_mdr[name] = self.mdr[name]
 
     def _read_record(self, dtype, count=1):
         """
@@ -137,18 +150,6 @@ class EPSProduct(object):
         sphr = self.fid.read(self.grh['record_size'] - self.grh.itemsize)
         self.sphr = OrderedDict(item.replace(' ', '').split('=')
                                 for item in sphr.split('\n')[:-1])
-
-    def _read_viadr(self):
-        """
-        Read VIADR
-        """
-        pass
-
-    def _read_viadr_grid(self):
-        """
-        Read VIADR grid
-        """
-        pass
 
     def _get_eps_xml(self):
         '''
@@ -175,25 +176,29 @@ class EPSProduct(object):
                         self.mphr['PRODUCT_TYPE'] in file_extension.text:
                     return os.path.join(format_path, filename)
 
-    def _read_xml_viadr(self):
+    def _template_from_xml(self, classid, subclassid=0):
         """
         Read xml record.
         """
-        doc = etree.parse(self.xml_file)
-        elements = doc.xpath('//viadr')
-        data = OrderedDict()
-        length = []
-        elem = elements[0]
+        subclass=0
+        if classid == 7:
+            mainclass = 'viadr'
+            if subclassid == 4:
+                subclass = 0
+            elif subclassid == 6:
+                subclass = 1
+            elif subclassid == 8:
+                subclass = 2
+            else:
+                raise RuntimeError("VIADR subclass not supported.")
+        elif classid == 8:
+            mainclass = 'mdr'
 
-    def _read_xml_mdr(self):
-        """
-        Read xml record.
-        """
         doc = etree.parse(self.xml_file)
-        elements = doc.xpath('//mdr')
+        elements = doc.xpath('//' + mainclass)
         data = OrderedDict()
         length = []
-        elem = elements[0]
+        elem = elements[subclass]
 
         for child in elem.getchildren():
 
@@ -257,7 +262,6 @@ class EPSProduct(object):
         return np.dtype(dtype), np.dtype(scaled_dtype), np.array(scaling_factor,
                                                                  dtype=np.float32)
 
-
 def grh_record():
     """
     Generic record header.
@@ -273,23 +277,63 @@ def grh_record():
     return record_dtype
 
 def read_eps_l1b(filename):
+    data = {}
+    metadata = {}
     eps_file = read_eps(filename)
     ptype = eps_file.mphr['PRODUCT_TYPE']
     fmv = int(eps_file.mphr['FORMAT_MAJOR_VERSION'])
 
     if ptype == 'SZF':
         if fmv == 12:
-            return read_szf_fmv_12(eps_file)
+            raw_data = read_szf_fmv_12(eps_file)
+
+        fields = ['as_des_pass', 'swath_indicator', 'beam_number',
+                  'azi', 'inc', 'sig', 'f_usable', 'f_land', 'jd']
+        for field in fields:
+            data[field] = raw_data[field]
+
+        fields = ['spacecraft_id', 'sat_track_azi',
+                  'processor_major_version', 'processor_minor_version',
+                  'format_major_version', 'format_minor_version',
+                  'degraded_inst_mdr', 'degraded_proc_mdr',
+                  'flagfield_rf1', 'flagfield_rf2', 'flagfield_pl',
+                  'flagfield_gen1', 'flagfield_gen2', 'land_frac',
+                  'f_usable', 'f_land']
+
+        for field in fields:
+            metadata[field] = raw_data[field]
 
     elif (ptype == 'SZR') or (ptype == 'SZO'):
         if fmv == 11:
-            return read_szx_fmv_11(eps_file)
+            raw_data = read_szx_fmv_11(eps_file)
         if fmv == 12:
-            return read_szx_fmv_12(eps_file)
+            raw_data = read_szx_fmv_12(eps_file)
 
-    raise ValueError("Format not supported. Product type {:1}"
+        beams = ['f', 'm', 'a']
+
+        fields = ['as_des_pass', 'swath_indicator', 'node_num',
+                  'sat_track_azi', 'line_num', 'jd',
+                  'spacecraft_id', 'abs_orbit_nr']
+        for field in fields:
+            data[field] = raw_data[field]
+
+        fields = ['azi', 'inc', 'sig', 'kp', 'f_land',
+                  'f_usable', 'f_kp', 'f_f', 'f_v', 'f_oa',
+                  'f_sa', 'f_tel', 'f_ref', 'num_val']
+        for field in fields:
+            for i, beam in enumerate(beams):
+                data[field + beam] = raw_data[field][:, i]
+
+        fields = ['processor_major_version',
+                  'processor_minor_version', 'format_major_version',
+                  'format_minor_version']
+        for field in fields:
+            metadata[field] = raw_data[field]
+    else:
+        raise ValueError("Format not supported. Product type {:1}"
                      " Format major version: {:2}".format(ptype, fmv))
 
+    return raw_data, data, metadata
 
 def read_eps(filename):
     """
@@ -505,7 +549,7 @@ def read_szf_fmv_12(eps_file):
 
     template = genio.GenericIO.get_template("SZF__001")
     n_node_per_line = raw_data['LONGITUDE_FULL'].shape[1]
-    n_lines = raw_data['LONGITUDE_FULL'].shape[0]
+    n_lines = eps_file.mdr_counter
     n_records = raw_data['LONGITUDE_FULL'].size
     data = np.repeat(template, n_records)
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
@@ -557,14 +601,98 @@ def read_szf_fmv_12(eps_file):
     mask = (data['azi'] != int_nan) & (data['azi'] < 0)
     data['azi'][mask] += 360
 
-    data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
-                               n_lines)
+    grid_nodes_per_line = 2 * 81
 
-    data['line_num'] = idx_nodes
+    viadr_grid = np.concatenate(eps_file.viadr_grid)
+    orbit_grid = np.zeros(viadr_grid.size * grid_nodes_per_line,
+                          dtype=np.dtype([('lon', np.float32),
+                                          ('lat', np.float32),
+                                          ('node_num', np.int16),
+                                          ('line_num', np.int32)]))
+
+    for pos_all in range(orbit_grid['lon'].size):
+        line = pos_all / grid_nodes_per_line
+        pos_small = pos_all % 81
+        if (pos_all % grid_nodes_per_line <= 80):
+            # left swath
+            orbit_grid['lon'][pos_all] = viadr_grid[
+                'longitude_left'][line][80 - pos_small]
+            orbit_grid['lat'][pos_all] = viadr_grid[
+                'latitude_left'][line][80 - pos_small]
+        else:
+            # right swath
+            orbit_grid['lon'][pos_all] = viadr_grid[
+                'longitude_right'][line][pos_small]
+            orbit_grid['lat'][pos_all] = viadr_grid[
+                'latitude_right'][line][pos_small]
+
+    orbit_grid['node_num'] = np.tile((np.arange(grid_nodes_per_line) + 1),
+                                     viadr_grid.size)
+
+    lines = np.arange(0, viadr_grid.size * 2, 2)
+    orbit_grid['line_num'] = np.repeat(lines, grid_nodes_per_line)
+
+    fields = ['lon', 'lat']
+    for field in fields:
+        mask = orbit_grid[field] != long_nan
+        orbit_grid[field] = orbit_grid[field] * 1e-6
+
+    mask = (orbit_grid['lon'] != long_nan) & (orbit_grid['lon'] > 180)
+    orbit_grid['lon'][mask] += -360.
+
+    set_flags(data)
 
     data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
 
-    return data
+    return data, orbit_grid
+
+
+def set_flags(data):
+    """
+    Compute summary flag for each measurement with a value of 0, 1 or 2
+    indicating nominal, slightly degraded or severely degraded data.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        SZF data.
+    """
+
+    # category:status = 'red': 2, 'amber': 1, 'warning': 0
+    flag_status_bit = {'flagfield_rf1': {'2': [2, 4],
+                                         '1': [0, 1, 3]},
+
+                       'flagfield_rf2': {'2': [0, 1]},
+
+                       'flagfield_pl': {'2': [0, 1, 2, 3],
+                                        '0': [4]},
+
+                       'flagfield_gen1': {'2': [1],
+                                          '0': [0]},
+
+                       'flagfield_gen2': {'2': [2],
+                                          '1': [0],
+                                          '0': [1]}
+                       }
+
+    for flagfield in flag_status_bit.keys():
+        unpacked_bits = np.unpackbits(data[flagfield])
+
+        set_bits = np.where(unpacked_bits == 1)[0]
+        if (set_bits.size != 0):
+            pos_8 = 7 - (set_bits % 8)
+
+            for category in sorted(flag_status_bit[flagfield].keys()):
+                if (int(category) == 0) and (flagfield != 'flagfield_gen2'):
+                    continue
+
+                for bit2check in flag_status_bit[flagfield][category]:
+                    pos = np.where(pos_8 == bit2check)[0]
+                    data['f_usable'][set_bits[pos] / 8] = int(category)
+
+                    # land points
+                    if (flagfield == 'flagfield_gen2') and (bit2check == 1):
+                        data['f_land'][set_bits[pos] / 8] = 1
 
 
 def shortcdstime2dtordinal(days, milliseconds):
@@ -594,12 +722,12 @@ def test_eps():
     """
     Test read EPS file.
     """
-    data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
+    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20160101000900Z_20160101015058Z_N_O_20160101005610Z.nat.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20070101010300Z_20070101024756Z_R_O_20140127103410Z.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20140331235400Z_20140401013856Z_R_O_20140528192253Z.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20070101010300Z_20070101024759Z_R_O_20140127103401Z.gz')
-    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20140331235400Z_20140401013900Z_R_O_20140528192238Z.gz')
+    data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20140331235400Z_20140401013900Z_R_O_20140528192238Z.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20121212071500Z_20121212085659Z_N_O_20121212080501Z.nat')
 
