@@ -180,7 +180,7 @@ class EPSProduct(object):
         """
         Read xml record.
         """
-        subclass=0
+
         if classid == 7:
             mainclass = 'viadr'
             if subclassid == 4:
@@ -192,6 +192,7 @@ class EPSProduct(object):
             else:
                 raise RuntimeError("VIADR subclass not supported.")
         elif classid == 8:
+            subclass = 0
             mainclass = 'mdr'
 
         doc = etree.parse(self.xml_file)
@@ -202,6 +203,8 @@ class EPSProduct(object):
 
         for child in elem.getchildren():
 
+            bitfield_flag = False;
+
             if child.tag == 'delimiter':
                 continue
 
@@ -209,8 +212,16 @@ class EPSProduct(object):
             name = child_items.pop('name')
 
             try:
+                if child_items['type']:
+                    if child_items['type'] == 'bitfield':
+                        bitfield_flag = True;
+            except KeyError:
+                pass
+
+            try:
                 var_len = child_items.pop('length')
-                length.append(np.int(var_len))
+                if bitfield_flag == False:
+                    length.append(np.int(var_len))
             except KeyError:
                 pass
 
@@ -219,14 +230,25 @@ class EPSProduct(object):
             if child.tag == 'array':
                 for arr in child.iterdescendants():
                     arr_items = dict(arr.items())
-                    if arr.tag == 'field':
+
+                    try:
+                        if arr_items['type']:
+                            bitfield_flag = True;
+                    except KeyError:
+                        pass
+
+                    if bitfield_flag == True:
                         data[name].update(arr_items)
+                        break
                     else:
-                        try:
-                            var_len = arr_items.pop('length')
-                            length.append(np.int(var_len))
-                        except KeyError:
-                            pass
+                        if arr.tag == 'field':
+                            data[name].update(arr_items)
+                        else:
+                            try:
+                                var_len = arr_items.pop('length')
+                                length.append(np.int(var_len))
+                            except KeyError:
+                                pass
 
             if length:
                 data[name].update({'length': length})
@@ -285,7 +307,7 @@ def read_eps_l1b(filename):
 
     if ptype == 'SZF':
         if fmv == 12:
-            raw_data = read_szf_fmv_12(eps_file)
+            raw_data, orbit_grid = read_szf_fmv_12(eps_file)
 
         fields = ['as_des_pass', 'swath_indicator', 'beam_number',
                   'azi', 'inc', 'sig', 'f_usable', 'f_land', 'jd']
@@ -616,15 +638,15 @@ def read_szf_fmv_12(eps_file):
         if (pos_all % grid_nodes_per_line <= 80):
             # left swath
             orbit_grid['lon'][pos_all] = viadr_grid[
-                'longitude_left'][line][80 - pos_small]
+                'LONGITUDE_LEFT'][line][80 - pos_small]
             orbit_grid['lat'][pos_all] = viadr_grid[
-                'latitude_left'][line][80 - pos_small]
+                'LATITUDE_LEFT'][line][80 - pos_small]
         else:
             # right swath
             orbit_grid['lon'][pos_all] = viadr_grid[
-                'longitude_right'][line][pos_small]
+                'LONGITUDE_RIGHT'][line][pos_small]
             orbit_grid['lat'][pos_all] = viadr_grid[
-                'latitude_right'][line][pos_small]
+                'LATITUDE_RIGHT'][line][pos_small]
 
     orbit_grid['node_num'] = np.tile((np.arange(grid_nodes_per_line) + 1),
                                      viadr_grid.size)
