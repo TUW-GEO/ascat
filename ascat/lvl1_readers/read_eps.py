@@ -21,6 +21,100 @@ int_nan = -2 ** 15
 uint_nan = 2 ** 16 - 1
 byte_nan = -2 ** 7
 
+def template_SZF__001():
+    """
+    Re-sampled backscatter template 001.
+
+    beam_num
+    - 1 Left Fore Antenna
+    - 2 Left Mid Antenna
+    - 3 Left Aft Antenna
+    - 4 Right Fore Antenna
+    - 5 Right Mid Antenna
+    - 6 Right Aft Antenna
+
+    as_des_pass
+    - 0 Ascending
+    - 1 Descending
+
+    swath_indicator
+    - 0 Left
+    - 1 Right
+    """
+    metadata = {'temp_name': 'SZF__001'}
+
+    struct = np.dtype([('jd', np.double),
+                       ('spacecraft_id', np.int8),
+                       ('processor_major_version', np.int16),
+                       ('processor_minor_version', np.int16),
+                       ('format_major_version', np.int16),
+                       ('format_minor_version', np.int16),
+                       ('degraded_inst_mdr', np.int8),
+                       ('degraded_proc_mdr', np.int8),
+                       ('sat_track_azi', np.float32),
+                       ('as_des_pass', np.int8),
+                       ('swath_indicator', np.int8),
+                       ('azi', np.float32),
+                       ('inc', np.float32),
+                       ('sig', np.float32),
+                       ('lat', np.float32),
+                       ('lon', np.float32),
+                       ('beam_number', np.int8),
+                       ('land_frac', np.float32),
+                       ('flagfield_rf1', np.uint8),
+                       ('flagfield_rf2', np.uint8),
+                       ('flagfield_pl', np.uint8),
+                       ('flagfield_gen1', np.uint8),
+                       ('flagfield_gen2', np.uint8),
+                       ('f_usable', np.uint8),
+                       ('f_land', np.uint8)], metadata=metadata)
+
+    dataset = np.zeros(1, dtype=struct)
+
+    return dataset
+
+
+def template_SZX__002():
+    """
+    Re-sampled backscatter template 002.
+    """
+    metadata = {'temp_name': 'SZX__002'}
+
+    struct = np.dtype([('jd', np.double),
+                       ('spacecraft_id', np.int8),
+                       ('abs_orbit_nr', np.uint32),
+                       ('processor_major_version', np.int16),
+                       ('processor_minor_version', np.int16),
+                       ('format_major_version', np.int16),
+                       ('format_minor_version', np.int16),
+                       ('degraded_inst_mdr', np.int8),
+                       ('degraded_proc_mdr', np.int8),
+                       ('sat_track_azi', np.float32),
+                       ('as_des_pass', np.int8),
+                       ('swath_indicator', np.int8),
+                       ('azi', np.float32, 3),
+                       ('inc', np.float32, 3),
+                       ('sig', np.float32, 3),
+                       ('lat', np.float32),
+                       ('lon', np.float32),
+                       ('kp', np.float32, 3),
+                       ('node_num', np.int16),
+                       ('line_num', np.int32),
+                       ('num_val', np.uint32, 3),
+                       ('f_kp', np.int8, 3),
+                       ('f_usable', np.int8, 3),
+                       ('f_f', np.uint16, 3),
+                       ('f_v', np.uint16, 3),
+                       ('f_oa', np.uint16, 3),
+                       ('f_sa', np.uint16, 3),
+                       ('f_tel', np.uint16, 3),
+                       ('f_ref', np.uint16, 3),
+                       ('f_land', np.float32, 3)], metadata=metadata)
+
+    dataset = np.zeros(1, dtype=struct)
+
+    return dataset
+
 class EPSProduct(object):
 
     """
@@ -33,12 +127,13 @@ class EPSProduct(object):
         self.grh = None
         self.mphr = None
         self.sphr = None
-        self.ipr = None
         self.geadr = None
         self.giadr_archive = None
         self.veadr = None
         self.viadr = None
+        self.viadr_scaled = None
         self.viadr_grid = None
+        self.viadr_grid_scaled = None
         self.dummy_mdr = None
         self.mdr = None
         self.eor = 0
@@ -46,6 +141,8 @@ class EPSProduct(object):
         self.mdr_counter = 0
         self.filesize = 0
         self.xml_file = None
+        self.xml_doc = None
+        self.mdr_template = None
         self.scaled_mdr = None
         self.scaled_template = None
         self.sfactor = None
@@ -75,33 +172,50 @@ class EPSProduct(object):
             if record_class == 1:
                 self._read_mphr()
                 self.xml_file = self._get_eps_xml()
-                mdr_template, self.scaled_template, self.sfactor = self._template_from_xml(8)
+                self.xml_doc = etree.parse(self.xml_file)
+                self.mdr_template, self.scaled_template, self.sfactor = self._read_xml_mdr()
 
             # sphr
             elif record_class == 2:
                 self._read_sphr()
 
+            # geadr
+            elif record_class == 3:
+                self._read_geadr()
+
+            elif record_class == 4:
+                self._read_geadr()
+
+            # veadr
+            elif record_class == 6:
+                self._read_veadr()
+
             # viadr
             elif record_class == 7:
-                template, scaled_template, sfactor = self._template_from_xml(record_class, record_subclass)
+                template, scaled_template, sfactor = self._read_xml_viadr(record_subclass)
                 viadr_element = self._read_record(template)
+                viadr_element_sc = self._scaling(viadr_element, scaled_template, sfactor)
                 if record_subclass == 8:
                     if self.viadr_grid is None:
                         self.viadr_grid = [viadr_element]
+                        self.viadr_grid_scaled = [viadr_element_sc]
                     else:
                         self.viadr_grid.append(viadr_element)
+                        self.viadr_grid_scaled.append(viadr_element_sc)
                 else:
                     if self.viadr is None:
                         self.viadr = [viadr_element]
+                        self.viadr_scaled = [viadr_element_sc]
                     else:
                         self.viadr.append(viadr_element)
+                        self.viadr_scaled.append(viadr_element_sc)
 
             # mdr
             elif record_class == 8:
                 if self.grh['instrument_group'] == 13:
                     pass
                 else:
-                    mdr_element = self._read_record(mdr_template)
+                    mdr_element = self._read_record(self.mdr_template)
                     if self.mdr is None:
                         self.mdr = [mdr_element]
                     else:
@@ -120,13 +234,18 @@ class EPSProduct(object):
         self.fid.close()
 
         self.mdr = np.hstack(self.mdr)
-        self.scaled_mdr = np.zeros_like(self.mdr, dtype=self.scaled_template)
+        self.scaled_mdr = self._scaling(self.mdr, self.scaled_template, self.sfactor)
 
-        for name, sf in zip(self.mdr.dtype.names, self.sfactor):
+    def _scaling(self, unscaled_data, scaled_template, sfactor):
+        scaled_data = np.zeros_like(unscaled_data, dtype=scaled_template)
+
+        for name, sf in zip(unscaled_data.dtype.names, sfactor):
             if sf != 1:
-                self.scaled_mdr[name] = self.mdr[name] / sf
+                scaled_data[name] = unscaled_data[name] / sf
             else:
-                self.scaled_mdr[name] = self.mdr[name]
+                scaled_data[name] = unscaled_data[name]
+
+        return scaled_data
 
     def _read_record(self, dtype, count=1):
         """
@@ -150,6 +269,12 @@ class EPSProduct(object):
         sphr = self.fid.read(self.grh['record_size'] - self.grh.itemsize)
         self.sphr = OrderedDict(item.replace(' ', '').split('=')
                                 for item in sphr.split('\n')[:-1])
+
+    def _read_geadr(self):
+        pass
+
+    def _read_veadr(self):
+        pass
 
     def _get_eps_xml(self):
         '''
@@ -176,34 +301,26 @@ class EPSProduct(object):
                         self.mphr['PRODUCT_TYPE'] in file_extension.text:
                     return os.path.join(format_path, filename)
 
-    def _template_from_xml(self, classid, subclassid=0):
+
+    def _read_xml_viadr(self, subclassid=99):
         """
         Read xml record.
         """
-
-        if classid == 7:
-            mainclass = 'viadr'
-            if subclassid == 4:
-                subclass = 0
-            elif subclassid == 6:
-                subclass = 1
-            elif subclassid == 8:
-                subclass = 2
-            else:
-                raise RuntimeError("VIADR subclass not supported.")
-        elif classid == 8:
+        if subclassid == 4:
             subclass = 0
-            mainclass = 'mdr'
+        elif subclassid == 6:
+            subclass = 1
+        elif subclassid == 8:
+            subclass = 2
+        else:
+            raise RuntimeError("VIADR subclass not supported.")
 
-        doc = etree.parse(self.xml_file)
-        elements = doc.xpath('//' + mainclass)
+        elements = self.xml_doc.xpath('//viadr')
         data = OrderedDict()
         length = []
         elem = elements[subclass]
 
         for child in elem.getchildren():
-
-            bitfield_flag = False;
 
             if child.tag == 'delimiter':
                 continue
@@ -211,12 +328,86 @@ class EPSProduct(object):
             child_items = dict(child.items())
             name = child_items.pop('name')
 
+            longtime_flag = ('type' in child_items and
+                             'longtime' in child_items['type'])
+
             try:
-                if child_items['type']:
-                    if child_items['type'] == 'bitfield':
-                        bitfield_flag = True;
+                var_len = child_items.pop('length')
+                if longtime_flag == False:
+                    length.append(np.int(var_len))
             except KeyError:
                 pass
+
+            data[name] = child_items
+
+            if child.tag == 'array':
+                for arr in child.iterdescendants():
+                    arr_items = dict(arr.items())
+                    if arr.tag == 'field':
+                        data[name].update(arr_items)
+                    else:
+                        try:
+                            var_len = arr_items.pop('length')
+                            length.append(np.int(var_len))
+                        except KeyError:
+                            pass
+
+            if length:
+                data[name].update({'length': length})
+            else:
+                data[name].update({'length': 1})
+
+            length = []
+
+        conv = {'longtime': long_cds_time, 'time': short_cds_time,
+                'boolean': np.uint8, 'integer1': np.int8,
+                'uinteger1': np.uint8,
+                'integer': np.int32, 'uinteger': np.uint32,
+                'integer2': np.int16,
+                'uinteger2': np.uint16, 'integer4': np.int32,
+                'uinteger4': np.uint32, 'integer8': np.int64,
+                'enumerated': np.uint8, 'string': 'str', 'bitfield': np.uint8}
+
+        scaling_factor = []
+        scaled_dtype = []
+        dtype = []
+
+        for key, value in data.items():
+
+            if 'scaling-factor' in value:
+                sf_dtype = np.float32
+                sf = eval(value['scaling-factor'].replace('^', '**'))
+            else:
+                sf_dtype = conv[value['type']]
+                sf = 1
+
+            scaling_factor.append(sf)
+            scaled_dtype.append((key, sf_dtype, value['length']))
+            dtype.append((key, conv[value['type']], value['length']))
+
+        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(scaling_factor,
+                                                                 dtype=np.float32)
+
+    def _read_xml_mdr(self):
+        """
+        Read xml record.
+        """
+
+        elements = self.xml_doc.xpath('//mdr')
+        data = OrderedDict()
+        length = []
+        elem = elements[0]
+
+        for child in elem.getchildren():
+
+            if child.tag == 'delimiter':
+                continue
+
+            child_items = dict(child.items())
+            name = child_items.pop('name')
+
+            bitfield_flag = ('type' in child_items and
+                             'bitfield' in child_items['type'])
 
             try:
                 var_len = child_items.pop('length')
@@ -308,6 +499,8 @@ def read_eps_l1b(filename):
     if ptype == 'SZF':
         if fmv == 12:
             raw_data, orbit_grid = read_szf_fmv_12(eps_file)
+        else:
+            raise RuntimeError("SZF format version not supported.")
 
         fields = ['as_des_pass', 'swath_indicator', 'beam_number',
                   'azi', 'inc', 'sig', 'f_usable', 'f_land', 'jd']
@@ -330,6 +523,8 @@ def read_eps_l1b(filename):
             raw_data = read_szx_fmv_11(eps_file)
         if fmv == 12:
             raw_data = read_szx_fmv_12(eps_file)
+        else:
+            raise RuntimeError("SZX format version not supported.")
 
         beams = ['f', 'm', 'a']
 
@@ -397,7 +592,7 @@ def read_szx_fmv_11(eps_file):
     raw_data = eps_file.scaled_mdr
     mphr = eps_file.mphr
 
-    template = genio.GenericIO.get_template("SZX__002")
+    template = template_SZX__002()
     n_node_per_line = raw_data['LONGITUDE'].shape[1]
     n_lines = raw_data['LONGITUDE'].shape[0]
     n_records = raw_data['LONGITUDE'].size
@@ -481,7 +676,7 @@ def read_szx_fmv_12(eps_file):
     raw_data = eps_file.scaled_mdr
     mphr = eps_file.mphr
 
-    template = genio.GenericIO.get_template("SZX__002")
+    template = template_SZX__002()
     n_node_per_line = raw_data['LONGITUDE'].shape[1]
     n_lines = raw_data['LONGITUDE'].shape[0]
     n_records = raw_data['LONGITUDE'].size
@@ -569,7 +764,7 @@ def read_szf_fmv_12(eps_file):
     raw_data = eps_file.scaled_mdr
     mphr = eps_file.mphr
 
-    template = genio.GenericIO.get_template("SZF__001")
+    template = template_SZF__001()
     n_node_per_line = raw_data['LONGITUDE_FULL'].shape[1]
     n_lines = eps_file.mdr_counter
     n_records = raw_data['LONGITUDE_FULL'].size
@@ -750,6 +945,8 @@ def test_eps():
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20140331235400Z_20140401013856Z_R_O_20140528192253Z.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20070101010300Z_20070101024759Z_R_O_20140127103401Z.gz')
     data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20140331235400Z_20140401013900Z_R_O_20140528192238Z.gz')
+    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20070906003300Z_20070906021459Z_R_O_20081223163950Z.nat.gz')
+    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20100101013000Z_20100101031159Z_R_O_20130824055501Z.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20121212071500Z_20121212085659Z_N_O_20121212080501Z.nat')
 
