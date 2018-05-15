@@ -6,7 +6,6 @@ from gzip import GzipFile
 from collections import OrderedDict
 
 import numpy as np
-import pygenio.genio as genio
 import datetime as dt
 import matplotlib.dates as mpl_dates
 
@@ -127,6 +126,7 @@ class EPSProduct(object):
         self.grh = None
         self.mphr = None
         self.sphr = None
+        self.ipr = None
         self.geadr = None
         self.giadr_archive = None
         self.veadr = None
@@ -162,39 +162,54 @@ class EPSProduct(object):
             # remember beginning of the record
             self.bor = self.fid.tell()
 
-            # read grh of current record
-            self.grh = self._read_record(grh_record())[0]
-            record_size = self.grh['record_size']
-            record_class = self.grh['record_class']
-            record_subclass = self.grh['record_subclass']
+            # read grh of current record (Generic Record Header)
+            self.grh = self._read_record(grh_record())
+            record_size = self.grh[0]['record_size']
+            record_class = self.grh[0]['record_class']
+            record_subclass = self.grh[0]['record_subclass']
 
-            # mphr
+            # mphr (Main Product Header Reader)
             if record_class == 1:
                 self._read_mphr()
                 self.xml_file = self._get_eps_xml()
                 self.xml_doc = etree.parse(self.xml_file)
                 self.mdr_template, self.scaled_template, self.sfactor = self._read_xml_mdr()
 
-            # sphr
+            # sphr (Secondary Product Header Record)
             elif record_class == 2:
                 self._read_sphr()
 
-            # geadr
+            # ipr (Internal Pointer Record)
             elif record_class == 3:
-                self._read_geadr()
+                ipr_element = self._read_record(ipr_record())
+                if self.ipr is None:
+                    self.ipr = [ipr_element]
+                else:
+                    self.ipr.append(ipr_element)
 
+            # geadr (Global External Auxiliary Data Record)
             elif record_class == 4:
-                self._read_geadr()
+                geadr_element = self._read_pointer()
+                if self.geadr is None:
+                    self.geadr = [geadr_element]
+                else:
+                    self.geadr.append(geadr_element)
 
-            # veadr
+            # veadr (Variable External Auxiliary Data Record)
             elif record_class == 6:
-                self._read_veadr()
+                veadr_element = self._read_pointer()
+                if self.veadr is None:
+                    self.veadr = [veadr_element]
+                else:
+                    self.veadr.append(veadr_element)
 
-            # viadr
+            # viadr (Variable Internal Auxiliary Data Record)
             elif record_class == 7:
                 template, scaled_template, sfactor = self._read_xml_viadr(record_subclass)
                 viadr_element = self._read_record(template)
                 viadr_element_sc = self._scaling(viadr_element, scaled_template, sfactor)
+
+                # save viadr_grid seperately
                 if record_subclass == 8:
                     if self.viadr_grid is None:
                         self.viadr_grid = [viadr_element]
@@ -210,9 +225,9 @@ class EPSProduct(object):
                         self.viadr.append(viadr_element)
                         self.viadr_scaled.append(viadr_element_sc)
 
-            # mdr
+            # mdr (Measurement Data Record)
             elif record_class == 8:
-                if self.grh['instrument_group'] == 13:
+                if self.grh[0]['instrument_group'] == 13:
                     pass
                 else:
                     mdr_element = self._read_record(self.mdr_template)
@@ -222,10 +237,12 @@ class EPSProduct(object):
                         self.mdr.append(mdr_element)
                     self.mdr_counter += 1
 
+            else:
+                pass
+
             # return pointer to the beginning of the record
             self.fid.seek(self.bor)
             self.fid.seek(record_size, 1)
-
 
             # determine number of bytes read
             # end of record
@@ -237,6 +254,9 @@ class EPSProduct(object):
         self.scaled_mdr = self._scaling(self.mdr, self.scaled_template, self.sfactor)
 
     def _scaling(self, unscaled_data, scaled_template, sfactor):
+        '''
+        Scale the data
+        '''
         scaled_data = np.zeros_like(unscaled_data, dtype=scaled_template)
 
         for name, sf in zip(unscaled_data.dtype.names, sfactor):
@@ -258,7 +278,7 @@ class EPSProduct(object):
         """
         Read Main Product Header (MPHR).
         """
-        mphr = self.fid.read(self.grh['record_size'] - self.grh.itemsize)
+        mphr = self.fid.read(self.grh[0]['record_size'] - self.grh[0].itemsize)
         self.mphr = OrderedDict(item.replace(' ', '').split('=')
                                 for item in mphr.split('\n')[:-1])
 
@@ -266,15 +286,17 @@ class EPSProduct(object):
         """
         Read Special Product Header (SPHR).
         """
-        sphr = self.fid.read(self.grh['record_size'] - self.grh.itemsize)
+        sphr = self.fid.read(self.grh[0]['record_size'] - self.grh[0].itemsize)
         self.sphr = OrderedDict(item.replace(' ', '').split('=')
                                 for item in sphr.split('\n')[:-1])
 
-    def _read_geadr(self):
-        pass
-
-    def _read_veadr(self):
-        pass
+    def _read_pointer(self, count=1):
+        """
+        Read record
+        """
+        dtype = np.dtype([('aux_data_pointer', np.ubyte, 100)])
+        record = np.fromfile(self.fid, dtype=dtype, count=count)
+        return record.newbyteorder('B')
 
     def _get_eps_xml(self):
         '''
@@ -302,23 +324,20 @@ class EPSProduct(object):
                     return os.path.join(format_path, filename)
 
 
-    def _read_xml_viadr(self, subclassid=99):
+    def _read_xml_viadr(self, subclassid=-99):
         """
-        Read xml record.
+        Read xml record for viadr class.
         """
-        if subclassid == 4:
-            subclass = 0
-        elif subclassid == 6:
-            subclass = 1
-        elif subclassid == 8:
-            subclass = 2
-        else:
-            raise RuntimeError("VIADR subclass not supported.")
-
         elements = self.xml_doc.xpath('//viadr')
         data = OrderedDict()
         length = []
-        elem = elements[subclass]
+
+        # find the element with the right subclass
+        for elem in elements:
+            item_dict = dict(elem.items())
+            subclass = int(item_dict['subclass'])
+            if subclass == subclassid:
+                break
 
         for child in elem.getchildren():
 
@@ -487,6 +506,16 @@ def grh_record():
                              ('record_start_time', short_cds_time),
                              ('record_stop_time', short_cds_time)])
 
+    return record_dtype
+
+def ipr_record():
+    """
+    ipr template.
+    """
+    record_dtype = np.dtype([('target_record_class', np.ubyte),
+                       ('target_instrument_group', np.ubyte),
+                       ('target_record_subclass', np.ubyte),
+                       ('target_record_offset', np.uint32)])
     return record_dtype
 
 def read_eps_l1b(filename):
