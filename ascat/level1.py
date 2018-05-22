@@ -28,7 +28,7 @@
 """
 General Level 1 data readers for ASCAT data in all formats. Not specific to distributor.
 """
-
+import time
 import os
 
 from pygeobase.io_base import ImageBase
@@ -59,7 +59,7 @@ class AscatL1Image(ImageBase):
         elif file_format == ".bfr":
             raw_data, data, metadata = read_bufr(self.filename)
         else:
-            raise RuntimeError("Format not found, please indicate the file format.")
+            raise RuntimeError("Format not found, please indicate the file format. [\".nat\", \".nc\", \".bfr\"]")
 
         return Image(raw_data['lon'], raw_data['lat'], data, metadata,
                      timestamp, timekey='jd')
@@ -103,11 +103,20 @@ def read_bufr(filename):
 
 
 def test_level1():
-    test = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
-    test.read()
-    test1 = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20070101010300Z_20070101024756Z_R_O_20140127103410Z.gz')
-    test1.read(file_format='.nat')
+    start_time = time.time()
 
+    # test = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
+    # test.read()
+    # test = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20070101010300Z_20070101024756Z_R_O_20140127103410Z.gz')
+    # test = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20140331235400Z_20140401013900Z_R_O_20140528192238Z.gz')
+    # test.read(file_format='.nat')
+
+    test = AscatL1Image(
+        '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20140331235400Z_20140401013856Z_R_O_20140528192253Z.gz')
+    test.read(file_format='.nat')
+
+    elapsed_time = time.time() - start_time
+    print (elapsed_time)
 
 if __name__ == '__main__':
     test_level1()

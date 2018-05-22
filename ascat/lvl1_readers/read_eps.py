@@ -22,7 +22,7 @@ byte_nan = -2 ** 7
 
 def template_SZF__001():
     """
-    Re-sampled backscatter template 001.
+    Re-sampled backscatter template 001. (from generic IO)
 
     beam_num
     - 1 Left Fore Antenna
@@ -75,7 +75,7 @@ def template_SZF__001():
 
 def template_SZX__002():
     """
-    Re-sampled backscatter template 002.
+    Re-sampled backscatter template 002. (from generic IO)
     """
     metadata = {'temp_name': 'SZX__002'}
 
@@ -102,12 +102,12 @@ def template_SZX__002():
                        ('num_val', np.uint32, 3),
                        ('f_kp', np.int8, 3),
                        ('f_usable', np.int8, 3),
-                       ('f_f', np.uint16, 3),
-                       ('f_v', np.uint16, 3),
-                       ('f_oa', np.uint16, 3),
-                       ('f_sa', np.uint16, 3),
-                       ('f_tel', np.uint16, 3),
-                       ('f_ref', np.uint16, 3),
+                       ('f_f', np.float32, 3),
+                       ('f_v', np.float32, 3),
+                       ('f_oa', np.float32, 3),
+                       ('f_sa', np.float32, 3),
+                       ('f_tel', np.float32, 3),
+                       ('f_ref', np.float32, 3),
                        ('f_land', np.float32, 3)], metadata=metadata)
 
     dataset = np.zeros(1, dtype=struct)
@@ -148,15 +148,15 @@ class EPSProduct(object):
         self.sfactor = None
 
     def read_product(self):
-        # record_class_dict = {1: 'MPHR', 2: 'SPHR', 3: 'IPR', 4: 'GEADR',
-        #                      5: 'GIADR', 6: 'VEADR', 7: 'VIADR', 8: 'MDR'}
-
-        mdr_template = None
-
+        """
+        Read complete file and create numpy arrays from raw byte string data.
+        """
+        # open file in read-binary mode
         self.fid = open(self.filename, 'rb')
         self.filesize = os.path.getsize(self.filename)
         self.eor = self.fid.tell()
 
+        # loop as long as the current position hasn't reached the end of file
         while self.eor < self.filesize:
 
             # remember beginning of the record
@@ -171,6 +171,8 @@ class EPSProduct(object):
             # mphr (Main Product Header Reader)
             if record_class == 1:
                 self._read_mphr()
+
+                # find the xml file corresponding to the format version
                 self.xml_file = self._get_eps_xml()
                 self.xml_doc = etree.parse(self.xml_file)
                 self.mdr_template, self.scaled_template, self.sfactor = self._read_xml_mdr()
@@ -209,7 +211,7 @@ class EPSProduct(object):
                 viadr_element = self._read_record(template)
                 viadr_element_sc = self._scaling(viadr_element, scaled_template, sfactor)
 
-                # save viadr_grid seperately
+                # store viadr_grid seperately
                 if record_subclass == 8:
                     if self.viadr_grid is None:
                         self.viadr_grid = [viadr_element]
@@ -228,7 +230,7 @@ class EPSProduct(object):
             # mdr (Measurement Data Record)
             elif record_class == 8:
                 if self.grh[0]['instrument_group'] == 13:
-                    pass
+                    self.dummy_mdr = self._read_record(self.mdr_template)
                 else:
                     mdr_element = self._read_record(self.mdr_template)
                     if self.mdr is None:
@@ -238,7 +240,7 @@ class EPSProduct(object):
                     self.mdr_counter += 1
 
             else:
-                pass
+                raise RuntimeError("Record class not found.")
 
             # return pointer to the beginning of the record
             self.fid.seek(self.bor)
@@ -292,7 +294,7 @@ class EPSProduct(object):
 
     def _read_pointer(self, count=1):
         """
-        Read record
+        Read pointer record.
         """
         dtype = np.dtype([('aux_data_pointer', np.ubyte, 100)])
         record = np.fromfile(self.fid, dtype=dtype, count=count)
@@ -301,13 +303,11 @@ class EPSProduct(object):
     def _get_eps_xml(self):
         '''
         Find the corresponding eps xml file.
-
-        :param: mphr_dict
-        :return: filename
         '''
         format_path = os.path.join(os.path.dirname(__file__), '..', '..',
                                    'formats')
 
+        # loop through files where filename starts with 'eps_ascat'.
         for filename in fnmatch.filter(os.listdir(format_path), 'eps_ascat*'):
             doc = etree.parse(os.path.join(format_path, filename))
             file_extension = doc.xpath('//file-extensions')[0].getchildren()[0]
@@ -316,6 +316,8 @@ class EPSProduct(object):
             for elem in format_version:
                 major = elem.getchildren()[0]
                 minor = elem.getchildren()[1]
+
+                # return the xml file matching the metadata of the datafile.
                 if major.text == self.mphr['FORMAT_MAJOR_VERSION'] and \
                         minor.text == self.mphr['FORMAT_MINOR_VERSION'] and \
                         self.mphr[
@@ -323,16 +325,15 @@ class EPSProduct(object):
                         self.mphr['PRODUCT_TYPE'] in file_extension.text:
                     return os.path.join(format_path, filename)
 
-
-    def _read_xml_viadr(self, subclassid=-99):
+    def _read_xml_viadr(self, subclassid):
         """
-        Read xml record for viadr class.
+        Read xml record of viadr class.
         """
         elements = self.xml_doc.xpath('//viadr')
         data = OrderedDict()
         length = []
 
-        # find the element with the right subclass
+        # find the element with the correct subclass
         for elem in elements:
             item_dict = dict(elem.items())
             subclass = int(item_dict['subclass'])
@@ -347,9 +348,11 @@ class EPSProduct(object):
             child_items = dict(child.items())
             name = child_items.pop('name')
 
+            # check if the item is of type longtime
             longtime_flag = ('type' in child_items and
                              'longtime' in child_items['type'])
 
+            # append the length if it isn't the special case of type longtime
             try:
                 var_len = child_items.pop('length')
                 if longtime_flag == False:
@@ -409,9 +412,8 @@ class EPSProduct(object):
 
     def _read_xml_mdr(self):
         """
-        Read xml record.
+        Read xml record of mdr class.
         """
-
         elements = self.xml_doc.xpath('//mdr')
         data = OrderedDict()
         length = []
@@ -425,9 +427,11 @@ class EPSProduct(object):
             child_items = dict(child.items())
             name = child_items.pop('name')
 
+            # check if the item is of type bitfield
             bitfield_flag = ('type' in child_items and
-                             'bitfield' in child_items['type'])
+                             ('bitfield' in child_items['type'] or 'time' in child_items['type']))
 
+            # append the length if it isn't the special case of type bitfield
             try:
                 var_len = child_items.pop('length')
                 if bitfield_flag == False:
@@ -441,11 +445,9 @@ class EPSProduct(object):
                 for arr in child.iterdescendants():
                     arr_items = dict(arr.items())
 
-                    try:
-                        if arr_items['type']:
-                            bitfield_flag = True;
-                    except KeyError:
-                        pass
+                    # check if the type is bitfield
+                    bitfield_flag = ('type' in arr_items and
+                                     'bitfield' in arr_items['type'])
 
                     if bitfield_flag == True:
                         data[name].update(arr_items)
@@ -519,6 +521,9 @@ def ipr_record():
     return record_dtype
 
 def read_eps_l1b(filename):
+    """
+    Use of correct lvl1b reader and data preparation.
+    """
     data = {}
     metadata = {}
     eps_file = read_eps(filename)
@@ -550,7 +555,7 @@ def read_eps_l1b(filename):
     elif (ptype == 'SZR') or (ptype == 'SZO'):
         if fmv == 11:
             raw_data = read_szx_fmv_11(eps_file)
-        if fmv == 12:
+        elif fmv == 12:
             raw_data = read_szx_fmv_12(eps_file)
         else:
             raise RuntimeError("SZX format version not supported.")
@@ -585,20 +590,22 @@ def read_eps(filename):
     """
     Read EPS file.
     """
-
     zipped = False
     if os.path.splitext(filename)[1] == '.gz':
         zipped = True
 
+    # for zipped files use an unzipped temporal copy
     if zipped:
         with NamedTemporaryFile(delete=False) as tmp_fid:
             with GzipFile(filename) as gz_fid:
                 tmp_fid.write(gz_fid.read())
             filename = tmp_fid.name
 
+    # create the eps object with the filename and read it
     prod = EPSProduct(filename)
     prod.read_product()
 
+    # remove the temporal copy
     if zipped:
         os.remove(filename)
 
@@ -607,18 +614,20 @@ def read_eps(filename):
 
 def read_szx_fmv_11(eps_file):
     """
-            Read SZO/SZR format version 12.
+    Read SZO/SZR format version 11.
 
-            Parameters
-            ----------
-            filename: filename of the eps product
+    Parameters
+    ----------
+    eps_file : EPSProduct object
+        EPS Product object.
 
-            Returns
-            -------
-            data : numpy.ndarray
-                SZO/SZR data.
-            """
+    Returns
+    -------
+    data : numpy.ndarray
+        SZO/SZR data.
+    """
     raw_data = eps_file.scaled_mdr
+    raw_unscaled = eps_file.mdr
     mphr = eps_file.mphr
 
     template = template_SZX__002()
@@ -651,8 +660,9 @@ def read_szx_fmv_11(eps_file):
               ('swath_indicator', 'SWATH_INDICATOR', byte_nan)]
     for field in fields:
         data[field[0]] = raw_data[field[1]].flatten()
-        valid = data[field[0]] != field[2]
-        data[field[0]][valid] = data[field[0]][valid]
+        # valid = data[field[0]] != field[2]
+        valid = raw_unscaled[field[1]].flatten() != field[2]
+        data[field[0]][valid == False] = field[2]
 
     fields = [('sig', 'SIGMA0_TRIP', long_nan),
               ('inc', 'INC_ANGLE_TRIP', uint_nan),
@@ -668,8 +678,9 @@ def read_szx_fmv_11(eps_file):
               ('f_land', 'F_LAND', uint_nan)]
     for field in fields:
         data[field[0]] = raw_data[field[1]].reshape(n_records, 3)
-        valid = data[field[0]] != field[2]
-        data[field[0]][valid] = data[field[0]][valid]
+        # valid = data[field[0]] != field[2]
+        valid = raw_unscaled[field[1]].reshape(n_records, 3) != field[2]
+        data[field[0]][valid == False] = field[2]
 
     # modify longitudes from (0, 360) to (-180,180)
     mask = np.logical_and(data['lon'] != long_nan, data['lon'] > 180)
@@ -691,18 +702,20 @@ def read_szx_fmv_11(eps_file):
 
 def read_szx_fmv_12(eps_file):
     """
-        Read SZO/SZR format version 12.
+    Read SZO/SZR format version 12.
 
-        Parameters
-        ----------
-        filename: filename of the eps product
+    Parameters
+    ----------
+    eps_file : EPSProduct object
+        EPS Product object.
 
-        Returns
-        -------
-        data : numpy.ndarray
-            SZO/SZR data.
-        """
+    Returns
+    -------
+    data : numpy.ndarray
+        SZO/SZR data.
+    """
     raw_data = eps_file.scaled_mdr
+    raw_unscaled = eps_file.mdr
     mphr = eps_file.mphr
 
     template = template_SZX__002()
@@ -737,8 +750,9 @@ def read_szx_fmv_12(eps_file):
               ('swath_indicator', 'SWATH INDICATOR', byte_nan)]
     for field in fields:
         data[field[0]] = raw_data[field[1]].flatten()
-        valid = data[field[0]] != field[2]
-        data[field[0]][valid] = data[field[0]][valid]
+        # valid = data[field[0]] != field[2]
+        valid = raw_unscaled[field[1]].flatten() != field[2]
+        data[field[0]][valid == False] = field[2]
 
     fields = [('sig', 'SIGMA0_TRIP', long_nan),
               ('inc', 'INC_ANGLE_TRIP', uint_nan),
@@ -756,8 +770,9 @@ def read_szx_fmv_12(eps_file):
               ('f_land', 'F_LAND', uint_nan)]
     for field in fields:
         data[field[0]] = raw_data[field[1]].reshape(n_records, 3)
-        valid = data[field[0]] != field[2]
-        data[field[0]][valid] = data[field[0]][valid]
+        # valid = data[field[0]] != field[2]
+        valid = raw_unscaled[field[1]].reshape(n_records, 3) != field[2]
+        data[field[0]][valid == False] = field[2]
 
     # modify longitudes from (0, 360) to (-180,180)
     mask = np.logical_and(data['lon'] != long_nan, data['lon'] > 180)
@@ -779,17 +794,20 @@ def read_szx_fmv_12(eps_file):
 
 def read_szf_fmv_12(eps_file):
     """
-        Read SZF format version 12.
+    Read SZF format version 12.
 
-        Parameters
-        ----------
-        filename: filename of the eps product
+    Parameters
+    ----------
+    eps_file : EPSProduct object
+        EPS Product object.
 
-        Returns
-        -------
-        data : numpy.ndarray
-            SZF data.
-        """
+    Returns
+    -------
+    data : numpy.ndarray
+        SZF data.
+    orbit_gri : numpy.ndarray
+        6.25km orbit lat/lon grid.
+    """
     raw_data = eps_file.scaled_mdr
     mphr = eps_file.mphr
 
@@ -922,8 +940,10 @@ def set_flags(data):
                        }
 
     for flagfield in flag_status_bit.keys():
+        # get flag data in binary format to get flags
         unpacked_bits = np.unpackbits(data[flagfield])
 
+        # find indizes where a flag is set
         set_bits = np.where(unpacked_bits == 1)[0]
         if (set_bits.size != 0):
             pos_8 = 7 - (set_bits % 8)
