@@ -9,6 +9,7 @@ import numpy as np
 import numpy.lib.recfunctions as rfn
 import datetime as dt
 import matplotlib.dates as mpl_dates
+import ascat.data_readers.templates as templates
 
 short_cds_time = np.dtype([('day', np.uint16), ('time', np.uint32)])
 
@@ -20,101 +21,6 @@ ulong_nan = 2 ** 32 - 1
 int_nan = -2 ** 15
 uint_nan = 2 ** 16 - 1
 byte_nan = -2 ** 7
-
-
-def template_SZF__001():
-    """
-    Re-sampled backscatter template 001. (from generic IO)
-
-    beam_num
-    - 1 Left Fore Antenna
-    - 2 Left Mid Antenna
-    - 3 Left Aft Antenna
-    - 4 Right Fore Antenna
-    - 5 Right Mid Antenna
-    - 6 Right Aft Antenna
-
-    as_des_pass
-    - 0 Ascending
-    - 1 Descending
-
-    swath_indicator
-    - 0 Left
-    - 1 Right
-    """
-    metadata = {'temp_name': 'SZF__001'}
-
-    struct = np.dtype([('jd', np.double),
-                       ('spacecraft_id', np.int8),
-                       ('processor_major_version', np.int16),
-                       ('processor_minor_version', np.int16),
-                       ('format_major_version', np.int16),
-                       ('format_minor_version', np.int16),
-                       ('degraded_inst_mdr', np.int8),
-                       ('degraded_proc_mdr', np.int8),
-                       ('sat_track_azi', np.float32),
-                       ('as_des_pass', np.int8),
-                       ('swath_indicator', np.int8),
-                       ('azi', np.float32),
-                       ('inc', np.float32),
-                       ('sig', np.float32),
-                       ('lat', np.float32),
-                       ('lon', np.float32),
-                       ('beam_number', np.int8),
-                       ('land_frac', np.float32),
-                       ('flagfield_rf1', np.uint8),
-                       ('flagfield_rf2', np.uint8),
-                       ('flagfield_pl', np.uint8),
-                       ('flagfield_gen1', np.uint8),
-                       ('flagfield_gen2', np.uint8),
-                       ('f_usable', np.uint8),
-                       ('f_land', np.uint8)], metadata=metadata)
-
-    dataset = np.zeros(1, dtype=struct)
-
-    return dataset
-
-
-def template_SZX__002():
-    """
-    Re-sampled backscatter template 002. (from generic IO)
-    """
-    metadata = {'temp_name': 'SZX__002'}
-
-    struct = np.dtype([('jd', np.double),
-                       ('spacecraft_id', np.int8),
-                       ('abs_orbit_nr', np.uint32),
-                       ('processor_major_version', np.int16),
-                       ('processor_minor_version', np.int16),
-                       ('format_major_version', np.int16),
-                       ('format_minor_version', np.int16),
-                       ('degraded_inst_mdr', np.int8),
-                       ('degraded_proc_mdr', np.int8),
-                       ('sat_track_azi', np.float32),
-                       ('as_des_pass', np.int8),
-                       ('swath_indicator', np.int8),
-                       ('azi', np.float32, 3),
-                       ('inc', np.float32, 3),
-                       ('sig', np.float32, 3),
-                       ('lat', np.float32),
-                       ('lon', np.float32),
-                       ('kp', np.float32, 3),
-                       ('node_num', np.int16),
-                       ('line_num', np.int32),
-                       ('num_val', np.uint32, 3),
-                       ('f_kp', np.int8, 3),
-                       ('f_usable', np.int8, 3),
-                       ('f_f', np.float32, 3),
-                       ('f_v', np.float32, 3),
-                       ('f_oa', np.float32, 3),
-                       ('f_sa', np.float32, 3),
-                       ('f_tel', np.float32, 3),
-                       ('f_ref', np.float32, 3),
-                       ('f_land', np.float32, 3)], metadata=metadata)
-
-    dataset = np.zeros(1, dtype=struct)
-
-    return dataset
 
 
 class EPSProduct(object):
@@ -313,7 +219,7 @@ class EPSProduct(object):
                                    'formats')
 
         # loop through files where filename starts with 'eps_ascat'.
-        for filename in fnmatch.filter(os.listdir(format_path), 'eps_ascatl1b*'):
+        for filename in fnmatch.filter(os.listdir(format_path), 'eps_ascat*'):
             doc = etree.parse(os.path.join(format_path, filename))
             file_extension = doc.xpath('//file-extensions')[0].getchildren()[0]
 
@@ -600,6 +506,49 @@ def read_eps_l1b(filename):
     return raw_data, data, metadata
 
 
+def read_eps_l2(filename):
+    """
+    Use of correct lvl2 reader and data preparation.
+    """
+    data = {}
+    metadata = {}
+    eps_file = read_eps(filename)
+    ptype = eps_file.mphr['PRODUCT_TYPE']
+    fmv = int(eps_file.mphr['FORMAT_MAJOR_VERSION'])
+
+    if (ptype == 'SMR') or (ptype == 'SMO'):
+        if fmv == 12:
+            raw_data = read_smx_fmv_12(eps_file)
+        else:
+            raise RuntimeError("SMX format version not supported.")
+
+        fields = ['jd', 'as_des_pass', 'swath_indicator', 'node_num', 'ssm',
+                  'ssm_noise', 'norm_sigma', 'norm_sigma_noise', 'slope',
+                  'slope_noise', 'dry_ref', 'wet_ref', 'mean_ssm',
+                  'ssm_sens', 'correction_flag', 'processing_flag',
+                  'aggregated_flag', 'snow', 'frozen', 'wetland', 'topo']
+        for field in fields:
+            data[field] = raw_data[field]
+
+        fields = ['azi', 'inc', 'sig', 'kp', 'f_land']
+        beams = ['f', 'm', 'a']
+        for field in fields:
+            for i, beam in enumerate(beams):
+                data[field + beam] = raw_data[field][:, i]
+
+        fields = ['spacecraft_id', 'warp_nrt_version',
+                  'param_db_version', ]
+
+        for field in fields:
+            metadata[field] = raw_data[field]
+
+    else:
+        raise ValueError("Format not supported. Product type {:1}"
+                         " Format major version: {:2}".format(ptype, fmv))
+
+    return raw_data, data, metadata
+
+
 def read_eps(filename):
     """
     Read EPS file.
@@ -644,7 +593,7 @@ def read_szx_fmv_11(eps_file):
     raw_unscaled = eps_file.mdr
     mphr = eps_file.mphr
 
-    template = template_SZX__002()
+    template = templates.template_SZX__002()
     n_node_per_line = raw_data['LONGITUDE'].shape[1]
     n_lines = raw_data['LONGITUDE'].shape[0]
     n_records = raw_data['LONGITUDE'].size
@@ -731,7 +680,7 @@ def read_szx_fmv_12(eps_file):
     raw_unscaled = eps_file.mdr
     mphr = eps_file.mphr
 
-    template = template_SZX__002()
+    template = templates.template_SZX__002()
     n_node_per_line = raw_data['LONGITUDE'].shape[1]
     n_lines = raw_data['LONGITUDE'].shape[0]
     n_records = raw_data['LONGITUDE'].size
@@ -823,7 +772,7 @@ def read_szf_fmv_12(eps_file):
     raw_data = eps_file.scaled_mdr
     mphr = eps_file.mphr
 
-    template = template_SZF__001()
+    template = templates.template_SZF__001()
     n_node_per_line = raw_data['LONGITUDE_FULL'].shape[1]
     n_lines = eps_file.mdr_counter
     n_records = raw_data['LONGITUDE_FULL'].size
@@ -971,6 +920,114 @@ def set_flags(data):
                     # land points
                     if (flagfield == 'flagfield_gen2') and (bit2check == 1):
                         data['f_land'][set_bits[pos] / 8] = 1
+
+
+def read_smx_fmv_12(eps_file):
+    raw_data = eps_file.scaled_mdr
+    raw_unscaled = eps_file.mdr
+
+    template = templates.template_SMR__001()
+    n_node_per_line = eps_file.mdr[0]['LONGITUDE'].size
+    n_records = eps_file.mdr_counter * n_node_per_line
+    idx_nodes = np.arange(eps_file.mdr_counter).repeat(n_node_per_line)
+
+    data = np.repeat(template, n_records)
+    # raw_data = np.array(eps_file.mdr)
+
+    # utc_line_nodes (time)
+    ascat_time = mpl_dates.num2julian(
+        shortcdstime2dtordinal(raw_data['UTC_LINE_NODES'].flatten()['day'],
+                               raw_data['UTC_LINE_NODES'].flatten()['time']))
+    data['jd'] = ascat_time[idx_nodes]
+
+    fields = [('sig', 'SIGMA0_TRIP', long_nan, 1e-6),
+              ('inc', 'INC_ANGLE_TRIP', uint_nan, 1e-2),
+              ('azi', 'AZI_ANGLE_TRIP', int_nan, 1e-2),
+              ('kp', 'KP', uint_nan, 1e-4),
+              ('f_land', 'F_LAND', uint_nan, 1e-3)]
+
+    for field in fields:
+        data[field[0]] = raw_data[field[1]].reshape(n_records, 3)
+        valid = raw_data[field[1]].reshape(n_records, 3) != field[2]
+        data[field[0]][valid == False] = field[2]
+
+    fields = [('lon', 'LONGITUDE', long_nan),
+              ('lat', 'LATITUDE', long_nan),
+              ('ssm', 'SOIL_MOISTURE', uint_nan),
+              ('ssm_noise', 'SOIL_MOISTURE_ERROR', uint_nan),
+              ('norm_sigma', 'SIGMA40', long_nan),
+              ('norm_sigma_noise', 'SIGMA40_ERROR', long_nan),
+              ('slope', 'SLOPE40', long_nan),
+              ('slope_noise', 'SLOPE40_ERROR', long_nan),
+              ('dry_ref', 'DRY_BACKSCATTER', long_nan),
+              ('wet_ref', 'WET_BACKSCATTER', long_nan),
+              ('mean_ssm', 'MEAN_SURF_SOIL_MOISTURE', uint_nan),
+              ('ssm_sens', 'SOIL_MOISTURE_SENSETIVITY', ulong_nan),
+              ('correction_flag', 'CORRECTION_FLAGS', None),
+              ('processing_flag', 'PROCESSING_FLAGS', None),
+              ('aggregated_flag', 'AGGREGATED_QUALITY_FLAG', None),
+              ('snow', 'SNOW_COVER_PROBABILITY', None),
+              ('frozen', 'FROZEN_SOIL_PROBABILITY', None),
+              ('wetland', 'INNUDATION_OR_WETLAND', None),
+              ('topo', 'TOPOGRAPHICAL_COMPLEXITY', None)]
+
+    for field in fields:
+        data[field[0]] = raw_data[field[1]].flatten()
+        if field[2] is not None:
+            valid = raw_unscaled[field[1]].flatten() != field[2]
+            data[field[0]][valid == False] = field[2]
+
+    # sat_track_azi (uint)
+    data['as_des_pass'] = \
+        np.array(raw_data['SAT_TRACK_AZI'].flatten()[idx_nodes] < 27000)
+
+    # modify longitudes from [0,360] to [-180,180]
+    mask = np.logical_and(data['lon'] != long_nan, data['lon'] > 180)
+    data['lon'][mask] += -360.
+
+    # modify azimuth from (-180, 180) to (0, 360)
+    mask = (data['azi'] != int_nan) & (data['azi'] < 0)
+    data['azi'][mask] += 360
+
+    data['param_db_version'] = \
+        raw_data['PARAM_DB_VERSION'].flatten()[idx_nodes]
+    data['warp_nrt_version'] = \
+        raw_data['WARP_NRT_VERSION'].flatten()[idx_nodes]
+
+    data['spacecraft_id'] = int(eps_file.mphr['SPACECRAFT_ID'][2])
+
+    lswath = raw_data['SWATH_INDICATOR'].flatten() == 0
+    rswath = raw_data['SWATH_INDICATOR'].flatten() == 1
+
+    if raw_data.dtype.fields.has_key('node_num') is False:
+        if (n_node_per_line == 82):
+            leftSw = np.arange(20, -21, -1)
+            rightSw = np.arange(-20, 21, 1)
+
+        if (n_node_per_line == 42):
+            leftSw = np.arange(10, -11, -1)
+            rightSw = np.arange(-10, 11, 1)
+
+        lineNum = np.concatenate((leftSw, rightSw), axis=0).flatten()
+        nodes = np.repeat(np.array(lineNum, ndmin=2),
+                          raw_data['ABS_LINE_NUMBER'].size, axis=0)
+
+    if (n_node_per_line == 82):
+        if raw_data.dtype.fields.has_key('node_num'):
+            data['node_num'][lswath] = 21 + raw_data['node_num'].flat[lswath]
+            data['node_num'][rswath] = 62 + raw_data['node_num'].flat[rswath]
+        else:
+            data['node_num'][lswath] = 21 + nodes.flat[lswath]
+            data['node_num'][rswath] = 62 + nodes.flat[rswath]
+    if (n_node_per_line == 42):
+        if raw_data.dtype.fields.has_key('node_num'):
+            data['node_num'][lswath] = 11 + raw_data['node_num'].flat[lswath]
+            data['node_num'][rswath] = 32 + raw_data['node_num'].flat[rswath]
+        else:
+            data['node_num'][lswath] = 11 + nodes.flat[lswath]
+            data['node_num'][rswath] = 32 + nodes.flat[rswath]
+
+    return data
 
 
 def shortcdstime2dtordinal(days, milliseconds):
