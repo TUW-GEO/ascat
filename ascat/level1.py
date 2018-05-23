@@ -33,7 +33,7 @@ import os
 
 from pygeobase.io_base import ImageBase
 from pygeobase.object_base import Image
-import ascat.lvl1_readers.read_eps as read_eps
+import ascat.data_readers.read_eps as read_eps
 
 
 class AscatL1Image(ImageBase):
@@ -74,24 +74,12 @@ class AscatL1Image(ImageBase):
         pass
 
 
-def read_eps_szf(filename):
-    pass
-
-
 def get_file_format(filename):
     if os.path.splitext(filename)[1] == '.gz':
         file_format = os.path.splitext(os.path.splitext(filename)[0])[1]
     else:
         file_format = os.path.splitext(filename)[1]
     return file_format
-
-
-def read_netCDF_szx(filename):
-    pass
-
-
-def read_bufr_szx(filename):
-    pass
 
 
 def read_netCDF(filename):
@@ -114,7 +102,18 @@ def test_level1():
     test = AscatL1Image(
         '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20140331235400Z_20140401013856Z_R_O_20140528192253Z.gz')
     test.read(file_format='.nat')
-
+    test = AscatL1Image(
+        '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
+    test.read(file_format='.nat')
+    test = AscatL1Image(
+        '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20160101000900Z_20160101015058Z_N_O_20160101005610Z.nat.gz')
+    test.read(file_format='.nat')
+    test = AscatL1Image(
+        '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20070101010300Z_20070101024759Z_R_O_20140127103401Z.gz')
+    test.read(file_format='.nat')
+    test = AscatL1Image(
+        '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20140331235400Z_20140401013900Z_R_O_20140528192238Z.gz')
+    test.read(file_format='.nat')
     elapsed_time = time.time() - start_time
     print (elapsed_time)
 

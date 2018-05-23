@@ -6,6 +6,7 @@ from gzip import GzipFile
 from collections import OrderedDict
 
 import numpy as np
+import numpy.lib.recfunctions as rfn
 import datetime as dt
 import matplotlib.dates as mpl_dates
 
@@ -19,6 +20,7 @@ ulong_nan = 2 ** 32 - 1
 int_nan = -2 ** 15
 uint_nan = 2 ** 16 - 1
 byte_nan = -2 ** 7
+
 
 def template_SZF__001():
     """
@@ -114,8 +116,8 @@ def template_SZX__002():
 
     return dataset
 
-class EPSProduct(object):
 
+class EPSProduct(object):
     """
     Class for reading EPS products.
     """
@@ -207,9 +209,11 @@ class EPSProduct(object):
 
             # viadr (Variable Internal Auxiliary Data Record)
             elif record_class == 7:
-                template, scaled_template, sfactor = self._read_xml_viadr(record_subclass)
+                template, scaled_template, sfactor = self._read_xml_viadr(
+                    record_subclass)
                 viadr_element = self._read_record(template)
-                viadr_element_sc = self._scaling(viadr_element, scaled_template, sfactor)
+                viadr_element_sc = self._scaling(viadr_element,
+                                                 scaled_template, sfactor)
 
                 # store viadr_grid seperately
                 if record_subclass == 8:
@@ -253,7 +257,8 @@ class EPSProduct(object):
         self.fid.close()
 
         self.mdr = np.hstack(self.mdr)
-        self.scaled_mdr = self._scaling(self.mdr, self.scaled_template, self.sfactor)
+        self.scaled_mdr = self._scaling(self.mdr, self.scaled_template,
+                                        self.sfactor)
 
     def _scaling(self, unscaled_data, scaled_template, sfactor):
         '''
@@ -308,7 +313,7 @@ class EPSProduct(object):
                                    'formats')
 
         # loop through files where filename starts with 'eps_ascat'.
-        for filename in fnmatch.filter(os.listdir(format_path), 'eps_ascat*'):
+        for filename in fnmatch.filter(os.listdir(format_path), 'eps_ascatl1b*'):
             doc = etree.parse(os.path.join(format_path, filename))
             file_extension = doc.xpath('//file-extensions')[0].getchildren()[0]
 
@@ -407,8 +412,9 @@ class EPSProduct(object):
             scaled_dtype.append((key, sf_dtype, value['length']))
             dtype.append((key, conv[value['type']], value['length']))
 
-        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(scaling_factor,
-                                                                 dtype=np.float32)
+        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(
+            scaling_factor,
+            dtype=np.float32)
 
     def _read_xml_mdr(self):
         """
@@ -429,7 +435,8 @@ class EPSProduct(object):
 
             # check if the item is of type bitfield
             bitfield_flag = ('type' in child_items and
-                             ('bitfield' in child_items['type'] or 'time' in child_items['type']))
+                             ('bitfield' in child_items['type'] or 'time' in
+                              child_items['type']))
 
             # append the length if it isn't the special case of type bitfield
             try:
@@ -470,8 +477,10 @@ class EPSProduct(object):
             length = []
 
         conv = {'longtime': long_cds_time, 'time': short_cds_time,
-                'boolean': np.uint8, 'integer1': np.int8, 'uinteger1': np.uint8,
-                'integer': np.int32, 'uinteger': np.uint32, 'integer2': np.int16,
+                'boolean': np.uint8, 'integer1': np.int8,
+                'uinteger1': np.uint8,
+                'integer': np.int32, 'uinteger': np.uint32,
+                'integer2': np.int16,
                 'uinteger2': np.uint16, 'integer4': np.int32,
                 'uinteger4': np.uint32, 'integer8': np.int64,
                 'enumerated': np.uint8, 'string': 'str', 'bitfield': np.uint8}
@@ -493,8 +502,10 @@ class EPSProduct(object):
             scaled_dtype.append((key, sf_dtype, value['length']))
             dtype.append((key, conv[value['type']], value['length']))
 
-        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(scaling_factor,
-                                                                 dtype=np.float32)
+        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(
+            scaling_factor,
+            dtype=np.float32)
+
 
 def grh_record():
     """
@@ -510,15 +521,17 @@ def grh_record():
 
     return record_dtype
 
+
 def ipr_record():
     """
     ipr template.
     """
     record_dtype = np.dtype([('target_record_class', np.ubyte),
-                       ('target_instrument_group', np.ubyte),
-                       ('target_record_subclass', np.ubyte),
-                       ('target_record_offset', np.uint32)])
+                             ('target_instrument_group', np.ubyte),
+                             ('target_record_subclass', np.ubyte),
+                             ('target_record_offset', np.uint32)])
     return record_dtype
+
 
 def read_eps_l1b(filename):
     """
@@ -582,9 +595,10 @@ def read_eps_l1b(filename):
             metadata[field] = raw_data[field]
     else:
         raise ValueError("Format not supported. Product type {:1}"
-                     " Format major version: {:2}".format(ptype, fmv))
+                         " Format major version: {:2}".format(ptype, fmv))
 
     return raw_data, data, metadata
+
 
 def read_eps(filename):
     """
@@ -678,7 +692,6 @@ def read_szx_fmv_11(eps_file):
               ('f_land', 'F_LAND', uint_nan)]
     for field in fields:
         data[field[0]] = raw_data[field[1]].reshape(n_records, 3)
-        # valid = data[field[0]] != field[2]
         valid = raw_unscaled[field[1]].reshape(n_records, 3) != field[2]
         data[field[0]][valid == False] = field[2]
 
@@ -740,8 +753,8 @@ def read_szx_fmv_12(eps_file):
         data[field[0]] = np.int16(mphr[field[1]])
 
     fields = [('degraded_inst_mdr', 'DEGRADED_INST_MDR'),
-              ('degraded_proc_mdr','DEGRADED_PROC_MDR'),
-              ('sat_track_azi','SAT_TRACK_AZI')]
+              ('degraded_proc_mdr', 'DEGRADED_PROC_MDR'),
+              ('sat_track_azi', 'SAT_TRACK_AZI')]
     for field in fields:
         data[field[0]] = raw_data[field[1]].flatten()[idx_nodes]
 
@@ -750,7 +763,6 @@ def read_szx_fmv_12(eps_file):
               ('swath_indicator', 'SWATH INDICATOR', byte_nan)]
     for field in fields:
         data[field[0]] = raw_data[field[1]].flatten()
-        # valid = data[field[0]] != field[2]
         valid = raw_unscaled[field[1]].flatten() != field[2]
         data[field[0]][valid == False] = field[2]
 
@@ -832,9 +844,9 @@ def read_szf_fmv_12(eps_file):
         data[field[0]] = np.int16(mphr[field[1]])
 
     fields = [('degraded_inst_mdr', 'DEGRADED_INST_MDR'),
-              ('degraded_proc_mdr','DEGRADED_PROC_MDR'),
-              ('sat_track_azi','SAT_TRACK_AZI'),
-              ('as_des_pass','AS_DES_PASS'),
+              ('degraded_proc_mdr', 'DEGRADED_PROC_MDR'),
+              ('sat_track_azi', 'SAT_TRACK_AZI'),
+              ('as_des_pass', 'AS_DES_PASS'),
               ('beam_number', 'BEAM_NUMBER'),
               ('flagfield_rf1', 'FLAGFIELD_RF1'),
               ('flagfield_rf2', 'FLAGFIELD_RF2'),
@@ -993,9 +1005,7 @@ def test_eps():
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20070101010300Z_20070101024756Z_R_O_20140127103410Z.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20140331235400Z_20140401013856Z_R_O_20140528192253Z.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20070101010300Z_20070101024759Z_R_O_20140127103401Z.gz')
-    data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20140331235400Z_20140401013900Z_R_O_20140528192238Z.gz')
-    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20070906003300Z_20070906021459Z_R_O_20081223163950Z.nat.gz')
-    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20100101013000Z_20100101031159Z_R_O_20130824055501Z.gz')
+    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20140331235400Z_20140401013900Z_R_O_20140528192238Z.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20121212071500Z_20121212085659Z_N_O_20121212080501Z.nat')
 
