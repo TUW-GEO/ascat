@@ -294,9 +294,8 @@ class EPSProduct(object):
 
         conv = {'longtime': long_cds_time, 'time': short_cds_time,
                 'boolean': np.uint8, 'integer1': np.int8,
-                'uinteger1': np.uint8,
-                'integer': np.int32, 'uinteger': np.uint32,
-                'integer2': np.int16,
+                'uinteger1': np.uint8, 'integer': np.int32,
+                'uinteger': np.uint32, 'integer2': np.int16,
                 'uinteger2': np.uint16, 'integer4': np.int32,
                 'uinteger4': np.uint32, 'integer8': np.int64,
                 'enumerated': np.uint8, 'string': 'str', 'bitfield': np.uint8}
@@ -344,7 +343,7 @@ class EPSProduct(object):
                              ('bitfield' in child_items['type'] or 'time' in
                               child_items['type']))
 
-            # append the length if it isn't the special case of type bitfield
+            # append the length if it isn't the special case of type bitfield or time
             try:
                 var_len = child_items.pop('length')
                 if bitfield_flag == False:
@@ -384,9 +383,8 @@ class EPSProduct(object):
 
         conv = {'longtime': long_cds_time, 'time': short_cds_time,
                 'boolean': np.uint8, 'integer1': np.int8,
-                'uinteger1': np.uint8,
-                'integer': np.int32, 'uinteger': np.uint32,
-                'integer2': np.int16,
+                'uinteger1': np.uint8, 'integer': np.int32,
+                'uinteger': np.uint32, 'integer2': np.int16,
                 'uinteger2': np.uint16, 'integer4': np.int32,
                 'uinteger4': np.uint32, 'integer8': np.int64,
                 'enumerated': np.uint8, 'string': 'str', 'bitfield': np.uint8}
@@ -503,7 +501,7 @@ def read_eps_l1b(filename):
         raise ValueError("Format not supported. Product type {:1}"
                          " Format major version: {:2}".format(ptype, fmv))
 
-    return raw_data, data, metadata
+    return raw_data['lon'], raw_data['lat'], data, metadata
 
 
 def read_eps_l2(filename):
@@ -546,7 +544,7 @@ def read_eps_l2(filename):
         raise ValueError("Format not supported. Product type {:1}"
                          " Format major version: {:2}".format(ptype, fmv))
 
-    return raw_data, data, metadata
+    return raw_data['lon'], raw_data['lat'], data, metadata
 
 
 def read_eps(filename):
@@ -557,7 +555,7 @@ def read_eps(filename):
     if os.path.splitext(filename)[1] == '.gz':
         zipped = True
 
-    # for zipped files use an unzipped temporal copy
+    # for zipped files use an unzipped temporary copy
     if zipped:
         with NamedTemporaryFile(delete=False) as tmp_fid:
             with GzipFile(filename) as gz_fid:
@@ -568,7 +566,7 @@ def read_eps(filename):
     prod = EPSProduct(filename)
     prod.read_product()
 
-    # remove the temporal copy
+    # remove the temporary copy
     if zipped:
         os.remove(filename)
 
@@ -932,19 +930,17 @@ def read_smx_fmv_12(eps_file):
     idx_nodes = np.arange(eps_file.mdr_counter).repeat(n_node_per_line)
 
     data = np.repeat(template, n_records)
-    # raw_data = np.array(eps_file.mdr)
 
-    # utc_line_nodes (time)
     ascat_time = mpl_dates.num2julian(
         shortcdstime2dtordinal(raw_data['UTC_LINE_NODES'].flatten()['day'],
                                raw_data['UTC_LINE_NODES'].flatten()['time']))
     data['jd'] = ascat_time[idx_nodes]
 
-    fields = [('sig', 'SIGMA0_TRIP', long_nan, 1e-6),
-              ('inc', 'INC_ANGLE_TRIP', uint_nan, 1e-2),
-              ('azi', 'AZI_ANGLE_TRIP', int_nan, 1e-2),
-              ('kp', 'KP', uint_nan, 1e-4),
-              ('f_land', 'F_LAND', uint_nan, 1e-3)]
+    fields = [('sig', 'SIGMA0_TRIP', long_nan),
+              ('inc', 'INC_ANGLE_TRIP', uint_nan),
+              ('azi', 'AZI_ANGLE_TRIP', int_nan),
+              ('kp', 'KP', uint_nan),
+              ('f_land', 'F_LAND', uint_nan)]
 
     for field in fields:
         data[field[0]] = raw_data[field[1]].reshape(n_records, 3)

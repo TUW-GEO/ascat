@@ -32,8 +32,11 @@ import time
 import os
 
 from pygeobase.io_base import ImageBase
+from pygeobase.io_base import MultiTemporalImageBase
+from pygeobase.io_base import IntervalReadingMixin
 from pygeobase.object_base import Image
 import ascat.data_readers.read_eps as read_eps
+import ascat.data_readers.read_bufr as read_bufr
 
 class AscatL2Image(ImageBase):
     """
@@ -51,16 +54,18 @@ class AscatL2Image(ImageBase):
             file_format = get_file_format(self.filename)
 
         if file_format == ".nat":
-            raw_data, data, metadata = read_eps.read_eps_l2(self.filename)
+            longitude, latitude, data, metadata = read_eps.read_eps_l2(self.filename)
+
         elif file_format == ".nc":
             raw_data, data, metadata = read_netCDF(self.filename)
 
         elif file_format == ".bfr":
-            raw_data, data, metadata = read_bufr(self.filename)
+            longitude, latitude, data, metadata = read_bufr.read_bufr_l2(self.filename)
+
         else:
             raise RuntimeError("Format not found, please indicate the file format. [\".nat\", \".nc\", \".bfr\"]")
 
-        return Image(raw_data['lon'], raw_data['lat'], data, metadata,
+        return Image(longitude, latitude, data, metadata,
                      timestamp, timekey='jd')
 
     def write(self, *args, **kwargs):
@@ -82,10 +87,6 @@ def get_file_format(filename):
 
 
 def read_netCDF(filename):
-    pass
-
-
-def read_bufr(filename):
     pass
 
 

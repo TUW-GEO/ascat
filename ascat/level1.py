@@ -28,7 +28,6 @@
 """
 General Level 1 data readers for ASCAT data in all formats. Not specific to distributor.
 """
-import time
 import os
 
 from pygeobase.io_base import ImageBase
@@ -38,7 +37,7 @@ import ascat.data_readers.read_eps as read_eps
 
 class AscatL1Image(ImageBase):
     """
-    General Level 1 Image
+    General Level 1b Image for ASCAT data
     """
     def __init__(self, *args, **kwargs):
         """
@@ -52,16 +51,18 @@ class AscatL1Image(ImageBase):
             file_format = get_file_format(self.filename)
 
         if file_format == ".nat":
-            raw_data, data, metadata = read_eps.read_eps_l1b(self.filename)
+            longitude, latitude, data, metadata = read_eps.read_eps_l1b(self.filename)
+
         elif file_format == ".nc":
             raw_data, data, metadata = read_netCDF(self.filename)
 
         elif file_format == ".bfr":
             raw_data, data, metadata = read_bufr(self.filename)
+
         else:
             raise RuntimeError("Format not found, please indicate the file format. [\".nat\", \".nc\", \".bfr\"]")
 
-        return Image(raw_data['lon'], raw_data['lat'], data, metadata,
+        return Image(longitude, latitude, data, metadata,
                      timestamp, timekey='jd')
 
     def write(self, *args, **kwargs):
@@ -82,40 +83,32 @@ def get_file_format(filename):
     return file_format
 
 
+class AscatL1bEPSImage(ImageBase):
+    def __init__(self, *args, **kwargs):
+        """
+        Initialization of i/o object.
+        """
+        super(AscatL1bEPSImage, self).__init__(*args, **kwargs)
+
+    def read(self, timestamp=None, file_format=None, **kwargs):
+        longitude, latitude, data, metadata = read_eps.read_eps_l1b(
+            self.filename)
+
+        return Image(longitude, latitude, data, metadata,
+                     timestamp, timekey='jd')
+
+    def write(self, *args, **kwargs):
+        pass
+
+    def flush(self):
+        pass
+
+    def close(self):
+        pass
+
 def read_netCDF(filename):
     pass
 
 
 def read_bufr(filename):
     pass
-
-
-def test_level1():
-    start_time = time.time()
-
-    # test = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
-    # test.read()
-    # test = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20070101010300Z_20070101024756Z_R_O_20140127103410Z.gz')
-    # test = AscatL1Image('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20140331235400Z_20140401013900Z_R_O_20140528192238Z.gz')
-    # test.read(file_format='.nat')
-
-    test = AscatL1Image(
-        '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20140331235400Z_20140401013856Z_R_O_20140528192253Z.gz')
-    test.read(file_format='.nat')
-    test = AscatL1Image(
-        '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
-    test.read(file_format='.nat')
-    test = AscatL1Image(
-        '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20160101000900Z_20160101015058Z_N_O_20160101005610Z.nat.gz')
-    test.read(file_format='.nat')
-    test = AscatL1Image(
-        '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20070101010300Z_20070101024759Z_R_O_20140127103401Z.gz')
-    test.read(file_format='.nat')
-    test = AscatL1Image(
-        '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20140331235400Z_20140401013900Z_R_O_20140528192238Z.gz')
-    test.read(file_format='.nat')
-    elapsed_time = time.time() - start_time
-    print (elapsed_time)
-
-if __name__ == '__main__':
-    test_level1()
