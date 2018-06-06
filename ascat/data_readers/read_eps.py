@@ -11,6 +11,7 @@ import datetime as dt
 import matplotlib.dates as mpl_dates
 import ascat.data_readers.templates as templates
 
+
 short_cds_time = np.dtype([('day', np.uint16), ('time', np.uint32)])
 
 long_cds_time = np.dtype([('day', np.uint16), ('ms', np.uint32),
@@ -93,25 +94,34 @@ class EPSProduct(object):
             elif record_class == 3:
                 ipr_element = self._read_record(ipr_record())
                 if self.ipr is None:
-                    self.ipr = [ipr_element]
+                    self.ipr = {}
+                    self.ipr['data'] = [ipr_element]
+                    self.ipr['grh'] = [self.grh]
                 else:
-                    self.ipr.append(ipr_element)
+                    self.ipr['data'].append(ipr_element)
+                    self.ipr['grh'].append(self.grh)
 
             # geadr (Global External Auxiliary Data Record)
             elif record_class == 4:
                 geadr_element = self._read_pointer()
                 if self.geadr is None:
-                    self.geadr = [geadr_element]
+                    self.geadr = {}
+                    self.geadr['data'] = [geadr_element]
+                    self.geadr['grh'] = [self.grh]
                 else:
-                    self.geadr.append(geadr_element)
+                    self.geadr['data'].append(geadr_element)
+                    self.geadr['grh'].append(self.grh)
 
             # veadr (Variable External Auxiliary Data Record)
             elif record_class == 6:
                 veadr_element = self._read_pointer()
                 if self.veadr is None:
-                    self.veadr = [veadr_element]
+                    self.veadr = {}
+                    self.veadr['data'] = [veadr_element]
+                    self.veadr['grh'] = [self.grh]
                 else:
-                    self.veadr.append(veadr_element)
+                    self.veadr['data'].append(veadr_element)
+                    self.veadr['grh'].append(self.grh)
 
             # viadr (Variable Internal Auxiliary Data Record)
             elif record_class == 7:
@@ -121,7 +131,7 @@ class EPSProduct(object):
                 viadr_element_sc = self._scaling(viadr_element,
                                                  scaled_template, sfactor)
 
-                # store viadr_grid seperately
+                # store viadr_grid separately
                 if record_subclass == 8:
                     if self.viadr_grid is None:
                         self.viadr_grid = [viadr_element]
@@ -131,11 +141,17 @@ class EPSProduct(object):
                         self.viadr_grid_scaled.append(viadr_element_sc)
                 else:
                     if self.viadr is None:
-                        self.viadr = [viadr_element]
-                        self.viadr_scaled = [viadr_element_sc]
+                        self.viadr = {}
+                        self.viadr_scaled = {}
+                        self.viadr['data'] = [viadr_element]
+                        self.viadr['grh'] = [self.grh]
+                        self.viadr_scaled['data'] = [viadr_element_sc]
+                        self.viadr_scaled['grh'] = [self.grh]
                     else:
-                        self.viadr.append(viadr_element)
-                        self.viadr_scaled.append(viadr_element_sc)
+                        self.viadr['data'].append(viadr_element)
+                        self.viadr['grh'].append(self.grh)
+                        self.viadr_scaled['data'].append(viadr_element_sc)
+                        self.viadr_scaled['grh'].append(self.grh)
 
             # mdr (Measurement Data Record)
             elif record_class == 8:
@@ -165,6 +181,9 @@ class EPSProduct(object):
         self.mdr = np.hstack(self.mdr)
         self.scaled_mdr = self._scaling(self.mdr, self.scaled_template,
                                         self.sfactor)
+
+    def _append_list(self, new_element):
+        return
 
     def _scaling(self, unscaled_data, scaled_template, sfactor):
         '''
@@ -1053,7 +1072,7 @@ def test_eps():
     """
     Test read EPS file.
     """
-    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
+    data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20160101000900Z_20160101015058Z_N_O_20160101005610Z.nat.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20070101010300Z_20070101024756Z_R_O_20140127103410Z.gz')
     # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20140331235400Z_20140401013856Z_R_O_20140528192253Z.gz')

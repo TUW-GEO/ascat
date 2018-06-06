@@ -37,6 +37,7 @@ from pygeobase.io_base import IntervalReadingMixin
 from pygeobase.object_base import Image
 import ascat.data_readers.read_eps as read_eps
 import ascat.data_readers.read_bufr as read_bufr
+import ascat.level2 as level2
 
 class AscatL2Image(ImageBase):
     """
@@ -55,18 +56,19 @@ class AscatL2Image(ImageBase):
 
         if file_format == ".nat":
             longitude, latitude, data, metadata = read_eps.read_eps_l2(self.filename)
+            img = Image(longitude, latitude, data, metadata,
+                     timestamp, timekey='jd')
 
         elif file_format == ".nc":
-            raw_data, data, metadata = read_netCDF(self.filename)
+            img = level2.AscatL2SsmNcFile(self.filename).read(timestamp)
 
-        elif file_format == ".bfr":
-            longitude, latitude, data, metadata = read_bufr.read_bufr_l2(self.filename)
+        elif file_format == ".bfr" or file_format == ".buf":
+            img = level2.AscatL2SsmBufrFile(self.filename).read(timestamp)
 
         else:
             raise RuntimeError("Format not found, please indicate the file format. [\".nat\", \".nc\", \".bfr\"]")
 
-        return Image(longitude, latitude, data, metadata,
-                     timestamp, timekey='jd')
+        return img
 
     def write(self, *args, **kwargs):
         pass
@@ -86,15 +88,11 @@ def get_file_format(filename):
     return file_format
 
 
-def read_netCDF(filename):
-    pass
-
-
 def test_level2():
     start_time = time.time()
 
     test = AscatL2Image('/home/mschmitz/Desktop/ascat_test_data/level2/eps_nat/ASCA_SMR_02_M01_20180408011800Z_20180408025958Z_N_O_20180408030052Z.nat')
-    test.read()
+    p = test.read()
 
     elapsed_time = time.time() - start_time
     print (elapsed_time)
