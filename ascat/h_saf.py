@@ -41,8 +41,8 @@ from pygeobase.io_base import ImageBase
 from pygeobase.io_base import MultiTemporalImageBase
 from pygeobase.object_base import Image
 
-import ascat.bufr as bufr_reader
-from ascat.level2 import AscatL2SsmBufr
+import ascat.data_readers.bufr as bufr_reader
+from ascat.data_readers.read_bufr import AscatL2SsmBufr
 from ascat.timeseries import AscatNc
 
 if sys.version_info < (3, 0):

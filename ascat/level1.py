@@ -33,8 +33,8 @@ import os
 from pygeobase.io_base import ImageBase
 from pygeobase.object_base import Image
 import ascat.data_readers.read_eps as read_eps
-import ascat.data_readers.read_bufr as bufr
-import ascat.data_readers.read_nc as nc
+import ascat.data_readers.read_bufr as read_bufr
+import ascat.data_readers.read_nc as read_nc
 
 
 class AscatL1Image(ImageBase):
@@ -53,15 +53,16 @@ class AscatL1Image(ImageBase):
             file_format = get_file_format(self.filename)
 
         if file_format == ".nat":
-            longitude, latitude, data, metadata = read_eps.read_eps_l1b(self.filename)
-            img = Image(longitude, latitude, data, metadata,
-                     timestamp, timekey='jd')
+            # longitude, latitude, data, metadata = read_eps.read_eps_l1b(self.filename)
+            # img = Image(longitude, latitude, data, metadata,
+            #          timestamp, timekey='jd')
+            img = read_eps.AscatL1bEPSImage(self.filename).read(timestamp)
 
         elif file_format == ".nc":
-            img = nc.AscatL1SsmNcFile(self.filename).read(timestamp)
+            img = read_nc.AscatL1SsmNcFile(self.filename).read(timestamp)
 
         elif file_format == ".bfr" or file_format == ".buf":
-            img = bufr.AscatL1SsmBufrFile(self.filename).read(timestamp)
+            img = read_bufr.AscatL1BufrFile(self.filename).read(timestamp)
 
         else:
             raise RuntimeError("Format not found, please indicate the file format. [\".nat\", \".nc\", \".bfr\"]")
@@ -85,33 +86,3 @@ def get_file_format(filename):
         file_format = os.path.splitext(filename)[1]
     return file_format
 
-
-class AscatL1bEPSImage(ImageBase):
-    def __init__(self, *args, **kwargs):
-        """
-        Initialization of i/o object.
-        """
-        super(AscatL1bEPSImage, self).__init__(*args, **kwargs)
-
-    def read(self, timestamp=None, file_format=None, **kwargs):
-        longitude, latitude, data, metadata = read_eps.read_eps_l1b(
-            self.filename)
-
-        return Image(longitude, latitude, data, metadata,
-                     timestamp, timekey='jd')
-
-    def write(self, *args, **kwargs):
-        pass
-
-    def flush(self):
-        pass
-
-    def close(self):
-        pass
-
-def read_netCDF(filename):
-    pass
-
-
-def read_bufr(filename):
-    pass

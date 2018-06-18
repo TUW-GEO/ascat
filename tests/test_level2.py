@@ -36,10 +36,10 @@ import os
 import pytest
 import unittest
 import sys
-from ascat.level2 import AscatL2SsmBufr
-from ascat.level2 import AscatL2SsmBufrChunked
-from ascat.level2 import AscatL2SsmBufrFile
-from ascat.level2 import AscatL2SsmNcFile
+from ascat.data_readers.read_bufr import AscatL2SsmBufr
+from ascat.data_readers.read_bufr import AscatL2SsmBufrChunked
+from ascat.data_readers.read_bufr import AscatL2SsmBufrFile
+from ascat.data_readers.read_nc import AscatL2SsmNcFile
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
