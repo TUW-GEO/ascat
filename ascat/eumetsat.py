@@ -29,9 +29,9 @@
 Readers for data downloaded from EUMETSAT data centre (UMARF)
 """
 
-from ascat.data_readers.read_bufr import AscatL2SsmBufr
-from ascat.data_readers.read_bufr import AscatL2SsmBufrChunked
-from ascat.data_readers.read_nc import AscatL2SsmNc
+from ascat.read_native.bufr import AscatL2SsmBufr
+from ascat.read_native.bufr import AscatL2SsmBufrChunked
+from ascat.read_native.nc import AscatL2SsmNc
 
 
 class AscatAL2Ssm125(AscatL2SsmBufr):

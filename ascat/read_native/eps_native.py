@@ -42,7 +42,7 @@ from pygeobase.object_base import Image
 import numpy as np
 import datetime as dt
 import matplotlib.dates as mpl_dates
-import ascat.data_readers.templates as templates
+import ascat.read_native.templates as templates
 
 
 short_cds_time = np.dtype([('day', np.uint16), ('time', np.uint32)])
@@ -619,11 +619,12 @@ def read_eps_l2(filename):
         else:
             raise RuntimeError("SMX format version not supported.")
 
-        fields = ['jd', 'as_des_pass', 'swath_indicator', 'node_num', 'ssm',
-                  'ssm_noise', 'norm_sigma', 'norm_sigma_noise', 'slope',
-                  'slope_noise', 'dry_ref', 'wet_ref', 'mean_ssm',
-                  'ssm_sens', 'correction_flag', 'processing_flag',
-                  'aggregated_flag', 'snow', 'frozen', 'wetland', 'topo']
+        fields = ['jd', 'as_des_pass', 'swath_indicator', 'sat_track_azi',
+                  'node_num', 'ssm', 'ssm_noise', 'norm_sigma',
+                  'norm_sigma_noise', 'slope', 'slope_noise', 'dry_ref',
+                  'wet_ref', 'mean_ssm', 'ssm_sens', 'correction_flag',
+                  'processing_flag', 'aggregated_flag', 'snow', 'frozen',
+                  'wetland', 'topo']
         for field in fields:
             data[field] = raw_data[field]
 
@@ -1046,9 +1047,14 @@ def read_smx_fmv_12(eps_file):
         valid = raw_data[field[1]].reshape(n_records, 3) != field[2]
         data[field[0]][valid == False] = field[2]
 
+    fields = [('sat_track_azi', 'SAT_TRACK_AZI')]
+    for field in fields:
+        data[field[0]] = raw_data[field[1]].flatten()[idx_nodes]
+
     fields = [('lon', 'LONGITUDE', long_nan),
               ('lat', 'LATITUDE', long_nan),
               ('ssm', 'SOIL_MOISTURE', uint_nan),
+              ('swath_indicator', 'SWATH_INDICATOR', byte_nan),
               ('ssm_noise', 'SOIL_MOISTURE_ERROR', uint_nan),
               ('norm_sigma', 'SIGMA40', long_nan),
               ('norm_sigma_noise', 'SIGMA40_ERROR', long_nan),
@@ -1146,21 +1152,3 @@ def shortcdstime2dtordinal(days, milliseconds):
     offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)
 
     return epoch + offset
-
-
-def test_eps():
-    """
-    Test read EPS file.
-    """
-    data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20180403012100Z_20180403030558Z_N_O_20180403030402Z.nat')
-    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M01_20160101000900Z_20160101015058Z_N_O_20160101005610Z.nat.gz')
-    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20070101010300Z_20070101024756Z_R_O_20140127103410Z.gz')
-    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZO_1B_M02_20140331235400Z_20140401013856Z_R_O_20140528192253Z.gz')
-    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20070101010300Z_20070101024759Z_R_O_20140127103401Z.gz')
-    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M02_20140331235400Z_20140401013900Z_R_O_20140528192238Z.gz')
-    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat.gz')
-    # data = read_eps_l1b('/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20121212071500Z_20121212085659Z_N_O_20121212080501Z.nat')
-
-
-if __name__ == '__main__':
-    test_eps()

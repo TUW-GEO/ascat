@@ -32,9 +32,9 @@ import os
 
 from pygeobase.io_base import ImageBase
 from pygeobase.object_base import Image
-import ascat.data_readers.read_eps as read_eps
-import ascat.data_readers.read_bufr as read_bufr
-import ascat.data_readers.read_nc as read_nc
+import ascat.read_native.eps_native as read_eps
+import ascat.read_native.bufr as read_bufr
+import ascat.read_native.nc as read_nc
 
 
 class AscatL1Image(ImageBase):

@@ -104,6 +104,7 @@ def template_SMR__001():
                        ('lon', np.float32),
                        ('lat', np.float32),
                        ('spacecraft_id', np.ubyte),
+                       ('sat_track_azi', np.float32),
                        ('as_des_pass', np.int8),
                        ('swath_indicator', np.ubyte),
                        ('node_num', np.int16),
