@@ -32,9 +32,11 @@ import os
 
 from pygeobase.io_base import ImageBase
 from pygeobase.object_base import Image
-import ascat.read_native.eps_native as read_eps
-import ascat.read_native.bufr as read_bufr
-import ascat.read_native.nc as read_nc
+
+import ascat.read_native.eps_native as eps_native
+import ascat.read_native.bufr as bufr
+import ascat.read_native.nc as nc
+import ascat.read_native.hdf5 as h5
 
 
 class AscatL1Image(ImageBase):
@@ -56,16 +58,18 @@ class AscatL1Image(ImageBase):
             # longitude, latitude, data, metadata = read_eps.read_eps_l1b(self.filename)
             # img = Image(longitude, latitude, data, metadata,
             #          timestamp, timekey='jd')
-            img = read_eps.AscatL1bEPSImage(self.filename).read(timestamp)
+            img = eps_native.AscatL1bEPSImage(self.filename).read(timestamp)
 
         elif file_format == ".nc":
-            img = read_nc.AscatL1SsmNcFile(self.filename).read(timestamp)
+            img = nc.AscatL1NcFile(self.filename).read(timestamp)
 
         elif file_format == ".bfr" or file_format == ".buf":
-            img = read_bufr.AscatL1BufrFile(self.filename).read(timestamp)
+            img = bufr.AscatL1BufrFile(self.filename).read(timestamp)
 
+        elif file_format == ".h5":
+            img = h5.AscatL1H5File(self.filename).read(timestamp)
         else:
-            raise RuntimeError("Format not found, please indicate the file format. [\".nat\", \".nc\", \".bfr\"]")
+            raise RuntimeError("Format not found, please indicate the file format. [\".nat\", \".nc\", \".bfr\", \".h5\"]")
 
         return img
 

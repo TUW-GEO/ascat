@@ -893,7 +893,6 @@ def read_szf_fmv_12(eps_file):
     fields = [('degraded_inst_mdr', 'DEGRADED_INST_MDR'),
               ('degraded_proc_mdr', 'DEGRADED_PROC_MDR'),
               ('sat_track_azi', 'SAT_TRACK_AZI'),
-              ('as_des_pass', 'AS_DES_PASS'),
               ('beam_number', 'BEAM_NUMBER'),
               ('flagfield_rf1', 'FLAGFIELD_RF1'),
               ('flagfield_rf2', 'FLAGFIELD_RF2'),

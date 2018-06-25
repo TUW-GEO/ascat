@@ -42,7 +42,7 @@ from pygeobase.io_base import MultiTemporalImageBase
 from pygeobase.io_base import IntervalReadingMixin
 from pygeobase.object_base import Image
 
-class AscatL1SsmNcFile(ImageBase):
+class AscatL1NcFile(ImageBase):
     """
     Read ASCAT L2 SSM File in netCDF format, as downloaded from EUMETSAT
 
@@ -62,8 +62,8 @@ class AscatL1SsmNcFile(ImageBase):
         Initialization of i/o object.
 
         """
-        super(AscatL1SsmNcFile, self).__init__(filename, mode=mode,
-                                               **kwargs)
+        super(AscatL1NcFile, self).__init__(filename, mode=mode,
+                                            **kwargs)
         self.nc_variables = nc_variables
         self.ds = None
 
@@ -110,6 +110,8 @@ class AscatL1SsmNcFile(ImageBase):
             valid_data = ~dd['soil_moisture'].mask
             for name in dd:
                 dd[name] = dd[name][valid_data]
+
+        dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
 
         longitude = dd.pop('longitude')
         latitude = dd.pop('latitude')
@@ -204,6 +206,8 @@ class AscatL2SsmNcFile(ImageBase):
 
         longitude = dd.pop('longitude')
         latitude = dd.pop('latitude')
+
+        dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
 
         return Image(longitude, latitude, dd, {}, timestamp, timekey='utc_line_nodes')
 
