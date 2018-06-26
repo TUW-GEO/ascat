@@ -76,13 +76,16 @@ class AscatL1H5File(ImageBase):
         """
 
         if self.ds is None:
-            self.ds = h5py.File(self.filename)['U-MARF/EPS/ASCA_SZF_1B']
+            # self.ds = h5py.File(self.filename)['U-MARF/EPS/ASCA_SZF_1B']
+            self.ds = h5py.File(self.filename)
+            while len(self.ds.keys()) == 1:
+                self.ds = self.ds[self.ds.keys()[0]]
         raw_data = self.ds['DATA']
         raw_metadata = self.ds['METADATA']
 
         # store data in dictionary
-        dd = {}
-        # dd = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'].value
+        data = {}
+        metadata = {}
 
         if self.h5_keys is None:
             var_to_read = list(raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'].dtype.names)
@@ -95,6 +98,8 @@ class AscatL1H5File(ImageBase):
         if 'LONGITUDE_FULL' not in var_to_read:
             var_to_read.append('LONGITUDE_FULL')
 
+        num_cells = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001']['LATITUDE_FULL'].shape[1]
+
         for name in var_to_read:
             variable = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'][name]
             if name in raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value['EntryName']:
@@ -102,27 +107,27 @@ class AscatL1H5File(ImageBase):
                 if raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value['Scale Factor'][var_index] != "n/a":
                     sf = 10**float(raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value['Scale Factor'][var_index])
                     variable = variable / sf
-            dd[name] = variable[:].flatten()
-
-
-        # num_cells = self.ds.dimensions['numCells'].size
-        # for name in var_to_read:
-        #     variable = self.ds.variables[name]
-        #     dd[name] = variable[:].flatten()
-        #     if len(variable.shape) == 1:
-        #         # If the data is 1D then we repeat it for each cell
-        #         dd[name] = np.repeat(dd[name], num_cells)
+            data[name] = variable[:].flatten()
+            if len(variable.shape) == 1:
+                # If the data is 1D then we repeat it for each cell
+                data[name] = np.repeat(data[name], num_cells)
 
             # if name == 'utc_line_nodes':
-            #     utc_dates = netCDF4.num2date(dd[name], variable.units)
-            #     dd['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
+            #     utc_dates = netCDF4.num2date(data[name], variable.units)
+            #     data['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
 
-        dd['AS_DES_PASS'] = (dd['SAT_TRACK_AZI'] < 270).astype(np.uint8)
+        data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
 
-        longitude = dd.pop('LONGITUDE_FULL')
-        latitude = dd.pop('LATITUDE_FULL')
+        for name in raw_metadata.keys():
+            for subname in raw_metadata[name].keys():
+                if not name in metadata:
+                    metadata[name] = dict()
+                metadata[name][subname] = raw_metadata[name][subname].value
 
-        return Image(longitude, latitude, dd, {}, timestamp, timekey='jd')
+        longitude = data.pop('LONGITUDE_FULL')
+        latitude = data.pop('LATITUDE_FULL')
+
+        return Image(longitude, latitude, data, metadata, timestamp, timekey='jd')
 
     def read_masked_data(self, **kwargs):
         """
