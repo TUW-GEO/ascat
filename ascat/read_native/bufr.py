@@ -35,7 +35,6 @@ from datetime import datetime, timedelta
 import warnings
 
 import numpy as np
-import pandas as pd
 
 from pygeobase.io_base import ImageBase
 from pygeobase.io_base import MultiTemporalImageBase
@@ -151,13 +150,8 @@ class AscatL1BufrFile(ImageBase):
                 minutes = message[:, 10].astype(int)
                 seconds = message[:, 11].astype(int)
 
-                df = pd.to_datetime(pd.DataFrame({'month': months,
-                                                  'year': years,
-                                                  'day': days,
-                                                  'hour': hours,
-                                                  'minute': minutes,
-                                                  'second': seconds}))
-                dates.append(pd.DatetimeIndex(df).to_julian_date().values)
+                dates.append(
+                    julday(months, days, years, hours, minutes, seconds))
 
                 # read optional data fields
                 for mid in self.msg_name_lookup:
@@ -180,7 +174,8 @@ class AscatL1BufrFile(ImageBase):
                 data[name] = data[name] * 100
 
         data['jd'] = dates
-        data['as_des_pass'] = (data["Direction Of Motion Of Moving Observing Platform"] < 270).astype(np.uint8)
+        if 'Direction Of Motion Of Moving Observing Platform' in data:
+            data['as_des_pass'] = (data["Direction Of Motion Of Moving Observing Platform"] < 270).astype(np.uint8)
 
         return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
 
@@ -407,13 +402,9 @@ class AscatL2SsmBufrFile(ImageBase):
                 minutes = message[:, 10].astype(int)
                 seconds = message[:, 11].astype(int)
 
-                df = pd.to_datetime(pd.DataFrame({'month': months,
-                                                  'year': years,
-                                                  'day': days,
-                                                  'hour': hours,
-                                                  'minute': minutes,
-                                                  'second': seconds}))
-                dates.append(pd.DatetimeIndex(df).to_julian_date().values)
+                dates.append(julday(months, days, years, hours, minutes, seconds))
+
+                # dt=datetime(years, months, days, hours, minutes, seconds)
 
                 # read optional data fields
                 for mid in self.msg_name_lookup:
@@ -436,7 +427,9 @@ class AscatL2SsmBufrFile(ImageBase):
                 data[name] = data[name] * 100
 
         data['jd'] = dates
-        data['as_des_pass'] = (data["Direction Of Motion Of Moving Observing Platform"] < 270).astype(np.uint8)
+
+        if 'Direction Of Motion Of Moving Observing Platform' in data:
+            data['as_des_pass'] = (data["Direction Of Motion Of Moving Observing Platform"] < 270).astype(np.uint8)
 
         if 65 in self.msg_name_lookup:
             # mask all the arrays based on fill_value of soil moisture
@@ -815,3 +808,42 @@ class BUFRReader(object):
 
     def __exit__(self, exc, val, trace):
         self.bufr.close()
+
+
+def julday(month, day, year, hour=0, minute=0, second=0):
+    """
+    Julian date from month, day, and year (can be scalars or arrays)
+    (function from pytesmo)
+    Parameters
+    ----------
+    month : numpy.ndarray or int32
+        Month.
+    day : numpy.ndarray or int32
+        Day.
+    year : numpy.ndarray or int32
+        Year.
+    hour : numpy.ndarray or int32, optional
+        Hour.
+    minute : numpy.ndarray or int32, optional
+        Minute.
+    second : numpy.ndarray or int32, optional
+        Second.
+    Returns
+    -------
+    jul : numpy.ndarray or double
+        Julian day.
+    """
+    month = np.array(month)
+    day = np.array(day)
+    inJanFeb = month <= 2
+    jy = year - inJanFeb
+    jm = month + 1 + inJanFeb * 12
+
+    jul = np.int32(np.floor(365.25 * jy) +
+                   np.floor(30.6001 * jm) + (day + 1720995.0))
+    ja = np.int32(0.01 * jy)
+    jul += 2 - ja + np.int32(0.25 * ja)
+
+    jul = jul + hour / 24.0 - 0.5 + minute / 1440.0 + second / 86400.0
+
+    return jul

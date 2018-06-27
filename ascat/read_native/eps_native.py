@@ -55,7 +55,8 @@ ulong_nan = 2 ** 32 - 1
 int_nan = -2 ** 15
 uint_nan = 2 ** 16 - 1
 byte_nan = -2 ** 7
-
+# 1.1.2000 00:00:00 in jd
+julian_epoch = 2451544.5
 
 class AscatL1bEPSImage(ImageBase):
     def __init__(self, *args, **kwargs):
@@ -698,9 +699,9 @@ def read_szx_fmv_11(eps_file):
     data = np.repeat(template, n_records)
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
 
-    data['jd'] = mpl_dates.num2julian(shortcdstime2dtordinal(
-        raw_data['UTC_LINE_NODES'].flatten()['day'],
-        raw_data['UTC_LINE_NODES'].flatten()['time']))[idx_nodes]
+    ascat_time = shortcdstime2jd(raw_data['UTC_LINE_NODES'].flatten()['day'],
+                                 raw_data['UTC_LINE_NODES'].flatten()['time'])
+    data['jd'] = ascat_time[idx_nodes]
 
     data['spacecraft_id'] = np.int8(mphr['SPACECRAFT_ID'][-1])
     data['abs_orbit_nr'] = np.uint32(mphr['ORBIT_START'])
@@ -785,9 +786,9 @@ def read_szx_fmv_12(eps_file):
     data = np.repeat(template, n_records)
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
 
-    data['jd'] = mpl_dates.num2julian(shortcdstime2dtordinal(
-        raw_data['UTC_LINE_NODES'].flatten()['day'],
-        raw_data['UTC_LINE_NODES'].flatten()['time']))[idx_nodes]
+    ascat_time = shortcdstime2jd(raw_data['UTC_LINE_NODES'].flatten()['day'],
+                                 raw_data['UTC_LINE_NODES'].flatten()['time'])
+    data['jd'] = ascat_time[idx_nodes]
 
     data['spacecraft_id'] = np.int8(mphr['SPACECRAFT_ID'][-1])
     data['abs_orbit_nr'] = np.uint32(mphr['ORBIT_START'])
@@ -877,9 +878,9 @@ def read_szf_fmv_12(eps_file):
     data = np.repeat(template, n_records)
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
 
-    data['jd'] = mpl_dates.num2julian(shortcdstime2dtordinal(
-        raw_data['UTC_LOCALISATION'].flatten()['day'],
-        raw_data['UTC_LOCALISATION'].flatten()['time']))[idx_nodes]
+    ascat_time = shortcdstime2jd(raw_data['UTC_LOCALISATION'].flatten()['day'],
+                                 raw_data['UTC_LOCALISATION'].flatten()['time'])
+    data['jd'] = ascat_time[idx_nodes]
 
     data['spacecraft_id'] = np.int8(mphr['SPACECRAFT_ID'][-1])
 
@@ -1030,9 +1031,8 @@ def read_smx_fmv_12(eps_file):
 
     data = np.repeat(template, n_records)
 
-    ascat_time = mpl_dates.num2julian(
-        shortcdstime2dtordinal(raw_data['UTC_LINE_NODES'].flatten()['day'],
-                               raw_data['UTC_LINE_NODES'].flatten()['time']))
+    ascat_time = shortcdstime2jd(raw_data['UTC_LINE_NODES'].flatten()['day'],
+                               raw_data['UTC_LINE_NODES'].flatten()['time'])
     data['jd'] = ascat_time[idx_nodes]
 
     fields = [('sig', 'SIGMA0_TRIP', long_nan),
@@ -1129,25 +1129,6 @@ def read_smx_fmv_12(eps_file):
 
     return data
 
-
-def shortcdstime2dtordinal(days, milliseconds):
-    """
-    Converting shortcdstime to datetime ordinal.
-
-    Parameters
-    ----------
-    days : int
-        Days.
-    milliseconds : int
-        Milliseconds
-
-    Returns
-    -------
-    date : datetime.datetime
-        Ordinal datetime.
-    """
-    epoch = dt.datetime.strptime('2000-01-01 00:00:00',
-                                 '%Y-%m-%d %H:%M:%S').toordinal()
+def shortcdstime2jd(days, milliseconds):
     offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)
-
-    return epoch + offset
+    return julian_epoch + offset

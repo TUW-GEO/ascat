@@ -30,16 +30,17 @@
 Readers for SZF data in h5 format.
 """
 
-import os
-from datetime import datetime, timedelta
 
 import numpy as np
-import pandas as pd
-import netCDF4
+import datetime as dt
 import h5py
+import matplotlib.dates as mpl_dates
 
 from pygeobase.io_base import ImageBase
 from pygeobase.object_base import Image
+
+# 1.1.2000 00:00:00 in jd
+julian_epoch = 2451544.5
 
 class AscatL1H5File(ImageBase):
     """
@@ -124,6 +125,17 @@ class AscatL1H5File(ImageBase):
                     metadata[name] = dict()
                 metadata[name][subname] = raw_metadata[name][subname].value
 
+        # modify longitudes from [0,360] to [-180,180]
+        mask = data['LONGITUDE_FULL'] > 180
+        data['LONGITUDE_FULL'][mask] += -360.
+
+        if 'AZI_ANGLE_FULL' in var_to_read:
+            mask = data['AZI_ANGLE_FULL'] < 0
+            data['AZI_ANGLE_FULL'][mask] += 360
+
+        if 'UTC_LOCALISATION-days' in var_to_read and 'UTC_LOCALISATION-milliseconds' in var_to_read:
+            data['jd'] = shortcdstime2jd(data['UTC_LOCALISATION-days'], data['UTC_LOCALISATION-milliseconds'])
+
         longitude = data.pop('LONGITUDE_FULL')
         latitude = data.pop('LATITUDE_FULL')
 
@@ -144,3 +156,7 @@ class AscatL1H5File(ImageBase):
 
     def close(self):
         pass
+
+def shortcdstime2jd(days, milliseconds):
+    offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)
+    return julian_epoch + offset
