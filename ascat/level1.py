@@ -31,7 +31,6 @@ General Level 1 data readers for ASCAT data in all formats. Not specific to dist
 import os
 
 from pygeobase.io_base import ImageBase
-from pygeobase.object_base import Image
 
 import ascat.read_native.eps_native as eps_native
 import ascat.read_native.bufr as bufr
@@ -55,9 +54,6 @@ class AscatL1Image(ImageBase):
             file_format = get_file_format(self.filename)
 
         if file_format == ".nat":
-            # longitude, latitude, data, metadata = read_eps.read_eps_l1b(self.filename)
-            # img = Image(longitude, latitude, data, metadata,
-            #          timestamp, timekey='jd')
             img = eps_native.AscatL1bEPSImage(self.filename).read(timestamp)
 
         elif file_format == ".nc":

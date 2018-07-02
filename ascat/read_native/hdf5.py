@@ -32,9 +32,7 @@ Readers for SZF data in h5 format.
 
 
 import numpy as np
-import datetime as dt
 import h5py
-import matplotlib.dates as mpl_dates
 
 from pygeobase.io_base import ImageBase
 from pygeobase.object_base import Image
@@ -112,10 +110,6 @@ class AscatL1H5File(ImageBase):
             if len(variable.shape) == 1:
                 # If the data is 1D then we repeat it for each cell
                 data[name] = np.repeat(data[name], num_cells)
-
-            # if name == 'utc_line_nodes':
-            #     utc_dates = netCDF4.num2date(data[name], variable.units)
-            #     data['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
 
         data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
 

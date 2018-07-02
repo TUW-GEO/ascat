@@ -52,7 +52,7 @@ except ImportError:
 
 class AscatL1BufrFile(ImageBase):
     """
-    Reads ASCAT files in BUFR format. There are the
+    Reads ASCAT L1b data in BUFR format.
 
     Parameters
     ----------
@@ -61,7 +61,42 @@ class AscatL1BufrFile(ImageBase):
     mode : str, optional
         Opening mode. Default: r
     msg_name_lookup: dict, optional
-        Dictionary mapping bufr msg number to parameter name.
+        Dictionary mapping bufr msg number to parameter name. See :ref:`ascatformattable`.
+
+        Default:
+
+             === =====================================================
+             Key Value
+             === =====================================================
+             4: "Satellite Identifier",
+             6: "Direction Of Motion Of Moving Observing Platform",
+             16: "Orbit Number",
+             17: "Cross-Track Cell Number",
+             21: "f_Beam Identifier",
+             22: "f_Radar Incidence Angle",
+             23: "f_Antenna Beam Azimuth",
+             24: "f_Backscatter",
+             25: "f_Radiometric Resolution (Noise Value)",
+             26: "f_ASCAT KP Estimate Quality",
+             27: "f_ASCAT Sigma-0 Usability",
+             34: "f_ASCAT Land Fraction",
+             35: "m_Beam Identifier",
+             36: "m_Radar Incidence Angle",
+             37: "m_Antenna Beam Azimuth",
+             38: "m_Backscatter",
+             39: "m_Radiometric Resolution (Noise Value)",
+             40: "m_ASCAT KP Estimate Quality",
+             41: "m_ASCAT Sigma-0 Usability",
+             48: "m_ASCAT Land Fraction",
+             49: "a_Beam Identifier",
+             50: "a_Radar Incidence Angle",
+             51: "a_Antenna Beam Azimuth",
+             52: "a_Backscatter",
+             53: "a_Radiometric Resolution (Noise Value)",
+             54: "a_ASCAT KP Estimate Quality",
+             55: "a_ASCAT Sigma-0 Usability",
+             62: "a_ASCAT Land Fraction"
+             === =====================================================
     """
 
     def __init__(self, filename, mode='r', msg_name_lookup=None, **kwargs):
@@ -275,26 +310,52 @@ class AscatL2SsmBufrFile(ImageBase):
              === =====================================================
              Key Value
              === =====================================================
-             6   'Direction Of Motion Of Moving Observing Platform',
-             16  'Orbit Number',
-             65  'Surface Soil Moisture (Ms)',
-             66  'Estimated Error In Surface Soil Moisture',
-             67  'Backscatter',
-             68  'Estimated Error In Sigma0 At 40 Deg Incidence Angle',
-             69  'Slope At 40 Deg Incidence Angle',
-             70  'Estimated Error In Slope At 40 Deg Incidence Angle',
-             71  'Soil Moisture Sensitivity',
-             72  'Dry Backscatter',
-             73  'Wet Backscatter',
-             74  'Mean Surface Soil Moisture',
-             75  'Rain Fall Detection',
-             76  'Soil Moisture Correction Flag',
-             77  'Soil Moisture Processing Flag',
-             78  'Soil Moisture Quality',
-             79  'Snow Cover',
-             80  'Frozen Land Surface Fraction',
-             81  'Inundation And Wetland Fraction',
-             82  'Topographic Complexity'
+             4: "Satellite Identifier",
+             6: "Direction Of Motion Of Moving Observing Platform",
+             16: "Orbit Number",
+             17: "Cross-Track Cell Number",
+             21: "f_Beam Identifier",
+             22: "f_Radar Incidence Angle",
+             23: "f_Antenna Beam Azimuth",
+             24: "f_Backscatter",
+             25: "f_Radiometric Resolution (Noise Value)",
+             26: "f_ASCAT KP Estimate Quality",
+             27: "f_ASCAT Sigma-0 Usability",
+             34: "f_ASCAT Land Fraction",
+             35: "m_Beam Identifier",
+             36: "m_Radar Incidence Angle",
+             37: "m_Antenna Beam Azimuth",
+             38: "m_Backscatter",
+             39: "m_Radiometric Resolution (Noise Value)",
+             40: "m_ASCAT KP Estimate Quality",
+             41: "m_ASCAT Sigma-0 Usability",
+             48: "m_ASCAT Land Fraction",
+             49: "a_Beam Identifier",
+             50: "a_Radar Incidence Angle",
+             51: "a_Antenna Beam Azimuth",
+             52: "a_Backscatter",
+             53: "a_Radiometric Resolution (Noise Value)",
+             54: "a_ASCAT KP Estimate Quality",
+             55: "a_ASCAT Sigma-0 Usability",
+             62: "a_ASCAT Land Fraction",
+             65: "Surface Soil Moisture (Ms)",
+             66: "Estimated Error In Surface Soil Moisture",
+             67: "Backscatter",
+             68: "Estimated Error In Sigma0 At 40 Deg Incidence Angle",
+             69: "Slope At 40 Deg Incidence Angle",
+             70: "Estimated Error In Slope At 40 Deg Incidence Angle",
+             71: "Soil Moisture Sensitivity",
+             72: "Dry Backscatter",
+             73: "Wet Backscatter",
+             74: "Mean Surface Soil Moisture",
+             75: "Rain Fall Detection",
+             76: "Soil Moisture Correction Flag",
+             77: "Soil Moisture Processing Flag",
+             78: "Soil Moisture Quality",
+             79: "Snow Cover",
+             80: "Frozen Land Surface Fraction",
+             81: "Inundation And Wetland Fraction",
+             82: "Topographic Complexity"
              === =====================================================
     """
 

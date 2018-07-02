@@ -28,13 +28,9 @@
 """
 General Level 2 data readers for ASCAT data in all formats. Not specific to distributor.
 """
-import time
 import os
 
 from pygeobase.io_base import ImageBase
-from pygeobase.io_base import MultiTemporalImageBase
-from pygeobase.io_base import IntervalReadingMixin
-from pygeobase.object_base import Image
 import ascat.read_native.eps_native as read_eps
 import ascat.read_native.bufr as read_bufr
 import ascat.read_native.nc as read_nc

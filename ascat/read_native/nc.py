@@ -34,12 +34,10 @@ import os
 from datetime import datetime, timedelta
 
 import numpy as np
-import pandas as pd
 import netCDF4
 
 from pygeobase.io_base import ImageBase
 from pygeobase.io_base import MultiTemporalImageBase
-from pygeobase.io_base import IntervalReadingMixin
 from pygeobase.object_base import Image
 
 class AscatL1NcFile(ImageBase):
