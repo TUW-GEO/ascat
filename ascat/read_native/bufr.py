@@ -105,7 +105,7 @@ class AscatL1BufrFile(ImageBase):
 
         """
         super(AscatL1BufrFile, self).__init__(filename, mode=mode,
-                                                 **kwargs)
+                                              **kwargs)
         if msg_name_lookup is None:
             msg_name_lookup = {
                 4: "Satellite Identifier",
@@ -210,7 +210,9 @@ class AscatL1BufrFile(ImageBase):
 
         data['jd'] = dates
         if 'Direction Of Motion Of Moving Observing Platform' in data:
-            data['as_des_pass'] = (data["Direction Of Motion Of Moving Observing Platform"] < 270).astype(np.uint8)
+            data['as_des_pass'] = (data[
+                                       "Direction Of Motion Of Moving Observing Platform"] < 270).astype(
+                np.uint8)
 
         return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
 
@@ -221,58 +223,6 @@ class AscatL1BufrFile(ImageBase):
         """
         return self.read(**kwargs)
 
-    def resample_data(self, image, index, distance, weights, **kwargs):
-        """
-        Takes an image and resample (interpolate) the image data to
-        arbitrary defined locations given by index and distance.
-
-        Parameters
-        ----------
-        image : object
-            pygeobase.object_base.Image object
-        index : np.array
-            Index into image data defining a look-up table for data elements
-            used in the interpolation process for each defined target
-            location.
-        distance : np.array
-            Array representing the distances of the image data to the
-            arbitrary defined locations.
-        weights : np.array
-            Array representing the weights of the image data that should be
-            used during resampling.
-            The weights of points not to use are set to np.nan
-            This array is of shape (x, max_neighbors)
-
-        Returns
-        -------
-        image : object
-            pygeobase.object_base.Image object
-        """
-        total_weights = np.nansum(weights, axis=1)
-
-        resOrbit = {}
-        # resample backscatter
-        for name in image.dtype.names:
-            if name in ['Soil Moisture Correction Flag',
-                        'Soil Moisture Processing Flag']:
-                # The flags are resampled by taking the minimum flag This works
-                # since any totally valid observation has the flag 0 and
-                # overrides the flagged observations. This is true in cases
-                # where the data was set to NaN by the flag as well as when the
-                # data was set to 0 or 100. The last image element is the one
-                # standing for NaN so we fill it with all flags filled to not
-                # interfere with the minimum.
-                image[name][-1] = 255
-                bits = np.unpackbits(image[name].reshape(
-                    (-1, 1)).astype(np.uint8), axis=1)
-                resampled_bits = np.min(bits[index, :], axis=1)
-                resOrbit[name] = np.packbits(resampled_bits)
-            else:
-                resOrbit[name] = np.nansum(
-                    image[name][index] * weights, axis=1) / total_weights
-
-        return resOrbit
-
     def write(self, data):
         raise NotImplementedError()
 
@@ -281,6 +231,7 @@ class AscatL1BufrFile(ImageBase):
 
     def close(self):
         pass
+
 
 class AscatL2SsmBufrFile(ImageBase):
     """
@@ -463,7 +414,8 @@ class AscatL2SsmBufrFile(ImageBase):
                 minutes = message[:, 10].astype(int)
                 seconds = message[:, 11].astype(int)
 
-                dates.append(julday(months, days, years, hours, minutes, seconds))
+                dates.append(
+                    julday(months, days, years, hours, minutes, seconds))
 
                 # dt=datetime(years, months, days, hours, minutes, seconds)
 
@@ -490,7 +442,9 @@ class AscatL2SsmBufrFile(ImageBase):
         data['jd'] = dates
 
         if 'Direction Of Motion Of Moving Observing Platform' in data:
-            data['as_des_pass'] = (data["Direction Of Motion Of Moving Observing Platform"] < 270).astype(np.uint8)
+            data['as_des_pass'] = (data[
+                                       "Direction Of Motion Of Moving Observing Platform"] < 270).astype(
+                np.uint8)
 
         if 65 in self.msg_name_lookup:
             # mask all the arrays based on fill_value of soil moisture
@@ -572,9 +526,8 @@ class AscatL2SsmBufrFile(ImageBase):
 
 
 class AscatL2SsmBufr(MultiTemporalImageBase):
-
     """
-    Class for reading HSAF ASCAt SSM images in bufr format.
+    Class for reading HSAF ASCAT SSM images in bufr format.
     The images have the same structure as the ASCAT 3 minute pdu files
     and these 2 readers could be merged in the future
     The images have to be uncompressed in the following folder structure
@@ -646,11 +599,13 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
         self.day_search_str = day_search_str
         self.file_search_str = file_search_str
         self.filename_datetime_format = filename_datetime_format
-        super(AscatL2SsmBufr, self).__init__(path, AscatL2SsmBufrFile, subpath_templ=[month_path_str],
+        super(AscatL2SsmBufr, self).__init__(path, AscatL2SsmBufrFile,
+                                             subpath_templ=[month_path_str],
                                              fname_templ=file_search_str,
                                              datetime_format=datetime_format,
                                              exact_templ=False,
-                                             ioclass_kws={'msg_name_lookup': msg_name_lookup})
+                                             ioclass_kws={
+                                                 'msg_name_lookup': msg_name_lookup})
 
     def _get_orbit_start_date(self, filename):
         orbit_start_str = \
@@ -697,7 +652,7 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
             timestamps.append(self._get_orbit_start_date(filename))
 
         timestamps = [dt for dt in timestamps if (
-            dt >= startdate and dt <= enddate)]
+                dt >= startdate and dt <= enddate)]
         return timestamps
 
 
@@ -720,7 +675,6 @@ class AscatL2SsmBufrChunked(IntervalReadingMixin, AscatL2SsmBufr):
                  datetime_format='%Y%m%d_%H%M%S',
                  filename_datetime_format=(4, 19, '%Y%m%d_%H%M%S'),
                  msg_name_lookup=None, chunk_minutes=50):
-
         super(AscatL2SsmBufrChunked, self).__init__(
             path,
             month_path_str=month_path_str,
@@ -730,6 +684,7 @@ class AscatL2SsmBufrChunked(IntervalReadingMixin, AscatL2SsmBufr):
             filename_datetime_format=filename_datetime_format,
             msg_name_lookup=msg_name_lookup,
             chunk_minutes=chunk_minutes)
+
 
 class BUFRReader(object):
     """

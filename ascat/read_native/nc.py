@@ -40,6 +40,7 @@ from pygeobase.io_base import ImageBase
 from pygeobase.io_base import MultiTemporalImageBase
 from pygeobase.object_base import Image
 
+
 class AscatL1NcFile(ImageBase):
     """
     Read ASCAT L2 SSM File in netCDF format, as downloaded from EUMETSAT
@@ -90,31 +91,36 @@ class AscatL1NcFile(ImageBase):
 
         # store data in dictionary
         dd = {}
+        beams = ['f_', 'm_', 'a_']
 
         num_cells = self.ds.dimensions['numCells'].size
         for name in var_to_read:
             variable = self.ds.variables[name]
-            dd[name] = variable[:].flatten()
+
             if len(variable.shape) == 1:
                 # If the data is 1D then we repeat it for each cell
+                dd[name] = variable[:].flatten()
                 dd[name] = np.repeat(dd[name], num_cells)
+            elif len(variable.shape) == 2:
+                dd[name] = variable[:].flatten()
+            elif len(variable.shape) == 3:
+                # length of 3 means it is triplet data, so we split it
+                for i, beam in enumerate(beams):
+                    dd[beam + name] = variable[:, :, i].flatten()
+            else:
+                raise RuntimeError("Unexpected variable shape.")
 
             if name == 'utc_line_nodes':
                 utc_dates = netCDF4.num2date(dd[name], variable.units)
                 dd['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
-
-        if 'soil_moisture' in dd:
-            # mask all the arrays based on fill_value of latitude
-            valid_data = ~dd['soil_moisture'].mask
-            for name in dd:
-                dd[name] = dd[name][valid_data]
 
         dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
 
         longitude = dd.pop('longitude')
         latitude = dd.pop('latitude')
 
-        return Image(longitude, latitude, dd, {}, timestamp, timekey='utc_line_nodes')
+        return Image(longitude, latitude, dd, {}, timestamp,
+                     timekey='utc_line_nodes')
 
     def read_masked_data(self, **kwargs):
         """
@@ -207,7 +213,8 @@ class AscatL2SsmNcFile(ImageBase):
 
         dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
 
-        return Image(longitude, latitude, dd, {}, timestamp, timekey='utc_line_nodes')
+        return Image(longitude, latitude, dd, {}, timestamp,
+                     timekey='utc_line_nodes')
 
     def read_masked_data(self, **kwargs):
         """
@@ -227,7 +234,6 @@ class AscatL2SsmNcFile(ImageBase):
 
 
 class AscatL2SsmNc(MultiTemporalImageBase):
-
     """
     Class for reading HSAF ASCAT SSM images in netCDF format.
     The images have to be uncompressed in the following folder structure
@@ -265,11 +271,13 @@ class AscatL2SsmNc(MultiTemporalImageBase):
         self.day_search_str = day_search_str
         self.file_search_str = file_search_str
         self.filename_datetime_format = filename_datetime_format
-        super(AscatL2SsmNc, self).__init__(path, AscatL2SsmNcFile, subpath_templ=[month_path_str],
+        super(AscatL2SsmNc, self).__init__(path, AscatL2SsmNcFile,
+                                           subpath_templ=[month_path_str],
                                            fname_templ=file_search_str,
                                            datetime_format=datetime_format,
                                            exact_templ=False,
-                                           ioclass_kws={'nc_variables': nc_variables})
+                                           ioclass_kws={
+                                               'nc_variables': nc_variables})
 
     def _get_orbit_start_date(self, filename):
         orbit_start_str = \

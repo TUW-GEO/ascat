@@ -41,7 +41,6 @@ from pygeobase.object_base import Image
 
 import numpy as np
 
-
 short_cds_time = np.dtype([('day', np.uint16), ('time', np.uint32)])
 
 long_cds_time = np.dtype([('day', np.uint16), ('ms', np.uint32),
@@ -54,6 +53,7 @@ uint_nan = 2 ** 16 - 1
 byte_nan = -2 ** 7
 # 1.1.2000 00:00:00 as jd
 julian_epoch = 2451544.5
+
 
 class AscatL1bEPSImage(ImageBase):
     def __init__(self, *args, **kwargs):
@@ -84,6 +84,7 @@ class AscatL1bEPSImage(ImageBase):
 
     def close(self):
         pass
+
 
 class AscatL2EPSImage(ImageBase):
     def __init__(self, *args, **kwargs):
@@ -562,6 +563,7 @@ def read_eps_l1b(filename, timestamp):
         for field in raw_data:
             data[field] = raw_data[field]
 
+        # separate data into single beam images
         for i in range(1, 7):
             dataset = 'd' + str(i)
             img = 'img' + str(i)
@@ -571,10 +573,10 @@ def read_eps_l1b(filename, timestamp):
 
             lon = data_full[dataset].pop('LONGITUDE_FULL')
             lat = data_full[dataset].pop('LATITUDE_FULL')
-            image_dict[img] = Image(lon, lat, data, metadata, timestamp, timekey='jd')
+            image_dict[img] = Image(lon, lat, data_full[dataset], metadata,
+                                    timestamp, timekey='jd')
 
         return image_dict
-
 
     elif (ptype == 'SZR') or (ptype == 'SZO'):
         if fmv == 11:
@@ -589,6 +591,7 @@ def read_eps_l1b(filename, timestamp):
         for field in raw_data:
             if len(raw_data[field].shape) == 1:
                 data[field] = raw_data[field]
+            # split data if it is triplet data
             elif len(raw_data[field].shape) == 2:
                 for i, beam in enumerate(beams):
                     data[beam + field] = raw_data[field][:, i]
@@ -598,12 +601,11 @@ def read_eps_l1b(filename, timestamp):
         longitude = data.pop('LONGITUDE')
         latitude = data.pop('LATITUDE')
 
-        return Image(longitude, latitude, data, metadata, timestamp, timekey='jd')
+        return Image(longitude, latitude, data, metadata, timestamp,
+                     timekey='jd')
     else:
         raise ValueError("Format not supported. Product type {:1}"
                          " Format major version: {:2}".format(ptype, fmv))
-
-
 
 
 def read_eps_l2(filename, timestamp):
@@ -618,7 +620,7 @@ def read_eps_l2(filename, timestamp):
 
     if (ptype == 'SMR') or (ptype == 'SMO'):
         if fmv == 12:
-            raw_data = read_smx_fmv_12(eps_file)
+            raw_data, metadata = read_smx_fmv_12(eps_file)
         else:
             raise RuntimeError("SMX format version not supported.")
 
@@ -730,7 +732,7 @@ def read_szx_fmv_11(eps_file):
               ('F_OA', uint_nan),
               ('F_SA', uint_nan),
               ('F_TEL', uint_nan),
-              ('F_LAND', uint_nan),]
+              ('F_LAND', uint_nan)]
     for field in fields:
         data[field[0]] = raw_data[field[0]].reshape(n_records, 3)
         # valid = data[field[0]] != field[2]
@@ -788,7 +790,8 @@ def read_szx_fmv_12(eps_file):
     metadata['SPACECRAFT_ID'] = np.int8(mphr['SPACECRAFT_ID'][-1])
     metadata['ORBIT_START'] = np.uint32(mphr['ORBIT_START'])
 
-    fields = ['PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION', 'FORMAT_MAJOR_VERSION', 'FORMAT_MINOR_VERSION']
+    fields = ['PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION',
+              'FORMAT_MAJOR_VERSION', 'FORMAT_MINOR_VERSION']
     for field in fields:
         # metadata[field] = np.repeat(np.int16(mphr[field]),n_records)
         metadata[field] = np.int16(mphr[field])
@@ -826,7 +829,8 @@ def read_szx_fmv_12(eps_file):
         data[field[0]][valid == False] = field[1]
 
     # modify longitudes from (0, 360) to (-180,180)
-    mask = np.logical_and(data['LONGITUDE'] != long_nan, data['LONGITUDE'] > 180)
+    mask = np.logical_and(data['LONGITUDE'] != long_nan,
+                          data['LONGITUDE'] > 180)
     data['LONGITUDE'][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
@@ -886,7 +890,8 @@ def read_szf_fmv_12(eps_file):
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
 
     ascat_time = shortcdstime2jd(raw_data['UTC_LOCALISATION'].flatten()['day'],
-                                 raw_data['UTC_LOCALISATION'].flatten()['time'])
+                                 raw_data['UTC_LOCALISATION'].flatten()[
+                                     'time'])
     data['jd'] = ascat_time[idx_nodes]
 
     metadata['SPACECRAFT_ID'] = np.int8(mphr['SPACECRAFT_ID'][-1])
@@ -918,7 +923,8 @@ def read_szf_fmv_12(eps_file):
         data[field[0]][valid] = data[field[0]][valid]
 
     # modify longitudes from (0, 360) to (-180,180)
-    mask = np.logical_and(data['LONGITUDE_FULL'] != long_nan, data['LONGITUDE_FULL'] > 180)
+    mask = np.logical_and(data['LONGITUDE_FULL'] != long_nan,
+                          data['LONGITUDE_FULL'] > 180)
     data['LONGITUDE_FULL'][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
@@ -1034,8 +1040,11 @@ def read_smx_fmv_12(eps_file):
     data = {}
     metadata = {}
 
+    metadata['SPACECRAFT_ID'] = np.int8(eps_file.mphr['SPACECRAFT_ID'][-1])
+    metadata['ORBIT_START'] = np.uint32(eps_file.mphr['ORBIT_START'])
+
     ascat_time = shortcdstime2jd(raw_data['UTC_LINE_NODES'].flatten()['day'],
-                               raw_data['UTC_LINE_NODES'].flatten()['time'])
+                                 raw_data['UTC_LINE_NODES'].flatten()['time'])
     data['jd'] = ascat_time[idx_nodes]
 
     fields = [('SIGMA0_TRIP', long_nan),
@@ -1085,7 +1094,8 @@ def read_smx_fmv_12(eps_file):
         np.array(raw_data['SAT_TRACK_AZI'].flatten()[idx_nodes] < 27000)
 
     # modify longitudes from [0,360] to [-180,180]
-    mask = np.logical_and(data['LONGITUDE'] != long_nan, data['LONGITUDE'] > 180)
+    mask = np.logical_and(data['LONGITUDE'] != long_nan,
+                          data['LONGITUDE'] > 180)
     data['LONGITUDE'][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
@@ -1130,7 +1140,8 @@ def read_smx_fmv_12(eps_file):
             data['NODE_NUM'][lswath] = 11 + nodes.flat[lswath]
             data['NODE_NUM'][rswath] = 32 + nodes.flat[rswath]
 
-    return data
+    return data, metadata
+
 
 def shortcdstime2jd(days, milliseconds):
     offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)

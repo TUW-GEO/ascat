@@ -75,7 +75,6 @@ class AscatL1H5File(ImageBase):
         """
 
         if self.ds is None:
-            # self.ds = h5py.File(self.filename)['U-MARF/EPS/ASCA_SZF_1B']
             self.ds = h5py.File(self.filename)
             while len(self.ds.keys()) == 1:
                 self.ds = self.ds[self.ds.keys()[0]]
@@ -130,10 +129,24 @@ class AscatL1H5File(ImageBase):
         if 'UTC_LOCALISATION-days' in var_to_read and 'UTC_LOCALISATION-milliseconds' in var_to_read:
             data['jd'] = shortcdstime2jd(data['UTC_LOCALISATION-days'], data['UTC_LOCALISATION-milliseconds'])
 
-        longitude = data.pop('LONGITUDE_FULL')
-        latitude = data.pop('LATITUDE_FULL')
+        image_dict = {'img1': {}, 'img2': {}, 'img3': {}, 'img4': {},
+                      'img5': {}, 'img6': {}}
+        data_full = {'d1': {}, 'd2': {}, 'd3': {}, 'd4': {}, 'd5': {},
+                     'd6': {}}
 
-        return Image(longitude, latitude, data, metadata, timestamp, timekey='jd')
+        # separate data into single beam images
+        for i in range(1, 7):
+            dataset = 'd' + str(i)
+            img = 'img' + str(i)
+            mask = ((data['BEAM_NUMBER']) == i)
+            for field in data:
+                data_full[dataset][field] = data[field][mask]
+
+            lon = data_full[dataset].pop('LONGITUDE_FULL')
+            lat = data_full[dataset].pop('LATITUDE_FULL')
+            image_dict[img] = Image(lon, lat, data, metadata, timestamp, timekey='jd')
+
+        return image_dict
 
     def read_masked_data(self, **kwargs):
         """
