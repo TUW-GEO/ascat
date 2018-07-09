@@ -108,7 +108,7 @@ def nc2generic(native_Image):
     fields = [('jd', 'jd'),
               # ('abs_orbit_nr', np.uint32)
               # ('node_num', np.uint8),
-              # ('line_num', np.uint16),
+              ('line_num', 'abs_line_number'),
               # ('dir', np.dtype('S1')),
               ('swath', 'swath_indicator'),
               # ('azif', np.float32),
@@ -131,7 +131,8 @@ def nc2generic(native_Image):
               ('wet_backscatter', 'wet_backscatter'),
               ('mean_surf_sm', 'mean_soil_moisture'),
               ('correction_flag', 'corr_flags'),
-              ('processing_flag', 'proc_flag1'),
+              # There is a processing flag but it is different to the other formats
+              # ('processing_flag', 'proc_flag1'),
               ('aggregated_quality_flag', 'aggregated_quality_flag'),
               ('snow_cover_probability', 'snow_cover_probability'),
               ('frozen_soil_probability', 'frozen_soil_probability'),
@@ -234,22 +235,22 @@ def bfr2generic(native_Image):
               ('sigm', 'm_Backscatter'),
               ('siga', 'a_Backscatter'),
               ('sm', 'Surface Soil Moisture (Ms)'),
-              # ('sm_noise', np.float32),
+              ('sm_noise', 'Estimated Error In Surface Soil Moisture'),
               ('sm_sensitivity', 'Soil Moisture Sensitivity'),
-              # ('sig40', np.float32),
+              ('sig40', 'Backscatter'),
               ('sig40_noise', 'Estimated Error In Sigma0 At 40 Deg Incidence Angle'),
               ('slope40', 'Slope At 40 Deg Incidence Angle'),
               ('slope40_noise', 'Estimated Error In Slope At 40 Deg Incidence Angle'),
               ('dry_backscatter', 'Dry Backscatter'),
               ('wet_backscatter', 'Wet Backscatter'),
               ('mean_surf_sm', 'Mean Surface Soil Moisture'),
-              # ('correction_flag', np.uint8),
-              # ('processing_flag', np.uint16),
+              ('correction_flag', 'Soil Moisture Correction Flag'),
+              ('processing_flag', 'Soil Moisture Processing Flag'),
               # ('aggregated_quality_flag', np.uint8),
               ('snow_cover_probability', 'Snow Cover'),
               ('frozen_soil_probability', 'Frozen Land Surface Fraction'),
               ('innudation_or_wetland', 'Inundation And Wetland Fraction'),
-              # ('topographical_complexity', np.float32)
+              ('topographical_complexity', 'Topographic Complexity')
                 ]
 
     for field in fields:
@@ -272,7 +273,7 @@ def template_ASCATL2():
                        ('abs_orbit_nr', np.uint32),
                        ('node_num', np.uint8),
                        ('line_num', np.uint16),
-                       ('dir', np.dtype('S1')),
+                       ('orb_dir', np.dtype('S1')),
                        ('swath', np.byte),
                        ('azif', np.float32),
                        ('azim', np.float32),

@@ -107,12 +107,16 @@ class AscatL1NcFile(ImageBase):
                 # length of 3 means it is triplet data, so we split it
                 for i, beam in enumerate(beams):
                     dd[beam + name] = variable[:, :, i].flatten()
+                    if name == 'azi_angle_trip':
+                        mask = dd[beam + name] < 0
+                        dd[beam + name][mask] += 360
             else:
                 raise RuntimeError("Unexpected variable shape.")
 
             if name == 'utc_line_nodes':
                 utc_dates = netCDF4.num2date(dd[name], variable.units)
                 dd['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
+
 
         dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
 

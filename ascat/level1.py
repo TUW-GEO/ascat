@@ -50,30 +50,38 @@ class AscatL1Image(ImageBase):
         """
         super(AscatL1Image, self).__init__(*args, **kwargs)
 
-    def read(self, timestamp=None, file_format=None, **kwargs):
+    def read(self, timestamp=None, file_format=None, native=False, **kwargs):
 
         if file_format == None:
             file_format = get_file_format(self.filename)
 
         if file_format == ".nat":
-            img = eps_native.AscatL1bEPSImage(self.filename).read(timestamp)
-            # img_raw = eps_native.AscatL1bEPSImage(self.filename).read(timestamp)
-            # img = eps2generic(img_raw)
+            if native:
+                img = eps_native.AscatL1bEPSImage(self.filename).read(timestamp)
+            else:
+                img_raw = eps_native.AscatL1bEPSImage(self.filename).read(timestamp)
+                img = eps2generic(img_raw)
 
         elif file_format == ".nc":
-            img = nc.AscatL1NcFile(self.filename).read(timestamp)
-            # img_raw = nc.AscatL1NcFile(self.filename).read(timestamp)
-            # img = nc2generic(img_raw)
+            if native:
+                img = nc.AscatL1NcFile(self.filename).read(timestamp)
+            else:
+                img_raw = nc.AscatL1NcFile(self.filename).read(timestamp)
+                img = nc2generic(img_raw)
 
         elif file_format == ".bfr" or file_format == ".buf":
-            img = bufr.AscatL1BufrFile(self.filename).read(timestamp)
-            # img_raw = bufr.AscatL1BufrFile(self.filename).read(timestamp)
-            # img = bfr2generic(img_raw)
+            if native:
+                img = bufr.AscatL1BufrFile(self.filename).read(timestamp)
+            else:
+                img_raw = bufr.AscatL1BufrFile(self.filename).read(timestamp)
+                img = bfr2generic(img_raw)
 
         elif file_format == ".h5":
-            img = h5.AscatL1H5File(self.filename).read(timestamp)
-            # img_raw = h5.AscatL1H5File(self.filename).read(timestamp)
-            # img = hdf2generic(img_raw)
+            if native:
+                img = h5.AscatL1H5File(self.filename).read(timestamp)
+            else:
+                img_raw = h5.AscatL1H5File(self.filename).read(timestamp)
+                img = hdf2generic(img_raw)
 
         else:
             raise RuntimeError(
@@ -202,28 +210,23 @@ def nc2generic(native_Image):
               # ('node_num', 'NODE_NUM'),
               # ('line_num', 'LINE_NUM'),
               ('swath', 'swath_indicator'),
-              ('azif', 'f_AZI_ANGLE_TRIP'),
-              ('azim', 'm_AZI_ANGLE_TRIP'),
-              ('azia', 'a_AZI_ANGLE_TRIP'),
-              ('incf', 'f_INC_ANGLE_TRIP'),
-              ('incm', 'm_INC_ANGLE_TRIP'),
-              ('inca', 'a_INC_ANGLE_TRIP'),
-              ('sigf', 'f_SIGMA0_TRIP'),
-              ('sigm', 'm_SIGMA0_TRIP'),
-              ('siga', 'a_SIGMA0_TRIP'),
-              ('kpf', 'f_KP'),
-              ('kpm', 'm_KP'),
-              ('kpa', 'a_KP'),
+              ('azif', 'f_azi_angle_trip'),
+              ('azim', 'm_azi_angle_trip'),
+              ('azia', 'a_azi_angle_trip'),
+              ('incf', 'f_inc_angle_trip'),
+              ('incm', 'm_inc_angle_trip'),
+              ('inca', 'a_inc_angle_trip'),
+              ('sigf', 'f_sigma0_trip'),
+              ('sigm', 'm_sigma0_trip'),
+              ('siga', 'a_sigma0_trip'),
+              ('kpf', 'f_kp'),
+              ('kpm', 'm_kp'),
+              ('kpa', 'a_kp'),
               # ('num_obs', np.ubyte),
-              ('usable_flag', 'f_usable')]
+              # ('usable_flag', 'f_usable')
+              ]
     for field in fields:
         generic_data[field[0]] = native_Image.data[field[1]]
-
-    fields = [('sat_id', 'SPACECRAFT_ID'),
-              ('abs_orbit_nr', 'ORBIT_START')]
-    for field in fields:
-        generic_data[field[0]] = native_Image.metadata[field[1]].repeat(
-            n_records)
 
     img = Image(native_Image.lon, native_Image.lat, generic_data,
                 native_Image.metadata, native_Image.timestamp,
@@ -263,8 +266,14 @@ def bfr2generic(native_Image):
               # ('num_obs', np.ubyte),
               # ('usable_flag', np.uint8)
               ]
+
+    kp_vars = ['kpf', 'kpm', 'kpa']
     for field in fields:
-        generic_data[field[0]] = native_Image.data[field[1]]
+        if field[0] in kp_vars:
+            generic_data[field[0]] = native_Image.data[field[1]]/100
+        else:
+            generic_data[field[0]] = native_Image.data[field[1]]
+
 
     img = Image(native_Image.lon, native_Image.lat, generic_data,
                 native_Image.metadata, native_Image.timestamp,
@@ -291,10 +300,11 @@ def template_ASCATL1():
 
     struct = np.dtype([('jd', np.double),
                        ('sat_id', np.byte),
+                       ('abs_line_nr', np.uint32),
                        ('abs_orbit_nr', np.uint32),
                        ('node_num', np.uint8),
                        ('line_num', np.uint16),
-                       ('dir', np.dtype('S1')),
+                       ('orb_dir', np.dtype('S1')),
                        ('swath', np.byte),
                        ('azif', np.float32),
                        ('azim', np.float32),
@@ -308,7 +318,11 @@ def template_ASCATL1():
                        ('kpf', np.float32),
                        ('kpm', np.float32),
                        ('kpa', np.float32),
+                       ('kpf_quality', np.float32),
+                       ('kpm_quality', np.float32),
+                       ('kpa_quality', np.float32),
                        ('num_obs', np.ubyte),
+                       ('land_flag', np.uint8),
                        ('usable_flag', np.uint8)], metadata=metadata)
 
     dataset = np.zeros(1, dtype=struct)
