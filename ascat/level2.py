@@ -38,6 +38,13 @@ import ascat.read_native.eps_native as read_eps
 import ascat.read_native.bufr as read_bufr
 import ascat.read_native.nc as read_nc
 
+byte_nan = np.iinfo(np.byte).min
+ubyte_nan = np.iinfo(np.ubyte).max
+uint8_nan = np.iinfo(np.uint8).max
+uint16_nan = np.iinfo(np.uint16).max
+uint32_nan = np.iinfo(np.uint32).max
+float32_nan = np.finfo(np.float32).min
+float64_nan = np.finfo(np.float64).min
 
 class AscatL2Image(ImageBase):
     """
@@ -50,23 +57,31 @@ class AscatL2Image(ImageBase):
         """
         super(AscatL2Image, self).__init__(*args, **kwargs)
 
-    def read(self, timestamp=None, file_format=None, **kwargs):
+    def read(self, timestamp=None, file_format=None, native=False, **kwargs):
 
         if file_format == None:
             file_format = get_file_format(self.filename)
 
         if file_format == ".nat":
-            img_raw = read_eps.AscatL2EPSImage(self.filename).read(timestamp)
-            img = eps2generic(img_raw)
+            if native:
+                img = read_eps.AscatL2EPSImage(self.filename).read(timestamp)
+            else:
+                img_raw = read_eps.AscatL2EPSImage(self.filename).read(timestamp)
+                img = eps2generic(img_raw)
 
         elif file_format == ".nc":
-            img_raw = read_nc.AscatL2SsmNcFile(self.filename).read(timestamp)
-            img = nc2generic(img_raw)
+            if native:
+                img = read_nc.AscatL2SsmNcFile(self.filename).read(timestamp)
+            else:
+                img_raw = read_nc.AscatL2SsmNcFile(self.filename).read(timestamp)
+                img = nc2generic(img_raw)
 
         elif file_format == ".bfr" or file_format == ".buf":
-            img_raw = read_bufr.AscatL2SsmBufrFile(self.filename).read(
-                timestamp)
-            img = bfr2generic(img_raw)
+            if native:
+                img = read_bufr.AscatL2SsmBufrFile(self.filename).read(timestamp)
+            else:
+                img_raw = read_bufr.AscatL2SsmBufrFile(self.filename).read(timestamp)
+                img = bfr2generic(img_raw)
 
         else:
             raise RuntimeError(
@@ -99,27 +114,26 @@ def nc2generic(native_Image):
     """
     Convert the native nc Image into a generic one.
     """
-    template = template_ASCATL2()
-    generic_data = {}
-
     n_records = native_Image.lat.shape[0]
-    # generic_data = np.repeat(template, n_records)
+    generic_data = get_template_ASCATL2_SMX(n_records)
 
     fields = [('jd', 'jd'),
-              # ('abs_orbit_nr', np.uint32)
-              # ('node_num', np.uint8),
-              ('line_num', 'abs_line_number'),
-              # ('dir', np.dtype('S1')),
+              ('sat_id', None),
+              ('abs_line_nr', 'abs_line_number'),
+              ('abs_orbit_nr', None),
+              ('node_num', 'node_num'),
+              ('line_num', 'line_num'),
+              ('as_des_pass', 'as_des_pass'),
               ('swath', 'swath_indicator'),
-              # ('azif', np.float32),
-              # ('azim', np.float32),
-              # ('azia', np.float32),
-              # ('incf', np.float32),
-              # ('incm', np.float32),
-              # ('inca', np.float32),
-              # ('sigf', np.float32),
-              # ('sigm', np.float32),
-              # ('siga', np.float32),
+              ('azif', None),
+              ('azim', None),
+              ('azia', None),
+              ('incf', None),
+              ('incm', None),
+              ('inca', None),
+              ('sigf', None),
+              ('sigm', None),
+              ('siga', None),
               ('sm', 'soil_moisture'),
               ('sm_noise', 'soil_moisture_error'),
               ('sm_sensitivity', 'soil_moisture_sensitivity'),
@@ -132,17 +146,23 @@ def nc2generic(native_Image):
               ('mean_surf_sm', 'mean_soil_moisture'),
               ('correction_flag', 'corr_flags'),
               # There is a processing flag but it is different to the other formats
-              # ('processing_flag', 'proc_flag1'),
+              ('processing_flag', None),
               ('aggregated_quality_flag', 'aggregated_quality_flag'),
               ('snow_cover_probability', 'snow_cover_probability'),
               ('frozen_soil_probability', 'frozen_soil_probability'),
               ('innudation_or_wetland', 'wetland_flag'),
-              ('topographical_complexity', 'topography_flag')
-              ]
-
+              ('topographical_complexity', 'topography_flag')]
 
     for field in fields:
+        if field[1] is None:
+            continue
         generic_data[field[0]] = native_Image.data[field[1]]
+
+    fields = [('sat_id', 'sat_id'),
+              ('abs_orbit_nr', 'orbit_start')]
+    for field in fields:
+        generic_data[field[0]] = np.repeat(native_Image.metadata[field[1]],
+                                           n_records)
 
     img = Image(native_Image.lon, native_Image.lat, generic_data,
                 native_Image.metadata, native_Image.timestamp,
@@ -155,16 +175,16 @@ def eps2generic(native_Image):
     """
     Convert the native eps Image into a generic one.
     """
-    template = template_ASCATL2()
-    generic_data = {}
-
     n_records = native_Image.lat.shape[0]
-    # generic_data = np.repeat(template, n_records)
+    generic_data = get_template_ASCATL2_SMX(n_records)
 
     fields = [('jd', 'jd'),
+              ('sat_id', None),
+              ('abs_line_nr', 'ABS_LINE_NUMBER'),
+              ('abs_orbit_nr', None),
               ('node_num', 'NODE_NUM'),
-              # ('line_num', np.uint16),
-              # ('dir', np.dtype('S1')),
+              ('line_num', 'LINE_NUM'),
+              ('as_des_pass', 'AS_DES_PASS'),
               ('swath', 'SWATH_INDICATOR'),
               ('azif', 'f_AZI_ANGLE_TRIP'),
               ('azim', 'm_AZI_ANGLE_TRIP'),
@@ -191,16 +211,17 @@ def eps2generic(native_Image):
               ('snow_cover_probability', 'SNOW_COVER_PROBABILITY'),
               ('frozen_soil_probability', 'FROZEN_SOIL_PROBABILITY'),
               ('innudation_or_wetland', 'INNUDATION_OR_WETLAND'),
-              ('topographical_complexity', 'TOPOGRAPHICAL_COMPLEXITY')
-              ]
+              ('topographical_complexity', 'TOPOGRAPHICAL_COMPLEXITY')]
 
     for field in fields:
+        if field[1] is None:
+            continue
         generic_data[field[0]] = native_Image.data[field[1]]
 
-    fields = [('abs_orbit_nr', 'ORBIT_START')]
+    fields = [('sat_id', 'SPACECRAFT_ID'),
+              ('abs_orbit_nr', 'ORBIT_START')]
     for field in fields:
-        generic_data[field[0]] = native_Image.metadata[
-            field[1]].repeat(n_records)
+        generic_data[field[0]] = np.repeat(native_Image.metadata[field[1]], n_records)
 
     img = Image(native_Image.lon, native_Image.lat, generic_data,
                 native_Image.metadata, native_Image.timestamp,
@@ -213,18 +234,17 @@ def bfr2generic(native_Image):
     """
     Convert the native bfr Image into a generic one.
     """
-    template = template_ASCATL2()
-    generic_data = {}
-
     n_records = native_Image.lat.shape[0]
-    # generic_data = np.repeat(template, n_records)
+    generic_data = get_template_ASCATL2_SMX(n_records)
 
     fields = [('jd', 'jd'),
+              ('sat_id', 'Satellite Identifier'),
+              ('abs_line_nr', None),
               ('abs_orbit_nr', 'Orbit Number'),
-              # ('node_num', np.uint8),
-              # ('line_num', np.uint16),
-              # ('dir', np.dtype('S1')),
-              # ('swath', np.byte),
+              ('node_num', 'Cross-Track Cell Number'),
+              ('line_num', 'line_num'),
+              ('as_des_pass', 'as_des_pass'),
+              ('swath', 'swath_indicator'),
               ('azif', 'f_Antenna Beam Azimuth'),
               ('azim', 'm_Antenna Beam Azimuth'),
               ('azia', 'a_Antenna Beam Azimuth'),
@@ -246,14 +266,15 @@ def bfr2generic(native_Image):
               ('mean_surf_sm', 'Mean Surface Soil Moisture'),
               ('correction_flag', 'Soil Moisture Correction Flag'),
               ('processing_flag', 'Soil Moisture Processing Flag'),
-              # ('aggregated_quality_flag', np.uint8),
+              ('aggregated_quality_flag', None),
               ('snow_cover_probability', 'Snow Cover'),
               ('frozen_soil_probability', 'Frozen Land Surface Fraction'),
               ('innudation_or_wetland', 'Inundation And Wetland Fraction'),
-              ('topographical_complexity', 'Topographic Complexity')
-                ]
+              ('topographical_complexity', 'Topographic Complexity')]
 
     for field in fields:
+        if field[1] is None:
+            continue
         generic_data[field[0]] = native_Image.data[field[1]]
 
     img = Image(native_Image.lon, native_Image.lat, generic_data,
@@ -262,18 +283,19 @@ def bfr2generic(native_Image):
 
     return img
 
-
-def template_ASCATL2():
+def get_template_ASCATL2_SMX(n=1):
     """
-    Generic lvl2 template.
+    Generic lvl2 SMX template.
     """
     metadata = {'temp_name': 'ASCATL2'}
 
-    struct = np.dtype([('jd', np.double),
+    struct = np.dtype([('jd', np.float64),
+                       ('sat_id', np.byte),
+                       ('abs_line_nr', np.uint32),
                        ('abs_orbit_nr', np.uint32),
                        ('node_num', np.uint8),
                        ('line_num', np.uint16),
-                       ('orb_dir', np.dtype('S1')),
+                       ('as_des_pass', np.byte),
                        ('swath', np.byte),
                        ('azif', np.float32),
                        ('azim', np.float32),
@@ -301,8 +323,16 @@ def template_ASCATL2():
                        ('frozen_soil_probability', np.float32),
                        ('innudation_or_wetland', np.float32),
                        ('topographical_complexity', np.float32)],
-                      metadata=metadata)
+                       metadata=metadata)
 
-    dataset = np.zeros(1, dtype=struct)
+    record = np.array([(float64_nan, byte_nan, uint32_nan, uint32_nan,
+                        uint8_nan, uint16_nan, byte_nan, byte_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, uint8_nan, uint16_nan,
+                        uint8_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan)], dtype=struct)
 
-    return dataset
+    return np.repeat(record, n)

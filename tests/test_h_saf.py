@@ -204,10 +204,10 @@ class Test_H16(unittest.TestCase):
                                     39.6, 43.8, 45.6, 46.1, 47., 43.7, 46.,
                                     46.7])
 
-        nptest.assert_allclose(lats[253:268], lats_should, atol=1e-5)
+        nptest.assert_allclose(lats[798:813], lats_should, atol=1e-5)
         nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
-                               253:268], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['Mean Surface Soil Moisture'][253:268],
+                               798:813], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['Mean Surface Soil Moisture'][798:813],
                                ssm_mean_should,
                                atol=0.01)
 
@@ -252,12 +252,12 @@ class Test_H101(unittest.TestCase):
                                     27.8, 24.7, 23.9, 22.8, 25., 25.6, 26.1,
                                     25.9, 26.9, 28.5, 27.8, 24.3, 22.7])
 
-        nptest.assert_allclose(lats[577:597], lats_should, atol=1e-5)
+        nptest.assert_allclose(lats[1800:1820], lats_should, atol=1e-5)
         nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
-                               577:597], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['Mean Surface Soil Moisture'][577:597],
-                               ssm_mean_should,
-                               atol=0.01)
+                               1800:1820], ssm_should, atol=0.01)
+        nptest.assert_allclose(
+            data['Mean Surface Soil Moisture'][1800:1820],
+            ssm_mean_should, atol=0.01)
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")

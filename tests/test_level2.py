@@ -220,7 +220,10 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
             # the invalid values for comparison
             if nc_name in ['snow_cover_probability',
                            'rainfall_flag',
-                           'topography_flag']:
+                           'topography_flag',
+                           'frozen_soil_probability',
+                           'wetland_flag',
+                           'snow_cover_probability']:
                 valid = np.where(data_nc[nc_name] != 255)
                 data_nc[nc_name] = data_nc[nc_name][valid]
                 data_bufr[bufr_name] = data_bufr[bufr_name][valid]
@@ -247,6 +250,6 @@ def test_AscatL2SsmBufrChunked():
                                              datetime.datetime(2017, 2, 20, 6))
     data = reader.read(intervals[0])
     assert len(data.metadata.keys()) == 3
-    assert data.data['jd'].shape == (23145,)
-    assert data.lon.shape == (23145,)
-    assert data.lat.shape == (23145,)
+    assert data.data['jd'].shape == (23616,)
+    assert data.lon.shape == (23616,)
+    assert data.lat.shape == (23616,)

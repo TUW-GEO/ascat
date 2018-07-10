@@ -51,6 +51,12 @@ ulong_nan = 2 ** 32 - 1
 int_nan = -2 ** 15
 uint_nan = 2 ** 16 - 1
 byte_nan = -2 ** 7
+
+long_nan = np.iinfo(np.int32).min
+ulong_nan = np.iinfo(np.uint32).max
+int_nan = np.iinfo(np.int16).min
+uint_nan = np.iinfo(np.uint16).max
+byte_nan = np.iinfo(np.byte).min
 # 1.1.2000 00:00:00 as jd
 julian_epoch = 2451544.5
 
@@ -796,7 +802,8 @@ def read_szx_fmv_12(eps_file):
         # metadata[field] = np.repeat(np.int16(mphr[field]),n_records)
         metadata[field] = np.int16(mphr[field])
 
-    fields = ['DEGRADED_INST_MDR', 'DEGRADED_PROC_MDR', 'SAT_TRACK_AZI']
+    fields = ['DEGRADED_INST_MDR', 'DEGRADED_PROC_MDR', 'SAT_TRACK_AZI',
+              'ABS_LINE_NUMBER']
     for field in fields:
         data[field] = raw_data[field].flatten()[idx_nodes]
 
@@ -895,6 +902,7 @@ def read_szf_fmv_12(eps_file):
     data['jd'] = ascat_time[idx_nodes]
 
     metadata['SPACECRAFT_ID'] = np.int8(mphr['SPACECRAFT_ID'][-1])
+    metadata['ORBIT_START'] = np.uint32(eps_file.mphr['ORBIT_START'])
 
     fields = ['PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION',
               'FORMAT_MAJOR_VERSION', 'FORMAT_MINOR_VERSION']
@@ -1058,7 +1066,7 @@ def read_smx_fmv_12(eps_file):
         valid = raw_data[field[0]].reshape(n_records, 3) != field[1]
         data[field[0]][valid == False] = field[1]
 
-    fields = ['SAT_TRACK_AZI']
+    fields = ['SAT_TRACK_AZI', 'ABS_LINE_NUMBER']
     for field in fields:
         data[field] = raw_data[field].flatten()[idx_nodes]
 
@@ -1139,6 +1147,8 @@ def read_smx_fmv_12(eps_file):
         else:
             data['NODE_NUM'][lswath] = 11 + nodes.flat[lswath]
             data['NODE_NUM'][rswath] = 32 + nodes.flat[rswath]
+
+    data['LINE_NUM'] = idx_nodes
 
     return data, metadata
 

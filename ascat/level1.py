@@ -40,6 +40,14 @@ import ascat.read_native.nc as nc
 import ascat.read_native.hdf5 as h5
 
 
+byte_nan = np.iinfo(np.byte).min
+ubyte_nan = np.iinfo(np.ubyte).max
+uint8_nan = np.iinfo(np.uint8).max
+uint16_nan = np.iinfo(np.uint16).max
+uint32_nan = np.iinfo(np.uint32).max
+float32_nan = np.finfo(np.float32).min
+float64_nan = np.finfo(np.float64).min
+
 class AscatL1Image(ImageBase):
     """
     General Level 1b Image for ASCAT data
@@ -114,33 +122,32 @@ def eps2generic(native_Image):
     """
     Convert the native eps Image into a generic one.
     """
-    template = template_ASCATL1()
     generic_data = {}
     if type(native_Image) is dict:
-        img = {'img1': {}, 'img2': {}, 'img3': {}, 'img4': {},
-                      'img5': {}, 'img6': {}}
+        img = {'img1': {}, 'img2': {}, 'img3': {}, 'img4': {}, 'img5': {},
+               'img6': {}}
         for szf_img in native_Image:
             n_records = native_Image[szf_img].lat.shape[0]
-            generic_data = np.repeat(template, n_records)
 
             fields = [('jd', 'jd'),
-                      # ('node_num', 'NODE_NUM'),
-                      # ('line_num', 'LINE_NUM'),
-                      ('swath', 'SWATH_INDICATOR'),
-                      ('azif', 'f_AZI_ANGLE_TRIP'),
-                      ('azim', 'm_AZI_ANGLE_TRIP'),
-                      ('azia', 'a_AZI_ANGLE_TRIP'),
-                      ('incf', 'f_INC_ANGLE_TRIP'),
-                      ('incm', 'm_INC_ANGLE_TRIP'),
-                      ('inca', 'a_INC_ANGLE_TRIP'),
-                      ('sigf', 'f_SIGMA0_TRIP'),
-                      ('sigm', 'm_SIGMA0_TRIP'),
-                      ('siga', 'a_SIGMA0_TRIP'),
-                      ('kpf', 'f_KP'),
-                      ('kpm', 'm_KP'),
-                      ('kpa', 'a_KP'),
-                      # ('num_obs', np.ubyte),
-                      # ('usable_flag', np.uint8)
+                      ('sat_id', None),
+                      ('beam_number', 'BEAM_NUMBER'),
+                      ('abs_line_nr', None),
+                      ('abs_orbit_nr', None),
+                      ('node_num', None),
+                      ('line_num', None),
+                      ('as_des_pass', 'AS_DES_PASS'),
+                      ('azi', 'AZI_ANGLE_FULL'),
+                      ('inc', 'INC_ANGLE_FULL'),
+                      ('sig', 'SIGMA0_FULL'),
+                      ('land_frac', 'LAND_FRAC'),
+                      ('flagfield_rf1', 'FLAGFIELD_RF1'),
+                      ('flagfield_rf2', 'FLAGFIELD_RF2'),
+                      ('flagfield_pl', 'FLAGFIELD_PL'),
+                      ('flagfield_gen1', 'FLAGFIELD_GEN1'),
+                      ('flagfield_gen2', 'FLAGFIELD_GEN2'),
+                      ('land_flag', 'F_LAND'),
+                      ('usable_flag', 'F_USABLE')
                       ]
             for field in fields:
                 generic_data[field[0]] = native_Image[szf_img].data[field[1]]
@@ -160,11 +167,15 @@ def eps2generic(native_Image):
 
     else:
         n_records = native_Image.lat.shape[0]
-        # generic_data = np.repeat(template, n_records)
+        generic_data = get_template_ASCATL1B_SZX(n_records)
 
         fields = [('jd', 'jd'),
+                  ('sat_id', None),
+                  ('abs_line_nr', None),
+                  ('abs_orbit_nr', None),
                   ('node_num', 'NODE_NUM'),
                   ('line_num', 'LINE_NUM'),
+                  ('as_des_pass', 'AS_DES_PASS'),
                   ('swath', 'SWATH INDICATOR'),
                   ('azif', 'f_AZI_ANGLE_TRIP'),
                   ('azim', 'm_AZI_ANGLE_TRIP'),
@@ -178,11 +189,23 @@ def eps2generic(native_Image):
                   ('kpf', 'f_KP'),
                   ('kpm', 'm_KP'),
                   ('kpa', 'a_KP'),
-                  # ('num_obs', np.ubyte),
-                  # ('usable_flag', np.uint8)
+                  ('kpf_quality', 'f_F_KP'),
+                  ('kpm_quality', 'm_F_KP'),
+                  ('kpa_quality', 'a_F_KP'),
+                  ('land_flagf', 'f_F_LAND'),
+                  ('land_flagm', 'm_F_LAND'),
+                  ('land_flaga', 'a_F_LAND'),
+                  ('usable_flagf', 'f_F_USABLE'),
+                  ('usable_flagm', 'm_F_USABLE'),
+                  ('usable_flaga', 'a_F_USABLE'),
                   ]
         for field in fields:
+            if field[1] is None:
+                continue
             generic_data[field[0]] = native_Image.data[field[1]]
+
+        if 'ABS_LINE_NUMBER' in native_Image.data:
+            generic_data['abs_line_nr'] = native_Image.data['ABS_LINE_NUMBER']
 
         fields = [('sat_id', 'SPACECRAFT_ID'),
                   ('abs_orbit_nr', 'ORBIT_START')]
@@ -200,15 +223,17 @@ def nc2generic(native_Image):
     """
     Convert the native nc Image into a generic one.
     """
-    template = template_ASCATL1()
     generic_data = {}
-
     n_records = native_Image.lat.shape[0]
-    # generic_data = np.repeat(template, n_records)
+    generic_data = get_template_ASCATL1B_SZX(n_records)
 
     fields = [('jd', 'jd'),
-              # ('node_num', 'NODE_NUM'),
-              # ('line_num', 'LINE_NUM'),
+              ('sat_id', None),
+              ('abs_line_nr', 'abs_line_number'),
+              ('abs_orbit_nr', None),
+              ('node_num', 'node_num'),
+              ('line_num', 'line_num'),
+              ('as_des_pass', 'as_des_pass'),
               ('swath', 'swath_indicator'),
               ('azif', 'f_azi_angle_trip'),
               ('azim', 'm_azi_angle_trip'),
@@ -222,11 +247,26 @@ def nc2generic(native_Image):
               ('kpf', 'f_kp'),
               ('kpm', 'm_kp'),
               ('kpa', 'a_kp'),
-              # ('num_obs', np.ubyte),
-              # ('usable_flag', 'f_usable')
+              ('kpf_quality', 'f_f_kp'),
+              ('kpm_quality', 'm_f_kp'),
+              ('kpa_quality', 'a_f_kp'),
+              ('land_flagf', 'f_f_land'),
+              ('land_flagm', 'm_f_land'),
+              ('land_flaga', 'a_f_land'),
+              ('usable_flagf', 'f_f_usable'),
+              ('usable_flagm', 'm_f_usable'),
+              ('usable_flaga', 'a_f_usable'),
               ]
     for field in fields:
+        if field[1] is None:
+            continue
         generic_data[field[0]] = native_Image.data[field[1]]
+
+    fields = [('sat_id', 'sat_id'),
+              ('abs_orbit_nr', 'orbit_start')]
+    for field in fields:
+        generic_data[field[0]] = np.repeat(native_Image.metadata[field[1]],
+            n_records)
 
     img = Image(native_Image.lon, native_Image.lat, generic_data,
                 native_Image.metadata, native_Image.timestamp,
@@ -239,18 +279,18 @@ def bfr2generic(native_Image):
     """
     Convert the native bfr Image into a generic one.
     """
-    template = template_ASCATL1()
     generic_data = {}
-
     n_records = native_Image.lat.shape[0]
-    # generic_data = np.repeat(template, n_records)
+    generic_data = get_template_ASCATL1B_SZX(n_records)
 
     fields = [('jd', 'jd'),
               ('sat_id', 'Satellite Identifier'),
+              ('abs_line_nr', None),
               ('abs_orbit_nr', 'Orbit Number'),
-              # ('node_num', 'NODE_NUM'),
-              # ('line_num', 'LINE_NUM'),
-              # ('swath', 'Swath Indicator'),
+              ('node_num', 'Cross-Track Cell Number'),
+              ('line_num', 'line_num'),
+              ('as_des_pass', 'as_des_pass'),
+              ('swath', 'swath_indicator'),
               ('azif', 'f_Antenna Beam Azimuth'),
               ('azim', 'm_Antenna Beam Azimuth'),
               ('azia', 'a_Antenna Beam Azimuth'),
@@ -263,17 +303,25 @@ def bfr2generic(native_Image):
               ('kpf', 'f_Radiometric Resolution (Noise Value)'),
               ('kpm', 'm_Radiometric Resolution (Noise Value)'),
               ('kpa', 'a_Radiometric Resolution (Noise Value)'),
-              # ('num_obs', np.ubyte),
-              # ('usable_flag', np.uint8)
+              ('kpf_quality', 'f_ASCAT KP Estimate Quality'),
+              ('kpm_quality', 'm_ASCAT KP Estimate Quality'),
+              ('kpa_quality', 'a_ASCAT KP Estimate Quality'),
+              ('land_flagf', 'f_ASCAT Land Fraction'),
+              ('land_flagm', 'm_ASCAT Land Fraction'),
+              ('land_flaga', 'a_ASCAT Land Fraction'),
+              ('usable_flagf', 'f_ASCAT Sigma-0 Usability'),
+              ('usable_flagm', 'm_ASCAT Sigma-0 Usability'),
+              ('usable_flaga', 'a_ASCAT Sigma-0 Usability'),
               ]
-
     kp_vars = ['kpf', 'kpm', 'kpa']
     for field in fields:
+        if field[1] is None:
+            continue
+
         if field[0] in kp_vars:
             generic_data[field[0]] = native_Image.data[field[1]]/100
         else:
             generic_data[field[0]] = native_Image.data[field[1]]
-
 
     img = Image(native_Image.lon, native_Image.lat, generic_data,
                 native_Image.metadata, native_Image.timestamp,
@@ -286,25 +334,62 @@ def hdf2generic(native_Image):
     """
     Convert the native nc Image into a generic one.
     """
-    img = native_Image
-    if type(img) is dict:
-        pass
-    return img
+    generic_data={}
+    img = {'img1': {}, 'img2': {}, 'img3': {}, 'img4': {}, 'img5': {},
+           'img6': {}}
+    for szf_img in native_Image:
+        n_records = native_Image[szf_img].lat.shape[0]
+
+        fields = [('jd', 'jd'),
+                  ('sat_id', None),
+                  ('beam_number', 'BEAM_NUMBER'),
+                  ('abs_line_nr', None),
+                  ('abs_orbit_nr', None),
+                  ('node_num', None),
+                  ('line_num', None),
+                  ('as_des_pass', 'AS_DES_PASS'),
+                  ('azi', 'AZI_ANGLE_FULL'),
+                  ('inc', 'INC_ANGLE_FULL'),
+                  ('sig', 'SIGMA0_FULL'),
+                  ('land_frac', 'LAND_FRAC'),
+                  ('flagfield_rf1', 'FLAGFIELD_RF1'),
+                  ('flagfield_rf2', 'FLAGFIELD_RF2'),
+                  ('flagfield_pl', 'FLAGFIELD_PL'),
+                  ('flagfield_gen1', 'FLAGFIELD_GEN1'),
+                  ('flagfield_gen2', 'FLAGFIELD_GEN2'),
+                  ('land_flag', 'F_LAND'),
+                  ('usable_flag', 'F_USABLE')
+                  ]
+        for field in fields:
+            generic_data[field[0]] = native_Image[szf_img].data[field[1]]
+
+        fields = [('sat_id', 'SPACECRAFT_ID'),
+                  ('abs_orbit_nr', 'ORBIT_START')]
+        for field in fields:
+            generic_data[field[0]] = native_Image[szf_img].metadata[
+                field[1]].repeat(n_records)
+
+        img[szf_img] = Image(native_Image[szf_img].lon,
+                             native_Image[szf_img].lat,
+                             generic_data,
+                             native_Image[szf_img].metadata,
+                             native_Image[szf_img].timestamp,
+                             timekey='jd')
 
 
-def template_ASCATL1():
+def get_template_ASCATL1B_SZX(n=1):
     """
-    Generic lvl1b template. (from generic IO: ASCRS009)
+    Generic lvl1b SZX template.
     """
-    metadata = {'temp_name': 'ASCATL1'}
+    metadata = {'temp_name': 'ASCATL1B_SZX'}
 
-    struct = np.dtype([('jd', np.double),
+    struct = np.dtype([('jd', np.float64),
                        ('sat_id', np.byte),
                        ('abs_line_nr', np.uint32),
                        ('abs_orbit_nr', np.uint32),
                        ('node_num', np.uint8),
                        ('line_num', np.uint16),
-                       ('orb_dir', np.dtype('S1')),
+                       ('as_des_pass', np.byte),
                        ('swath', np.byte),
                        ('azif', np.float32),
                        ('azim', np.float32),
@@ -321,10 +406,55 @@ def template_ASCATL1():
                        ('kpf_quality', np.float32),
                        ('kpm_quality', np.float32),
                        ('kpa_quality', np.float32),
-                       ('num_obs', np.ubyte),
+                       ('land_flagf', np.uint8),
+                       ('land_flagm', np.uint8),
+                       ('land_flaga', np.uint8),
+                       ('usable_flagf', np.uint8),
+                       ('usable_flagm', np.uint8),
+                       ('usable_flaga', np.uint8),
+                       ], metadata=metadata)
+
+    record = np.array([(float64_nan, byte_nan, uint32_nan, uint32_nan,
+                        uint8_nan, uint16_nan, byte_nan, byte_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, uint8_nan, uint8_nan,
+                        uint8_nan, uint8_nan, uint8_nan, uint8_nan)],
+                        dtype=struct)
+
+    return np.repeat(record, n)
+
+def get_template_ASCATL1B_SZF(n=1):
+    """
+    Generic lvl1b SZF template.
+    """
+    metadata = {'temp_name': 'ASCATL1B_SZF'}
+
+    struct = np.dtype([('jd', np.float64),
+                       ('sat_id', np.byte),
+                       ('beam_number', np.byte),
+                       ('abs_line_nr', np.uint32),
+                       ('abs_orbit_nr', np.uint32),
+                       ('node_num', np.uint8),
+                       ('line_num', np.uint16),
+                       ('as_des_pass', np.byte),
+                       ('azi', np.float32),
+                       ('inc', np.float32),
+                       ('sig', np.float32),
+                       ('land_frac', np.float32),
+                       ('flagfield_rf1', np.uint8),
+                       ('flagfield_rf2', np.uint8),
+                       ('flagfield_pl', np.uint8),
+                       ('flagfield_gen1', np.uint8),
+                       ('flagfield_gen2', np.uint8),
                        ('land_flag', np.uint8),
                        ('usable_flag', np.uint8)], metadata=metadata)
 
-    dataset = np.zeros(1, dtype=struct)
+    record = np.array([(float64_nan, byte_nan, byte_nan, uint32_nan, uint32_nan,
+                        uint8_nan, uint16_nan, byte_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, uint8_nan,
+                        uint8_nan, uint8_nan, uint8_nan, uint8_nan, uint8_nan,
+                        uint8_nan)], dtype=struct)
 
-    return dataset
+    return np.repeat(record, n)

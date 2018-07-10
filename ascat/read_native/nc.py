@@ -91,7 +91,15 @@ class AscatL1NcFile(ImageBase):
 
         # store data in dictionary
         dd = {}
+        metadata = {}
         beams = ['f_', 'm_', 'a_']
+
+        metadata['sat_id'] = self.ds.platform[-1]
+        metadata['orbit_start'] = self.ds.start_orbit_number
+        metadata['processor_major_version'] = self.ds.processor_major_version
+        metadata['product_minor_version'] = self.ds.product_minor_version
+        metadata['format_major_version'] = self.ds.format_major_version
+        metadata['format_minor_version'] = self.ds.format_minor_version
 
         num_cells = self.ds.dimensions['numCells'].size
         for name in var_to_read:
@@ -117,13 +125,17 @@ class AscatL1NcFile(ImageBase):
                 utc_dates = netCDF4.num2date(dd[name], variable.units)
                 dd['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
 
-
         dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
 
         longitude = dd.pop('longitude')
         latitude = dd.pop('latitude')
 
-        return Image(longitude, latitude, dd, {}, timestamp,
+        n_records = latitude.shape[0]
+        n_lines = n_records / num_cells
+        dd['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
+        dd['line_num'] = np.arange(n_lines).repeat(num_cells)
+
+        return Image(longitude, latitude, dd, metadata, timestamp,
                      timekey='utc_line_nodes')
 
     def read_masked_data(self, **kwargs):
@@ -193,6 +205,15 @@ class AscatL2SsmNcFile(ImageBase):
 
         # store data in dictionary
         dd = {}
+        metadata = {}
+        beams = ['f_', 'm_', 'a_']
+
+        metadata['sat_id'] = self.ds.platform_long_name[-1]
+        metadata['orbit_start'] = self.ds.start_orbit_number
+        metadata['processor_major_version'] = self.ds.processor_major_version
+        metadata['product_minor_version'] = self.ds.product_minor_version
+        metadata['format_major_version'] = self.ds.format_major_version
+        metadata['format_minor_version'] = self.ds.format_minor_version
 
         num_cells = self.ds.dimensions['numCells'].size
         for name in var_to_read:
@@ -206,18 +227,23 @@ class AscatL2SsmNcFile(ImageBase):
                 utc_dates = netCDF4.num2date(dd[name], variable.units)
                 dd['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
 
-        if 'soil_moisture' in dd:
-            # mask all the arrays based on fill_value of latitude
-            valid_data = ~dd['soil_moisture'].mask
-            for name in dd:
-                dd[name] = dd[name][valid_data]
+        # if 'soil_moisture' in dd:
+        #     # mask all the arrays based on fill_value of latitude
+        #     valid_data = ~dd['soil_moisture'].mask
+        #     for name in dd:
+        #         dd[name] = dd[name][valid_data]
 
         longitude = dd.pop('longitude')
         latitude = dd.pop('latitude')
 
+        n_records = latitude.shape[0]
+        n_lines = n_records / num_cells
+        dd['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
+        dd['line_num'] = np.arange(n_lines).repeat(num_cells)
+
         dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
 
-        return Image(longitude, latitude, dd, {}, timestamp,
+        return Image(longitude, latitude, dd, metadata, timestamp,
                      timekey='utc_line_nodes')
 
     def read_masked_data(self, **kwargs):

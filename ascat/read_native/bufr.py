@@ -200,6 +200,7 @@ class AscatL1BufrFile(ImageBase):
         dates = np.concatenate(dates)
         longitude = np.concatenate(longitude)
         latitude = np.concatenate(latitude)
+        n_records = latitude.shape[0]
 
         for mid in self.msg_name_lookup:
             name = self.msg_name_lookup[mid]
@@ -213,6 +214,16 @@ class AscatL1BufrFile(ImageBase):
             data['as_des_pass'] = (data[
                                        "Direction Of Motion Of Moving Observing Platform"] < 270).astype(
                 np.uint8)
+
+        if 'Cross-Track Cell Number' in data:
+            if data['Cross-Track Cell Number'].max() == 82:
+                data['swath_indicator'] = 1*(data['Cross-Track Cell Number'] > 41)
+            elif data['Cross-Track Cell Number'].max() == 42:
+                data['swath_indicator'] = 1*(data['Cross-Track Cell Number'] > 21)
+            else:
+                raise ValueError("Unsuspected node number.")
+            n_lines = n_records / max(data['Cross-Track Cell Number'])
+            data['line_num'] = np.arange(n_lines).repeat(max(data['Cross-Track Cell Number']))
 
         return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
 
@@ -417,7 +428,97 @@ class AscatL2SsmBufrFile(ImageBase):
                 dates.append(
                     julday(months, days, years, hours, minutes, seconds))
 
-                # dt=datetime(years, months, days, hours, minutes, seconds)
+                # read optional data fields
+                for mid in self.msg_name_lookup:
+                    name = self.msg_name_lookup[mid]
+
+                    if name not in data:
+                        data[name] = []
+
+                    data[name].append(message[:, mid - 1])
+
+        dates = np.concatenate(dates)
+        longitude = np.concatenate(longitude)
+        latitude = np.concatenate(latitude)
+        n_records = latitude.shape[0]
+
+        for mid in self.msg_name_lookup:
+            name = self.msg_name_lookup[mid]
+            data[name] = np.concatenate(data[name])
+            if mid == 74:
+                # ssm mean is encoded differently
+                data[name] = data[name] * 100
+
+        data['jd'] = dates
+
+        if 'Direction Of Motion Of Moving Observing Platform' in data:
+            data['as_des_pass'] = (data[
+                "Direction Of Motion Of Moving Observing Platform"]
+                                   < 270).astype(np.uint8)
+
+        if 'Cross-Track Cell Number' in data:
+            if data['Cross-Track Cell Number'].max() == 82:
+                data['swath_indicator'] = 1*(data['Cross-Track Cell Number'] > 41)
+            elif data['Cross-Track Cell Number'].max() == 42:
+                data['swath_indicator'] = 1*(data['Cross-Track Cell Number'] > 21)
+            else:
+                raise ValueError("Unsuspected node number.")
+            n_lines = n_records / max(data['Cross-Track Cell Number'])
+            data['line_num'] = np.arange(n_lines).repeat(
+                max(data['Cross-Track Cell Number']))
+
+        return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
+
+    def read_masked_data(self, timestamp=None):
+        """
+        Read specific image for given datetime timestamp and mask it based on
+        fill_value of soil moisture
+
+        Parameters
+        ----------
+        timestamp : datetime.datetime
+            exact observation timestamp of the image that should be read
+
+        Returns
+        -------
+        data : dict
+            dictionary of numpy arrays that hold the image data for each
+            variable of the dataset
+        metadata : dict
+            dictionary of numpy arrays that hold the metadata
+        timestamp : datetime.datetime
+            exact timestamp of the image
+        lon : numpy.array or None
+            array of longitudes, if None self.grid will be assumed
+        lat : numpy.array or None
+            array of latitudes, if None self.grid will be assumed
+        time_var : string or None
+            variable name of observation times in the data dict, if None all
+            observations have the same timestamp
+        """
+        # lookup table between names and message number in the BUFR file
+
+        data = {}
+        dates = []
+        # 13: Latitude (High Accuracy)
+        latitude = []
+        # 14: Longitude (High Accuracy)
+        longitude = []
+
+        with BUFRReader(self.filename) as bufr:
+            for message in bufr.messages():
+                # read fixed fields
+                latitude.append(message[:, 12])
+                longitude.append(message[:, 13])
+                years = message[:, 6].astype(int)
+                months = message[:, 7].astype(int)
+                days = message[:, 8].astype(int)
+                hours = message[:, 9].astype(int)
+                minutes = message[:, 10].astype(int)
+                seconds = message[:, 11].astype(int)
+
+                dates.append(
+                    julday(months, days, years, hours, minutes, seconds))
 
                 # read optional data fields
                 for mid in self.msg_name_lookup:
@@ -431,6 +532,7 @@ class AscatL2SsmBufrFile(ImageBase):
         dates = np.concatenate(dates)
         longitude = np.concatenate(longitude)
         latitude = np.concatenate(latitude)
+        n_records = latitude.shape[0]
 
         for mid in self.msg_name_lookup:
             name = self.msg_name_lookup[mid]
@@ -443,8 +545,21 @@ class AscatL2SsmBufrFile(ImageBase):
 
         if 'Direction Of Motion Of Moving Observing Platform' in data:
             data['as_des_pass'] = (data[
-                                       "Direction Of Motion Of Moving Observing Platform"] < 270).astype(
-                np.uint8)
+                                       "Direction Of Motion Of Moving Observing Platform"]
+                                   < 270).astype(np.uint8)
+
+        if 'Cross-Track Cell Number' in data:
+            if data['Cross-Track Cell Number'].max() == 82:
+                data['swath_indicator'] = 1 * (
+                            data['Cross-Track Cell Number'] > 41)
+            elif data['Cross-Track Cell Number'].max() == 42:
+                data['swath_indicator'] = 1 * (
+                            data['Cross-Track Cell Number'] > 21)
+            else:
+                raise ValueError("Unsuspected node number.")
+            n_lines = n_records / max(data['Cross-Track Cell Number'])
+            data['line_num'] = np.arange(n_lines).repeat(
+                max(data['Cross-Track Cell Number']))
 
         if 65 in self.msg_name_lookup:
             # mask all the arrays based on fill_value of soil moisture
@@ -455,13 +570,6 @@ class AscatL2SsmBufrFile(ImageBase):
                 data[name] = data[name][valid_data]
 
         return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
-
-    def read_masked_data(self, **kwargs):
-        """
-        It does not make sense to read a orbit file unmasked
-        so we only have a masked implementation.
-        """
-        return self.read(**kwargs)
 
     def resample_data(self, image, index, distance, weights, **kwargs):
         """
