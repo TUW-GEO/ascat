@@ -164,6 +164,11 @@ def nc2generic(native_Image):
         generic_data[field[0]] = np.repeat(native_Image.metadata[field[1]],
                                            n_records)
 
+    # convert sat_id (spacecraft id) to the department intern definition
+    # use an array as look up table
+    sat_id_lut = np.array([0, 4, 3, 5])
+    generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
+
     img = Image(native_Image.lon, native_Image.lat, generic_data,
                 native_Image.metadata, native_Image.timestamp,
                 timekey='jd')
@@ -223,6 +228,11 @@ def eps2generic(native_Image):
     for field in fields:
         generic_data[field[0]] = np.repeat(native_Image.metadata[field[1]], n_records)
 
+    # convert sat_id (spacecraft id) to the department intern definition
+    # use an array as look up table
+    sat_id_lut = np.array([0, 4, 3, 5])
+    generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
+
     img = Image(native_Image.lon, native_Image.lat, generic_data,
                 native_Image.metadata, native_Image.timestamp,
                 timekey='jd')
@@ -276,6 +286,11 @@ def bfr2generic(native_Image):
         if field[1] is None:
             continue
         generic_data[field[0]] = native_Image.data[field[1]]
+
+    # convert sat_id (spacecraft id) to the department intern definition
+    # use an array as look up table
+    sat_id_lut = np.array([0, 0, 0, 4, 3, 5])
+    generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
 
     img = Image(native_Image.lon, native_Image.lat, generic_data,
                 native_Image.metadata, native_Image.timestamp,

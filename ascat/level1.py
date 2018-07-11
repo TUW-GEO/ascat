@@ -47,6 +47,10 @@ uint16_nan = np.iinfo(np.uint16).max
 uint32_nan = np.iinfo(np.uint32).max
 float32_nan = np.finfo(np.float32).min
 float64_nan = np.finfo(np.float64).min
+long_nan = np.iinfo(np.int32).min
+#ulong_nan = np.iinfo(np.uint32).max
+int_nan = np.iinfo(np.int16).min
+# uint_nan = np.iinfo(np.uint16).max
 
 class AscatL1Image(ImageBase):
     """
@@ -128,6 +132,7 @@ def eps2generic(native_Image):
                'img6': {}}
         for szf_img in native_Image:
             n_records = native_Image[szf_img].lat.shape[0]
+            generic_data = get_template_ASCATL1B_SZF(n_records)
 
             fields = [('jd', 'jd'),
                       ('sat_id', None),
@@ -150,6 +155,8 @@ def eps2generic(native_Image):
                       ('usable_flag', 'F_USABLE')
                       ]
             for field in fields:
+                if field[1] is None:
+                    continue
                 generic_data[field[0]] = native_Image[szf_img].data[field[1]]
 
             fields = [('sat_id', 'SPACECRAFT_ID'),
@@ -157,6 +164,11 @@ def eps2generic(native_Image):
             for field in fields:
                 generic_data[field[0]] = native_Image[szf_img].metadata[
                     field[1]].repeat(n_records)
+
+            # convert sat_id (spacecraft id) to the department intern definition
+            # use an array as look up table
+            sat_id_lut = np.array([0, 4, 3, 5])
+            generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
 
             img[szf_img] = Image(native_Image[szf_img].lon,
                                  native_Image[szf_img].lat,
@@ -169,40 +181,45 @@ def eps2generic(native_Image):
         n_records = native_Image.lat.shape[0]
         generic_data = get_template_ASCATL1B_SZX(n_records)
 
-        fields = [('jd', 'jd'),
-                  ('sat_id', None),
-                  ('abs_line_nr', None),
-                  ('abs_orbit_nr', None),
-                  ('node_num', 'NODE_NUM'),
-                  ('line_num', 'LINE_NUM'),
-                  ('as_des_pass', 'AS_DES_PASS'),
-                  ('swath', 'SWATH INDICATOR'),
-                  ('azif', 'f_AZI_ANGLE_TRIP'),
-                  ('azim', 'm_AZI_ANGLE_TRIP'),
-                  ('azia', 'a_AZI_ANGLE_TRIP'),
-                  ('incf', 'f_INC_ANGLE_TRIP'),
-                  ('incm', 'm_INC_ANGLE_TRIP'),
-                  ('inca', 'a_INC_ANGLE_TRIP'),
-                  ('sigf', 'f_SIGMA0_TRIP'),
-                  ('sigm', 'm_SIGMA0_TRIP'),
-                  ('siga', 'a_SIGMA0_TRIP'),
-                  ('kpf', 'f_KP'),
-                  ('kpm', 'm_KP'),
-                  ('kpa', 'a_KP'),
-                  ('kpf_quality', 'f_F_KP'),
-                  ('kpm_quality', 'm_F_KP'),
-                  ('kpa_quality', 'a_F_KP'),
-                  ('land_flagf', 'f_F_LAND'),
-                  ('land_flagm', 'm_F_LAND'),
-                  ('land_flaga', 'a_F_LAND'),
-                  ('usable_flagf', 'f_F_USABLE'),
-                  ('usable_flagm', 'm_F_USABLE'),
-                  ('usable_flaga', 'a_F_USABLE'),
+        fields = [('jd', 'jd', None),
+                  ('sat_id', None, None),
+                  ('abs_line_nr', None, None),
+                  ('abs_orbit_nr', None, None),
+                  ('node_num', 'NODE_NUM', None),
+                  ('line_num', 'LINE_NUM', None),
+                  ('as_des_pass', 'AS_DES_PASS', None),
+                  ('swath', 'SWATH INDICATOR', byte_nan),
+                  ('azif', 'f_AZI_ANGLE_TRIP', int_nan),
+                  ('azim', 'm_AZI_ANGLE_TRIP', int_nan),
+                  ('azia', 'a_AZI_ANGLE_TRIP', int_nan),
+                  ('incf', 'f_INC_ANGLE_TRIP', uint16_nan),
+                  ('incm', 'm_INC_ANGLE_TRIP', uint16_nan),
+                  ('inca', 'a_INC_ANGLE_TRIP', uint16_nan),
+                  ('sigf', 'f_SIGMA0_TRIP', long_nan),
+                  ('sigm', 'm_SIGMA0_TRIP', long_nan),
+                  ('siga', 'a_SIGMA0_TRIP', long_nan),
+                  ('kpf', 'f_KP', uint16_nan),
+                  ('kpm', 'm_KP', uint16_nan),
+                  ('kpa', 'a_KP', uint16_nan),
+                  ('kpf_quality', 'f_F_KP', byte_nan),
+                  ('kpm_quality', 'm_F_KP', byte_nan),
+                  ('kpa_quality', 'a_F_KP', byte_nan),
+                  ('land_flagf', 'f_F_LAND', uint16_nan),
+                  ('land_flagm', 'm_F_LAND', uint16_nan),
+                  ('land_flaga', 'a_F_LAND', uint16_nan),
+                  ('usable_flagf', 'f_F_USABLE', byte_nan),
+                  ('usable_flagm', 'm_F_USABLE', byte_nan),
+                  ('usable_flaga', 'a_F_USABLE', byte_nan),
                   ]
         for field in fields:
             if field[1] is None:
                 continue
-            generic_data[field[0]] = native_Image.data[field[1]]
+
+            if field[2] is not None:
+                valid_mask = (native_Image.data[field[1]] != field[2])
+                generic_data[field[0]][valid_mask] = native_Image.data[field[1]][valid_mask]
+            else:
+                generic_data[field[0]] = native_Image.data[field[1]]
 
         if 'ABS_LINE_NUMBER' in native_Image.data:
             generic_data['abs_line_nr'] = native_Image.data['ABS_LINE_NUMBER']
@@ -211,6 +228,11 @@ def eps2generic(native_Image):
                   ('abs_orbit_nr', 'ORBIT_START')]
         for field in fields:
             generic_data[field[0]] = native_Image.metadata[field[1]].repeat(n_records)
+
+        # convert sat_id (spacecraft id) to the department intern definition
+        # use an array as look up table
+        sat_id_lut = np.array([0, 4, 3, 5])
+        generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
 
         img = Image(native_Image.lon, native_Image.lat, generic_data,
                     native_Image.metadata, native_Image.timestamp,
@@ -260,13 +282,24 @@ def nc2generic(native_Image):
     for field in fields:
         if field[1] is None:
             continue
-        generic_data[field[0]] = native_Image.data[field[1]]
+
+        if (type(native_Image.data[field[1]]) == np.ma.core.MaskedArray):
+            valid_mask = ~native_Image.data[field[1]].mask
+            generic_data[field[0]][valid_mask] = native_Image.data[field[1]][
+                valid_mask]
+        else:
+            generic_data[field[0]] = native_Image.data[field[1]]
 
     fields = [('sat_id', 'sat_id'),
               ('abs_orbit_nr', 'orbit_start')]
     for field in fields:
         generic_data[field[0]] = np.repeat(native_Image.metadata[field[1]],
             n_records)
+
+    # convert sat_id (spacecraft id) to the department intern definition
+    # use an array as look up table
+    sat_id_lut = np.array([0, 4, 3, 5])
+    generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
 
     img = Image(native_Image.lon, native_Image.lat, generic_data,
                 native_Image.metadata, native_Image.timestamp,
@@ -283,45 +316,54 @@ def bfr2generic(native_Image):
     n_records = native_Image.lat.shape[0]
     generic_data = get_template_ASCATL1B_SZX(n_records)
 
-    fields = [('jd', 'jd'),
-              ('sat_id', 'Satellite Identifier'),
-              ('abs_line_nr', None),
-              ('abs_orbit_nr', 'Orbit Number'),
-              ('node_num', 'Cross-Track Cell Number'),
-              ('line_num', 'line_num'),
-              ('as_des_pass', 'as_des_pass'),
-              ('swath', 'swath_indicator'),
-              ('azif', 'f_Antenna Beam Azimuth'),
-              ('azim', 'm_Antenna Beam Azimuth'),
-              ('azia', 'a_Antenna Beam Azimuth'),
-              ('incf', 'f_Radar Incidence Angle'),
-              ('incm', 'm_Radar Incidence Angle'),
-              ('inca', 'a_Radar Incidence Angle'),
-              ('sigf', 'f_Backscatter'),
-              ('sigm', 'm_Backscatter'),
-              ('siga', 'a_Backscatter'),
-              ('kpf', 'f_Radiometric Resolution (Noise Value)'),
-              ('kpm', 'm_Radiometric Resolution (Noise Value)'),
-              ('kpa', 'a_Radiometric Resolution (Noise Value)'),
-              ('kpf_quality', 'f_ASCAT KP Estimate Quality'),
-              ('kpm_quality', 'm_ASCAT KP Estimate Quality'),
-              ('kpa_quality', 'a_ASCAT KP Estimate Quality'),
-              ('land_flagf', 'f_ASCAT Land Fraction'),
-              ('land_flagm', 'm_ASCAT Land Fraction'),
-              ('land_flaga', 'a_ASCAT Land Fraction'),
-              ('usable_flagf', 'f_ASCAT Sigma-0 Usability'),
-              ('usable_flagm', 'm_ASCAT Sigma-0 Usability'),
-              ('usable_flaga', 'a_ASCAT Sigma-0 Usability'),
+    fields = [('jd', 'jd', None),
+              ('sat_id', 'Satellite Identifier', None),
+              ('abs_line_nr', None, None),
+              ('abs_orbit_nr', 'Orbit Number', None),
+              ('node_num', 'Cross-Track Cell Number', None),
+              ('line_num', 'line_num', None),
+              ('as_des_pass', 'as_des_pass', None),
+              ('swath', 'swath_indicator', None),
+              ('azif', 'f_Antenna Beam Azimuth', 32.32),
+              ('azim', 'm_Antenna Beam Azimuth', 32.32),
+              ('azia', 'a_Antenna Beam Azimuth', 32.32),
+              ('incf', 'f_Radar Incidence Angle', 1.7e+38),
+              ('incm', 'm_Radar Incidence Angle', 1.7e+38),
+              ('inca', 'a_Radar Incidence Angle', 1.7e+38),
+              ('sigf', 'f_Backscatter', 1.7e+38),
+              ('sigm', 'm_Backscatter', 1.7e+38),
+              ('siga', 'a_Backscatter', 1.7e+38),
+              ('kpf', 'f_Radiometric Resolution (Noise Value)', 1.7e+38),
+              ('kpm', 'm_Radiometric Resolution (Noise Value)', 1.7e+38),
+              ('kpa', 'a_Radiometric Resolution (Noise Value)', 1.7e+38),
+              ('kpf_quality', 'f_ASCAT KP Estimate Quality', None),
+              ('kpm_quality', 'm_ASCAT KP Estimate Quality', None),
+              ('kpa_quality', 'a_ASCAT KP Estimate Quality', None),
+              ('land_flagf', 'f_ASCAT Land Fraction', None),
+              ('land_flagm', 'm_ASCAT Land Fraction', None),
+              ('land_flaga', 'a_ASCAT Land Fraction', None),
+              ('usable_flagf', 'f_ASCAT Sigma-0 Usability', None),
+              ('usable_flagm', 'm_ASCAT Sigma-0 Usability', None),
+              ('usable_flaga', 'a_ASCAT Sigma-0 Usability', None),
               ]
     kp_vars = ['kpf', 'kpm', 'kpa']
     for field in fields:
         if field[1] is None:
             continue
 
-        if field[0] in kp_vars:
-            generic_data[field[0]] = native_Image.data[field[1]]/100
+        if field[2] is not None:
+            valid_mask = (native_Image.data[field[1]] != field[2])
+            if field[0] in kp_vars:
+                generic_data[field[0]][valid_mask] = native_Image.data[field[1]][valid_mask] / 100
+            else:
+                generic_data[field[0]][valid_mask] = native_Image.data[field[1]][valid_mask]
         else:
             generic_data[field[0]] = native_Image.data[field[1]]
+
+    # convert sat_id (spacecraft id) to the department intern definition
+    # use an array as look up table
+    sat_id_lut = np.array([0, 0, 0, 4, 3, 5])
+    generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
 
     img = Image(native_Image.lon, native_Image.lat, generic_data,
                 native_Image.metadata, native_Image.timestamp,
@@ -334,11 +376,11 @@ def hdf2generic(native_Image):
     """
     Convert the native nc Image into a generic one.
     """
-    generic_data={}
     img = {'img1': {}, 'img2': {}, 'img3': {}, 'img4': {}, 'img5': {},
            'img6': {}}
     for szf_img in native_Image:
         n_records = native_Image[szf_img].lat.shape[0]
+        generic_data = get_template_ASCATL1B_SZF(n_records)
 
         fields = [('jd', 'jd'),
                   ('sat_id', None),
@@ -361,13 +403,20 @@ def hdf2generic(native_Image):
                   ('usable_flag', 'F_USABLE')
                   ]
         for field in fields:
+            if field[1] is None:
+                continue
             generic_data[field[0]] = native_Image[szf_img].data[field[1]]
 
         fields = [('sat_id', 'SPACECRAFT_ID'),
                   ('abs_orbit_nr', 'ORBIT_START')]
         for field in fields:
-            generic_data[field[0]] = native_Image[szf_img].metadata[
-                field[1]].repeat(n_records)
+            generic_data[field[0]] = np.repeat(native_Image[szf_img].metadata[
+                field[1]], n_records)
+
+        # convert sat_id (spacecraft id) to the department intern definition
+        # use an array as look up table
+        sat_id_lut = np.array([0, 4, 3, 5])
+        generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
 
         img[szf_img] = Image(native_Image[szf_img].lon,
                              native_Image[szf_img].lat,
@@ -375,6 +424,9 @@ def hdf2generic(native_Image):
                              native_Image[szf_img].metadata,
                              native_Image[szf_img].timestamp,
                              timekey='jd')
+
+    return img
+
 
 
 def get_template_ASCATL1B_SZX(n=1):

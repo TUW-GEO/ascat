@@ -97,6 +97,9 @@ class AscatL1H5File(ImageBase):
             var_to_read.append('LONGITUDE_FULL')
 
         num_cells = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001']['LATITUDE_FULL'].shape[1]
+        num_lines = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'][
+            'LATITUDE_FULL'].shape[0]
+        n_records = num_cells*num_lines
 
         for name in var_to_read:
             variable = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'][name]
@@ -129,6 +132,21 @@ class AscatL1H5File(ImageBase):
         if 'UTC_LOCALISATION-days' in var_to_read and 'UTC_LOCALISATION-milliseconds' in var_to_read:
             data['jd'] = shortcdstime2jd(data['UTC_LOCALISATION-days'], data['UTC_LOCALISATION-milliseconds'])
 
+        set_flags(data)
+
+        fields = ['SPACECRAFT_ID', 'ORBIT_START',
+                  'PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION',
+                  'FORMAT_MAJOR_VERSION', 'FORMAT_MINOR_VERSION'
+                  ]
+        for field in fields:
+            var_index = np.where(
+                np.core.defchararray.startswith(
+                    metadata['MPHR']['MPHR_TABLE']['EntryName'], field))[0][0]
+            var = metadata['MPHR']['MPHR_TABLE']['EntryValue'][var_index]
+            if field == 'SPACECRAFT_ID':
+                var = var[-1]
+            metadata[field] = int(var)
+
         image_dict = {'img1': {}, 'img2': {}, 'img3': {}, 'img4': {},
                       'img5': {}, 'img6': {}}
         data_full = {'d1': {}, 'd2': {}, 'd3': {}, 'd4': {}, 'd5': {},
@@ -144,7 +162,7 @@ class AscatL1H5File(ImageBase):
 
             lon = data_full[dataset].pop('LONGITUDE_FULL')
             lat = data_full[dataset].pop('LATITUDE_FULL')
-            image_dict[img] = Image(lon, lat, data, metadata, timestamp, timekey='jd')
+            image_dict[img] = Image(lon, lat, data_full[dataset], metadata, timestamp, timekey='jd')
 
         return image_dict
 
@@ -163,6 +181,58 @@ class AscatL1H5File(ImageBase):
 
     def close(self):
         pass
+
+def set_flags(data):
+    """
+    Compute summary flag for each measurement with a value of 0, 1 or 2
+    indicating nominal, slightly degraded or severely degraded data.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        SZF data.
+    """
+
+    # category:status = 'red': 2, 'amber': 1, 'warning': 0
+    flag_status_bit = {'FLAGFIELD_RF1': {'2': [2, 4],
+                                         '1': [0, 1, 3]},
+
+                       'FLAGFIELD_RF2': {'2': [0, 1]},
+
+                       'FLAGFIELD_PL': {'2': [0, 1, 2, 3],
+                                        '0': [4]},
+
+                       'FLAGFIELD_GEN1': {'2': [1],
+                                          '0': [0]},
+
+                       'FLAGFIELD_GEN2': {'2': [2],
+                                          '1': [0],
+                                          '0': [1]}
+                       }
+
+    for flagfield in flag_status_bit.keys():
+        # get flag data in binary format to get flags
+        unpacked_bits = np.unpackbits(data[flagfield])
+
+        # find indizes where a flag is set
+        set_bits = np.where(unpacked_bits == 1)[0]
+        if (set_bits.size != 0):
+            pos_8 = 7 - (set_bits % 8)
+
+            for category in sorted(flag_status_bit[flagfield].keys()):
+                if (int(category) == 0) and (flagfield != 'FLAGFIELD_GEN2'):
+                    continue
+
+                for bit2check in flag_status_bit[flagfield][category]:
+                    pos = np.where(pos_8 == bit2check)[0]
+                    data['F_USABLE'] = np.zeros(data['FLAGFIELD_GEN2'].size)
+                    data['F_USABLE'][set_bits[pos] / 8] = int(category)
+
+                    # land points
+                    if (flagfield == 'FLAGFIELD_GEN2') and (bit2check == 1):
+                        data['F_LAND'] = np.zeros(data['FLAGFIELD_GEN2'].size)
+                        data['F_LAND'][set_bits[pos] / 8] = 1
+
 
 def shortcdstime2jd(days, milliseconds):
     offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)
