@@ -29,7 +29,7 @@
 """
 Readers for SZF data in h5 format.
 """
-
+from __future__ import division
 
 import numpy as np
 import h5py
@@ -114,6 +114,10 @@ class AscatL1H5File(ImageBase):
                 data[name] = np.repeat(data[name], num_cells)
 
         data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
+
+        data['line_num'] = np.arange(num_lines / 6).repeat(num_cells * 6)
+        data['node_num'] = np.tile((np.arange(num_cells) + 1),
+                                   num_lines)
 
         for name in raw_metadata.keys():
             for subname in raw_metadata[name].keys():
@@ -226,12 +230,12 @@ def set_flags(data):
                 for bit2check in flag_status_bit[flagfield][category]:
                     pos = np.where(pos_8 == bit2check)[0]
                     data['F_USABLE'] = np.zeros(data['FLAGFIELD_GEN2'].size)
-                    data['F_USABLE'][set_bits[pos] / 8] = int(category)
+                    data['F_USABLE'][set_bits[pos] // 8] = int(category)
 
                     # land points
                     if (flagfield == 'FLAGFIELD_GEN2') and (bit2check == 1):
                         data['F_LAND'] = np.zeros(data['FLAGFIELD_GEN2'].size)
-                        data['F_LAND'][set_bits[pos] / 8] = 1
+                        data['F_LAND'][set_bits[pos] // 8] = 1
 
 
 def shortcdstime2jd(days, milliseconds):

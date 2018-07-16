@@ -29,6 +29,7 @@
 """
 Readers for lvl1b and lvl2 data in eps format.
 """
+from __future__ import division
 
 import os
 import fnmatch
@@ -949,7 +950,7 @@ def read_szf_fmv_12(eps_file):
                                           ('line_num', np.int32)]))
 
     for pos_all in range(orbit_grid['lon'].size):
-        line = pos_all / grid_nodes_per_line
+        line = pos_all // grid_nodes_per_line
         pos_small = pos_all % 81
         if (pos_all % grid_nodes_per_line <= 80):
             # left swath
@@ -981,6 +982,10 @@ def read_szf_fmv_12(eps_file):
     set_flags(data)
 
     data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
+
+    data['line_num'] = np.arange(n_lines/6).repeat(n_node_per_line*6)
+    data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
+                               n_lines)
 
     return data, metadata, orbit_grid
 
@@ -1029,19 +1034,20 @@ def set_flags(data):
                 for bit2check in flag_status_bit[flagfield][category]:
                     pos = np.where(pos_8 == bit2check)[0]
                     data['F_USABLE'] = np.zeros(data['FLAGFIELD_GEN2'].size)
-                    data['F_USABLE'][set_bits[pos] / 8] = int(category)
+                    data['F_USABLE'][set_bits[pos] // 8] = int(category)
 
                     # land points
                     if (flagfield == 'FLAGFIELD_GEN2') and (bit2check == 1):
                         data['F_LAND'] = np.zeros(data['FLAGFIELD_GEN2'].size)
-                        data['F_LAND'][set_bits[pos] / 8] = 1
+                        data['F_LAND'][set_bits[pos] // 8] = 1
 
 
 def read_smx_fmv_12(eps_file):
     raw_data = eps_file.scaled_mdr
     raw_unscaled = eps_file.mdr
 
-    n_node_per_line = eps_file.mdr[0]['LONGITUDE'].size
+    n_node_per_line = raw_data['LONGITUDE'].shape[1]
+    n_lines = raw_data['LONGITUDE'].shape[0]
     n_records = eps_file.mdr_counter * n_node_per_line
     idx_nodes = np.arange(eps_file.mdr_counter).repeat(n_node_per_line)
 
@@ -1099,7 +1105,7 @@ def read_smx_fmv_12(eps_file):
 
     # sat_track_azi (uint)
     data['AS_DES_PASS'] = \
-        np.array(raw_data['SAT_TRACK_AZI'].flatten()[idx_nodes] < 27000)
+        np.array(raw_data['SAT_TRACK_AZI'].flatten()[idx_nodes] < 270)
 
     # modify longitudes from [0,360] to [-180,180]
     mask = np.logical_and(data['LONGITUDE'] != long_nan,
@@ -1116,37 +1122,7 @@ def read_smx_fmv_12(eps_file):
 
     metadata['SPACECRAFT_ID'] = int(eps_file.mphr['SPACECRAFT_ID'][2])
 
-    lswath = raw_data['SWATH_INDICATOR'].flatten() == 0
-    rswath = raw_data['SWATH_INDICATOR'].flatten() == 1
-
-    if raw_data.dtype.fields.has_key('NODE_NUM') is False:
-        data['NODE_NUM'] = np.zeros(n_records)
-        if (n_node_per_line == 82):
-            leftSw = np.arange(20, -21, -1)
-            rightSw = np.arange(-20, 21, 1)
-
-        if (n_node_per_line == 42):
-            leftSw = np.arange(10, -11, -1)
-            rightSw = np.arange(-10, 11, 1)
-
-        lineNum = np.concatenate((leftSw, rightSw), axis=0).flatten()
-        nodes = np.repeat(np.array(lineNum, ndmin=2),
-                          raw_data['ABS_LINE_NUMBER'].size, axis=0)
-
-    if (n_node_per_line == 82):
-        if raw_data.dtype.fields.has_key('NODE_NUM'):
-            data['NODE_NUM'][lswath] = 21 + raw_data['NODE_NUM'].flat[lswath]
-            data['NODE_NUM'][rswath] = 62 + raw_data['NODE_NUM'].flat[rswath]
-        else:
-            data['NODE_NUM'][lswath] = 21 + nodes.flat[lswath]
-            data['NODE_NUM'][rswath] = 62 + nodes.flat[rswath]
-    if (n_node_per_line == 42):
-        if raw_data.dtype.fields.has_key('NODE_NUM'):
-            data['NODE_NUM'][lswath] = 11 + raw_data['NODE_NUM'].flat[lswath]
-            data['NODE_NUM'][rswath] = 32 + raw_data['NODE_NUM'].flat[rswath]
-        else:
-            data['NODE_NUM'][lswath] = 11 + nodes.flat[lswath]
-            data['NODE_NUM'][rswath] = 32 + nodes.flat[rswath]
+    data['NODE_NUM'] = np.tile((np.arange(n_node_per_line) + 1), n_lines)
 
     data['LINE_NUM'] = idx_nodes
 

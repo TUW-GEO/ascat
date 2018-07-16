@@ -36,10 +36,12 @@ import os
 import pytest
 import unittest
 import sys
+
 from ascat.read_native.bufr import AscatL2SsmBufr
 from ascat.read_native.bufr import AscatL2SsmBufrChunked
 from ascat.read_native.bufr import AscatL2SsmBufrFile
 from ascat.read_native.nc import AscatL2SsmNcFile
+import ascat.level2 as level2
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
@@ -253,3 +255,65 @@ def test_AscatL2SsmBufrChunked():
     assert data.data['jd'].shape == (23616,)
     assert data.lon.shape == (23616,)
     assert data.lat.shape == (23616,)
+
+
+class Test_AscatL2Image(unittest.TestCase):
+
+    def setUp(self):
+        test_b = level2.AscatL2Image(
+            '/home/mschmitz/Desktop/ascat_test_data/level2/bufr/M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr')
+        self.reader_bufr = test_b.read()
+        test_e = level2.AscatL2Image(
+            '/home/mschmitz/Desktop/ascat_test_data/level2/eps_nat/ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat.gz')
+        self.reader_eps = test_e.read()
+        test_n = level2.AscatL2Image(
+            '/home/mschmitz/Desktop/ascat_test_data/level2/nc/W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_20180612035700_29742_eps_o_250_ssm_l2.nc')
+        self.reader_nc = test_n.read()
+
+    def tearDown(self):
+        self.reader_nc = None
+        self.reader_bufr = None
+        self.reader_eps = None
+
+    def test_image_reading(self):
+
+        nptest.assert_allclose(self.reader_bufr.lat, self.reader_eps.lat,
+                               atol=1e-4)
+        nptest.assert_allclose(self.reader_eps.lat, self.reader_nc.lat,
+                               atol=1e-4)
+        nptest.assert_allclose(self.reader_nc.lat, self.reader_bufr.lat,
+                               atol=1e-4)
+
+        nptest.assert_allclose(self.reader_bufr.lon, self.reader_eps.lon,
+                               atol=1e-4)
+        nptest.assert_allclose(self.reader_eps.lon, self.reader_nc.lon,
+                               atol=1e-4)
+        nptest.assert_allclose(self.reader_nc.lon, self.reader_bufr.lon,
+                               atol=1e-4)
+
+        matching = ['jd', 'sat_id', 'abs_line_nr', 'abs_orbit_nr', 'node_num',
+                    'line_num', 'as_des_pass', 'swath', 'azif', 'azim', 'azia',
+                    'incf', 'incm', 'inca', 'sigf', 'sigm', 'siga', 'sm',
+                    'sm_noise', 'sm_sensitivity', 'sig40', 'sig40_noise',
+                    'slope40', 'slope40_noise', 'dry_backscatter',
+                    'wet_backscatter', 'mean_surf_sm', 'correction_flag',
+                    'processing_flag', 'aggregated_quality_flag',
+                    'snow_cover_probability', 'frozen_soil_probability',
+                    'innudation_or_wetland', 'topographical_complexity']
+
+        # lists with no data fields
+        bufr_none = ['abs_line_nr', 'abs_orbit_nr', 'aggregated_quality_flag']
+        nc_none = ['azif', 'azim', 'azia', 'incf', 'incm', 'inca',
+                   'sigf', 'sigm', 'siga', 'processing_flag']
+
+        # BUFR files contain less accurate data so we only compare to one 0.1
+        # accuracy.
+        for field in matching:
+            if field not in bufr_none:
+                nptest.assert_allclose(self.reader_bufr.data[field], self.reader_eps.data[field], atol=0.1)
+
+            if field not in nc_none:
+                nptest.assert_allclose(self.reader_eps.data[field], self.reader_nc.data[field], atol=0.1)
+
+            if field not in bufr_none and field not in nc_none:
+                nptest.assert_allclose(self.reader_nc.data[field], self.reader_bufr.data[field], atol=0.1)

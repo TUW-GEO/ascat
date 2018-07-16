@@ -205,9 +205,6 @@ class AscatL1BufrFile(ImageBase):
         for mid in self.msg_name_lookup:
             name = self.msg_name_lookup[mid]
             data[name] = np.concatenate(data[name])
-            if mid == 74:
-                # ssm mean is encoded differently
-                data[name] = data[name] * 100
 
         data['jd'] = dates
         if 'Direction Of Motion Of Moving Observing Platform' in data:
@@ -454,7 +451,7 @@ class AscatL2SsmBufrFile(ImageBase):
         if 'Direction Of Motion Of Moving Observing Platform' in data:
             data['as_des_pass'] = (data[
                 "Direction Of Motion Of Moving Observing Platform"]
-                                   < 270).astype(np.uint8)
+                                   <= 270).astype(np.uint8)
 
         if 'Cross-Track Cell Number' in data:
             if data['Cross-Track Cell Number'].max() == 82:

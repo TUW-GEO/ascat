@@ -45,6 +45,8 @@ uint16_nan = np.iinfo(np.uint16).max
 uint32_nan = np.iinfo(np.uint32).max
 float32_nan = np.finfo(np.float32).min
 float64_nan = np.finfo(np.float64).min
+long_nan = np.iinfo(np.int32).min
+int_nan = np.iinfo(np.int16).min
 
 class AscatL2Image(ImageBase):
     """
@@ -143,8 +145,22 @@ def nc2generic(native_Image):
               ('slope40_noise', 'slope40_error'),
               ('dry_backscatter', 'dry_backscatter'),
               ('wet_backscatter', 'wet_backscatter'),
-              ('mean_surf_sm', 'mean_soil_moisture'),
-              ('correction_flag', 'corr_flags'),
+              ('mean_surf_sm', 'mean_soil_moisture')]
+
+    for field in fields:
+        if field[1] is None:
+            continue
+
+        if (type(native_Image.data[field[1]]) == np.ma.core.MaskedArray):
+            valid_mask = ~native_Image.data[field[1]].mask
+            generic_data[field[0]][valid_mask] = native_Image.data[field[1]][
+                valid_mask]
+        else:
+            generic_data[field[0]] = native_Image.data[field[1]]
+
+    # flag_fields need to be treated differently since they are not masked arrays
+    # so we need to check for nan values
+    flags = [('correction_flag', 'corr_flags'),
               # There is a processing flag but it is different to the other formats
               ('processing_flag', None),
               ('aggregated_quality_flag', 'aggregated_quality_flag'),
@@ -153,10 +169,13 @@ def nc2generic(native_Image):
               ('innudation_or_wetland', 'wetland_flag'),
               ('topographical_complexity', 'topography_flag')]
 
-    for field in fields:
+    for field in flags:
         if field[1] is None:
             continue
-        generic_data[field[0]] = native_Image.data[field[1]]
+
+        valid_mask = (native_Image.data[field[1]] != ubyte_nan)
+        generic_data[field[0]][valid_mask] = native_Image.data[field[1]][
+            valid_mask]
 
     fields = [('sat_id', 'sat_id'),
               ('abs_orbit_nr', 'orbit_start')]
@@ -183,45 +202,51 @@ def eps2generic(native_Image):
     n_records = native_Image.lat.shape[0]
     generic_data = get_template_ASCATL2_SMX(n_records)
 
-    fields = [('jd', 'jd'),
-              ('sat_id', None),
-              ('abs_line_nr', 'ABS_LINE_NUMBER'),
-              ('abs_orbit_nr', None),
-              ('node_num', 'NODE_NUM'),
-              ('line_num', 'LINE_NUM'),
-              ('as_des_pass', 'AS_DES_PASS'),
-              ('swath', 'SWATH_INDICATOR'),
-              ('azif', 'f_AZI_ANGLE_TRIP'),
-              ('azim', 'm_AZI_ANGLE_TRIP'),
-              ('azia', 'a_AZI_ANGLE_TRIP'),
-              ('incf', 'f_INC_ANGLE_TRIP'),
-              ('incm', 'm_INC_ANGLE_TRIP'),
-              ('inca', 'a_INC_ANGLE_TRIP'),
-              ('sigf', 'f_SIGMA0_TRIP'),
-              ('sigm', 'm_SIGMA0_TRIP'),
-              ('siga', 'a_SIGMA0_TRIP'),
-              ('sm', 'SOIL_MOISTURE'),
-              ('sm_noise', 'SOIL_MOISTURE_ERROR'),
-              ('sm_sensitivity', 'SOIL_MOISTURE_SENSETIVITY'),
-              ('sig40', 'SIGMA40'),
-              ('sig40_noise', 'SIGMA40_ERROR'),
-              ('slope40', 'SLOPE40'),
-              ('slope40_noise', 'SLOPE40_ERROR'),
-              ('dry_backscatter', 'DRY_BACKSCATTER'),
-              ('wet_backscatter', 'WET_BACKSCATTER'),
-              ('mean_surf_sm', 'MEAN_SURF_SOIL_MOISTURE'),
-              ('correction_flag', 'CORRECTION_FLAGS'),
-              ('processing_flag', 'PROCESSING_FLAGS'),
-              ('aggregated_quality_flag', 'AGGREGATED_QUALITY_FLAG'),
-              ('snow_cover_probability', 'SNOW_COVER_PROBABILITY'),
-              ('frozen_soil_probability', 'FROZEN_SOIL_PROBABILITY'),
-              ('innudation_or_wetland', 'INNUDATION_OR_WETLAND'),
-              ('topographical_complexity', 'TOPOGRAPHICAL_COMPLEXITY')]
+    fields = [('jd', 'jd', None),
+              ('sat_id', None, None),
+              ('abs_line_nr', 'ABS_LINE_NUMBER', None),
+              ('abs_orbit_nr', None, None),
+              ('node_num', 'NODE_NUM', None),
+              ('line_num', 'LINE_NUM', None),
+              ('as_des_pass', 'AS_DES_PASS', None),
+              ('swath', 'SWATH_INDICATOR', byte_nan),
+              ('azif', 'f_AZI_ANGLE_TRIP', int_nan),
+              ('azim', 'm_AZI_ANGLE_TRIP', int_nan),
+              ('azia', 'a_AZI_ANGLE_TRIP', int_nan),
+              ('incf', 'f_INC_ANGLE_TRIP', uint16_nan),
+              ('incm', 'm_INC_ANGLE_TRIP', uint16_nan),
+              ('inca', 'a_INC_ANGLE_TRIP', uint16_nan),
+              ('sigf', 'f_SIGMA0_TRIP', long_nan),
+              ('sigm', 'm_SIGMA0_TRIP', long_nan),
+              ('siga', 'a_SIGMA0_TRIP', long_nan),
+              ('sm', 'SOIL_MOISTURE', uint16_nan),
+              ('sm_noise', 'SOIL_MOISTURE_ERROR', uint16_nan),
+              ('sm_sensitivity', 'SOIL_MOISTURE_SENSETIVITY', uint32_nan + 5.),
+              ('sig40', 'SIGMA40', long_nan),
+              ('sig40_noise', 'SIGMA40_ERROR', long_nan),
+              ('slope40', 'SLOPE40', long_nan),
+              ('slope40_noise', 'SLOPE40_ERROR', long_nan),
+              ('dry_backscatter', 'DRY_BACKSCATTER', long_nan),
+              ('wet_backscatter', 'WET_BACKSCATTER', long_nan),
+              ('mean_surf_sm', 'MEAN_SURF_SOIL_MOISTURE', uint16_nan),
+              ('correction_flag', 'CORRECTION_FLAGS', uint16_nan),
+              ('processing_flag', 'PROCESSING_FLAGS', uint16_nan),
+              ('aggregated_quality_flag', 'AGGREGATED_QUALITY_FLAG', ubyte_nan),
+              ('snow_cover_probability', 'SNOW_COVER_PROBABILITY', ubyte_nan),
+              ('frozen_soil_probability', 'FROZEN_SOIL_PROBABILITY', ubyte_nan),
+              ('innudation_or_wetland', 'INNUDATION_OR_WETLAND', ubyte_nan),
+              ('topographical_complexity', 'TOPOGRAPHICAL_COMPLEXITY', ubyte_nan)]
 
     for field in fields:
         if field[1] is None:
             continue
-        generic_data[field[0]] = native_Image.data[field[1]]
+
+        if field[2] is not None:
+            valid_mask = (native_Image.data[field[1]] != field[2])
+            generic_data[field[0]][valid_mask] = native_Image.data[field[1]][
+                valid_mask]
+        else:
+            generic_data[field[0]] = native_Image.data[field[1]]
 
     fields = [('sat_id', 'SPACECRAFT_ID'),
               ('abs_orbit_nr', 'ORBIT_START')]
@@ -247,45 +272,51 @@ def bfr2generic(native_Image):
     n_records = native_Image.lat.shape[0]
     generic_data = get_template_ASCATL2_SMX(n_records)
 
-    fields = [('jd', 'jd'),
-              ('sat_id', 'Satellite Identifier'),
-              ('abs_line_nr', None),
-              ('abs_orbit_nr', 'Orbit Number'),
-              ('node_num', 'Cross-Track Cell Number'),
-              ('line_num', 'line_num'),
-              ('as_des_pass', 'as_des_pass'),
-              ('swath', 'swath_indicator'),
-              ('azif', 'f_Antenna Beam Azimuth'),
-              ('azim', 'm_Antenna Beam Azimuth'),
-              ('azia', 'a_Antenna Beam Azimuth'),
-              ('incf', 'f_Radar Incidence Angle'),
-              ('incm', 'm_Radar Incidence Angle'),
-              ('inca', 'a_Radar Incidence Angle'),
-              ('sigf', 'f_Backscatter'),
-              ('sigm', 'm_Backscatter'),
-              ('siga', 'a_Backscatter'),
-              ('sm', 'Surface Soil Moisture (Ms)'),
-              ('sm_noise', 'Estimated Error In Surface Soil Moisture'),
-              ('sm_sensitivity', 'Soil Moisture Sensitivity'),
-              ('sig40', 'Backscatter'),
-              ('sig40_noise', 'Estimated Error In Sigma0 At 40 Deg Incidence Angle'),
-              ('slope40', 'Slope At 40 Deg Incidence Angle'),
-              ('slope40_noise', 'Estimated Error In Slope At 40 Deg Incidence Angle'),
-              ('dry_backscatter', 'Dry Backscatter'),
-              ('wet_backscatter', 'Wet Backscatter'),
-              ('mean_surf_sm', 'Mean Surface Soil Moisture'),
-              ('correction_flag', 'Soil Moisture Correction Flag'),
-              ('processing_flag', 'Soil Moisture Processing Flag'),
+    fields = [('jd', 'jd', None),
+              ('sat_id', 'Satellite Identifier', None),
+              ('abs_line_nr', None, None),
+              ('abs_orbit_nr', 'Orbit Number', None),
+              ('node_num', 'Cross-Track Cell Number', None),
+              ('line_num', 'line_num', None),
+              ('as_des_pass', 'as_des_pass', None),
+              ('swath', 'swath_indicator', None),
+              ('azif', 'f_Antenna Beam Azimuth', None),
+              ('azim', 'm_Antenna Beam Azimuth', None),
+              ('azia', 'a_Antenna Beam Azimuth', None),
+              ('incf', 'f_Radar Incidence Angle', None),
+              ('incm', 'm_Radar Incidence Angle', None),
+              ('inca', 'a_Radar Incidence Angle', None),
+              ('sigf', 'f_Backscatter', None),
+              ('sigm', 'm_Backscatter', None),
+              ('siga', 'a_Backscatter', None),
+              ('sm', 'Surface Soil Moisture (Ms)', 1.7e+38),
+              ('sm_noise', 'Estimated Error In Surface Soil Moisture', 1.7e+38),
+              ('sm_sensitivity', 'Soil Moisture Sensitivity', 1.7e+38),
+              ('sig40', 'Backscatter', 1.7e+38),
+              ('sig40_noise', 'Estimated Error In Sigma0 At 40 Deg Incidence Angle', 1.7e+38),
+              ('slope40', 'Slope At 40 Deg Incidence Angle', 1.7e+38),
+              ('slope40_noise', 'Estimated Error In Slope At 40 Deg Incidence Angle', 1.7e+38),
+              ('dry_backscatter', 'Dry Backscatter', 1.7e+38),
+              ('wet_backscatter', 'Wet Backscatter', 1.7e+38),
+              ('mean_surf_sm', 'Mean Surface Soil Moisture', 1.7e+40),
+              ('correction_flag', 'Soil Moisture Correction Flag', 1.7e+38),
+              ('processing_flag', 'Soil Moisture Processing Flag', 1.7e+38),
               ('aggregated_quality_flag', None),
-              ('snow_cover_probability', 'Snow Cover'),
-              ('frozen_soil_probability', 'Frozen Land Surface Fraction'),
-              ('innudation_or_wetland', 'Inundation And Wetland Fraction'),
-              ('topographical_complexity', 'Topographic Complexity')]
+              ('snow_cover_probability', 'Snow Cover', 1.7e+38),
+              ('frozen_soil_probability', 'Frozen Land Surface Fraction', 1.7e+38),
+              ('innudation_or_wetland', 'Inundation And Wetland Fraction', 1.7e+38),
+              ('topographical_complexity', 'Topographic Complexity', 1.7e+38)]
 
     for field in fields:
         if field[1] is None:
             continue
-        generic_data[field[0]] = native_Image.data[field[1]]
+
+        if field[2] is not None:
+            valid_mask = (native_Image.data[field[1]] != field[2])
+            generic_data[field[0]][valid_mask] = native_Image.data[field[1]][
+                valid_mask]
+        else:
+            generic_data[field[0]] = native_Image.data[field[1]]
 
     # convert sat_id (spacecraft id) to the department intern definition
     # use an array as look up table
