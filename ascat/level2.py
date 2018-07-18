@@ -221,7 +221,7 @@ def eps2generic(native_Image):
               ('siga', 'a_SIGMA0_TRIP', long_nan),
               ('sm', 'SOIL_MOISTURE', uint16_nan),
               ('sm_noise', 'SOIL_MOISTURE_ERROR', uint16_nan),
-              ('sm_sensitivity', 'SOIL_MOISTURE_SENSETIVITY', uint32_nan + 5.),
+              ('sm_sensitivity', 'SOIL_MOISTURE_SENSETIVITY', np.float32(uint32_nan)),
               ('sig40', 'SIGMA40', long_nan),
               ('sig40_noise', 'SIGMA40_ERROR', long_nan),
               ('slope40', 'SLOPE40', long_nan),

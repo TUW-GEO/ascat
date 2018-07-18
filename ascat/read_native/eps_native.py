@@ -762,6 +762,8 @@ def read_szx_fmv_11(eps_file):
 
     data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
 
+    data['SWATH INDICATOR'] = data.pop('SWATH_INDICATOR')
+
     return data, metadata
 
 

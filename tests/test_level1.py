@@ -26,9 +26,9 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-Tests for general level 2 readers.
+Tests for level 1 reader.
 """
-
+import numpy as np
 import numpy.testing as nptest
 import unittest
 
@@ -37,31 +37,34 @@ import ascat.level1 as level1
 class Test_AscatL1Image(unittest.TestCase):
 
     def setUp(self):
-        test_b = level1.AscatL1Image(
+        self.image_bufr = level1.AscatL1Image(
             '/home/mschmitz/Desktop/ascat_test_data/level1/bufr/M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr')
-        self.reader_bufr = test_b.read()
-        test_e = level1.AscatL1Image(
+        self.image_eps = level1.AscatL1Image(
             '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20100609013900Z_20100609032058Z_R_O_20130824233100Z.nat.gz')
-        self.reader_eps = test_e.read()
-        test_n = level1.AscatL1Image(
+        self.image_nc = level1.AscatL1Image(
             '/home/mschmitz/Desktop/ascat_test_data/level1/nc/W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20100609013900_18872_eps_o_125_l1.nc')
-        self.reader_nc = test_n.read()
 
-        test_e_szf = level1.AscatL1Image(
+        self.image_eps_fmv11 = level1.AscatL1Image(
+            '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat')
+
+        self.image_e_szf = level1.AscatL1Image(
             '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.nat.gz')
-        self.reader_eps_szf = test_e_szf.read()
-        test_h_szf = level1.AscatL1Image(
+        self.image_h5_szf = level1.AscatL1Image(
             '/home/mschmitz/Desktop/ascat_test_data/level1/h5/ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.h5')
-        self.reader_hdf5_szf = test_h_szf.read()
+
 
     def tearDown(self):
-        self.reader_nc = None
-        self.reader_bufr = None
-        self.reader_eps = None
-        self.reader_eps_szf = None
-        self.reader_hdf5_szf = None
+        self.image_nc = None
+        self.image_bufr = None
+        self.image_eps = None
+        self.image_eps_fmv11 = None
+        self.image_eps_szf = None
+        self.image_h5_szf = None
 
-    def test_image_reading_szx(self):
+    def test_image_reading_szx_all_formats(self):
+        self.reader_bufr = self.image_bufr.read()
+        self.reader_eps = self.image_eps.read()
+        self.reader_nc = self.image_nc.read()
         nptest.assert_allclose(self.reader_bufr.lat, self.reader_eps.lat,
                                atol=1e-4)
         nptest.assert_allclose(self.reader_eps.lat, self.reader_nc.lat,
@@ -99,7 +102,9 @@ class Test_AscatL1Image(unittest.TestCase):
             nptest.assert_allclose(self.reader_eps.data[field],
                                    self.reader_nc.data[field], atol=0.1)
 
-    def test_image_reading_szf(self):
+    def test_image_reading_szf_all_formats(self):
+        self.reader_eps_szf = self.image_e_szf.read()
+        self.reader_hdf5_szf = self.image_h5_szf.read()
         for szf_img in self.reader_eps_szf:
             nptest.assert_allclose(self.reader_eps_szf[szf_img].lat,
                                    self.reader_hdf5_szf[szf_img].lat,
@@ -120,4 +125,131 @@ class Test_AscatL1Image(unittest.TestCase):
                 nptest.assert_allclose(self.reader_eps_szf[szf_img].data[field],
                                        self.reader_hdf5_szf[szf_img].data[field], atol=0.1)
 
+    def test_image_reading_szx_eps(self):
+        self.reader = self.image_eps.read()
 
+        lat_should = np.array(
+            [68.91681, 69.005196, 69.09337, 69.18132, 69.26905, 69.35655,
+             69.443825, 69.53087, 69.61768, 69.704254, 69.79059, 69.87668,
+             69.962524, 70.04812, 70.13346, 70.218544, 70.303375, 70.38794,
+             70.47224, 70.55626, 70.640015, 70.723495, 70.806694, 70.88961,
+             70.97224])
+
+        lon_should = np.array(
+            [168.80144, 168.60977, 168.41656, 168.22179, 168.02544, 167.82748,
+             167.62794, 167.42676, 167.22394, 167.01947, 166.81332, 166.60548,
+             166.39592, 166.18465, 165.97163, 165.75685, 165.5403, 165.32195,
+             165.10178, 164.87979, 164.65594, 164.43024, 164.20264, 163.97314,
+             163.74171])
+
+        sig_should = np.array(
+            [-13.510671, -13.421737, -13.872492, -14.351357, -14.395881,
+             -14.382635, -14.860762, -16.108913, -17.354418, -18.86383,
+             -18.793966, -18.631758, -18.46626, -18.71435, -19.150038,
+             -19.315845, -19.79865, -19.845669, -19.892258, -20.138796,
+             -20.151554, -20.154343, -20.165552, -20.013523, -19.238102])
+
+        kp_should = np.array(
+            [0.0307, 0.032, 0.051, 0.0696, 0.0703, 0.0584, 0.045, 0.0464,
+             0.0615, 0.0477, 0.0323, 0.04, 0.0346, 0.0369, 0.0378, 0.0397,
+             0.0341, 0.0399, 0.0418, 0.0408, 0.0421, 0.0347, 0.0424, 0.0451,
+             0.0523])
+
+        jd_should = np.array(
+            [2455356.56875, 2455356.56875, 2455356.56875,
+             2455356.56875, 2455356.56875, 2455356.56875,
+             2455356.56875, 2455356.56877169, 2455356.56877169,
+             2455356.56877169])
+
+        nptest.assert_allclose(self.reader.lat[:25], lat_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.lon[:25], lon_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.data['sigf'][:25],
+                               sig_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.data['kpf'][:25],
+                               kp_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.data['jd'][75:85],
+                               jd_should, atol=1e-5)
+
+    def test_image_reading_szx_eps_fmv11(self):
+        self.reader = self.image_eps_fmv11.read()
+
+        lat_should = np.array(
+            [61.849445, 61.916786, 61.983864, 62.050674, 62.11722, 62.183495,
+             62.2495, 62.315228, 62.380684, 62.44586, 62.51076, 62.57538,
+             62.63971, 62.70376, 62.76752, 62.830994, 62.894173, 62.95706,
+             63.019653, 63.081947, 63.143944, 63.205635, 63.267025, 63.32811,
+             63.388885])
+
+        lon_should = np.array(
+            [69.18133, 68.991295, 68.80043, 68.60872, 68.41617, 68.22277,
+             68.028534, 67.833435, 67.63749, 67.44069, 67.243034, 67.04452,
+             66.84513, 66.64489, 66.44378, 66.2418, 66.03894, 65.83522,
+             65.630615, 65.42514, 65.21878, 65.01154, 64.80342, 64.59441,
+             64.38452])
+
+        sig_should = np.array(
+            [-15.008125, -14.547356, -15.067405, -15.340037, -15.381483,
+             -15.085848, -14.620477, -14.200545, -13.873865, -13.29581,
+             -12.962119, -12.909232, -12.990307, -13.076723, -13.039384,
+             -13.010556, -13.238036, -13.045113, -12.981088, -13.003889,
+             -14.009461, -14.633162, -14.706434, -14.042056, -13.7074])
+
+        kp_should = np.array(
+            [0.052, 0.0417, 0.0462, 0.0264, 0.0308, 0.0296, 0.0363, 0.0348,
+             0.0377, 0.036, 0.0329, 0.0258, 0.0296, 0.0245, 0.0275, 0.0309,
+             0.035, 0.0325, 0.0288, 0.0292, 0.0431, 0.0363, 0.0435, 0.0282,
+             0.0309])
+
+        jd_should = np.array(
+            [2454446.80208333, 2454446.80208333, 2454446.80208333,
+             2454446.80208333, 2454446.80208333, 2454446.80208333,
+             2454446.80208333, 2454446.80210505, 2454446.80210505,
+             2454446.80210505])
+
+        nptest.assert_allclose(self.reader.lat[:25], lat_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.lon[:25], lon_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.data['sigf'][:25],
+                               sig_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.data['kpf'][:25],
+                               kp_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.data['jd'][75:85],
+                               jd_should, atol=1e-5)
+
+    def test_image_reading_szf_eps(self):
+        self.reader = self.image_e_szf.read()
+
+        lat_should = np.array(
+            [64.45502, 64.42318, 64.39127, 64.35929, 64.32724, 64.29512,
+             64.262924, 64.23065, 64.19831, 64.16589, 64.1334, 64.10083,
+             64.06819, 64.03547, 64.00268, 63.969807, 63.936855, 63.903828,
+             63.870724, 63.837536, 63.804276, 63.77093, 63.737507, 63.704002,
+             63.67042])
+
+        lon_should = np.array(
+            [103.29956, 103.32185, 103.34413, 103.36641, 103.38869,
+             103.41095, 103.43322, 103.45548, 103.47774, 103.49999,
+             103.52224, 103.54449, 103.566734, 103.588974, 103.61121,
+             103.63345, 103.655685, 103.67792, 103.70014, 103.722374,
+             103.7446, 103.76682, 103.78904, 103.811264, 103.83348])
+
+        sig_should = np.array(
+            [-9.713457, -8.768949, -9.294478, -7.449275, -8.939872,
+             -7.893198, -8.570546, -8.934691, -7.851117, -7.782818,
+             -8.33993, -7.539894, -7.833797, -8.465893, -8.244121,
+             -7.59996, -8.976448, -9.36595, -10.800382, -8.289896,
+             -9.127579, -9.410345, -7.238986, -8.335969, -7.897769])
+
+        jd_should = np.array(
+            [2458280.67917396, 2458280.67917396, 2458280.67918378,
+             2458280.67918378, 2458280.67918378, 2458280.67918378,
+             2458280.67918378, 2458280.67918378, 2458280.67918378,
+             2458280.67918378])
+
+        nptest.assert_allclose(self.reader['img1'].lat[:25],
+                               lat_should, atol=1e-5)
+        nptest.assert_allclose(self.reader['img1'].lon[:25],
+                               lon_should, atol=1e-5)
+        nptest.assert_allclose(self.reader['img1'].data['sig'][:25],
+                               sig_should, atol=1e-5)
+        nptest.assert_allclose(self.reader['img1'].data['jd'][190:200],
+                               jd_should, atol=1e-5)

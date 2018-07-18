@@ -26,7 +26,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-Tests for general level 2 readers.
+Tests for level 2 readers.
 """
 
 import datetime
@@ -156,6 +156,52 @@ class Test_AscatL2SsmNcFile(unittest.TestCase):
                                ssm_mean_should,
                                atol=1e-5)
 
+    def test_image_reading_masked(self):
+        data, meta, timestamp, lons, lats, time_var = self.reader.read_masked_data()
+
+        ssm_should = np.array(
+            [33.39999771118164, 27.06999969482422,
+             20.649999618530273, 18.28999900817871,
+             24.229999542236328, 24.939998626708984,
+             23.639999389648438, 20.3799991607666,
+             14.15999984741211, 10.059999465942383,
+             9.539999961853027, 9.019999504089355,
+             9.420000076293945, 12.279999732971191,
+             21.529998779296875, 33.880001068115234,
+             39.57999801635742, 35.34000015258789,
+             38.88999938964844, 44.459999084472656,
+             46.66999816894531, 40.12999725341797,
+             38.39999771118164, 43.959999084472656,
+             33.43000030517578])
+
+        lats_should = np.array(
+            [65.11197384, 65.17437784, 65.23645384, 65.29819884, 65.35961083,
+             65.42068783, 65.48142683, 65.54182483, 65.60187983, 65.66158983,
+             65.72095083, 65.77996183, 65.83861883, 68.62952883, 68.66132883,
+             68.69261383, 68.72337983, 68.75362483, 68.78334683, 68.81254383,
+             68.84121383, 68.86935383, 68.89696283, 68.92403783, 68.95057683])
+
+        ssm_mean_should = np.array([26.85999870300293, 25.90999984741211,
+                                    25.670000076293945, 25.81999969482422,
+                                    24.65999984741211, 22.6299991607666,
+                                    20.389999389648438, 18.94999885559082,
+                                    17.68000030517578, 16.28999900817871,
+                                    15.130000114440918, 14.739999771118164,
+                                    15.5,
+                                    26.51999855041504, 31.529998779296875,
+                                    36.09000015258789, 40.36000061035156,
+                                    42.61000061035156, 45.529998779296875,
+                                    47.939998626708984, 47.45000076293945,
+                                    44.689998626708984, 41.12999725341797,
+                                    37.59000015258789, 33.09000015258789])
+
+        nptest.assert_allclose(lats[50000:50025], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['soil_moisture'][50000:50025], ssm_should,
+                               atol=1e-5)
+        nptest.assert_allclose(data['mean_soil_moisture'][50000:50025],
+                               ssm_mean_should,
+                               atol=1e-5)
+
 
 class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
 
@@ -260,22 +306,22 @@ def test_AscatL2SsmBufrChunked():
 class Test_AscatL2Image(unittest.TestCase):
 
     def setUp(self):
-        test_b = level2.AscatL2Image(
+        self.image_bufr = level2.AscatL2Image(
             '/home/mschmitz/Desktop/ascat_test_data/level2/bufr/M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr')
-        self.reader_bufr = test_b.read()
-        test_e = level2.AscatL2Image(
+        self.image_eps = level2.AscatL2Image(
             '/home/mschmitz/Desktop/ascat_test_data/level2/eps_nat/ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat.gz')
-        self.reader_eps = test_e.read()
-        test_n = level2.AscatL2Image(
+        self.image_nc = level2.AscatL2Image(
             '/home/mschmitz/Desktop/ascat_test_data/level2/nc/W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_20180612035700_29742_eps_o_250_ssm_l2.nc')
-        self.reader_nc = test_n.read()
 
     def tearDown(self):
-        self.reader_nc = None
-        self.reader_bufr = None
-        self.reader_eps = None
+        self.image_nc = None
+        self.image_bufr = None
+        self.image_eps = None
 
-    def test_image_reading(self):
+    def test_image_reading_all_formats(self):
+        self.reader_bufr = self.image_bufr.read()
+        self.reader_eps = self.image_eps.read()
+        self.reader_nc = self.image_nc.read()
 
         nptest.assert_allclose(self.reader_bufr.lat, self.reader_eps.lat,
                                atol=1e-4)
@@ -317,3 +363,47 @@ class Test_AscatL2Image(unittest.TestCase):
 
             if field not in bufr_none and field not in nc_none:
                 nptest.assert_allclose(self.reader_nc.data[field], self.reader_bufr.data[field], atol=0.1)
+
+    def test_image_reading_eps(self):
+        self.reader = self.image_eps.read()
+
+        sm_should = np.array(
+            [69.11, 74.23, 74.12, 75.95, 76.23, 80.74, 83.45, 84.94, 84.28,
+             86.33, 86.19, 86.31, 87.64, 87.92, 90.65, 90.52, 89.71, 89.33,
+             91.41, 91.89, 94.51, 70.43, 67.75, 60.54, 69.43])
+
+        lat_should = np.array(
+            [64.06651, 64.21156, 64.355545, 64.49845, 64.64026, 64.78095,
+             64.9205, 65.05891, 65.19613, 65.33216, 65.46697, 65.600555,
+             65.73289, 65.86394, 65.9937, 66.12214, 66.249245, 66.374985,
+             66.499344, 66.62231, 66.743835, 69.63313, 69.698105, 69.760895,
+             69.821495])
+
+        lon_should = np.array(
+            [121.95572, 121.564156, 121.16849, 120.76867, 120.36467,
+             119.95644, 119.54396, 119.12719, 118.70608, 118.2806,
+             117.85073, 117.41643, 116.97765, 116.53439, 116.08661,
+             115.63427, 115.17735, 114.715836, 114.24969, 113.77889,
+             113.30343, 96.66666, 96.049965, 95.42956, 94.80551])
+
+        mean_surf_sm_should = np.array(
+            [77.97, 77.57, 79.2, 78.38, 77.85, 79.81, 80.72, 81.23, 82.43,
+             82.11, 81.93, 82.55, 83.41, 81.84, 81.43, 81.28, 80.37, 79.6,
+             79.43, 78.02, 77.49, 42.42, 41.69, 42.99, 47.51])
+
+        jd_should = np.array(
+            [2458281.66458332, 2458281.66458332, 2458281.66458332,
+             2458281.66458332, 2458281.66458332, 2458281.66458332,
+             2458281.66458332, 2458281.66462674, 2458281.66462674,
+             2458281.66462674])
+
+
+
+        nptest.assert_allclose(self.reader.lat[:25], lat_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.lon[:25], lon_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.data['sm'][:25],
+                               sm_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.data['mean_surf_sm'][:25],
+                               mean_surf_sm_should, atol=1e-5)
+        nptest.assert_allclose(self.reader.data['jd'][35:45],
+                               jd_should, atol=1e-5)
