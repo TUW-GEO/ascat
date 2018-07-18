@@ -52,6 +52,7 @@ install:
   - pip install pykdtree
   - pip install pygeogrids
   - pip install pygeobase
+  - pip install lxml
   - pip install .
   - pip list
   - which pip
