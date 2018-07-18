@@ -20,11 +20,6 @@ python:
 env:
   - PYGRIB="1.9.9"
   - PYGRIB="2.0.1"
-cache:
-  directories:
-    - .git/lfs
-git:
-  lfs_skip_smudge: true
 before_install:
   - git lfs pull
 install:
