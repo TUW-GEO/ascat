@@ -20,10 +20,12 @@ python:
 env:
   - PYGRIB="1.9.9"
   - PYGRIB="2.0.1"
+git:
+  lfs_skip_smudge: true
 before_install:
   - curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
   - sudo apt-get install git-lfs
-  - git lfs install
+  - git lfs install --force
   - git lfs pull
 install:
   # You may want to periodically update this, although the conda update
