@@ -31,26 +31,36 @@ Tests for level 1 reader.
 import numpy as np
 import numpy.testing as nptest
 import unittest
+import os
 
 import ascat.level1 as level1
 
 class Test_AscatL1Image(unittest.TestCase):
 
     def setUp(self):
-        self.image_bufr = level1.AscatL1Image(
-            '/home/mschmitz/Desktop/ascat_test_data/level1/bufr/M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr')
-        self.image_eps = level1.AscatL1Image(
-            '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20100609013900Z_20100609032058Z_R_O_20130824233100Z.nat.gz')
-        self.image_nc = level1.AscatL1Image(
-            '/home/mschmitz/Desktop/ascat_test_data/level1/nc/W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20100609013900_18872_eps_o_125_l1.nc')
+        data_path = os.path.join(
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            'ASCAT_generic_reader_data')
+        name_b = os.path.join(data_path, 'bufr',
+                       'M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr')
+        name_e = os.path.join(data_path, 'eps_nat',
+                       'ASCA_SZR_1B_M02_20100609013900Z_20100609032058Z_R_O_20130824233100Z.nat')
+        name_n = os.path.join(data_path, 'nc',
+                       'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20100609013900_18872_eps_o_125_l1.nc')
+        name_e11 = os.path.join(data_path, 'eps_nat',
+                       'ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat')
+        name_e_szf = os.path.join(data_path, 'eps_nat',
+                       'ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.nat')
+        name_h = os.path.join(data_path, 'hdf5',
+                       'ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.h5')
+        self.image_bufr = level1.AscatL1Image(name_b)
+        self.image_eps = level1.AscatL1Image(name_e)
+        self.image_nc = level1.AscatL1Image(name_n)
 
-        self.image_eps_fmv11 = level1.AscatL1Image(
-            '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat')
+        self.image_eps_fmv11 = level1.AscatL1Image(name_e11)
 
-        self.image_e_szf = level1.AscatL1Image(
-            '/home/mschmitz/Desktop/ascat_test_data/level1/eps_nat/ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.nat.gz')
-        self.image_h5_szf = level1.AscatL1Image(
-            '/home/mschmitz/Desktop/ascat_test_data/level1/h5/ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.h5')
+        self.image_e_szf = level1.AscatL1Image(name_e_szf)
+        self.image_h5_szf = level1.AscatL1Image(name_h)
 
 
     def tearDown(self):
@@ -126,7 +136,7 @@ class Test_AscatL1Image(unittest.TestCase):
                                        self.reader_hdf5_szf[szf_img].data[field], atol=0.1)
 
     def test_image_reading_szx_eps(self):
-        self.reader = self.image_eps.read()
+        self.reader = self.image_eps.read(file_format='.nat')
 
         lat_should = np.array(
             [68.91681, 69.005196, 69.09337, 69.18132, 69.26905, 69.35655,

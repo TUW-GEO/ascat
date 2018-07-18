@@ -87,7 +87,7 @@ class AscatL2Image(ImageBase):
 
         else:
             raise RuntimeError(
-                "Format not found, please indicate the file format. [\".nat\", \".nc\", \".bfr\"]")
+                "Format not found, please indicate the file_format. [\".nat\", \".nc\", \".bfr\"]")
 
         return img
 

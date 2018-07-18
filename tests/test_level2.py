@@ -306,12 +306,18 @@ def test_AscatL2SsmBufrChunked():
 class Test_AscatL2Image(unittest.TestCase):
 
     def setUp(self):
-        self.image_bufr = level2.AscatL2Image(
-            '/home/mschmitz/Desktop/ascat_test_data/level2/bufr/M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr')
-        self.image_eps = level2.AscatL2Image(
-            '/home/mschmitz/Desktop/ascat_test_data/level2/eps_nat/ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat.gz')
-        self.image_nc = level2.AscatL2Image(
-            '/home/mschmitz/Desktop/ascat_test_data/level2/nc/W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_20180612035700_29742_eps_o_250_ssm_l2.nc')
+        data_path = os.path.join(
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            'ASCAT_generic_reader_data')
+        name_b = os.path.join(data_path, 'bufr',
+                       'M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr')
+        name_e = os.path.join(data_path, 'eps_nat',
+                       'ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat')
+        name_n = os.path.join(data_path, 'nc',
+                       'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_20180612035700_29742_eps_o_250_ssm_l2.nc')
+        self.image_bufr = level2.AscatL2Image(name_b)
+        self.image_eps = level2.AscatL2Image(name_e)
+        self.image_nc = level2.AscatL2Image(name_n)
 
     def tearDown(self):
         self.image_nc = None
