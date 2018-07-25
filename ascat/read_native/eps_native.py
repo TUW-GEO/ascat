@@ -303,7 +303,7 @@ class EPSProduct(object):
         """
         mphr = self.fid.read(self.grh[0]['record_size'] - self.grh[0].itemsize)
         self.mphr = OrderedDict(item.replace(' ', '').split('=')
-                                for item in mphr.split('\n')[:-1])
+                                for item in mphr.decode("utf-8").split('\n')[:-1])
 
     def _read_sphr(self):
         """
@@ -311,7 +311,7 @@ class EPSProduct(object):
         """
         sphr = self.fid.read(self.grh[0]['record_size'] - self.grh[0].itemsize)
         self.sphr = OrderedDict(item.replace(' ', '').split('=')
-                                for item in sphr.split('\n')[:-1])
+                                for item in sphr.decode("utf-8").split('\n')[:-1])
 
     def _read_pointer(self, count=1):
         """

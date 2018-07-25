@@ -77,7 +77,7 @@ class AscatL1H5File(ImageBase):
         if self.ds is None:
             self.ds = h5py.File(self.filename)
             while len(self.ds.keys()) == 1:
-                self.ds = self.ds[self.ds.keys()[0]]
+                self.ds = self.ds[list(self.ds.keys())[0]]
         raw_data = self.ds['DATA']
         raw_metadata = self.ds['METADATA']
 
@@ -101,11 +101,13 @@ class AscatL1H5File(ImageBase):
             'LATITUDE_FULL'].shape[0]
         n_records = num_cells*num_lines
 
+        # read the requested variables and scale them if they have a scaling factor
+        # encode() is needed for py3 comparison between str and byte
         for name in var_to_read:
             variable = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'][name]
-            if name in raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value['EntryName']:
-                var_index = np.where(raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR']['EntryName']==name)[0][0]
-                if raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value['Scale Factor'][var_index] != "n/a":
+            if name.encode() in raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value['EntryName']:
+                var_index = np.where(raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR']['EntryName']==name.encode())[0][0]
+                if raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value['Scale Factor'][var_index] != "n/a".encode():
                     sf = 10**float(raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value['Scale Factor'][var_index])
                     variable = variable / sf
             data[name] = variable[:].flatten()
@@ -145,8 +147,8 @@ class AscatL1H5File(ImageBase):
         for field in fields:
             var_index = np.where(
                 np.core.defchararray.startswith(
-                    metadata['MPHR']['MPHR_TABLE']['EntryName'], field))[0][0]
-            var = metadata['MPHR']['MPHR_TABLE']['EntryValue'][var_index]
+                    metadata['MPHR']['MPHR_TABLE']['EntryName'], field.encode()))[0][0]
+            var = metadata['MPHR']['MPHR_TABLE']['EntryValue'][var_index].decode()
             if field == 'SPACECRAFT_ID':
                 var = var[-1]
             metadata[field] = int(var)
@@ -166,7 +168,8 @@ class AscatL1H5File(ImageBase):
 
             lon = data_full[dataset].pop('LONGITUDE_FULL')
             lat = data_full[dataset].pop('LATITUDE_FULL')
-            image_dict[img] = Image(lon, lat, data_full[dataset], metadata, timestamp, timekey='jd')
+            image_dict[img] = Image(lon, lat, data_full[dataset], metadata,
+                                    timestamp, timekey='jd')
 
         return image_dict
 

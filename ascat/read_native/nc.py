@@ -131,7 +131,7 @@ class AscatL1NcFile(ImageBase):
         latitude = dd.pop('latitude')
 
         n_records = latitude.shape[0]
-        n_lines = n_records / num_cells
+        n_lines = n_records // num_cells
         dd['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
         dd['line_num'] = np.arange(n_lines).repeat(num_cells)
 
@@ -230,7 +230,7 @@ class AscatL2SsmNcFile(ImageBase):
         latitude = dd.pop('latitude')
 
         n_records = latitude.shape[0]
-        n_lines = n_records / num_cells
+        n_lines = n_records // num_cells
         dd['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
         dd['line_num'] = np.arange(n_lines).repeat(num_cells)
 
@@ -296,7 +296,7 @@ class AscatL2SsmNcFile(ImageBase):
         latitude = dd.pop('latitude')
 
         n_records = latitude.shape[0]
-        n_lines = n_records / num_cells
+        n_lines = n_records // num_cells
         dd['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
         dd['line_num'] = np.arange(n_lines).repeat(num_cells)
 
