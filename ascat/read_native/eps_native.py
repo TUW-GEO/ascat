@@ -47,17 +47,12 @@ short_cds_time = np.dtype([('day', np.uint16), ('time', np.uint32)])
 long_cds_time = np.dtype([('day', np.uint16), ('ms', np.uint32),
                           ('mms', np.uint16)])
 
-long_nan = -2 ** 31
-ulong_nan = 2 ** 32 - 1
-int_nan = -2 ** 15
-uint_nan = 2 ** 16 - 1
-byte_nan = -2 ** 7
-
 long_nan = np.iinfo(np.int32).min
 ulong_nan = np.iinfo(np.uint32).max
 int_nan = np.iinfo(np.int16).min
 uint_nan = np.iinfo(np.uint16).max
 byte_nan = np.iinfo(np.byte).min
+
 # 1.1.2000 00:00:00 as jd
 julian_epoch = 2451544.5
 

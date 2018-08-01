@@ -43,7 +43,7 @@ from pygeobase.object_base import Image
 
 class AscatL1NcFile(ImageBase):
     """
-    Read ASCAT L2 SSM File in netCDF format, as downloaded from EUMETSAT
+    Read ASCAT L1 File in netCDF format, as downloaded from EUMETSAT
 
     Parameters
     ----------

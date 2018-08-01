@@ -48,9 +48,8 @@ uint32_nan = np.iinfo(np.uint32).max
 float32_nan = np.finfo(np.float32).min
 float64_nan = np.finfo(np.float64).min
 long_nan = np.iinfo(np.int32).min
-#ulong_nan = np.iinfo(np.uint32).max
 int_nan = np.iinfo(np.int16).min
-# uint_nan = np.iinfo(np.uint16).max
+
 
 class AscatL1Image(ImageBase):
     """

@@ -109,6 +109,76 @@ class Test_AscatL2SsmBufr_ioclass_kws(unittest.TestCase):
                                atol=0.01)
 
 
+class Test_AscatL2SsmBufrFile(unittest.TestCase):
+
+    def setUp(self):
+        data_path = os.path.join(
+            os.path.dirname(__file__),  'test-data', 'eumetsat',
+            'ASCAT_L2_SM_125', 'bufr')
+        fname = os.path.join(
+            data_path,
+            'M01-ASCA-ASCSMR02-NA-5.0-20170220050900.000000000Z-20170220055833-1207110.bfr')
+        self.reader = AscatL2SsmBufrFile(fname)
+
+    def tearDown(self):
+        self.reader = None
+
+    def test_image_reading(self):
+        data, meta, timestamp, lons, lats, time_var = self.reader.read()
+
+        ssm_should = np.array(
+            [29.2, 30.2, 35.7, 38.6, 37.5, 37.6, 40.5, 44.5, 40.7,
+             39.7, 41.5, 38.8, 34.5, 36.8, 39.4, 41.2, 42.4, 42.9,
+             39.3, 30.5, 26.7, 26.5, 26.7, 23.9, 26.2])
+
+        lats_should = np.array(
+            [64.74398, 64.81854, 64.89284, 64.96688, 65.04066, 65.11416,
+             65.18739, 65.26036, 65.33304, 65.40545, 65.47758, 65.54942,
+             65.62099, 65.69226, 65.76324, 65.83393, 65.90432, 65.97442,
+             66.04422, 66.11371, 66.1829, 66.25177, 66.32034, 66.38859,
+             66.45653])
+
+        ssm_mean_should = np.array(
+            [36.7, 35.4, 33.4, 32.5, 32.5, 32., 31.2, 29.4, 28.7,
+             27.6, 25.8, 25.4, 25.5, 25.3, 24.4, 23.4, 22.3, 21.3,
+             20.4, 20.4, 19.9, 19.7, 20.3, 21.5, 22.9])
+
+        nptest.assert_allclose(lats[:25], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
+                               :25], ssm_should, atol=1e-5)
+        nptest.assert_allclose(data['Mean Surface Soil Moisture'][:25],
+                               ssm_mean_should,
+                               atol=1e-5)
+
+    def test_image_reading_masked(self):
+        data, meta, timestamp, lons, lats, time_var = self.reader.read_masked_data()
+
+        ssm_should = np.array(
+            [15.6, 10.8, 15.3, 15.9, 19.8, 27., 27.8, 26.8, 28.6,
+             35.6, 36., 32.3, 27.6, 31.2, 36.8, 13.4, 18.7, 23.1,
+             24.5, 22.1, 17.1, 17.9, 17.8, 21.1, 23.])
+
+        lats_should = np.array(
+            [54.27036, 54.3167, 54.36279, 54.40862, 54.45419, 54.49951,
+             54.54456, 54.58936, 54.6339, 54.67818, 54.72219, 54.76594,
+             54.80943, 54.85265, 54.89561, 56.95692, 56.98178, 57.00631,
+             57.03053, 57.05442, 57.07799, 57.10123, 57.12415, 57.14675,
+             57.16902])
+
+        ssm_mean_should = np.array(
+            [24.4, 22.2, 21., 19.6, 18.7, 19.1, 19.1, 19.9, 19.9,
+             20.1, 20.9, 21., 19.6, 17.3, 16.9, 25.6, 25.6, 24.9,
+             23.6, 22.9, 22.4, 23.2, 24.1, 24.5, 26.1])
+
+        nptest.assert_allclose(lats[10000:10025], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['Surface Soil Moisture (Ms)']
+                               [10000:10025], ssm_should,
+                               atol=1e-5)
+        nptest.assert_allclose(data['Mean Surface Soil Moisture']
+                               [10000:10025], ssm_mean_should,
+                               atol=1e-5)
+
+
 class Test_AscatL2SsmNcFile(unittest.TestCase):
 
     def setUp(self):

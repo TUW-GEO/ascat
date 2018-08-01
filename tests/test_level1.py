@@ -97,7 +97,7 @@ class Test_AscatL1Image(unittest.TestCase):
                     'usable_flagm', 'usable_flaga',
                     ]
 
-        # lists with no data fields
+        # lists with no data fields or different definition
         bufr_none = ['abs_line_nr', 'abs_orbit_nr', 'as_des_pass', 'azif', 'azim', 'azia', 'sigf', 'sigm', 'siga']
 
         # BUFR files contain less accurate data so we only compare to one 0.1
