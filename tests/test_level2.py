@@ -151,7 +151,7 @@ class Test_AscatL2SsmBufrFile(unittest.TestCase):
                                atol=1e-5)
 
     def test_image_reading_masked(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read_masked_data()
+        data, meta, timestamp, lons, lats, time_var = self.reader.read(ssm_masked=True)
 
         ssm_should = np.array(
             [15.6, 10.8, 15.3, 15.9, 19.8, 27., 27.8, 26.8, 28.6,
@@ -227,7 +227,7 @@ class Test_AscatL2SsmNcFile(unittest.TestCase):
                                atol=1e-5)
 
     def test_image_reading_masked(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read_masked_data()
+        data, meta, timestamp, lons, lats, time_var = self.reader.read(ssm_masked=True)
 
         ssm_should = np.array(
             [33.39999771118164, 27.06999969482422,

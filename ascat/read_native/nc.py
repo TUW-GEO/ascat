@@ -138,13 +138,6 @@ class AscatL1NcFile(ImageBase):
         return Image(longitude, latitude, dd, metadata, timestamp,
                      timekey='utc_line_nodes')
 
-    def read_masked_data(self, **kwargs):
-        """
-        It does not make sense to read a orbit file unmasked
-        so we only have a masked implementation.
-        """
-        return self.read(**kwargs)
-
     def write(self, data):
         raise NotImplementedError()
 
@@ -180,7 +173,7 @@ class AscatL2SsmNcFile(ImageBase):
         self.nc_variables = nc_variables
         self.ds = None
 
-    def read(self, timestamp=None):
+    def read(self, timestamp=None, ssm_masked=False):
         """
         reads from the netCDF file given by the filename
 
@@ -226,67 +219,8 @@ class AscatL2SsmNcFile(ImageBase):
                 utc_dates = netCDF4.num2date(dd[name], variable.units)
                 dd['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
 
-        longitude = dd.pop('longitude')
-        latitude = dd.pop('latitude')
-
-        n_records = latitude.shape[0]
-        n_lines = n_records // num_cells
-        dd['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
-        dd['line_num'] = np.arange(n_lines).repeat(num_cells)
-
-        dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
-
-        return Image(longitude, latitude, dd, metadata, timestamp,
-                     timekey='utc_line_nodes')
-
-    def read_masked_data(self, timestamp=None):
-        """
-        reads from the netCDF file given by the filename and masks it according
-        to the soil moisture values
-
-        Returns
-        -------
-        data : pygeobase.object_base.Image
-        """
-
-        if self.ds is None:
-            self.ds = netCDF4.Dataset(self.filename)
-
-        if self.nc_variables is None:
-            var_to_read = self.ds.variables.keys()
-        else:
-            var_to_read = self.nc_variables
-
-        # make sure that essential variables are read always:
-        if 'latitude' not in var_to_read:
-            var_to_read.append('latitude')
-        if 'longitude' not in var_to_read:
-            var_to_read.append('longitude')
-
-        # store data in dictionary
-        dd = {}
-        metadata = {}
-
-        metadata['sat_id'] = self.ds.platform_long_name[-1]
-        metadata['orbit_start'] = self.ds.start_orbit_number
-        metadata['processor_major_version'] = self.ds.processor_major_version
-        metadata['product_minor_version'] = self.ds.product_minor_version
-        metadata['format_major_version'] = self.ds.format_major_version
-        metadata['format_minor_version'] = self.ds.format_minor_version
-
-        num_cells = self.ds.dimensions['numCells'].size
-        for name in var_to_read:
-            variable = self.ds.variables[name]
-            dd[name] = variable[:].flatten()
-            if len(variable.shape) == 1:
-                # If the data is 1D then we repeat it for each cell
-                dd[name] = np.repeat(dd[name], num_cells)
-
-            if name == 'utc_line_nodes':
-                utc_dates = netCDF4.num2date(dd[name], variable.units)
-                dd['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
-
-        if 'soil_moisture' in dd:
+        # if the ssm_masked is True we mask out data with missing ssm value
+        if 'soil_moisture' in dd and ssm_masked==True:
             # mask all the arrays based on fill_value of latitude
             valid_data = ~dd['soil_moisture'].mask
             for name in dd:

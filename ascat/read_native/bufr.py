@@ -222,14 +222,22 @@ class AscatL1BufrFile(ImageBase):
             n_lines = n_records / max(data['Cross-Track Cell Number'])
             data['line_num'] = np.arange(n_lines).repeat(max(data['Cross-Track Cell Number']))
 
-        return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
+        # There are strange elements with a value of 32.32 instead of the nan_values
+        # Since some elements rly have this value we check the other triplet
+        # data of that beam to filter the nan_values out
+        beams = ['f', 'm', 'a']
+        for beam in beams:
+            azi = beam + '_Antenna Beam Azimuth'
+            sig = beam + '_Backscatter'
+            inc = beam + '_Radar Incidence Angle'
+            if azi in data:
+                mask_azi = data[azi] == 32.32
+                mask_sig = data[sig] == 1.7e+38
+                mask_inc = data[inc] == 1.7e+38
+                mask = np.all([mask_azi, mask_sig, mask_inc], axis=0)
+                data[azi][mask] = 1.7e+38
 
-    def read_masked_data(self, **kwargs):
-        """
-        It does not make sense to read a orbit file unmasked
-        so we only have a masked implementation.
-        """
-        return self.read(**kwargs)
+        return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
 
     def write(self, data):
         raise NotImplementedError()
@@ -375,7 +383,7 @@ class AscatL2SsmBufrFile(ImageBase):
                 82: "Topographic Complexity"}
         self.msg_name_lookup = msg_name_lookup
 
-    def read(self, timestamp=None):
+    def read(self, timestamp=None, ssm_masked=False):
         """
         Read specific image for given datetime timestamp.
 
@@ -464,101 +472,23 @@ class AscatL2SsmBufrFile(ImageBase):
             data['line_num'] = np.arange(n_lines).repeat(
                 max(data['Cross-Track Cell Number']))
 
-        return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
+        # There are strange elements with a value of 32.32 instead of the nan_values
+        # Since some elements rly have this value we check the other triplet
+        # data of that beam to filter the nan_values out
+        beams = ['f', 'm', 'a']
+        for beam in beams:
+            azi = beam + '_Antenna Beam Azimuth'
+            sig = beam + '_Backscatter'
+            inc = beam + '_Radar Incidence Angle'
+            if azi in data:
+                mask_azi = data[azi] == 32.32
+                mask_sig = data[sig] == 1.7e+38
+                mask_inc = data[inc] == 1.7e+38
+                mask = np.all([mask_azi, mask_sig, mask_inc], axis=0)
+                data[azi][mask] = 1.7e+38
 
-    def read_masked_data(self, timestamp=None):
-        """
-        Read specific image for given datetime timestamp and mask it based on
-        fill_value of soil moisture
-
-        Parameters
-        ----------
-        timestamp : datetime.datetime
-            exact observation timestamp of the image that should be read
-
-        Returns
-        -------
-        data : dict
-            dictionary of numpy arrays that hold the image data for each
-            variable of the dataset
-        metadata : dict
-            dictionary of numpy arrays that hold the metadata
-        timestamp : datetime.datetime
-            exact timestamp of the image
-        lon : numpy.array or None
-            array of longitudes, if None self.grid will be assumed
-        lat : numpy.array or None
-            array of latitudes, if None self.grid will be assumed
-        time_var : string or None
-            variable name of observation times in the data dict, if None all
-            observations have the same timestamp
-        """
-        # lookup table between names and message number in the BUFR file
-
-        data = {}
-        dates = []
-        # 13: Latitude (High Accuracy)
-        latitude = []
-        # 14: Longitude (High Accuracy)
-        longitude = []
-
-        with BUFRReader(self.filename) as bufr:
-            for message in bufr.messages():
-                # read fixed fields
-                latitude.append(message[:, 12])
-                longitude.append(message[:, 13])
-                years = message[:, 6].astype(int)
-                months = message[:, 7].astype(int)
-                days = message[:, 8].astype(int)
-                hours = message[:, 9].astype(int)
-                minutes = message[:, 10].astype(int)
-                seconds = message[:, 11].astype(int)
-
-                dates.append(
-                    julday(months, days, years, hours, minutes, seconds))
-
-                # read optional data fields
-                for mid in self.msg_name_lookup:
-                    name = self.msg_name_lookup[mid]
-
-                    if name not in data:
-                        data[name] = []
-
-                    data[name].append(message[:, mid - 1])
-
-        dates = np.concatenate(dates)
-        longitude = np.concatenate(longitude)
-        latitude = np.concatenate(latitude)
-        n_records = latitude.shape[0]
-
-        for mid in self.msg_name_lookup:
-            name = self.msg_name_lookup[mid]
-            data[name] = np.concatenate(data[name])
-            if mid == 74:
-                # ssm mean is encoded differently
-                data[name] = data[name] * 100
-
-        data['jd'] = dates
-
-        if 'Direction Of Motion Of Moving Observing Platform' in data:
-            data['as_des_pass'] = (data[
-                                       "Direction Of Motion Of Moving Observing Platform"]
-                                   < 270).astype(np.uint8)
-
-        if 'Cross-Track Cell Number' in data:
-            if data['Cross-Track Cell Number'].max() == 82:
-                data['swath_indicator'] = 1 * (
-                            data['Cross-Track Cell Number'] > 41)
-            elif data['Cross-Track Cell Number'].max() == 42:
-                data['swath_indicator'] = 1 * (
-                            data['Cross-Track Cell Number'] > 21)
-            else:
-                raise ValueError("Unsuspected node number.")
-            n_lines = n_records / max(data['Cross-Track Cell Number'])
-            data['line_num'] = np.arange(n_lines).repeat(
-                max(data['Cross-Track Cell Number']))
-
-        if 65 in self.msg_name_lookup:
+        # if the ssm_masked is True we mask out data with missing ssm value
+        if 65 in self.msg_name_lookup and ssm_masked==True:
             # mask all the arrays based on fill_value of soil moisture
             valid_data = np.where(data[self.msg_name_lookup[65]] != 1.7e+38)
             latitude = latitude[valid_data]
@@ -845,7 +775,7 @@ class BUFRReader(object):
         -------
         data : yield results of messages
         """
-
+        count = 0
         for i in np.arange(self.nr_messages) + 1:
             tries = 0
 
@@ -921,6 +851,7 @@ class BUFRReader(object):
             # reshape and trim the array to the actual size of the data
             values = self.init_values.reshape((factor, kelem))
             values = values[:decoded_msg, :decoded_values]
+            count += values.shape[0]
 
             yield values
 

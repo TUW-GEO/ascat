@@ -1066,7 +1066,7 @@ def read_smx_fmv_12(eps_file):
 
     for field in fields:
         data[field[0]] = raw_data[field[0]].reshape(n_records, 3)
-        valid = raw_data[field[0]].reshape(n_records, 3) != field[1]
+        valid = raw_unscaled[field[0]].reshape(n_records, 3) != field[1]
         data[field[0]][valid == False] = field[1]
 
     fields = ['SAT_TRACK_AZI', 'ABS_LINE_NUMBER']

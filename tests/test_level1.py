@@ -35,6 +35,8 @@ import os
 
 import ascat.level1 as level1
 
+float32_nan = np.finfo(np.float32).min
+
 class Test_AscatL1Image(unittest.TestCase):
 
     def setUp(self):
@@ -98,12 +100,20 @@ class Test_AscatL1Image(unittest.TestCase):
                     ]
 
         # lists with no data fields or different definition
-        bufr_none = ['abs_line_nr', 'abs_orbit_nr', 'as_des_pass', 'azif', 'azim', 'azia', 'sigf', 'sigm', 'siga']
+        bufr_none = ['abs_line_nr', 'abs_orbit_nr', 'as_des_pass']
+        sig = ['sigf', 'sigm', 'siga']
 
         # BUFR files contain less accurate data so we only compare to one 0.1
         # accuracy.
         for field in matching:
             if field not in bufr_none:
+                # BUFR filters sigma values below -50 dB so for comparison we
+                # have to mask those values in nc and eps
+                if field in sig:
+                    sig_mask = (self.reader_eps.data[field] < -50)
+                    self.reader_eps.data[field][sig_mask] = float32_nan
+                    self.reader_nc.data[field][sig_mask] = float32_nan
+
                 nptest.assert_allclose(self.reader_bufr.data[field],
                                        self.reader_eps.data[field], atol=0.1)
                 nptest.assert_allclose(self.reader_nc.data[field],
