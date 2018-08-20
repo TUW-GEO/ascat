@@ -29,9 +29,11 @@
 General Level 1 data readers for ASCAT data in all formats. Not specific to distributor.
 """
 import os
-
 import numpy as np
+from datetime import datetime, timedelta
+
 from pygeobase.io_base import ImageBase
+from pygeobase.io_base import MultiTemporalImageBase
 from pygeobase.object_base import Image
 
 import ascat.read_native.eps_native as eps_native
@@ -108,6 +110,463 @@ class AscatL1Image(ImageBase):
 
     def close(self):
         pass
+
+class AscatL1Bufr(MultiTemporalImageBase):
+    """
+    Class for reading multiple ASCAT level1 images in bufr format.
+
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        if the files are stored in folders by month then please specify the string
+        that should be used in datetime.datetime.strftime
+    day_search_str: string, optional
+        to provide an iterator over all images of a day the method _get_possible_timestamps
+        looks for all available images on a day on the harddisk.
+        Default: '*-ASCA-*-NA-*-%Y%m%d*.bfr'
+    file_search_str: string, optional
+        this string is used to find a bufr file by the exact date.
+        Default: '*-ASCA-*-NA-*-{datetime}*.bfr'
+    datetime_format: string, optional
+        datetime format by which {datetime} will be replaced in file_search_str
+        Default: %Y%m%d%H%M%S
+    msg_name_lookup: dict, optional
+        Dictionary mapping bufr msg number to parameter name. See bufr.AscatL1BufrFile
+    eo_portal : boolean optional
+        If your data is from the EUMETSAT EO portal you can set this flag to
+        True. This way the the datetime can automatically be read from the
+        filename. Otherwise it needs the filename_datetime_format class
+        variable set correctly.
+    """
+
+    def __init__(self, path,
+                 month_path_str='',
+                 day_search_str='*-ASCA-*-NA-*-%Y%m%d*-*-*.bfr',
+                 file_search_str='*-ASCA-*-NA-*-{datetime}.*.bfr',
+                 datetime_format='%Y%m%d%H%M%S',
+                 filename_datetime_format=(26, 40, '%Y%m%d%H%M%S'),
+                 msg_name_lookup=None,
+                 eo_portal=False):
+        self.path = path
+        self.month_path_str = month_path_str
+        self.day_search_str = day_search_str
+        self.file_search_str = file_search_str
+        self.datetime_format = datetime_format
+        self.filename_datetime_format = filename_datetime_format
+        self.eo_portal = eo_portal
+        super(AscatL1Bufr, self).__init__(path, AscatL1Image,
+                                             subpath_templ=[month_path_str],
+                                             fname_templ=file_search_str,
+                                             datetime_format=datetime_format,
+                                             exact_templ=False,
+                                             ioclass_kws={
+                                                 'msg_name_lookup': msg_name_lookup})
+
+    def _get_orbit_start_date(self, filename):
+        """
+        Returns the datetime of the file.
+
+        Parameters
+        ----------
+        filename : full name (including the path) of the file
+
+        Returns
+        -------
+        dates : datetime object
+            datetime from the filename
+        """
+        # if your data comes from the EUMETSAT EO Portal this function can
+        if self.eo_portal == True:
+            filename_base = os.path.basename(filename)
+            fln_spl = filename_base.split('-')[5]
+            fln_datetime = fln_spl.split('.')[0]
+            return datetime.strptime(fln_datetime, self.datetime_format)
+
+        else:
+            orbit_start_str = os.path.basename(filename)[
+                              self.filename_datetime_format[0]:
+                              self.filename_datetime_format[1]]
+            return datetime.strptime(orbit_start_str,
+                                     self.filename_datetime_format[2])
+
+    def tstamps_for_daterange(self, startdate, enddate):
+        """
+        Returns the possible timestamps of the given daterange as a datetime
+        array.
+
+        Parameters
+        ----------
+        start_date : datetime.date or datetime.datetime
+            start date
+        end_date : datetime.date or datetime.datetime
+            end date
+
+        Returns
+        -------
+        dates : list
+            list of datetimes
+        """
+        file_list = []
+        delta_all = enddate - startdate
+        timestamps = []
+
+        for i in range(delta_all.days + 1):
+            timestamp = startdate + timedelta(days=i)
+
+            files = self._search_files(
+                timestamp, custom_templ=self.day_search_str)
+
+            file_list.extend(sorted(files))
+
+        for filename in file_list:
+            timestamps.append(self._get_orbit_start_date(filename))
+
+        timestamps = [dt for dt in timestamps if (
+                dt >= startdate and dt <= enddate)]
+        return timestamps
+
+
+class AscatL1Eps(MultiTemporalImageBase):
+    """
+    Class for reading multiple ASCAT level1 images in eps format.
+
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        if the files are stored in folders by month then please specify the string
+        that should be used in datetime.datetime.strftime
+    day_search_str: string, optional
+        to provide an iterator over all images of a day the method _get_possible_timestamps
+        looks for all available images on a day on the harddisk.
+        Default: 'ASCA_*_*_*_%Y%m%d*_*_*_*_*.nat'
+    file_search_str: string, optional
+        this string is used to find a bufr file by the exact date.
+        Default: 'ASCA_*_*_*_{datetime}Z_*_*_*_*.nat'
+    datetime_format: string, optional
+        datetime format by which {datetime} will be replaced in file_search_str
+        Default: %Y%m%d%H%M%S
+    eo_portal : boolean optional
+        If your data is from the EUMETSAT EO portal you can set this flag to
+        True. This way the the datetime can automatically be read from the
+        filename. Otherwise it needs the filename_datetime_format class
+        variable set correctly.
+    """
+
+    def __init__(self, path,
+                 month_path_str='',
+                 day_search_str='ASCA_*_*_*_%Y%m%d*_*_*_*_*.nat',
+                 file_search_str='ASCA_*_*_*_{datetime}Z_*_*_*_*.nat',
+                 datetime_format='%Y%m%d%H%M%S',
+                 filename_datetime_format=(16, 30, '%Y%m%d%H%M%S'),
+                 eo_portal=False):
+        self.path = path
+        self.month_path_str = month_path_str
+        self.day_search_str = day_search_str
+        self.file_search_str = file_search_str
+        self.datetime_format = datetime_format
+        self.filename_datetime_format = filename_datetime_format
+        self.eo_portal = eo_portal
+        super(AscatL1Eps, self).__init__(path, AscatL1Image,
+                                             subpath_templ=[month_path_str],
+                                             fname_templ=file_search_str,
+                                             datetime_format=datetime_format,
+                                             exact_templ=False)
+
+    def _get_orbit_start_date(self, filename):
+        """
+        Returns the datetime of the file.
+
+        Parameters
+        ----------
+        filename : full name (including the path) of the file
+
+        Returns
+        -------
+        dates : datetime object
+            datetime from the filename
+        """
+        # if your data comes from the EUMETSAT EO Portal this function can
+        if self.eo_portal == True:
+            filename_base = os.path.basename(filename)
+            fln_spl = filename_base.split('_')[4]
+            fln_datetime = fln_spl[:-1]
+            return datetime.strptime(fln_datetime, self.datetime_format)
+
+        else:
+            orbit_start_str = os.path.basename(filename)[
+                              self.filename_datetime_format[0]:
+                              self.filename_datetime_format[1]]
+            return datetime.strptime(orbit_start_str,
+                                     self.filename_datetime_format[2])
+
+    def tstamps_for_daterange(self, startdate, enddate):
+        """
+        Returns the possible timestamps of the given daterange as a datetime
+        array.
+
+        Parameters
+        ----------
+        start_date : datetime.date or datetime.datetime
+            start date
+        end_date : datetime.date or datetime.datetime
+            end date
+
+        Returns
+        -------
+        dates : list
+            list of datetimes
+        """
+        file_list = []
+        delta_all = enddate - startdate
+        timestamps = []
+
+        for i in range(delta_all.days + 1):
+            timestamp = startdate + timedelta(days=i)
+
+            files = self._search_files(
+                timestamp, custom_templ=self.day_search_str)
+
+            file_list.extend(sorted(files))
+
+        for filename in file_list:
+            timestamps.append(self._get_orbit_start_date(filename))
+
+        timestamps = [dt for dt in timestamps if (
+                dt >= startdate and dt <= enddate)]
+        return timestamps
+
+
+class AscatL1Hdf5(MultiTemporalImageBase):
+    """
+    Class for reading multiple ASCAT level1 images in hdf5 format.
+
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        if the files are stored in folders by month then please specify the string
+        that should be used in datetime.datetime.strftime
+    day_search_str: string, optional
+        to provide an iterator over all images of a day the method _get_possible_timestamps
+        looks for all available images on a day on the harddisk.
+        Default: 'ASCA_*_*_*_%Y%m%d*_*_*_*_*.h5'
+    file_search_str: string, optional
+        this string is used to find a bufr file by the exact date.
+        Default: 'ASCA_*_*_*_{datetime}Z_*_*_*_*.h5'
+    datetime_format: string, optional
+        datetime format by which {datetime} will be replaced in file_search_str
+        Default: %Y%m%d%H%M%S
+    eo_portal : boolean optional
+        If your data is from the EUMETSAT EO portal you can set this flag to
+        True. This way the the datetime can automatically be read from the
+        filename. Otherwise it needs the filename_datetime_format class
+        variable set correctly.
+    """
+
+    def __init__(self, path,
+                 month_path_str='',
+                 day_search_str='ASCA_*_*_*_%Y%m%d*_*_*_*_*.h5',
+                 file_search_str='ASCA_*_*_*_{datetime}Z_*_*_*_*.h5',
+                 datetime_format='%Y%m%d%H%M%S',
+                 filename_datetime_format=(16, 30, '%Y%m%d%H%M%S'),
+                 eo_portal=False):
+        self.path = path
+        self.month_path_str = month_path_str
+        self.day_search_str = day_search_str
+        self.file_search_str = file_search_str
+        self.datetime_format = datetime_format
+        self.filename_datetime_format = filename_datetime_format
+        self.eo_portal=eo_portal
+        super(AscatL1Hdf5, self).__init__(path, AscatL1Image,
+                                             subpath_templ=[month_path_str],
+                                             fname_templ=file_search_str,
+                                             datetime_format=datetime_format,
+                                             exact_templ=False)
+
+    def _get_orbit_start_date(self, filename):
+        """
+        Returns the datetime of the file.
+
+        Parameters
+        ----------
+        filename : full name (including the path) of the file
+
+        Returns
+        -------
+        dates : datetime object
+            datetime from the filename
+        """
+        # if your data comes from the EUMETSAT EO Portal this function can
+        if self.eo_portal == True:
+            filename_base = os.path.basename(filename)
+            fln_spl = filename_base.split('_')[4]
+            fln_datetime = fln_spl[:-1]
+            return datetime.strptime(fln_datetime, self.datetime_format)
+
+        else:
+            orbit_start_str = os.path.basename(filename)[
+                              self.filename_datetime_format[0]:
+                              self.filename_datetime_format[1]]
+            return datetime.strptime(orbit_start_str,
+                                     self.filename_datetime_format[2])
+
+    def tstamps_for_daterange(self, startdate, enddate):
+        """
+        Returns the possible timestamps of the given daterange as a datetime
+        array.
+
+        Parameters
+        ----------
+        start_date : datetime.date or datetime.datetime
+            start date
+        end_date : datetime.date or datetime.datetime
+            end date
+
+        Returns
+        -------
+        dates : list
+            list of datetimes
+        """
+        file_list = []
+        delta_all = enddate - startdate
+        timestamps = []
+
+        for i in range(delta_all.days + 1):
+            timestamp = startdate + timedelta(days=i)
+
+            files = self._search_files(
+                timestamp, custom_templ=self.day_search_str)
+
+            file_list.extend(sorted(files))
+
+        for filename in file_list:
+            timestamps.append(self._get_orbit_start_date(filename))
+
+        timestamps = [dt for dt in timestamps if (
+                dt >= startdate and dt <= enddate)]
+        return timestamps
+
+
+class AscatL1Nc(MultiTemporalImageBase):
+    """
+    Class for reading multiple ASCAT level1 images in nc format.
+
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        if the files are stored in folders by month then please specify the string
+        that should be used in datetime.datetime.strftime
+    day_search_str: string, optional
+        to provide an iterator over all images of a day the method _get_possible_timestamps
+        looks for all available images on a day on the harddisk.
+        Default: 'W_XX-*_EUMP_%Y%m%d*.nc'
+    file_search_str: string, optional
+        this string is used to find a bufr file by the exact date.
+        Default: 'W_XX-*_EUMP_{datetime}*.nc'
+    datetime_format: string, optional
+        datetime format by which {datetime} will be replaced in file_search_str
+        Default: %Y%m%d%H%M%S
+    msg_name_lookup: dict, optional
+        Dictionary mapping nc msg number to parameter name. See nc.AscatL1NcFile
+    eo_portal : boolean optional
+        If your data is from the EUMETSAT EO portal you can set this flag to
+        True. This way the the datetime can automatically be read from the
+        filename. Otherwise it needs the filename_datetime_format class
+        variable set correctly.
+    """
+
+    def __init__(self, path,
+                 month_path_str='',
+                 day_search_str='W_XX-*_EUMP_%Y%m%d*.nc',
+                 file_search_str='W_XX-*_EUMP_{datetime}*.nc',
+                 datetime_format='%Y%m%d%H%M%S',
+                 filename_datetime_format=(62, 76, '%Y%m%d%H%M%S'),
+                 msg_name_lookup=None,
+                 eo_portal=False):
+        self.path = path
+        self.month_path_str = month_path_str
+        self.day_search_str = day_search_str
+        self.file_search_str = file_search_str
+        self.datetime_format = datetime_format
+        self.filename_datetime_format = filename_datetime_format
+        self.eo_portal=eo_portal
+        super(AscatL1Nc, self).__init__(path, AscatL1Image,
+                                             subpath_templ=[month_path_str],
+                                             fname_templ=file_search_str,
+                                             datetime_format=datetime_format,
+                                             exact_templ=False,
+                                             ioclass_kws={
+                                                 'msg_name_lookup': msg_name_lookup})
+
+    def _get_orbit_start_date(self, filename):
+        """
+        Returns the datetime of the file.
+
+        Parameters
+        ----------
+        filename : full name (including the path) of the file
+
+        Returns
+        -------
+        dates : datetime object
+            datetime from the filename
+        """
+        # if your data comes from the EUMETSAT EO Portal this function can
+        if self.eo_portal == True:
+            filename_base = os.path.basename(filename)
+            fln_spl = filename_base.split('_')[4]
+            fln_datetime = fln_spl[:-1]
+            return datetime.strptime(fln_datetime, self.datetime_format)
+
+        else:
+            orbit_start_str = os.path.basename(filename)[
+                              self.filename_datetime_format[0]:
+                              self.filename_datetime_format[1]]
+            return datetime.strptime(orbit_start_str,
+                                     self.filename_datetime_format[2])
+
+    def tstamps_for_daterange(self, startdate, enddate):
+        """
+        Returns the possible timestamps of the given daterange as a datetime
+        array.
+
+        Parameters
+        ----------
+        start_date : datetime.date or datetime.datetime
+            start date
+        end_date : datetime.date or datetime.datetime
+            end date
+
+        Returns
+        -------
+        dates : list
+            list of datetimes
+        """
+        file_list = []
+        delta_all = enddate - startdate
+        timestamps = []
+
+        for i in range(delta_all.days + 1):
+            timestamp = startdate + timedelta(days=i)
+
+            files = self._search_files(
+                timestamp, custom_templ=self.day_search_str)
+
+            file_list.extend(sorted(files))
+
+        for filename in file_list:
+            timestamps.append(self._get_orbit_start_date(filename))
+
+        timestamps = [dt for dt in timestamps if (
+                dt >= startdate and dt <= enddate)]
+        return timestamps
 
 
 def get_file_format(filename):

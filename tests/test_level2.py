@@ -29,7 +29,7 @@
 Tests for level 2 readers.
 """
 
-import datetime
+from datetime import datetime
 import numpy as np
 import numpy.testing as nptest
 import os
@@ -63,13 +63,13 @@ class Test_AscatL2SsmBufr_ioclass_kws(unittest.TestCase):
         2010-05-01
         """
         timestamps = self.reader.tstamps_for_daterange(
-            datetime.datetime(2010, 5, 1), datetime.datetime(2010, 5, 1, 12))
-        timestamps_should = [datetime.datetime(2010, 5, 1, 8, 33, 1)]
+            datetime(2010, 5, 1), datetime(2010, 5, 1, 12))
+        timestamps_should = [datetime(2010, 5, 1, 8, 33, 1)]
         assert sorted(timestamps) == sorted(timestamps_should)
 
     def test_image_reading(self):
         data, meta, timestamp, lons, lats, time_var = self.reader.read(
-            datetime.datetime(2010, 5, 1, 8, 33, 1))
+            datetime(2010, 5, 1, 8, 33, 1))
 
         ssm_should = np.array([51.2, 65.6, 46.2, 56.9, 61.4, 61.5, 58.1, 47.1,
                                72.7, 13.8, 60.9, 52.1, 78.5, 57.8, 56.2, 79.8,
@@ -364,8 +364,8 @@ def test_AscatL2SsmBufrChunked():
                                    datetime_format=datetime_format,
                                    filename_datetime_format=filename_datetime_format)
 
-    intervals = reader.tstamps_for_daterange(datetime.datetime(2017, 2, 20, 5),
-                                             datetime.datetime(2017, 2, 20, 6))
+    intervals = reader.tstamps_for_daterange(datetime(2017, 2, 20, 5),
+                                             datetime(2017, 2, 20, 6))
     data = reader.read(intervals[0])
     assert len(data.metadata.keys()) == 3
     assert data.data['jd'].shape == (23616,)
@@ -483,3 +483,105 @@ class Test_AscatL2Image(unittest.TestCase):
                                mean_surf_sm_should, atol=1e-5)
         nptest.assert_allclose(self.reader.data['jd'][35:45],
                                jd_should, atol=1e-5)
+
+
+class Test_AscatL2Bufr(unittest.TestCase):
+
+    def setUp(self):
+        self.data_path = os.path.join(
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            'ASCAT_generic_reader_data', 'bufr')
+
+        self.image_bufr = level2.AscatL2Bufr(self.data_path, eo_portal=True)
+
+    def tearDown(self):
+        self.image_bufr = None
+
+    def test_image_reading(self):
+        data, meta, timestamp, lon, lat, time_var = self.image_bufr.read(
+            datetime(2018, 6, 12, 3, 57))
+
+        assert lon.shape == (68544,)
+        assert lat.shape == (68544,)
+
+    def test_get_orbit_start_date(self):
+        filename = os.path.join(self.data_path,
+                    'M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr')
+        orbit_start = self.image_bufr._get_orbit_start_date(filename)
+        orbit_start_should = datetime(2018, 6, 12, 3, 57)
+
+        assert orbit_start == orbit_start_should
+
+    def test_tstamp_for_daterange(self):
+        tstamps = self.image_bufr.tstamps_for_daterange(datetime(2018, 6, 12), datetime(2018, 6, 13))
+        tstamps_should = [datetime(2018, 6, 12, 3, 57)]
+
+        assert tstamps == tstamps_should
+
+
+class Test_AscatL2Eps(unittest.TestCase):
+
+    def setUp(self):
+        self.data_path = os.path.join(
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            'ASCAT_generic_reader_data', 'eps_nat')
+
+        self.image_eps = level2.AscatL2Eps(self.data_path, eo_portal=True)
+
+    def tearDown(self):
+        self.image_eps = None
+
+    def test_image_reading(self):
+        data, meta, timestamp, lon, lat, time_var = self.image_eps.read(
+            datetime(2018, 6, 12, 3, 57))
+
+        assert lon.shape == (68544,)
+        assert lat.shape == (68544,)
+
+    def test_get_orbit_start_date(self):
+        filename = os.path.join(self.data_path,
+                    'ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat')
+        orbit_start = self.image_eps._get_orbit_start_date(filename)
+        orbit_start_should = datetime(2018, 6, 12, 3, 57)
+
+        assert orbit_start == orbit_start_should
+
+    def test_tstamp_for_daterange(self):
+        tstamps = self.image_eps.tstamps_for_daterange(datetime(2018, 6, 12), datetime(2018, 6, 13))
+        tstamps_should = [datetime(2018, 6, 12, 3, 57)]
+
+        assert tstamps == tstamps_should
+
+
+class Test_AscatL2Nc(unittest.TestCase):
+
+    def setUp(self):
+        self.data_path = os.path.join(
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            'ASCAT_generic_reader_data', 'nc')
+
+        self.image_nc = level2.AscatL2Nc(self.data_path, eo_portal=True)
+
+    def tearDown(self):
+        self.image_nc = None
+
+    def test_image_reading(self):
+        data, meta, timestamp, lon, lat, time_var = self.image_nc.read(
+            datetime(2018, 6, 12, 3, 57))
+
+        assert lon.shape == (68544,)
+        assert lat.shape == (68544,)
+
+    def test_get_orbit_start_date(self):
+        filename = os.path.join(self.data_path,
+                    'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_20180612035700_29742_eps_o_250_ssm_l2.nc')
+        orbit_start = self.image_nc._get_orbit_start_date(filename)
+        orbit_start_should = datetime(2018, 6, 12, 3, 57)
+
+        assert orbit_start == orbit_start_should
+
+    def test_tstamp_for_daterange(self):
+        tstamps = self.image_nc.tstamps_for_daterange(datetime(2018, 6, 12), datetime(2018, 6, 13))
+        tstamps_should = [datetime(2018, 6, 12, 3, 57)]
+
+        assert tstamps == tstamps_should

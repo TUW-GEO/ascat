@@ -32,6 +32,7 @@ import numpy as np
 import numpy.testing as nptest
 import unittest
 import os
+from datetime import datetime
 
 import ascat.level1 as level1
 
@@ -273,3 +274,147 @@ class Test_AscatL1Image(unittest.TestCase):
                                sig_should, atol=1e-5)
         nptest.assert_allclose(self.reader['img1'].data['jd'][190:200],
                                jd_should, atol=1e-5)
+
+class Test_AscatL1Bufr(unittest.TestCase):
+
+    def setUp(self):
+        self.data_path = os.path.join(
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            'ASCAT_generic_reader_data', 'bufr')
+
+        self.image_bufr = level1.AscatL1Bufr(self.data_path, eo_portal=True)
+
+    def tearDown(self):
+        self.image_bufr = None
+
+    def test_image_reading(self):
+        data, meta, timestamp, lon, lat, time_var = self.image_bufr.read(
+            datetime(2010, 6, 9, 1, 39))
+
+        assert lon.shape == (267648,)
+        assert lat.shape == (267648,)
+
+    def test_get_orbit_start_date(self):
+        filename = os.path.join(self.data_path,
+                    'M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr')
+        orbit_start = self.image_bufr._get_orbit_start_date(filename)
+        orbit_start_should = datetime(2010, 6, 9, 1, 39)
+
+        assert orbit_start == orbit_start_should
+
+    def test_tstamp_for_daterange(self):
+        tstamps = self.image_bufr.tstamps_for_daterange(datetime(2010, 6, 8), datetime(2010, 6, 10))
+        tstamps_should = [datetime(2010, 6, 9, 1, 39)]
+
+        assert tstamps == tstamps_should
+
+class Test_AscatL1Eps(unittest.TestCase):
+
+    def setUp(self):
+        self.data_path = os.path.join(
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            'ASCAT_generic_reader_data', 'eps_nat')
+
+        self.image_eps = level1.AscatL1Eps(self.data_path, eo_portal=True)
+
+    def tearDown(self):
+        self.image_eps = None
+
+    def test_image_reading(self):
+        data, meta, timestamp, lon, lat, time_var = self.image_eps.read(
+            datetime(2010, 6, 9, 1, 39))
+
+        assert lon.shape == (267648,)
+        assert lat.shape == (267648,)
+
+    def test_image_reading_szf(self):
+        szf_dict = self.image_eps.read(
+            datetime(2018, 6, 11, 4, 18))
+
+        szf_dict['img1'].lon
+        assert szf_dict['img1'].lon.shape == (1383552,)
+        assert szf_dict['img1'].lat.shape == (1383552,)
+
+    def test_get_orbit_start_date(self):
+        filename = os.path.join(self.data_path,
+                                'ASCA_SZR_1B_M02_20100609013900Z_20100609032058Z_R_O_20130824233100Z.nat')
+        orbit_start = self.image_eps._get_orbit_start_date(filename)
+        orbit_start_should = datetime(2010, 6, 9, 1, 39)
+
+        assert orbit_start == orbit_start_should
+
+    def test_tstamp_for_daterange(self):
+        tstamps = self.image_eps.tstamps_for_daterange(
+            datetime(2010, 6, 8), datetime(2010, 6, 10))
+        tstamps_should = [datetime(2010, 6, 9, 1, 39)]
+
+        assert tstamps == tstamps_should
+
+
+class Test_AscatL1Nc(unittest.TestCase):
+
+    def setUp(self):
+        self.data_path = os.path.join(
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            'ASCAT_generic_reader_data', 'nc')
+
+        self.image_nc = level1.AscatL1Nc(self.data_path, eo_portal=True)
+
+    def tearDown(self):
+        self.image_nc = None
+
+    def test_image_reading(self):
+        data, meta, timestamp, lon, lat, time_var = self.image_nc.read(
+            datetime(2010, 6, 9, 1, 39))
+
+        assert lon.shape == (267648,)
+        assert lat.shape == (267648,)
+
+    def test_get_orbit_start_date(self):
+        filename = os.path.join(self.data_path,
+                    'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20100609013900_18872_eps_o_125_l1.nc')
+        orbit_start = self.image_nc._get_orbit_start_date(filename)
+        orbit_start_should = datetime(2010, 6, 9, 1, 39)
+
+        assert orbit_start == orbit_start_should
+
+    def test_tstamp_for_daterange(self):
+        tstamps = self.image_nc.tstamps_for_daterange(datetime(2010, 6, 8), datetime(2010, 6, 10))
+        tstamps_should = [datetime(2010, 6, 9, 1, 39)]
+
+        assert tstamps == tstamps_should
+
+
+class Test_AscatL1Hdf5(unittest.TestCase):
+
+    def setUp(self):
+        self.data_path = os.path.join(
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            'ASCAT_generic_reader_data', 'hdf5')
+
+        self.image_h5 = level1.AscatL1Hdf5(self.data_path, eo_portal=True)
+
+    def tearDown(self):
+        self.image_h5 = None
+
+    def test_image_reading(self):
+        szf_dict = self.image_h5.read(
+            datetime(2018, 6, 11, 4, 18))
+
+        szf_dict['img1'].lon
+        assert szf_dict['img1'].lon.shape == (1383552,)
+        assert szf_dict['img1'].lat.shape == (1383552,)
+
+    def test_get_orbit_start_date(self):
+        filename = os.path.join(self.data_path,
+                    'ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.h5')
+        orbit_start = self.image_h5._get_orbit_start_date(filename)
+        orbit_start_should = datetime(2018, 6, 11, 4, 18)
+
+        assert orbit_start == orbit_start_should
+
+    def test_tstamp_for_daterange(self):
+        tstamps = self.image_h5.tstamps_for_daterange(datetime(2018, 6, 10), datetime(2018, 6, 12))
+        tstamps_should = [datetime(2018, 6, 11, 4, 18)]
+
+        assert tstamps == tstamps_should
