@@ -40,6 +40,7 @@ import ascat.read_native.eps_native as eps_native
 import ascat.read_native.bufr as bufr
 import ascat.read_native.nc as nc
 import ascat.read_native.hdf5 as h5
+from ascat.math import db2lin, lin2db, hamming_window
 from ascat.base import ASCAT_MultiTemporalImageBase
 
 byte_nan = np.iinfo(np.byte).min
@@ -57,7 +58,6 @@ class AscatL1Image(ImageBase):
     """
     General Level 1b Image for ASCAT data
     """
-
     def __init__(self, *args, **kwargs):
         """
         Initialization of i/o object.
@@ -105,6 +105,51 @@ class AscatL1Image(ImageBase):
                 "[\".nat\", \".nc\", \".bfr\", \".h5\"]")
 
         return img
+
+    def resample_data(self, data, index, distance, windowRadius, **kwargs):
+        # target template
+        template = get_template_ASCATL1B_SZX
+        resOrbit = np.repeat(template, index.shape[0])
+
+        # get weights
+        weights, _ = hamming_window(windowRadius, distance)
+        total_weights = np.nansum(weights, axis=1)
+
+        # resample backscatter
+        sigmaNought = ['sigf', 'sigm', 'siga']
+        for sigma in sigmaNought:
+            resOrbit[sigma] = lin2db(np.nansum(db2lin(data[sigma])[index]
+                                               * weights,
+                                               axis=1)
+                                     / total_weights)
+
+        # resample measurement geometry
+        measgeos = ['incf', 'incm', 'inca', 'azif', 'azim', 'azia']
+        for mg in measgeos:
+            resOrbit[mg] = (np.nansum(data[mg][index] * weights, axis=1)
+                            / total_weights)
+
+        # noise estimate
+        noise = ['kpf', 'kpm', 'kpa']
+        for n in noise:
+            resOrbit[n] = (np.nansum(data[n][index] * weights, axis=1)
+                           / total_weights)
+
+        # nearest neighbour resampling values
+        nnResample = ['jd', 'sat_id', 'abs_line_nr', 'abs_orbit_nr',
+                      'node_num', 'line_num', 'swath']
+        # index of min. distance is equal to 0 because of kd-tree usage
+        for nn in nnResample:
+            resOrbit[nn] = data[nn][index][:, 0]
+
+        # set as_des_pass as string
+        resOrbit['dir'][data['as_des_pass'][index][:, 0] == 1] = 'D'
+        resOrbit['dir'][data['as_des_pass'][index][:, 0] == 0] = 'A'
+
+        # set number of measurements for resampling
+        resOrbit['num_obs'] = np.sum(distance != np.inf, axis=1)
+
+        return resOrbit
 
     def write(self, *args, **kwargs):
         pass
