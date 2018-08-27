@@ -40,8 +40,9 @@ import ascat.read_native.eps_native as eps_native
 import ascat.read_native.bufr as bufr
 import ascat.read_native.nc as nc
 import ascat.read_native.hdf5 as h5
-from ascat.math import db2lin, lin2db, hamming_window
 from ascat.base import ASCAT_MultiTemporalImageBase
+from ascat.math_functions import db2lin, lin2db, hamming_window
+
 
 byte_nan = np.iinfo(np.byte).min
 ubyte_nan = np.iinfo(np.ubyte).max
@@ -105,6 +106,24 @@ class AscatL1Image(ImageBase):
                 "[\".nat\", \".nc\", \".bfr\", \".h5\"]")
 
         return img
+
+    def read_masked_data(self, **kwargs):
+        orbit = self.read(**kwargs)
+
+        # valid = np.ones(orbit.data[orbit.data.dtype.names[0]].shape, dtype=np.bool)
+        # beams = ['f', 'm', 'a']
+        #
+        # for b in beams:
+        #     valid = (valid & (orbit.data['usable_flag' + b] < 2))
+        #     valid = (valid & (orbit.data['land_flag' + b] > 0.095))
+        # for key in orbit.data.dtype.names:
+        #     orbit.data[key] = []
+        #     orbit.data[key] = orbit.data[key][valid]
+        # for key in orbit.metadata.keys():
+        #     orbit.metadata[key] = orbit.metadata[key][valid]
+        # orbit.lon = orbit.lon[valid]
+        # orbit.lat = orbit.lat[valid]
+        return orbit
 
     def resample_data(self, data, index, distance, windowRadius, **kwargs):
         # target template
@@ -762,9 +781,9 @@ def get_template_ASCATL1B_SZX(n=1):
                        ('kpf_quality', np.float32),
                        ('kpm_quality', np.float32),
                        ('kpa_quality', np.float32),
-                       ('land_flagf', np.uint8),
-                       ('land_flagm', np.uint8),
-                       ('land_flaga', np.uint8),
+                       ('land_flagf', np.float32),
+                       ('land_flagm', np.float32),
+                       ('land_flaga', np.float32),
                        ('usable_flagf', np.uint8),
                        ('usable_flagm', np.uint8),
                        ('usable_flaga', np.uint8),
@@ -775,9 +794,9 @@ def get_template_ASCATL1B_SZX(n=1):
                         float32_nan, float32_nan, float32_nan, float32_nan,
                         float32_nan, float32_nan, float32_nan, float32_nan,
                         float32_nan, float32_nan, float32_nan, float32_nan,
-                        float32_nan, float32_nan, uint8_nan, uint8_nan,
-                        uint8_nan, uint8_nan, uint8_nan, uint8_nan)],
-                      dtype=struct)
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, uint8_nan, uint8_nan, uint8_nan)],
+                        dtype=struct)
 
     return np.repeat(record, n)
 
@@ -802,12 +821,13 @@ def get_template_ASCATL1B_SZF(n=1):
                        ('flagfield_pl', np.uint8),
                        ('flagfield_gen1', np.uint8),
                        ('flagfield_gen2', np.uint8),
-                       ('land_flag', np.uint8),
+                       ('land_flag', np.float32),
                        ('usable_flag', np.uint8)], metadata=metadata)
 
-    record = np.array([(float64_nan, byte_nan, byte_nan, uint32_nan, byte_nan,
-                        float32_nan, float32_nan, float32_nan, float32_nan,
-                        uint8_nan, uint8_nan, uint8_nan, uint8_nan, uint8_nan,
-                        uint8_nan, uint8_nan)], dtype=struct)
+    record = np.array([(float64_nan, byte_nan, byte_nan, uint32_nan,
+                        uint8_nan, uint16_nan, byte_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, uint8_nan,
+                        uint8_nan, uint8_nan, uint8_nan, uint8_nan, float32_nan,
+                        uint8_nan)], dtype=struct)
 
     return np.repeat(record, n)
