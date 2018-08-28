@@ -110,24 +110,27 @@ class AscatL1Image(ImageBase):
     def read_masked_data(self, **kwargs):
         orbit = self.read(**kwargs)
 
-        # valid = np.ones(orbit.data[orbit.data.dtype.names[0]].shape, dtype=np.bool)
-        # beams = ['f', 'm', 'a']
-        #
-        # for b in beams:
-        #     valid = (valid & (orbit.data['usable_flag' + b] < 2))
-        #     valid = (valid & (orbit.data['land_flag' + b] > 0.095))
-        # for key in orbit.data.dtype.names:
-        #     orbit.data[key] = []
-        #     orbit.data[key] = orbit.data[key][valid]
-        # for key in orbit.metadata.keys():
-        #     orbit.metadata[key] = orbit.metadata[key][valid]
-        # orbit.lon = orbit.lon[valid]
-        # orbit.lat = orbit.lat[valid]
-        return orbit
+        valid = np.ones(orbit.data[orbit.data.dtype.names[0]].shape, dtype=np.bool)
+        beams = ['f', 'm', 'a']
+
+        for b in beams:
+            valid = (valid & (orbit.data['usable_flag' + b] < 2))
+            valid = (valid & (orbit.data['land_flag' + b] > 0.095))
+
+        valid_num = orbit.data['jd'][valid].shape[0]
+        masked_data = get_template_ASCATL1B_SZX(valid_num)
+        for key in orbit.data.dtype.names:
+            masked_data[key] = orbit.data[key][valid]
+
+        img = Image(orbit.lon[valid], orbit.lat[valid], masked_data,
+                    orbit.metadata, orbit.timestamp,
+                    timekey='jd')
+
+        return img
 
     def resample_data(self, data, index, distance, windowRadius, **kwargs):
         # target template
-        template = get_template_ASCATL1B_SZX
+        template = get_template_ASCATL1B_SZX()
         resOrbit = np.repeat(template, index.shape[0])
 
         # get weights
@@ -162,11 +165,11 @@ class AscatL1Image(ImageBase):
             resOrbit[nn] = data[nn][index][:, 0]
 
         # set as_des_pass as string
-        resOrbit['dir'][data['as_des_pass'][index][:, 0] == 1] = 'D'
-        resOrbit['dir'][data['as_des_pass'][index][:, 0] == 0] = 'A'
+        # resOrbit['dir'][data['as_des_pass'][index][:, 0] == 1] = 'D'
+        # resOrbit['dir'][data['as_des_pass'][index][:, 0] == 0] = 'A'
 
         # set number of measurements for resampling
-        resOrbit['num_obs'] = np.sum(distance != np.inf, axis=1)
+        # resOrbit['num_obs'] = np.sum(distance != np.inf, axis=1)
 
         return resOrbit
 
