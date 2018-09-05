@@ -130,7 +130,7 @@ class AscatL1Image(ImageBase):
 
     def resample_data(self, data, index, distance, windowRadius, **kwargs):
         # target template
-        template = get_template_ASCATL1B_SZX()
+        template = get_resample_template_ASCATL1B_SZX()
         resOrbit = np.repeat(template, index.shape[0])
 
         # get weights
@@ -169,7 +169,7 @@ class AscatL1Image(ImageBase):
         # resOrbit['dir'][data['as_des_pass'][index][:, 0] == 0] = 'A'
 
         # set number of measurements for resampling
-        # resOrbit['num_obs'] = np.sum(distance != np.inf, axis=1)
+        resOrbit['num_obs'] = np.sum(distance != np.inf, axis=1)
 
         return resOrbit
 
@@ -832,5 +832,43 @@ def get_template_ASCATL1B_SZF(n=1):
                         float32_nan, float32_nan, float32_nan, uint8_nan,
                         uint8_nan, uint8_nan, uint8_nan, uint8_nan, float32_nan,
                         uint8_nan)], dtype=struct)
+
+    return np.repeat(record, n)
+
+def get_resample_template_ASCATL1B_SZX(n=1):
+    """
+    Generic lvl1b SZX template.
+    """
+    metadata = {'temp_name': 'resample_ASCATL1B_SZX'}
+
+    struct = np.dtype([('jd', np.float64),
+                       ('sat_id', np.byte),
+                       ('abs_line_nr', np.uint32),
+                       ('abs_orbit_nr', np.uint32),
+                       ('node_num', np.uint8),
+                       ('line_num', np.uint16),
+                       ('as_des_pass', np.byte),
+                       ('swath', np.byte),
+                       ('azif', np.float32),
+                       ('azim', np.float32),
+                       ('azia', np.float32),
+                       ('incf', np.float32),
+                       ('incm', np.float32),
+                       ('inca', np.float32),
+                       ('sigf', np.float32),
+                       ('sigm', np.float32),
+                       ('siga', np.float32),
+                       ('kpf', np.float32),
+                       ('kpm', np.float32),
+                       ('kpa', np.float32),
+                       ('num_obs', np.uint16)
+                       ], metadata=metadata)
+
+    record = np.array([(float64_nan, byte_nan, uint32_nan, uint32_nan,
+                        uint8_nan, uint16_nan, byte_nan, byte_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, uint16_nan)],
+                        dtype=struct)
 
     return np.repeat(record, n)
