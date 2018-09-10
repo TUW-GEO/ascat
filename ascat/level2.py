@@ -39,6 +39,7 @@ from pygeobase.object_base import Image
 import ascat.read_native.eps_native as read_eps
 import ascat.read_native.bufr as read_bufr
 import ascat.read_native.nc as read_nc
+from ascat.base import ASCAT_MultiTemporalImageBase
 
 byte_nan = np.iinfo(np.byte).min
 ubyte_nan = np.iinfo(np.ubyte).max
@@ -103,7 +104,7 @@ class AscatL2Image(ImageBase):
         pass
 
 
-class AscatL2Bufr(MultiTemporalImageBase):
+class AscatL2Bufr(ASCAT_MultiTemporalImageBase):
     """
     Class for reading multiple ASCAT level2 images in bufr format.
 
@@ -183,44 +184,8 @@ class AscatL2Bufr(MultiTemporalImageBase):
             return datetime.strptime(orbit_start_str,
                                      self.filename_datetime_format[2])
 
-    def tstamps_for_daterange(self, startdate, enddate):
-        """
-        Returns the possible timestamps of the given daterange as a datetime
-        array.
 
-        Parameters
-        ----------
-        start_date : datetime.date or datetime.datetime
-            start date
-        end_date : datetime.date or datetime.datetime
-            end date
-
-        Returns
-        -------
-        dates : list
-            list of datetimes
-        """
-        file_list = []
-        delta_all = enddate - startdate
-        timestamps = []
-
-        for i in range(delta_all.days + 1):
-            timestamp = startdate + timedelta(days=i)
-
-            files = self._search_files(
-                timestamp, custom_templ=self.day_search_str)
-
-            file_list.extend(sorted(files))
-
-        for filename in file_list:
-            timestamps.append(self._get_orbit_start_date(filename))
-
-        timestamps = [dt for dt in timestamps if (
-                dt >= startdate and dt <= enddate)]
-        return timestamps
-
-
-class AscatL2Eps(MultiTemporalImageBase):
+class AscatL2Eps(ASCAT_MultiTemporalImageBase):
     """
     Class for reading multiple ASCAT level2 images in eps format.
 
@@ -268,71 +233,8 @@ class AscatL2Eps(MultiTemporalImageBase):
                                              datetime_format=datetime_format,
                                              exact_templ=False)
 
-    def _get_orbit_start_date(self, filename):
-        """
-        Returns the datetime of the file.
 
-        Parameters
-        ----------
-        filename : full name (including the path) of the file
-
-        Returns
-        -------
-        dates : datetime object
-            datetime from the filename
-        """
-        # if your data comes from the EUMETSAT EO Portal this function can
-        if self.eo_portal == True:
-            filename_base = os.path.basename(filename)
-            fln_spl = filename_base.split('_')[4]
-            fln_datetime = fln_spl[:-1]
-            return datetime.strptime(fln_datetime, self.datetime_format)
-
-        else:
-            orbit_start_str = os.path.basename(filename)[
-                              self.filename_datetime_format[0]:
-                              self.filename_datetime_format[1]]
-            return datetime.strptime(orbit_start_str,
-                                     self.filename_datetime_format[2])
-
-    def tstamps_for_daterange(self, startdate, enddate):
-        """
-        Returns the possible timestamps of the given daterange as a datetime
-        array.
-
-        Parameters
-        ----------
-        start_date : datetime.date or datetime.datetime
-            start date
-        end_date : datetime.date or datetime.datetime
-            end date
-
-        Returns
-        -------
-        dates : list
-            list of datetimes
-        """
-        file_list = []
-        delta_all = enddate - startdate
-        timestamps = []
-
-        for i in range(delta_all.days + 1):
-            timestamp = startdate + timedelta(days=i)
-
-            files = self._search_files(
-                timestamp, custom_templ=self.day_search_str)
-
-            file_list.extend(sorted(files))
-
-        for filename in file_list:
-            timestamps.append(self._get_orbit_start_date(filename))
-
-        timestamps = [dt for dt in timestamps if (
-                dt >= startdate and dt <= enddate)]
-        return timestamps
-
-
-class AscatL2Nc(MultiTemporalImageBase):
+class AscatL2Nc(ASCAT_MultiTemporalImageBase):
     """
     Class for reading multiple ASCAT level2 images in nc format.
 
@@ -384,69 +286,6 @@ class AscatL2Nc(MultiTemporalImageBase):
                                              exact_templ=False,
                                              ioclass_kws={
                                                  'msg_name_lookup': msg_name_lookup})
-
-    def _get_orbit_start_date(self, filename):
-        """
-        Returns the datetime of the file.
-
-        Parameters
-        ----------
-        filename : full name (including the path) of the file
-
-        Returns
-        -------
-        dates : datetime object
-            datetime from the filename
-        """
-        # if your data comes from the EUMETSAT EO Portal this function can
-        if self.eo_portal == True:
-            filename_base = os.path.basename(filename)
-            fln_spl = filename_base.split('_')[4]
-            fln_datetime = fln_spl[:-1]
-            return datetime.strptime(fln_datetime, self.datetime_format)
-
-        else:
-            orbit_start_str = os.path.basename(filename)[
-                              self.filename_datetime_format[0]:
-                              self.filename_datetime_format[1]]
-            return datetime.strptime(orbit_start_str,
-                                     self.filename_datetime_format[2])
-
-    def tstamps_for_daterange(self, startdate, enddate):
-        """
-        Returns the possible timestamps of the given daterange as a datetime
-        array.
-
-        Parameters
-        ----------
-        start_date : datetime.date or datetime.datetime
-            start date
-        end_date : datetime.date or datetime.datetime
-            end date
-
-        Returns
-        -------
-        dates : list
-            list of datetimes
-        """
-        file_list = []
-        delta_all = enddate - startdate
-        timestamps = []
-
-        for i in range(delta_all.days + 1):
-            timestamp = startdate + timedelta(days=i)
-
-            files = self._search_files(
-                timestamp, custom_templ=self.day_search_str)
-
-            file_list.extend(sorted(files))
-
-        for filename in file_list:
-            timestamps.append(self._get_orbit_start_date(filename))
-
-        timestamps = [dt for dt in timestamps if (
-                dt >= startdate and dt <= enddate)]
-        return timestamps
 
 
 def get_file_format(filename):
