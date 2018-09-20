@@ -48,7 +48,7 @@ import ascat.level2 as level2
 class Test_AscatL2SsmBufr_ioclass_kws(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+        data_path = os.path.join(os.path.dirname(__file__), 'test-data',
                                  'hsaf', 'h07')
         self.reader = AscatL2SsmBufr(data_path,
                                      msg_name_lookup={65: 'ssm',
@@ -89,16 +89,16 @@ class Test_AscatL2SsmBufr_ioclass_kws(unittest.TestCase):
                                 64.27395, 63.80293, 60.6569, 59.72684,
                                 58.74838, 63.42774])
 
-        ssm_mean_should = np.array([0.342,  0.397,  0.402,  0.365,  0.349,
-                                    0.354,  0.37,  0.36, 0.445,  0.211,
-                                    0.394,  0.354,  0.501,  0.361,  0.366,
-                                    0.45, 0.545,  0.329,  0.506,  0.229,
-                                    0.404,  0.591,  0.348,  0.433, 0.29,
-                                    0.508,  0.643,  0.343,  0.519,  0.61,
-                                    0.414,  0.594, 0.399,  0.512,  0.681,
-                                    0.457,  0.622,  0.396,  0.572,  0.7,
-                                    0.302,  0.722,  0.493,  0.747,  0.521,
-                                    0.72,  0.578,  0.718, 0.536,  0.704,
+        ssm_mean_should = np.array([0.342, 0.397, 0.402, 0.365, 0.349,
+                                    0.354, 0.37, 0.36, 0.445, 0.211,
+                                    0.394, 0.354, 0.501, 0.361, 0.366,
+                                    0.45, 0.545, 0.329, 0.506, 0.229,
+                                    0.404, 0.591, 0.348, 0.433, 0.29,
+                                    0.508, 0.643, 0.343, 0.519, 0.61,
+                                    0.414, 0.594, 0.399, 0.512, 0.681,
+                                    0.457, 0.622, 0.396, 0.572, 0.7,
+                                    0.302, 0.722, 0.493, 0.747, 0.521,
+                                    0.72, 0.578, 0.718, 0.536, 0.704,
                                     0.466]) * 100
 
         nptest.assert_allclose(lats[25:-1:30], lats_should, atol=1e-5)
@@ -113,7 +113,7 @@ class Test_AscatL2SsmBufrFile(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
             'ASCAT_L2_SM_125', 'bufr')
         fname = os.path.join(
             data_path,
@@ -151,7 +151,8 @@ class Test_AscatL2SsmBufrFile(unittest.TestCase):
                                atol=1e-5)
 
     def test_image_reading_masked(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(ssm_masked=True)
+        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+            ssm_masked=True)
 
         ssm_should = np.array(
             [15.6, 10.8, 15.3, 15.9, 19.8, 27., 27.8, 26.8, 28.6,
@@ -183,7 +184,7 @@ class Test_AscatL2SsmNcFile(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
             'ASCAT_L2_SM_125', 'nc')
         fname = os.path.join(
             data_path,
@@ -227,7 +228,8 @@ class Test_AscatL2SsmNcFile(unittest.TestCase):
                                atol=1e-5)
 
     def test_image_reading_masked(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(ssm_masked=True)
+        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+            ssm_masked=True)
 
         ssm_should = np.array(
             [33.39999771118164, 27.06999969482422,
@@ -277,7 +279,7 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'test-data', 'eumetsat',
             'ASCAT_L2_SM_125')
         fname_nc = os.path.join(
             data_path, 'nc',
@@ -285,7 +287,8 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
         self.reader_nc = AscatL2SsmNcFile(fname_nc)
 
         fname_bufr = os.path.join(
-            data_path, 'bufr', 'M02-ASCA-ASCSMR02-NA-5.0-20170220041500.000000000Z-20170220055656-1207110.bfr')
+            data_path, 'bufr',
+            'M02-ASCA-ASCSMR02-NA-5.0-20170220041500.000000000Z-20170220055656-1207110.bfr')
         self.reader_bufr = AscatL2SsmBufrFile(fname_bufr)
 
     def tearDown(self):
@@ -299,32 +302,32 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
         nptest.assert_allclose(lats_nc, lats_bufr, atol=1e-4)
 
         nc_bufr_matching = {
-            'slope40':                   'Slope At 40 Deg Incidence Angle',
-            'sigma40_error':             'Estimated Error In Sigma0 At 40 Deg Incidence Angle',
-            'utc_line_nodes':            None,
-            'jd':                        'jd',
-            'wet_backscatter':           'Wet Backscatter',
-            'swath_indicator':           None,
-            'frozen_soil_probability':   'Frozen Land Surface Fraction',
-            'wetland_flag':              'Inundation And Wetland Fraction',
+            'slope40': 'Slope At 40 Deg Incidence Angle',
+            'sigma40_error': 'Estimated Error In Sigma0 At 40 Deg Incidence Angle',
+            'utc_line_nodes': None,
+            'jd': 'jd',
+            'wet_backscatter': 'Wet Backscatter',
+            'swath_indicator': None,
+            'frozen_soil_probability': 'Frozen Land Surface Fraction',
+            'wetland_flag': 'Inundation And Wetland Fraction',
             # The processing flag definition between BUFR and netCDF is slightly different
             # 'proc_flag1':                'Soil Moisture Processing Flag',
-            'proc_flag2':                None,
-            'abs_line_number':           None,
-            'sat_track_azi':             None,
-            'sigma40':                   'Backscatter',
-            'soil_moisture':             'Surface Soil Moisture (Ms)',
-            'soil_moisture_error':       'Estimated Error In Surface Soil Moisture',
-            'rainfall_flag':             'Rain Fall Detection',
+            'proc_flag2': None,
+            'abs_line_number': None,
+            'sat_track_azi': None,
+            'sigma40': 'Backscatter',
+            'soil_moisture': 'Surface Soil Moisture (Ms)',
+            'soil_moisture_error': 'Estimated Error In Surface Soil Moisture',
+            'rainfall_flag': 'Rain Fall Detection',
             'soil_moisture_sensitivity': 'Soil Moisture Sensitivity',
-            'corr_flags':                'Soil Moisture Correction Flag',
-            'dry_backscatter':           'Dry Backscatter',
-            'aggregated_quality_flag':   None,
-            'mean_soil_moisture':        'Mean Surface Soil Moisture',
-            'as_des_pass':               None,
-            'slope40_error':             'Estimated Error In Slope At 40 Deg Incidence Angle',
-            'topography_flag':           'Topographic Complexity',
-            'snow_cover_probability':    'Snow Cover'}
+            'corr_flags': 'Soil Moisture Correction Flag',
+            'dry_backscatter': 'Dry Backscatter',
+            'aggregated_quality_flag': None,
+            'mean_soil_moisture': 'Mean Surface Soil Moisture',
+            'as_des_pass': None,
+            'slope40_error': 'Estimated Error In Slope At 40 Deg Incidence Angle',
+            'topography_flag': 'Topographic Complexity',
+            'snow_cover_probability': 'Snow Cover'}
 
         # 'Direction Of Motion Of Moving Observing Platform']
         # BUFR files contain less accurate data so we only compare to one 0.1
@@ -351,9 +354,9 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
 
 
 def test_AscatL2SsmBufrChunked():
-
     data_path = os.path.join(
-        os.path.dirname(__file__),  'test-data', 'eumetsat', 'ASCAT_L2_SM_125', 'PDU')
+        os.path.dirname(__file__), 'test-data', 'eumetsat', 'ASCAT_L2_SM_125',
+        'PDU')
     day_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.bin'
     file_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_{datetime}*_125_ssm_l2.bin'
     datetime_format = '%Y%m%d%H%M%S'
@@ -380,11 +383,11 @@ class Test_AscatL2Image(unittest.TestCase):
             os.path.dirname(__file__), 'test-data', 'eumetsat',
             'ASCAT_generic_reader_data')
         name_b = os.path.join(data_path, 'bufr',
-                       'M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr')
+                              'M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr')
         name_e = os.path.join(data_path, 'eps_nat',
-                       'ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat')
+                              'ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat')
         name_n = os.path.join(data_path, 'nc',
-                       'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_20180612035700_29742_eps_o_250_ssm_l2.nc')
+                              'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_20180612035700_29742_eps_o_250_ssm_l2.nc')
         self.image_bufr = level2.AscatL2Image(name_b)
         self.image_eps = level2.AscatL2Image(name_e)
         self.image_nc = level2.AscatL2Image(name_n)
@@ -432,13 +435,16 @@ class Test_AscatL2Image(unittest.TestCase):
         # accuracy.
         for field in matching:
             if field not in bufr_none:
-                nptest.assert_allclose(self.reader_bufr.data[field], self.reader_eps.data[field], atol=0.1)
+                nptest.assert_allclose(self.reader_bufr.data[field],
+                                       self.reader_eps.data[field], atol=0.1)
 
             if field not in nc_none:
-                nptest.assert_allclose(self.reader_eps.data[field], self.reader_nc.data[field], atol=0.1)
+                nptest.assert_allclose(self.reader_eps.data[field],
+                                       self.reader_nc.data[field], atol=0.1)
 
             if field not in bufr_none and field not in nc_none:
-                nptest.assert_allclose(self.reader_nc.data[field], self.reader_bufr.data[field], atol=0.1)
+                nptest.assert_allclose(self.reader_nc.data[field],
+                                       self.reader_bufr.data[field], atol=0.1)
 
     def test_image_reading_eps(self):
         self.reader = self.image_eps.read()
@@ -473,8 +479,6 @@ class Test_AscatL2Image(unittest.TestCase):
              2458281.66458332, 2458281.66462674, 2458281.66462674,
              2458281.66462674])
 
-
-
         nptest.assert_allclose(self.reader.lat[:25], lat_should, atol=1e-5)
         nptest.assert_allclose(self.reader.lon[:25], lon_should, atol=1e-5)
         nptest.assert_allclose(self.reader.data['sm'][:25],
@@ -506,14 +510,15 @@ class Test_AscatL2Bufr(unittest.TestCase):
 
     def test_get_orbit_start_date(self):
         filename = os.path.join(self.data_path,
-                    'M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr')
+                                'M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr')
         orbit_start = self.image_bufr._get_orbit_start_date(filename)
         orbit_start_should = datetime(2018, 6, 12, 3, 57)
 
         assert orbit_start == orbit_start_should
 
     def test_tstamp_for_daterange(self):
-        tstamps = self.image_bufr.tstamps_for_daterange(datetime(2018, 6, 12), datetime(2018, 6, 13))
+        tstamps = self.image_bufr.tstamps_for_daterange(datetime(2018, 6, 12),
+                                                        datetime(2018, 6, 13))
         tstamps_should = [datetime(2018, 6, 12, 3, 57)]
 
         assert tstamps == tstamps_should
@@ -540,14 +545,15 @@ class Test_AscatL2Eps(unittest.TestCase):
 
     def test_get_orbit_start_date(self):
         filename = os.path.join(self.data_path,
-                    'ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat')
+                                'ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat')
         orbit_start = self.image_eps._get_orbit_start_date(filename)
         orbit_start_should = datetime(2018, 6, 12, 3, 57)
 
         assert orbit_start == orbit_start_should
 
     def test_tstamp_for_daterange(self):
-        tstamps = self.image_eps.tstamps_for_daterange(datetime(2018, 6, 12), datetime(2018, 6, 13))
+        tstamps = self.image_eps.tstamps_for_daterange(datetime(2018, 6, 12),
+                                                       datetime(2018, 6, 13))
         tstamps_should = [datetime(2018, 6, 12, 3, 57)]
 
         assert tstamps == tstamps_should
@@ -574,14 +580,15 @@ class Test_AscatL2Nc(unittest.TestCase):
 
     def test_get_orbit_start_date(self):
         filename = os.path.join(self.data_path,
-                    'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_20180612035700_29742_eps_o_250_ssm_l2.nc')
+                                'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_20180612035700_29742_eps_o_250_ssm_l2.nc')
         orbit_start = self.image_nc._get_orbit_start_date(filename)
         orbit_start_should = datetime(2018, 6, 12, 3, 57)
 
         assert orbit_start == orbit_start_should
 
     def test_tstamp_for_daterange(self):
-        tstamps = self.image_nc.tstamps_for_daterange(datetime(2018, 6, 12), datetime(2018, 6, 13))
+        tstamps = self.image_nc.tstamps_for_daterange(datetime(2018, 6, 12),
+                                                      datetime(2018, 6, 13))
         tstamps_should = [datetime(2018, 6, 12, 3, 57)]
 
         assert tstamps == tstamps_should

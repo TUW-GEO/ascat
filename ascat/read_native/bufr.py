@@ -47,7 +47,8 @@ try:
     from pybufr_ecmwf import ecmwfbufr_parameters
 except ImportError:
     warnings.warn(
-        'pybufr-ecmwf can not be imported, H08 and H07 images can not be read.')
+        'pybufr-ecmwf can not be imported, H08 and H07 images can '
+        'not be read.')
 
 
 class AscatL1BufrFile(ImageBase):
@@ -61,7 +62,8 @@ class AscatL1BufrFile(ImageBase):
     mode : str, optional
         Opening mode. Default: r
     msg_name_lookup: dict, optional
-        Dictionary mapping bufr msg number to parameter name. See :ref:`ascatformattable`.
+        Dictionary mapping bufr msg number to parameter name.
+        See :ref:`ascatformattable`.
 
         Default:
 
@@ -209,20 +211,24 @@ class AscatL1BufrFile(ImageBase):
         data['jd'] = dates
         if 'Direction Of Motion Of Moving Observing Platform' in data:
             data['as_des_pass'] = (data[
-                                       "Direction Of Motion Of Moving Observing Platform"] < 270).astype(
-                np.uint8)
+                "Direction Of Motion Of Moving Observing Platform"
+                                   ] < 270).astype(np.uint8)
 
         if 'Cross-Track Cell Number' in data:
             if data['Cross-Track Cell Number'].max() == 82:
-                data['swath_indicator'] = 1*(data['Cross-Track Cell Number'] > 41)
+                data['swath_indicator'] = 1 * (
+                            data['Cross-Track Cell Number'] > 41)
             elif data['Cross-Track Cell Number'].max() == 42:
-                data['swath_indicator'] = 1*(data['Cross-Track Cell Number'] > 21)
+                data['swath_indicator'] = 1 * (
+                            data['Cross-Track Cell Number'] > 21)
             else:
                 raise ValueError("Unsuspected node number.")
             n_lines = n_records / max(data['Cross-Track Cell Number'])
-            data['line_num'] = np.arange(n_lines).repeat(max(data['Cross-Track Cell Number']))
+            data['line_num'] = np.arange(n_lines).repeat(
+                max(data['Cross-Track Cell Number']))
 
-        # There are strange elements with a value of 32.32 instead of the nan_values
+        # There are strange elements with a value of 32.32 instead of the
+        # typical nan_values
         # Since some elements rly have this value we check the other triplet
         # data of that beam to filter the nan_values out
         beams = ['f', 'm', 'a']
@@ -254,12 +260,18 @@ class AscatL2SsmBufrFile(ImageBase):
     Reads ASCAT SSM swath files in BUFR format. There are the
     following products:
 
-    - H101 SSM ASCAT-A NRT O 12.5 Metop-A ASCAT NRT SSM orbit geometry 12.5 km sampling
-    - H102 SSM ASCAT-A NRT O 25.0 Metop-A ASCAT NRT SSM orbit geometry 25 km sampling
-    - H16  SSM ASCAT-B NRT O 12.5 Metop-B ASCAT NRT SSM orbit geometry 12.5 km sampling
-    - H103 SSM ASCAT-B NRT O 25.0 Metop-B ASCAT NRT SSM orbit geometry 25 km sampling
-    - H104 SSM ASCAT-C NRT O 12.5 Metop-C ASCAT NRT SSM orbit geometry 12.5 km sampling
-    - H105 SSM ASCAT-C NRT O 25.0 Metop-C ASCAT NRT SSM orbit geometry 25 km sampling
+    - H101 SSM ASCAT-A NRT O 12.5 Metop-A ASCAT NRT SSM orbit geometry
+    12.5 km sampling
+    - H102 SSM ASCAT-A NRT O 25.0 Metop-A ASCAT NRT SSM orbit geometry
+    25 km sampling
+    - H16  SSM ASCAT-B NRT O 12.5 Metop-B ASCAT NRT SSM orbit geometry
+    12.5 km sampling
+    - H103 SSM ASCAT-B NRT O 25.0 Metop-B ASCAT NRT SSM orbit geometry
+    25 km sampling
+    - H104 SSM ASCAT-C NRT O 12.5 Metop-C ASCAT NRT SSM orbit geometry
+    12.5 km sampling
+    - H105 SSM ASCAT-C NRT O 25.0 Metop-C ASCAT NRT SSM orbit geometry
+    25 km sampling
     - EUMETSAT ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in BUFR format
     - EUMETSAT ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in BUFR format
 
@@ -270,7 +282,8 @@ class AscatL2SsmBufrFile(ImageBase):
     mode : str, optional
         Opening mode. Default: r
     msg_name_lookup: dict, optional
-        Dictionary mapping bufr msg number to parameter name. See :ref:`ascatformattable`.
+        Dictionary mapping bufr msg number to parameter name.
+        See :ref:`ascatformattable`.
 
         Default:
 
@@ -389,8 +402,11 @@ class AscatL2SsmBufrFile(ImageBase):
 
         Parameters
         ----------
-        timestamp : datetime.datetime
+        timestamp : datetime.datetime (optional)
             exact observation timestamp of the image that should be read
+        ssm_masked : flag (optional)
+            set to True to filter data by ssm values
+
 
         Returns
         -------
@@ -458,21 +474,24 @@ class AscatL2SsmBufrFile(ImageBase):
 
         if 'Direction Of Motion Of Moving Observing Platform' in data:
             data['as_des_pass'] = (data[
-                "Direction Of Motion Of Moving Observing Platform"]
+                            "Direction Of Motion Of Moving Observing Platform"]
                                    <= 270).astype(np.uint8)
 
         if 'Cross-Track Cell Number' in data:
             if data['Cross-Track Cell Number'].max() == 82:
-                data['swath_indicator'] = 1*(data['Cross-Track Cell Number'] > 41)
+                data['swath_indicator'] = 1 * (
+                            data['Cross-Track Cell Number'] > 41)
             elif data['Cross-Track Cell Number'].max() == 42:
-                data['swath_indicator'] = 1*(data['Cross-Track Cell Number'] > 21)
+                data['swath_indicator'] = 1 * (
+                            data['Cross-Track Cell Number'] > 21)
             else:
                 raise ValueError("Unsuspected node number.")
             n_lines = n_records / max(data['Cross-Track Cell Number'])
             data['line_num'] = np.arange(n_lines).repeat(
                 max(data['Cross-Track Cell Number']))
 
-        # There are strange elements with a value of 32.32 instead of the nan_values
+        # There are strange elements with a value of 32.32 instead of the
+        # typical nan_values
         # Since some elements rly have this value we check the other triplet
         # data of that beam to filter the nan_values out
         beams = ['f', 'm', 'a']
@@ -488,7 +507,7 @@ class AscatL2SsmBufrFile(ImageBase):
                 data[azi][mask] = 1.7e+38
 
         # if the ssm_masked is True we mask out data with missing ssm value
-        if 65 in self.msg_name_lookup and ssm_masked==True:
+        if 65 in self.msg_name_lookup and ssm_masked is True:
             # mask all the arrays based on fill_value of soil moisture
             valid_data = np.where(data[self.msg_name_lookup[65]] != 1.7e+38)
             latitude = latitude[valid_data]
@@ -568,8 +587,8 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
     The images have to be uncompressed in the following folder structure
     path - month_path_str (default 'h07_%Y%m_buf')
 
-    For example if path is set to /home/user/hsaf07 and month_path_str is left to the default 'h07_%Y%m_buf'
-    then the images for March 2012 have to be in
+    For example if path is set to /home/user/hsaf07 and month_path_str is left
+    to the default 'h07_%Y%m_buf' then the images for March 2012 have to be in
     the folder /home/user/hsaf07/h07_201203_buf/
 
     Parameters
@@ -577,13 +596,14 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
     path: string
         path where the data is stored
     month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on the HSAF FTP Server
-        then please specify the string that should be used in datetime.datetime.strftime
-        Default: 'h07_%Y%m_buf'
+        if the files are stored in folders by month as is the standard on the
+        HSAF FTP Server then please specify the string that should be used in
+        datetime.datetime.strftime Default: 'h07_%Y%m_buf'
     day_search_str: string, optional
-        to provide an iterator over all images of a day the method _get_possible_timestamps
-        looks for all available images on a day on the harddisk. This string is used in
-        datetime.datetime.strftime and in glob.glob to search for all files on a day.
+        to provide an iterator over all images of a day the
+        method _get_possible_timestamps looks for all available images on a day
+        on the harddisk. This string is used in datetime.datetime.strftime and
+        in glob.glob to search for all files on a day.
         Default : 'h07_%Y%m%d_*.buf'
     file_search_str: string, optional
         this string is used in datetime.datetime.strftime and glob.glob to find
@@ -593,7 +613,8 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
         datetime format by which {datetime} will be replaced in file_search_str
         Default: %Y%m%d_%H%M%S
     msg_name_lookup: dict, optional
-        Dictionary mapping bufr msg number to parameter name. See :ref:`ascatformattable`.
+        Dictionary mapping bufr msg number to parameter name.
+        See :ref:`ascatformattable`.
 
         Default:
 
@@ -666,7 +687,8 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
                                              datetime_format=datetime_format,
                                              exact_templ=False,
                                              ioclass_kws={
-                                                 'msg_name_lookup': msg_name_lookup})
+                                                 'msg_name_lookup':
+                                                     msg_name_lookup})
 
     def _get_orbit_start_date(self, filename):
         orbit_start_str = \
@@ -678,7 +700,7 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
     def tstamps_for_daterange(self, startdate, enddate):
         """
         Get the timestamps as datetime array that are possible for the
-        given day, if the timestamps are
+        given day.
 
         For this product it is not fixed but has to be looked up from
         the hard disk since bufr files are not regular spaced and only
@@ -687,9 +709,9 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
 
         Parameters
         ----------
-        start_date : datetime.date or datetime.datetime
+        startdate : datetime.date or datetime.datetime
             start date
-        end_date : datetime.date or datetime.datetime
+        enddate : datetime.date or datetime.datetime
             end date
 
         Returns
@@ -713,7 +735,7 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
             timestamps.append(self._get_orbit_start_date(filename))
 
         timestamps = [dt for dt in timestamps if (
-                dt >= startdate and dt <= enddate)]
+                startdate <= dt <= enddate)]
         return timestamps
 
 

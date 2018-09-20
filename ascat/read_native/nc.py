@@ -220,7 +220,7 @@ class AscatL2SsmNcFile(ImageBase):
                 dd['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
 
         # if the ssm_masked is True we mask out data with missing ssm value
-        if 'soil_moisture' in dd and ssm_masked==True:
+        if 'soil_moisture' in dd and ssm_masked is True:
             # mask all the arrays based on fill_value of latitude
             valid_data = ~dd['soil_moisture'].mask
             for name in dd:
@@ -259,13 +259,14 @@ class AscatL2SsmNc(MultiTemporalImageBase):
     path: string
         path where the data is stored
     month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on the HSAF FTP Server
-        then please specify the string that should be used in datetime.datetime.strftime
-        Default: ''
+        if the files are stored in folders by month as is the standard on
+        the HSAF FTP Server then please specify the string that should be used
+        in datetime.datetime.strftime Default: ''
     day_search_str: string, optional
-        to provide an iterator over all images of a day the method _get_possible_timestamps
-        looks for all available images on a day on the harddisk. This string is used in
-        datetime.datetime.strftime and in glob.glob to search for all files on a day.
+        to provide an iterator over all images of a day the method
+        _get_possible_timestamps looks for all available images on a day on the
+        harddisk. This string is used in datetime.datetime.strftime and in
+        glob.glob to search for all files on a day.
     file_search_str: string, optional
         this string is used in datetime.datetime.strftime and glob.glob to find
         a 3 minute bufr file by the exact date.
@@ -277,8 +278,12 @@ class AscatL2SsmNc(MultiTemporalImageBase):
     """
 
     def __init__(self, path, month_path_str='',
-                 day_search_str='W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.nc',
-                 file_search_str='W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_{datetime}*_125_ssm_l2.nc',
+                 day_search_str='W_XX-EUMETSAT-Darmstadt,'
+                                'SURFACE+SATELLITE,METOPA+'
+                                'ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.nc',
+                 file_search_str='W_XX-EUMETSAT-Darmstadt,'
+                                 'SURFACE+SATELLITE,METOPA+'
+                                 'ASCAT_C_EUMP_{datetime}*_125_ssm_l2.nc',
                  datetime_format='%Y%m%d%H%M%S',
                  filename_datetime_format=(62, 76, '%Y%m%d%H%M%S'),
                  nc_variables=None):
@@ -314,9 +319,9 @@ class AscatL2SsmNc(MultiTemporalImageBase):
 
         Parameters
         ----------
-        start_date : datetime.date or datetime.datetime
+        startdate : datetime.date or datetime.datetime
             start date
-        end_date : datetime.date or datetime.datetime
+        enddate : datetime.date or datetime.datetime
             end date
 
         Returns
@@ -339,6 +344,5 @@ class AscatL2SsmNc(MultiTemporalImageBase):
         for filename in file_list:
             timestamps.append(self._get_orbit_start_date(filename))
 
-        timestamps = [dt for dt in timestamps if dt >=
-                      startdate and dt <= enddate]
+        timestamps = [dt for dt in timestamps if startdate <= dt <= enddate]
         return timestamps

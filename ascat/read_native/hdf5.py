@@ -40,6 +40,7 @@ from pygeobase.object_base import Image
 # 1.1.2000 00:00:00 in jd
 julian_epoch = 2451544.5
 
+
 class AscatL1H5File(ImageBase):
     """
     Read ASCAT L2 SSM File in netCDF format, as downloaded from EUMETSAT
@@ -61,7 +62,7 @@ class AscatL1H5File(ImageBase):
 
         """
         super(AscatL1H5File, self).__init__(filename, mode=mode,
-                                               **kwargs)
+                                            **kwargs)
         self.h5_keys = h5_keys
         self.ds = None
 
@@ -86,7 +87,8 @@ class AscatL1H5File(ImageBase):
         metadata = {}
 
         if self.h5_keys is None:
-            var_to_read = list(raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'].dtype.names)
+            var_to_read = list(
+                raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'].dtype.names)
         else:
             var_to_read = self.h5_keys
 
@@ -96,19 +98,27 @@ class AscatL1H5File(ImageBase):
         if 'LONGITUDE_FULL' not in var_to_read:
             var_to_read.append('LONGITUDE_FULL')
 
-        num_cells = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001']['LATITUDE_FULL'].shape[1]
+        num_cells = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'][
+            'LATITUDE_FULL'].shape[1]
         num_lines = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'][
             'LATITUDE_FULL'].shape[0]
-        n_records = num_cells*num_lines
 
-        # read the requested variables and scale them if they have a scaling factor
+        # read the requested variables and scale them if they have a
+        # scaling factor
         # encode() is needed for py3 comparison between str and byte
         for name in var_to_read:
             variable = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'][name]
-            if name.encode() in raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value['EntryName']:
-                var_index = np.where(raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR']['EntryName']==name.encode())[0][0]
-                if raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value['Scale Factor'][var_index] != "n/a".encode():
-                    sf = 10**float(raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value['Scale Factor'][var_index])
+            if name.encode() in \
+                    raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value[
+                        'EntryName']:
+                var_index = np.where(
+                    raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'][
+                        'EntryName'] == name.encode())[0][0]
+                if raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value[
+                        'Scale Factor'][var_index] != "n/a".encode():
+                    sf = 10 ** float(
+                        raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value[
+                            'Scale Factor'][var_index])
                     variable = variable / sf
             data[name] = variable[:].flatten()
             if len(variable.shape) == 1:
@@ -123,7 +133,7 @@ class AscatL1H5File(ImageBase):
 
         for name in raw_metadata.keys():
             for subname in raw_metadata[name].keys():
-                if not name in metadata:
+                if name not in metadata:
                     metadata[name] = dict()
                 metadata[name][subname] = raw_metadata[name][subname].value
 
@@ -135,8 +145,10 @@ class AscatL1H5File(ImageBase):
             mask = data['AZI_ANGLE_FULL'] < 0
             data['AZI_ANGLE_FULL'][mask] += 360
 
-        if 'UTC_LOCALISATION-days' in var_to_read and 'UTC_LOCALISATION-milliseconds' in var_to_read:
-            data['jd'] = shortcdstime2jd(data['UTC_LOCALISATION-days'], data['UTC_LOCALISATION-milliseconds'])
+        if 'UTC_LOCALISATION-days' in var_to_read and \
+                'UTC_LOCALISATION-milliseconds' in var_to_read:
+            data['jd'] = shortcdstime2jd(data['UTC_LOCALISATION-days'],
+                                         data['UTC_LOCALISATION-milliseconds'])
 
         set_flags(data)
 
@@ -147,8 +159,10 @@ class AscatL1H5File(ImageBase):
         for field in fields:
             var_index = np.where(
                 np.core.defchararray.startswith(
-                    metadata['MPHR']['MPHR_TABLE']['EntryName'], field.encode()))[0][0]
-            var = metadata['MPHR']['MPHR_TABLE']['EntryValue'][var_index].decode()
+                    metadata['MPHR']['MPHR_TABLE']['EntryName'],
+                    field.encode()))[0][0]
+            var = metadata['MPHR']['MPHR_TABLE']['EntryValue'][
+                var_index].decode()
             if field == 'SPACECRAFT_ID':
                 var = var[-1]
             metadata[field] = int(var)
@@ -189,6 +203,7 @@ class AscatL1H5File(ImageBase):
     def close(self):
         pass
 
+
 def set_flags(data):
     """
     Compute summary flag for each measurement with a value of 0, 1 or 2
@@ -223,7 +238,7 @@ def set_flags(data):
 
         # find indizes where a flag is set
         set_bits = np.where(unpacked_bits == 1)[0]
-        if (set_bits.size != 0):
+        if set_bits.size != 0:
             pos_8 = 7 - (set_bits % 8)
 
             for category in sorted(flag_status_bit[flagfield].keys()):
@@ -242,5 +257,8 @@ def set_flags(data):
 
 
 def shortcdstime2jd(days, milliseconds):
+    """
+    Convert cds time to julian date
+    """
     offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)
     return julian_epoch + offset

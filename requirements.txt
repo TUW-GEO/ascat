@@ -5,3 +5,7 @@ pygeobase>=0.3.13
 pygeogrids>=0.2.2
 netCDF4
 pynetcf>=0.1.8
+lxml
+h5py
+pybufr-ecmwf
+pygrib

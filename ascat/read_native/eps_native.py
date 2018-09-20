@@ -170,7 +170,8 @@ class EPSProduct(object):
                 # find the xml file corresponding to the format version
                 self.xml_file = self._get_eps_xml()
                 self.xml_doc = etree.parse(self.xml_file)
-                self.mdr_template, self.scaled_template, self.sfactor = self._read_xml_mdr()
+                self.mdr_template, self.scaled_template, self.sfactor = \
+                    self._read_xml_mdr()
 
             # sphr (Secondary Product Header Record)
             elif record_class == 2:
@@ -272,9 +273,9 @@ class EPSProduct(object):
         return
 
     def _scaling(self, unscaled_data, scaled_template, sfactor):
-        '''
+        """
         Scale the data
-        '''
+        """
         scaled_data = np.zeros_like(unscaled_data, dtype=scaled_template)
 
         for name, sf in zip(unscaled_data.dtype.names, sfactor):
@@ -298,7 +299,8 @@ class EPSProduct(object):
         """
         mphr = self.fid.read(self.grh[0]['record_size'] - self.grh[0].itemsize)
         self.mphr = OrderedDict(item.replace(' ', '').split('=')
-                                for item in mphr.decode("utf-8").split('\n')[:-1])
+                                for item in
+                                mphr.decode("utf-8").split('\n')[:-1])
 
     def _read_sphr(self):
         """
@@ -306,7 +308,8 @@ class EPSProduct(object):
         """
         sphr = self.fid.read(self.grh[0]['record_size'] - self.grh[0].itemsize)
         self.sphr = OrderedDict(item.replace(' ', '').split('=')
-                                for item in sphr.decode("utf-8").split('\n')[:-1])
+                                for item in
+                                sphr.decode("utf-8").split('\n')[:-1])
 
     def _read_pointer(self, count=1):
         """
@@ -317,9 +320,9 @@ class EPSProduct(object):
         return record.newbyteorder('B')
 
     def _get_eps_xml(self):
-        '''
+        """
         Find the corresponding eps xml file.
-        '''
+        """
         format_path = os.path.join(os.path.dirname(__file__), '..', '..',
                                    'formats')
 
@@ -371,7 +374,7 @@ class EPSProduct(object):
             # append the length if it isn't the special case of type longtime
             try:
                 var_len = child_items.pop('length')
-                if longtime_flag == False:
+                if not longtime_flag:
                     length.append(np.int(var_len))
             except KeyError:
                 pass
@@ -448,10 +451,11 @@ class EPSProduct(object):
                              ('bitfield' in child_items['type'] or 'time' in
                               child_items['type']))
 
-            # append the length if it isn't the special case of type bitfield or time
+            # append the length if it isn't the special case of type
+            # bitfield or time
             try:
                 var_len = child_items.pop('length')
-                if bitfield_flag == False:
+                if not bitfield_flag:
                     length.append(np.int(var_len))
             except KeyError:
                 pass
@@ -466,7 +470,7 @@ class EPSProduct(object):
                     bitfield_flag = ('type' in arr_items and
                                      'bitfield' in arr_items['type'])
 
-                    if bitfield_flag == True:
+                    if bitfield_flag:
                         data[name].update(arr_items)
                         break
                     else:
@@ -547,7 +551,6 @@ def read_eps_l1b(filename, timestamp):
     Use of correct lvl1b reader and data preparation.
     """
     data = {}
-    metadata = {}
     eps_file = read_eps(filename)
     ptype = eps_file.mphr['PRODUCT_TYPE']
     fmv = int(eps_file.mphr['FORMAT_MAJOR_VERSION'])
@@ -615,7 +618,6 @@ def read_eps_l2(filename, timestamp):
     Use of correct lvl2 reader and data preparation.
     """
     data = {}
-    metadata = {}
     eps_file = read_eps(filename)
     ptype = eps_file.mphr['PRODUCT_TYPE']
     fmv = int(eps_file.mphr['FORMAT_MAJOR_VERSION'])
@@ -721,7 +723,7 @@ def read_szx_fmv_11(eps_file):
     for field in fields:
         data[field[0]] = raw_data[field[0]].flatten()
         valid = raw_unscaled[field[0]].flatten() != field[1]
-        data[field[0]][valid == False] = field[1]
+        data[field[0]][~valid] = field[1]
 
     fields = [('SIGMA0_TRIP', long_nan),
               ('INC_ANGLE_TRIP', uint_nan),
@@ -739,7 +741,7 @@ def read_szx_fmv_11(eps_file):
         data[field[0]] = raw_data[field[0]].reshape(n_records, 3)
         # valid = data[field[0]] != field[2]
         valid = raw_unscaled[field[0]].reshape(n_records, 3) != field[1]
-        data[field[0]][valid == False] = field[1]
+        data[field[0]][~valid] = field[1]
 
     # modify longitudes from (0, 360) to (-180,180)
     mask = np.logical_and(data['LONGITUDE'] != long_nan,
@@ -811,7 +813,7 @@ def read_szx_fmv_12(eps_file):
     for field in fields:
         data[field[0]] = raw_data[field[0]].flatten()
         valid = raw_unscaled[field[0]].flatten() != field[1]
-        data[field[0]][valid == False] = field[1]
+        data[field[0]][~valid] = field[1]
 
     fields = [('SIGMA0_TRIP', long_nan),
               ('INC_ANGLE_TRIP', uint_nan),
@@ -831,7 +833,7 @@ def read_szx_fmv_12(eps_file):
         data[field[0]] = raw_data[field[0]].reshape(n_records, 3)
         # valid = data[field[0]] != field[2]
         valid = raw_unscaled[field[0]].reshape(n_records, 3) != field[1]
-        data[field[0]][valid == False] = field[1]
+        data[field[0]][~valid] = field[1]
 
     # modify longitudes from (0, 360) to (-180,180)
     mask = np.logical_and(data['LONGITUDE'] != long_nan,
@@ -889,7 +891,6 @@ def read_szf_fmv_12(eps_file):
 
     n_node_per_line = raw_data['LONGITUDE_FULL'].shape[1]
     n_lines = eps_file.mdr_counter
-    n_records = raw_data['LONGITUDE_FULL'].size
     data = {}
     metadata = {}
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
@@ -905,7 +906,6 @@ def read_szf_fmv_12(eps_file):
     fields = ['PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION',
               'FORMAT_MAJOR_VERSION', 'FORMAT_MINOR_VERSION']
     for field in fields:
-        # metadata[field] = np.repeat(np.int16(mphr[field]),n_records)
         metadata[field] = np.int16(mphr[field])
 
     fields = ['DEGRADED_INST_MDR', 'DEGRADED_PROC_MDR', 'SAT_TRACK_AZI',
@@ -949,7 +949,7 @@ def read_szf_fmv_12(eps_file):
     for pos_all in range(orbit_grid['lon'].size):
         line = pos_all // grid_nodes_per_line
         pos_small = pos_all % 81
-        if (pos_all % grid_nodes_per_line <= 80):
+        if pos_all % grid_nodes_per_line <= 80:
             # left swath
             orbit_grid['lon'][pos_all] = viadr_grid[
                 'LONGITUDE_LEFT'][line][80 - pos_small]
@@ -970,7 +970,6 @@ def read_szf_fmv_12(eps_file):
 
     fields = ['lon', 'lat']
     for field in fields:
-        mask = orbit_grid[field] != long_nan
         orbit_grid[field] = orbit_grid[field] * 1e-6
 
     mask = (orbit_grid['lon'] != long_nan) & (orbit_grid['lon'] > 180)
@@ -980,7 +979,7 @@ def read_szf_fmv_12(eps_file):
 
     data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
 
-    data['line_num'] = np.arange(n_lines/6).repeat(n_node_per_line*6)
+    data['line_num'] = np.arange(n_lines / 6).repeat(n_node_per_line * 6)
     data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
                                n_lines)
 
@@ -1021,7 +1020,7 @@ def set_flags(data):
 
         # find indizes where a flag is set
         set_bits = np.where(unpacked_bits == 1)[0]
-        if (set_bits.size != 0):
+        if set_bits.size != 0:
             pos_8 = 7 - (set_bits % 8)
 
             for category in sorted(flag_status_bit[flagfield].keys()):
@@ -1040,6 +1039,19 @@ def set_flags(data):
 
 
 def read_smx_fmv_12(eps_file):
+    """
+    Read SMO/SMR format version 12.
+
+    Parameters
+    ----------
+    eps_file : EPSProduct object
+        EPS Product object.
+
+    Returns
+    -------
+    data : numpy.ndarray
+        SMO/SMR data.
+    """
     raw_data = eps_file.scaled_mdr
     raw_unscaled = eps_file.mdr
 
@@ -1067,7 +1079,7 @@ def read_smx_fmv_12(eps_file):
     for field in fields:
         data[field[0]] = raw_data[field[0]].reshape(n_records, 3)
         valid = raw_unscaled[field[0]].reshape(n_records, 3) != field[1]
-        data[field[0]][valid == False] = field[1]
+        data[field[0]][~valid] = field[1]
 
     fields = ['SAT_TRACK_AZI', 'ABS_LINE_NUMBER']
     for field in fields:
@@ -1098,7 +1110,7 @@ def read_smx_fmv_12(eps_file):
         data[field[0]] = raw_data[field[0]].flatten()
         if field[1] is not None:
             valid = raw_unscaled[field[0]].flatten() != field[1]
-            data[field[0]][valid == False] = field[1]
+            data[field[0]][~valid] = field[1]
 
     # sat_track_azi (uint)
     data['AS_DES_PASS'] = \
@@ -1127,5 +1139,8 @@ def read_smx_fmv_12(eps_file):
 
 
 def shortcdstime2jd(days, milliseconds):
+    """
+    Convert cds time to julian date
+    """
     offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)
     return julian_epoch + offset

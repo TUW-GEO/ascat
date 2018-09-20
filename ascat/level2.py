@@ -26,14 +26,14 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-General Level 2 data readers for ASCAT data in all formats. Not specific to distributor.
+General Level 2 data readers for ASCAT data in all formats.
+Not specific to distributor.
 """
 import os
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from pygeobase.io_base import ImageBase
-from pygeobase.io_base import MultiTemporalImageBase
 from pygeobase.object_base import Image
 
 import ascat.read_native.eps_native as read_eps
@@ -51,6 +51,7 @@ float64_nan = np.finfo(np.float64).min
 long_nan = np.iinfo(np.int32).min
 int_nan = np.iinfo(np.int16).min
 
+
 class AscatL2Image(ImageBase):
     """
     General Level 2 Image
@@ -64,33 +65,38 @@ class AscatL2Image(ImageBase):
 
     def read(self, timestamp=None, file_format=None, native=False, **kwargs):
 
-        if file_format == None:
+        if file_format is None:
             file_format = get_file_format(self.filename)
 
         if file_format == ".nat":
             if native:
                 img = read_eps.AscatL2EPSImage(self.filename).read(timestamp)
             else:
-                img_raw = read_eps.AscatL2EPSImage(self.filename).read(timestamp)
+                img_raw = read_eps.AscatL2EPSImage(self.filename).read(
+                    timestamp)
                 img = eps2generic(img_raw)
 
         elif file_format == ".nc":
             if native:
                 img = read_nc.AscatL2SsmNcFile(self.filename).read(timestamp)
             else:
-                img_raw = read_nc.AscatL2SsmNcFile(self.filename).read(timestamp)
+                img_raw = read_nc.AscatL2SsmNcFile(self.filename).read(
+                    timestamp)
                 img = nc2generic(img_raw)
 
         elif file_format == ".bfr" or file_format == ".buf":
             if native:
-                img = read_bufr.AscatL2SsmBufrFile(self.filename).read(timestamp)
+                img = read_bufr.AscatL2SsmBufrFile(self.filename).read(
+                    timestamp)
             else:
-                img_raw = read_bufr.AscatL2SsmBufrFile(self.filename).read(timestamp)
+                img_raw = read_bufr.AscatL2SsmBufrFile(self.filename).read(
+                    timestamp)
                 img = bfr2generic(img_raw)
 
         else:
             raise RuntimeError(
-                "Format not found, please indicate the file_format. [\".nat\", \".nc\", \".bfr\"]")
+                "Format not found, please indicate the file_format. "
+                "[\".nat\", \".nc\", \".bfr\"]")
 
         return img
 
@@ -113,11 +119,12 @@ class AscatL2Bufr(ASCAT_MultiTemporalImageBase):
     path: string
         path where the data is stored
     month_path_str: string, optional
-        if the files are stored in folders by month then please specify the string
-        that should be used in datetime.datetime.strftime
+        if the files are stored in folders by month then please specify the
+        string that should be used in datetime.datetime.strftime
     day_search_str: string, optional
-        to provide an iterator over all images of a day the method _get_possible_timestamps
-        looks for all available images on a day on the harddisk.
+        to provide an iterator over all images of a day the method
+        _get_possible_timestamps looks for all available images on a day on the
+        harddisk.
         Default: '*-ASCA-*-NA-*-%Y%m%d*.bfr'
     file_search_str: string, optional
         this string is used to find a bufr file by the exact date.
@@ -126,7 +133,8 @@ class AscatL2Bufr(ASCAT_MultiTemporalImageBase):
         datetime format by which {datetime} will be replaced in file_search_str
         Default: %Y%m%d%H%M%S
     msg_name_lookup: dict, optional
-        Dictionary mapping bufr msg number to parameter name. See bufr.AscatL1BufrFile
+        Dictionary mapping bufr msg number to parameter name.
+        See bufr.AscatL1BufrFile
     eo_portal : boolean optional
         If your data is from the EUMETSAT EO portal you can set this flag to
         True. This way the the datetime can automatically be read from the
@@ -150,12 +158,13 @@ class AscatL2Bufr(ASCAT_MultiTemporalImageBase):
         self.filename_datetime_format = filename_datetime_format
         self.eo_portal = eo_portal
         super(AscatL2Bufr, self).__init__(path, AscatL2Image,
-                                             subpath_templ=[month_path_str],
-                                             fname_templ=file_search_str,
-                                             datetime_format=datetime_format,
-                                             exact_templ=False,
-                                             ioclass_kws={
-                                                 'msg_name_lookup': msg_name_lookup})
+                                          subpath_templ=[month_path_str],
+                                          fname_templ=file_search_str,
+                                          datetime_format=datetime_format,
+                                          exact_templ=False,
+                                          ioclass_kws={
+                                              'msg_name_lookup':
+                                                  msg_name_lookup})
 
     def _get_orbit_start_date(self, filename):
         """
@@ -171,7 +180,7 @@ class AscatL2Bufr(ASCAT_MultiTemporalImageBase):
             datetime from the filename
         """
         # if your data comes from the EUMETSAT EO Portal this function can
-        if self.eo_portal == True:
+        if self.eo_portal is True:
             filename_base = os.path.basename(filename)
             fln_spl = filename_base.split('-')[5]
             fln_datetime = fln_spl.split('.')[0]
@@ -194,11 +203,12 @@ class AscatL2Eps(ASCAT_MultiTemporalImageBase):
     path: string
         path where the data is stored
     month_path_str: string, optional
-        if the files are stored in folders by month then please specify the string
-        that should be used in datetime.datetime.strftime
+        if the files are stored in folders by month then please specify the
+        string that should be used in datetime.datetime.strftime
     day_search_str: string, optional
-        to provide an iterator over all images of a day the method _get_possible_timestamps
-        looks for all available images on a day on the harddisk.
+        to provide an iterator over all images of a day the method
+        _get_possible_timestamps looks for all available images on a day on the
+        harddisk.
         Default: 'ASCA_*_*_*_%Y%m%d*_*_*_*_*.nat'
     file_search_str: string, optional
         this string is used to find a bufr file by the exact date.
@@ -228,10 +238,10 @@ class AscatL2Eps(ASCAT_MultiTemporalImageBase):
         self.filename_datetime_format = filename_datetime_format
         self.eo_portal = eo_portal
         super(AscatL2Eps, self).__init__(path, AscatL2Image,
-                                             subpath_templ=[month_path_str],
-                                             fname_templ=file_search_str,
-                                             datetime_format=datetime_format,
-                                             exact_templ=False)
+                                         subpath_templ=[month_path_str],
+                                         fname_templ=file_search_str,
+                                         datetime_format=datetime_format,
+                                         exact_templ=False)
 
 
 class AscatL2Nc(ASCAT_MultiTemporalImageBase):
@@ -243,11 +253,12 @@ class AscatL2Nc(ASCAT_MultiTemporalImageBase):
     path: string
         path where the data is stored
     month_path_str: string, optional
-        if the files are stored in folders by month then please specify the string
-        that should be used in datetime.datetime.strftime
+        if the files are stored in folders by month then please specify the
+        string that should be used in datetime.datetime.strftime
     day_search_str: string, optional
-        to provide an iterator over all images of a day the method _get_possible_timestamps
-        looks for all available images on a day on the harddisk.
+        to provide an iterator over all images of a day the method
+        _get_possible_timestamps looks for all available images on a day on the
+        harddisk.
         Default: 'W_XX-*_EUMP_%Y%m%d*.nc'
     file_search_str: string, optional
         this string is used to find a bufr file by the exact date.
@@ -256,7 +267,8 @@ class AscatL2Nc(ASCAT_MultiTemporalImageBase):
         datetime format by which {datetime} will be replaced in file_search_str
         Default: %Y%m%d%H%M%S
     msg_name_lookup: dict, optional
-        Dictionary mapping nc msg number to parameter name. See nc.AscatL1NcFile
+        Dictionary mapping nc msg number to parameter name.
+        See nc.AscatL1NcFile
     eo_portal : boolean optional
         If your data is from the EUMETSAT EO portal you can set this flag to
         True. This way the the datetime can automatically be read from the
@@ -280,12 +292,13 @@ class AscatL2Nc(ASCAT_MultiTemporalImageBase):
         self.filename_datetime_format = filename_datetime_format
         self.eo_portal = eo_portal
         super(AscatL2Nc, self).__init__(path, AscatL2Image,
-                                             subpath_templ=[month_path_str],
-                                             fname_templ=file_search_str,
-                                             datetime_format=datetime_format,
-                                             exact_templ=False,
-                                             ioclass_kws={
-                                                 'msg_name_lookup': msg_name_lookup})
+                                        subpath_templ=[month_path_str],
+                                        fname_templ=file_search_str,
+                                        datetime_format=datetime_format,
+                                        exact_templ=False,
+                                        ioclass_kws={
+                                            'msg_name_lookup':
+                                                msg_name_lookup})
 
 
 def get_file_format(filename):
@@ -338,23 +351,25 @@ def nc2generic(native_Image):
         if field[1] is None:
             continue
 
-        if (type(native_Image.data[field[1]]) == np.ma.core.MaskedArray):
+        if type(native_Image.data[field[1]]) == np.ma.core.MaskedArray:
             valid_mask = ~native_Image.data[field[1]].mask
             generic_data[field[0]][valid_mask] = native_Image.data[field[1]][
                 valid_mask]
         else:
             generic_data[field[0]] = native_Image.data[field[1]]
 
-    # flag_fields need to be treated differently since they are not masked arrays
+    # flag_fields need to be treated differently since they are not masked
+    # arrays
     # so we need to check for nan values
     flags = [('correction_flag', 'corr_flags'),
-              # There is a processing flag but it is different to the other formats
-              ('processing_flag', None),
-              ('aggregated_quality_flag', 'aggregated_quality_flag'),
-              ('snow_cover_probability', 'snow_cover_probability'),
-              ('frozen_soil_probability', 'frozen_soil_probability'),
-              ('innudation_or_wetland', 'wetland_flag'),
-              ('topographical_complexity', 'topography_flag')]
+             # There is a processing flag but it is different to the other
+             # formats
+             ('processing_flag', None),
+             ('aggregated_quality_flag', 'aggregated_quality_flag'),
+             ('snow_cover_probability', 'snow_cover_probability'),
+             ('frozen_soil_probability', 'frozen_soil_probability'),
+             ('innudation_or_wetland', 'wetland_flag'),
+             ('topographical_complexity', 'topography_flag')]
 
     for field in flags:
         if field[1] is None:
@@ -408,7 +423,8 @@ def eps2generic(native_Image):
               ('siga', 'a_SIGMA0_TRIP', long_nan),
               ('sm', 'SOIL_MOISTURE', uint16_nan),
               ('sm_noise', 'SOIL_MOISTURE_ERROR', uint16_nan),
-              ('sm_sensitivity', 'SOIL_MOISTURE_SENSETIVITY', np.float32(uint32_nan)),
+              ('sm_sensitivity', 'SOIL_MOISTURE_SENSETIVITY',
+               np.float32(uint32_nan)),
               ('sig40', 'SIGMA40', long_nan),
               ('sig40_noise', 'SIGMA40_ERROR', long_nan),
               ('slope40', 'SLOPE40', long_nan),
@@ -418,11 +434,14 @@ def eps2generic(native_Image):
               ('mean_surf_sm', 'MEAN_SURF_SOIL_MOISTURE', uint16_nan),
               ('correction_flag', 'CORRECTION_FLAGS', uint16_nan),
               ('processing_flag', 'PROCESSING_FLAGS', uint16_nan),
-              ('aggregated_quality_flag', 'AGGREGATED_QUALITY_FLAG', ubyte_nan),
+              (
+              'aggregated_quality_flag', 'AGGREGATED_QUALITY_FLAG', ubyte_nan),
               ('snow_cover_probability', 'SNOW_COVER_PROBABILITY', ubyte_nan),
-              ('frozen_soil_probability', 'FROZEN_SOIL_PROBABILITY', ubyte_nan),
+              (
+              'frozen_soil_probability', 'FROZEN_SOIL_PROBABILITY', ubyte_nan),
               ('innudation_or_wetland', 'INNUDATION_OR_WETLAND', ubyte_nan),
-              ('topographical_complexity', 'TOPOGRAPHICAL_COMPLEXITY', ubyte_nan)]
+              ('topographical_complexity', 'TOPOGRAPHICAL_COMPLEXITY',
+               ubyte_nan)]
 
     for field in fields:
         if field[1] is None:
@@ -438,7 +457,8 @@ def eps2generic(native_Image):
     fields = [('sat_id', 'SPACECRAFT_ID'),
               ('abs_orbit_nr', 'ORBIT_START')]
     for field in fields:
-        generic_data[field[0]] = np.repeat(native_Image.metadata[field[1]], n_records)
+        generic_data[field[0]] = np.repeat(native_Image.metadata[field[1]],
+                                           n_records)
 
     # convert sat_id (spacecraft id) to the department intern definition
     # use an array as look up table
@@ -477,12 +497,15 @@ def bfr2generic(native_Image):
               ('sigm', 'm_Backscatter', 1.7e+38),
               ('siga', 'a_Backscatter', 1.7e+38),
               ('sm', 'Surface Soil Moisture (Ms)', 1.7e+38),
-              ('sm_noise', 'Estimated Error In Surface Soil Moisture', 1.7e+38),
+              (
+              'sm_noise', 'Estimated Error In Surface Soil Moisture', 1.7e+38),
               ('sm_sensitivity', 'Soil Moisture Sensitivity', 1.7e+38),
               ('sig40', 'Backscatter', 1.7e+38),
-              ('sig40_noise', 'Estimated Error In Sigma0 At 40 Deg Incidence Angle', 1.7e+38),
+              ('sig40_noise',
+               'Estimated Error In Sigma0 At 40 Deg Incidence Angle', 1.7e+38),
               ('slope40', 'Slope At 40 Deg Incidence Angle', 1.7e+38),
-              ('slope40_noise', 'Estimated Error In Slope At 40 Deg Incidence Angle', 1.7e+38),
+              ('slope40_noise',
+               'Estimated Error In Slope At 40 Deg Incidence Angle', 1.7e+38),
               ('dry_backscatter', 'Dry Backscatter', 1.7e+38),
               ('wet_backscatter', 'Wet Backscatter', 1.7e+38),
               ('mean_surf_sm', 'Mean Surface Soil Moisture', 1.7e+40),
@@ -490,8 +513,10 @@ def bfr2generic(native_Image):
               ('processing_flag', 'Soil Moisture Processing Flag', 1.7e+38),
               ('aggregated_quality_flag', None),
               ('snow_cover_probability', 'Snow Cover', 1.7e+38),
-              ('frozen_soil_probability', 'Frozen Land Surface Fraction', 1.7e+38),
-              ('innudation_or_wetland', 'Inundation And Wetland Fraction', 1.7e+38),
+              ('frozen_soil_probability', 'Frozen Land Surface Fraction',
+               1.7e+38),
+              ('innudation_or_wetland', 'Inundation And Wetland Fraction',
+               1.7e+38),
               ('topographical_complexity', 'Topographic Complexity', 1.7e+38)]
 
     for field in fields:
@@ -515,6 +540,7 @@ def bfr2generic(native_Image):
                 timekey='jd')
 
     return img
+
 
 def get_template_ASCATL2_SMX(n=1):
     """
@@ -556,7 +582,7 @@ def get_template_ASCATL2_SMX(n=1):
                        ('frozen_soil_probability', np.float32),
                        ('innudation_or_wetland', np.float32),
                        ('topographical_complexity', np.float32)],
-                       metadata=metadata)
+                      metadata=metadata)
 
     record = np.array([(float64_nan, byte_nan, uint32_nan, uint32_nan,
                         uint8_nan, uint16_nan, byte_nan, byte_nan, float32_nan,
