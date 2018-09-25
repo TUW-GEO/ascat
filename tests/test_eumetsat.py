@@ -37,12 +37,12 @@ import os
 import sys
 import pytest
 
-from ascat.eumetsat import AscatAL2Ssm125, AscatBL2Ssm125
-from ascat.eumetsat import AscatAL2Ssm125PDU, AscatBL2Ssm125PDU
-from ascat.eumetsat import AscatAL2Ssm250, AscatBL2Ssm250
-from ascat.eumetsat import AscatAL2Ssm250PDU, AscatBL2Ssm250PDU
-from ascat.eumetsat import AscatAL2Ssm125Nc, AscatBL2Ssm125Nc
-from ascat.eumetsat import AscatAL2Ssm250Nc, AscatBL2Ssm250Nc
+from ascat.eumetsat import AscatL2Ssm125
+from ascat.eumetsat import AscatL2Ssm125PDU
+from ascat.eumetsat import AscatL2Ssm250
+from ascat.eumetsat import AscatL2Ssm250PDU
+from ascat.eumetsat import AscatL2Ssm125Nc
+from ascat.eumetsat import AscatL2Ssm250Nc
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
@@ -51,23 +51,30 @@ class Test_ASCAT_A_L2_SSM_125_BUFR(unittest.TestCase):
     def setUp(self):
         data_path = os.path.join(os.path.dirname(__file__),  'test-data',
                                  'eumetsat', 'ASCAT_L2_SM_125', 'bufr')
-        self.reader = AscatAL2Ssm125(data_path)
+        self.reader_A = AscatL2Ssm125(data_path, 'Metop_A')
+        self.reader_B = AscatL2Ssm125(data_path, 'Metop_B')
 
     def tearDown(self):
-        self.reader = None
+        self.reader_A = None
+        self.reader_B = None
 
     def test_offset_getting(self):
         """
         test getting the image offsets for a known day
         """
-        timestamps = self.reader.tstamps_for_daterange(
+        timestamps = self.reader_A.tstamps_for_daterange(
             datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
         timestamps_should = [datetime.datetime(2017, 2, 20, 4, 15),
                              datetime.datetime(2017, 2, 20, 5, 57)]
         assert sorted(timestamps) == sorted(timestamps_should)
 
+        timestamps = self.reader_B.tstamps_for_daterange(
+            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
+        timestamps_should = [datetime.datetime(2017, 2, 20, 5, 9)]
+        assert sorted(timestamps) == sorted(timestamps_should)
+
     def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+        data, meta, timestamp, lons, lats, time_var = self.reader_A.read(
             datetime.datetime(2017, 2, 20, 4, 15))
 
         ssm_should = np.array([3., 0., 0., 0., 0., 0., 0., 0., 0., 1.8, 3.3,
@@ -93,30 +100,7 @@ class Test_ASCAT_A_L2_SSM_125_BUFR(unittest.TestCase):
                                ssm_mean_should,
                                atol=0.01)
 
-
-@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_ASCAT_B_L2_SSM_125_BUFR(unittest.TestCase):
-
-    def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'eumetsat',
-            'ASCAT_L2_SM_125', 'bufr')
-        self.reader = AscatBL2Ssm125(data_path)
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
-        """
-        test getting the image offsets for a known day
-        """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
-        timestamps_should = [datetime.datetime(2017, 2, 20, 5, 9)]
-        assert sorted(timestamps) == sorted(timestamps_should)
-
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+        data, meta, timestamp, lons, lats, time_var = self.reader_B.read(
             datetime.datetime(2017, 2, 20, 5, 9))
 
         ssm_should = np.array([29.2, 30.2, 35.7, 38.6, 37.5, 37.6, 40.5, 44.5,
@@ -146,71 +130,30 @@ class Test_ASCAT_B_L2_SSM_125_BUFR(unittest.TestCase):
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_ASCAT_A_L2_SSM_125_BUFR_PDU(unittest.TestCase):
+class Test_ASCAT_L2_SSM_125_BUFR_PDU(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(os.path.dirname(__file__),  'test-data',
                                  'eumetsat', 'ASCAT_L2_SM_125', 'PDU')
-        self.reader = AscatAL2Ssm125PDU(data_path)
+        self.reader_A = AscatL2Ssm125PDU(data_path, 'Metop_A')
+        self.reader_B = AscatL2Ssm125PDU(data_path, 'Metop_B')
 
     def tearDown(self):
-        self.reader = None
+        self.reader_A = None
+        self.reader_B = None
 
     def test_offset_getting(self):
         """
         test getting the image offsets for a known day
         """
-        timestamps = self.reader.tstamps_for_daterange(
+        timestamps = self.reader_A.tstamps_for_daterange(
             datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
         timestamps_should = [datetime.datetime(2017, 2, 20, 4, 15),
                              datetime.datetime(2017, 2, 20, 4, 18),
                              datetime.datetime(2017, 2, 20, 4, 21)]
         assert sorted(timestamps) == sorted(timestamps_should)
 
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
-            datetime.datetime(2017, 2, 20, 4, 15))
-
-        ssm_should = np.array([3., 0., 0., 0., 0., 0., 0., 0., 0., 1.8, 3.3,
-                               4.8, 4.3, 2.5, 0., 3.8, 5.8, 1.5, 2.4, 4.1, 2.3,
-                               2.7, 5.6, 5.5, 4.9])
-
-        lats_should = np.array([62.60224, 62.67133, 62.74015, 62.80871, 62.877,
-                                62.94502, 63.01276, 63.08024, 63.14743,
-                                63.21435, 63.28098, 63.34734, 63.41341,
-                                63.47919, 63.54468, 63.60988, 63.67479,
-                                63.7394, 63.80372, 63.86773, 63.93144,
-                                63.99485, 64.05795, 64.12075, 64.18323])
-
-        ssm_mean_should = np.array([21.3, 21.3, 21.4, 22.4, 23.4, 24.5, 26.,
-                                    27.1, 27., 26.6, 27.1, 27.6, 27.4, 26.7,
-                                    26.5, 27.5, 28.2, 28.4, 28.8, 29.2, 30.,
-                                    31., 31.3, 31.9, 32.1])
-
-        nptest.assert_allclose(lats[:25], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
-                               :25], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['Mean Surface Soil Moisture'][:25],
-                               ssm_mean_should,
-                               atol=0.01)
-
-
-@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_ASCAT_B_L2_SSM_125_BUFR_PDU(unittest.TestCase):
-
-    def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
-                                 'eumetsat', 'ASCAT_L2_SM_125', 'PDU')
-        self.reader = AscatBL2Ssm125PDU(data_path)
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
-        """
-        test getting the image offsets for a known day
-        """
-        timestamps = self.reader.tstamps_for_daterange(
+        timestamps = self.reader_B.tstamps_for_daterange(
             datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
         timestamps_should = [datetime.datetime(2017, 2, 20, 5, 9),
                              datetime.datetime(2017, 2, 20, 5, 12),
@@ -218,7 +161,33 @@ class Test_ASCAT_B_L2_SSM_125_BUFR_PDU(unittest.TestCase):
         assert sorted(timestamps) == sorted(timestamps_should)
 
     def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+        data, meta, timestamp, lons, lats, time_var = self.reader_A.read(
+            datetime.datetime(2017, 2, 20, 4, 15))
+
+        ssm_should = np.array([3., 0., 0., 0., 0., 0., 0., 0., 0., 1.8, 3.3,
+                               4.8, 4.3, 2.5, 0., 3.8, 5.8, 1.5, 2.4, 4.1, 2.3,
+                               2.7, 5.6, 5.5, 4.9])
+
+        lats_should = np.array([62.60224, 62.67133, 62.74015, 62.80871, 62.877,
+                                62.94502, 63.01276, 63.08024, 63.14743,
+                                63.21435, 63.28098, 63.34734, 63.41341,
+                                63.47919, 63.54468, 63.60988, 63.67479,
+                                63.7394, 63.80372, 63.86773, 63.93144,
+                                63.99485, 64.05795, 64.12075, 64.18323])
+
+        ssm_mean_should = np.array([21.3, 21.3, 21.4, 22.4, 23.4, 24.5, 26.,
+                                    27.1, 27., 26.6, 27.1, 27.6, 27.4, 26.7,
+                                    26.5, 27.5, 28.2, 28.4, 28.8, 29.2, 30.,
+                                    31., 31.3, 31.9, 32.1])
+
+        nptest.assert_allclose(lats[:25], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
+                               :25], ssm_should, atol=0.01)
+        nptest.assert_allclose(data['Mean Surface Soil Moisture'][:25],
+                               ssm_mean_should,
+                               atol=0.01)
+
+        data, meta, timestamp, lons, lats, time_var = self.reader_B.read(
             datetime.datetime(2017, 2, 20, 5, 9))
 
         ssm_should = np.array([29.2, 30.2, 35.7, 38.6, 37.5, 37.6, 40.5, 44.5,
@@ -248,28 +217,35 @@ class Test_ASCAT_B_L2_SSM_125_BUFR_PDU(unittest.TestCase):
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_ASCAT_A_L2_SSM_250_BUFR(unittest.TestCase):
+class Test_ASCAT_L2_SSM_250_BUFR(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(os.path.dirname(__file__),  'test-data',
                                  'eumetsat', 'ASCAT_L2_SM_250', 'bufr')
-        self.reader = AscatAL2Ssm250(data_path)
+        self.reader_A = AscatL2Ssm250(data_path, 'Metop_A')
+        self.reader_B = AscatL2Ssm250(data_path, 'Metop_B')
 
     def tearDown(self):
-        self.reader = None
+        self.reader_A = None
+        self.reader_B = None
 
     def test_offset_getting(self):
         """
         test getting the image offsets for a known day
         """
-        timestamps = self.reader.tstamps_for_daterange(
+        timestamps = self.reader_A.tstamps_for_daterange(
             datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
         timestamps_should = [datetime.datetime(2017, 2, 20, 4, 15),
                              datetime.datetime(2017, 2, 20, 5, 57)]
         assert sorted(timestamps) == sorted(timestamps_should)
 
+        timestamps = self.reader_B.tstamps_for_daterange(
+            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
+        timestamps_should = [datetime.datetime(2017, 2, 20, 5, 9)]
+        assert sorted(timestamps) == sorted(timestamps_should)
+
     def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+        data, meta, timestamp, lons, lats, time_var = self.reader_A.read(
             datetime.datetime(2017, 2, 20, 4, 15))
 
         ssm_should = np.array([1.8, 0., 0., 0., 0., 4.6, 2.8, 4., 4.1, 4.2,
@@ -296,29 +272,7 @@ class Test_ASCAT_A_L2_SSM_250_BUFR(unittest.TestCase):
                                ssm_mean_should,
                                atol=0.01)
 
-
-@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_ASCAT_B_L2_SSM_250_BUFR(unittest.TestCase):
-
-    def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
-                                 'eumetsat', 'ASCAT_L2_SM_250', 'bufr')
-        self.reader = AscatBL2Ssm250(data_path)
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
-        """
-        test getting the image offsets for a known day
-        """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
-        timestamps_should = [datetime.datetime(2017, 2, 20, 5, 9)]
-        assert sorted(timestamps) == sorted(timestamps_should)
-
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+        data, meta, timestamp, lons, lats, time_var = self.reader_B.read(
             datetime.datetime(2017, 2, 20, 5, 9))
 
         ssm_should = np.array([28.8, 31., 35.8, 38.7, 39.3, 38.9, 39.6, 40.7,
@@ -347,22 +301,24 @@ class Test_ASCAT_B_L2_SSM_250_BUFR(unittest.TestCase):
                                atol=0.01)
 
 
-@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_ASCAT_A_L2_SSM_250_BUFR_PDU(unittest.TestCase):
+pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
+class Test_ASCAT_L2_SSM_250_BUFR_PDU(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(os.path.dirname(__file__),  'test-data',
                                  'eumetsat', 'ASCAT_L2_SM_250', 'PDU')
-        self.reader = AscatAL2Ssm250PDU(data_path)
+        self.reader_A = AscatL2Ssm250PDU(data_path, 'Metop_A')
+        self.reader_B = AscatL2Ssm250PDU(data_path, 'Metop_B')
 
     def tearDown(self):
-        self.reader = None
+        self.reader_A = None
+        self.reader_B = None
 
     def test_offset_getting(self):
         """
         test getting the image offsets for a known day
         """
-        timestamps = self.reader.tstamps_for_daterange(
+        timestamps = self.reader_A.tstamps_for_daterange(
             datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
         timestamps_should = [datetime.datetime(2017, 2, 20, 4, 15),
                              datetime.datetime(2017, 2, 20, 4, 18),
@@ -370,7 +326,7 @@ class Test_ASCAT_A_L2_SSM_250_BUFR_PDU(unittest.TestCase):
         assert sorted(timestamps) == sorted(timestamps_should)
 
     def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+        data, meta, timestamp, lons, lats, time_var = self.reader_A.read(
             datetime.datetime(2017, 2, 20, 4, 15))
 
         ssm_should = np.array([1.8, 0., 0., 0., 0., 4.6, 2.8, 4., 4.1, 4.2,
@@ -397,31 +353,7 @@ class Test_ASCAT_A_L2_SSM_250_BUFR_PDU(unittest.TestCase):
                                ssm_mean_should,
                                atol=0.01)
 
-
-@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_ASCAT_B_L2_SSM_250_BUFR_PDU(unittest.TestCase):
-
-    def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
-                                 'eumetsat', 'ASCAT_L2_SM_250', 'PDU')
-        self.reader = AscatBL2Ssm250PDU(data_path)
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
-        """
-        test getting the image offsets for a known day
-        """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
-        timestamps_should = [datetime.datetime(2017, 2, 20, 5, 9),
-                             datetime.datetime(2017, 2, 20, 5, 12),
-                             datetime.datetime(2017, 2, 20, 5, 15)]
-        assert sorted(timestamps) == sorted(timestamps_should)
-
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+        data, meta, timestamp, lons, lats, time_var = self.reader_B.read(
             datetime.datetime(2017, 2, 20, 5, 9))
 
         ssm_should = np.array([28.8, 31., 35.8, 38.7, 39.3, 38.9, 39.6, 40.7,
@@ -450,28 +382,35 @@ class Test_ASCAT_B_L2_SSM_250_BUFR_PDU(unittest.TestCase):
                                atol=0.01)
 
 
-class Test_ASCAT_A_L2_SSM_125_NC(unittest.TestCase):
+class Test_ASCAT_L2_SSM_125_NC(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(os.path.dirname(__file__),  'test-data',
                                  'eumetsat', 'ASCAT_L2_SM_125', 'nc')
-        self.reader = AscatAL2Ssm125Nc(data_path)
+        self.reader_A = AscatL2Ssm125Nc(data_path, 'Metop_A')
+        self.reader_B = AscatL2Ssm125Nc(data_path, 'Metop_B')
 
     def tearDown(self):
-        self.reader = None
+        self.reader_A = None
+        self.reader_B = None
 
     def test_offset_getting(self):
         """
         test getting the image offsets for a known day
         """
-        timestamps = self.reader.tstamps_for_daterange(
+        timestamps = self.reader_A.tstamps_for_daterange(
             datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
         timestamps_should = [datetime.datetime(2017, 2, 20, 4, 15),
                              datetime.datetime(2017, 2, 20, 5, 57)]
         assert sorted(timestamps) == sorted(timestamps_should)
 
+        timestamps = self.reader_B.tstamps_for_daterange(
+            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
+        timestamps_should = [datetime.datetime(2017, 2, 20, 5, 9)]
+        assert sorted(timestamps) == sorted(timestamps_should)
+
     def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+        data, meta, timestamp, lons, lats, time_var = self.reader_A.read(
             datetime.datetime(2017, 2, 20, 4, 15))
 
         ssm_should = np.array([3., 0., 0., 0., 0., 0., 0., 0., 0., 1.8, 3.3,
@@ -497,28 +436,7 @@ class Test_ASCAT_A_L2_SSM_125_NC(unittest.TestCase):
                                ssm_mean_should,
                                atol=0.1)
 
-
-class Test_ASCAT_B_L2_SSM_125_NC(unittest.TestCase):
-
-    def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
-                                 'eumetsat', 'ASCAT_L2_SM_125', 'nc')
-        self.reader = AscatBL2Ssm125Nc(data_path)
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
-        """
-        test getting the image offsets for a known day
-        """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
-        timestamps_should = [datetime.datetime(2017, 2, 20, 5, 9)]
-        assert sorted(timestamps) == sorted(timestamps_should)
-
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+        data, meta, timestamp, lons, lats, time_var = self.reader_B.read(
             datetime.datetime(2017, 2, 20, 5, 9))
 
         ssm_should = np.array([29.2, 30.2, 35.7, 38.6, 37.5, 37.6, 40.5, 44.5,
@@ -547,28 +465,35 @@ class Test_ASCAT_B_L2_SSM_125_NC(unittest.TestCase):
                                atol=0.1)
 
 
-class Test_ASCAT_A_L2_SSM_250_NC(unittest.TestCase):
+class Test_ASCAT_L2_SSM_250_NC(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(os.path.dirname(__file__),  'test-data',
                                  'eumetsat', 'ASCAT_L2_SM_250', 'nc')
-        self.reader = AscatAL2Ssm250Nc(data_path)
+        self.reader_A = AscatL2Ssm250Nc(data_path, 'Metop_A')
+        self.reader_B = AscatL2Ssm250Nc(data_path, 'Metop_B')
 
     def tearDown(self):
-        self.reader = None
+        self.reader_A = None
+        self.reader_B = None
 
     def test_offset_getting(self):
         """
         test getting the image offsets for a known day
         """
-        timestamps = self.reader.tstamps_for_daterange(
+        timestamps = self.reader_A.tstamps_for_daterange(
             datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
         timestamps_should = [datetime.datetime(2017, 2, 20, 4, 15),
                              datetime.datetime(2017, 2, 20, 5, 57)]
         assert sorted(timestamps) == sorted(timestamps_should)
 
+        timestamps = self.reader_B.tstamps_for_daterange(
+            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
+        timestamps_should = [datetime.datetime(2017, 2, 20, 5, 9)]
+        assert sorted(timestamps) == sorted(timestamps_should)
+
     def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+        data, meta, timestamp, lons, lats, time_var = self.reader_A.read(
             datetime.datetime(2017, 2, 20, 4, 15))
 
         ssm_should = np.array([1.8, 0., 0., 0., 0., 4.6, 2.8, 4., 4.1, 4.2,
@@ -595,29 +520,7 @@ class Test_ASCAT_A_L2_SSM_250_NC(unittest.TestCase):
                                ssm_mean_should,
                                atol=0.1)
 
-
-class Test_ASCAT_B_L2_SSM_250_NC(unittest.TestCase):
-
-    def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
-                                 'eumetsat', 'ASCAT_L2_SM_250', 'nc')
-        self.reader = AscatBL2Ssm250Nc(data_path)
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
-        """
-        test getting the image offsets for a known day
-        """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime.datetime(2017, 2, 20), datetime.datetime(2017, 2, 21))
-        timestamps_should = [datetime.datetime(2017, 2, 20, 5, 9)]
-        assert sorted(timestamps) == sorted(timestamps_should)
-
-    def test_image_reading(self):
-
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
+        data, meta, timestamp, lons, lats, time_var = self.reader_B.read(
             datetime.datetime(2017, 2, 20, 5, 9))
 
         ssm_should = np.array([28.8, 31., 35.8, 38.7, 39.3, 38.9, 39.6, 40.7,

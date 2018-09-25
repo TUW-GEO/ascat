@@ -114,7 +114,7 @@ class Test_AscatL2SsmBufrFile(unittest.TestCase):
     def setUp(self):
         data_path = os.path.join(
             os.path.dirname(__file__), 'test-data', 'eumetsat',
-            'ASCAT_L2_SM_125', 'bufr')
+            'ASCAT_L2_SM_125', 'bufr', 'Metop_B')
         fname = os.path.join(
             data_path,
             'M01-ASCA-ASCSMR02-NA-5.0-20170220050900.000000000Z-20170220055833-1207110.bfr')
@@ -185,7 +185,7 @@ class Test_AscatL2SsmNcFile(unittest.TestCase):
     def setUp(self):
         data_path = os.path.join(
             os.path.dirname(__file__), 'test-data', 'eumetsat',
-            'ASCAT_L2_SM_125', 'nc')
+            'ASCAT_L2_SM_125', 'nc', 'Metop_A')
         fname = os.path.join(
             data_path,
             'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20170220041500_53652_eps_o_125_ssm_l2.nc')
@@ -282,12 +282,12 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
             os.path.dirname(__file__), 'test-data', 'eumetsat',
             'ASCAT_L2_SM_125')
         fname_nc = os.path.join(
-            data_path, 'nc',
+            data_path, 'nc', 'Metop_A',
             'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20170220041500_53652_eps_o_125_ssm_l2.nc')
         self.reader_nc = AscatL2SsmNcFile(fname_nc)
 
         fname_bufr = os.path.join(
-            data_path, 'bufr',
+            data_path, 'bufr', 'Metop_A',
             'M02-ASCA-ASCSMR02-NA-5.0-20170220041500.000000000Z-20170220055656-1207110.bfr')
         self.reader_bufr = AscatL2SsmBufrFile(fname_bufr)
 
@@ -356,7 +356,7 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
 def test_AscatL2SsmBufrChunked():
     data_path = os.path.join(
         os.path.dirname(__file__), 'test-data', 'eumetsat', 'ASCAT_L2_SM_125',
-        'PDU')
+        'PDU', 'Metop_B')
     day_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.bin'
     file_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_{datetime}*_125_ssm_l2.bin'
     datetime_format = '%Y%m%d%H%M%S'

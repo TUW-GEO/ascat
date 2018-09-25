@@ -81,3 +81,13 @@ This example program reads and plots Metop ASCAT VOD data.
 
 .. include::
    read_tuw_vod.rst
+
+Reading and plotting lvl1b and lvl2 ASCAT data in generic manner
+================================================================
+
+This example script uses the generic lvl1b and lvl2 reader to get an generic
+Image.
+
+
+.. include::
+   read_generic.rst
