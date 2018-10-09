@@ -321,7 +321,7 @@ def nc2generic(native_Image):
 
     fields = [('jd', 'jd'),
               ('sat_id', None),
-              ('abs_line_nr', 'abs_line_number'),
+              ('abs_line_nr', None),
               ('abs_orbit_nr', None),
               ('node_num', 'node_num'),
               ('line_num', 'line_num'),
@@ -357,6 +357,9 @@ def nc2generic(native_Image):
                 valid_mask]
         else:
             generic_data[field[0]] = native_Image.data[field[1]]
+
+    if 'abs_line_number' in native_Image.data:
+        generic_data['abs_line_nr'] = native_Image.data['abs_line_number']
 
     # flag_fields need to be treated differently since they are not masked
     # arrays
