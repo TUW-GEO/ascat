@@ -39,6 +39,7 @@ from pygeobase.object_base import Image
 import ascat.read_native.eps_native as read_eps
 import ascat.read_native.bufr as read_bufr
 import ascat.read_native.nc as read_nc
+from ascat.math_functions import db2lin, lin2db, hamming_window
 from ascat.base import ASCAT_MultiTemporalImageBase
 
 byte_nan = np.iinfo(np.byte).min
@@ -99,6 +100,110 @@ class AscatL2Image(ImageBase):
                 "[\".nat\", \".nc\", \".bfr\"]")
 
         return img
+
+    def read_masked_data(self, correction_flag=0,
+                         processing_flag=0,
+                         aggregated_quality_flag=100,
+                         snow_cover_probability=100,
+                         frozen_soil_probability=100,
+                         innudation_or_wetland=100,
+                         topographical_complexity=100, **kwargs):
+        orbit = self.read(**kwargs)
+
+        valid = np.ones(orbit.data[orbit.data.dtype.names[0]].shape,
+                        dtype=np.bool)
+        # bitwise comparison, if any bitflag is set by the user and is active
+        # for the datarecord the result is bigger than 0 and the not valid
+        valid = (valid & (((orbit.data['correction_flag'] & correction_flag) == 0) | (orbit.data['correction_flag'] == uint8_nan)))
+        valid = (valid & (((orbit.data['processing_flag'] & processing_flag) == 0) | (orbit.data['processing_flag'] == uint16_nan)))
+        # if any probability/flag is too high the datarecord is not used
+        # nan values are not considered since not all formats provide all flags
+        # and the values are set to nan there to keep a generic structure
+        valid = (valid & ((orbit.data['aggregated_quality_flag'] < aggregated_quality_flag) | (orbit.data['aggregated_quality_flag'] == uint8_nan)))
+        valid = (valid & ((orbit.data['snow_cover_probability'] < snow_cover_probability) | (orbit.data['snow_cover_probability'] == float32_nan)))
+        valid = (valid & ((orbit.data['frozen_soil_probability'] < frozen_soil_probability) | (orbit.data['frozen_soil_probability'] == float32_nan)))
+        valid = (valid & ((orbit.data['innudation_or_wetland'] < innudation_or_wetland) | (orbit.data['innudation_or_wetland'] == float32_nan)))
+        valid = (valid & ((orbit.data['topographical_complexity'] < topographical_complexity) | (orbit.data['topographical_complexity'] == float32_nan)))
+
+        valid_num = orbit.data['jd'][valid].shape[0]
+        masked_data = get_template_ASCATL2_SMX(valid_num)
+        for key in orbit.data.dtype.names:
+            masked_data[key] = orbit.data[key][valid]
+
+        img = Image(orbit.lon[valid], orbit.lat[valid], masked_data,
+                    orbit.metadata, orbit.timestamp,
+                    timekey='jd')
+
+        return img
+
+    def resample_data(self, data, index, distance, windowRadius, **kwargs):
+        # target template
+        template = get_resample_template_ASCATL2_SMX()
+        resOrbit = np.repeat(template, index.shape[0])
+
+        # get weights
+        weights, _ = hamming_window(windowRadius, distance)
+
+        # resample soil moiusture variables [%]
+        sm = ['sm', 'sm_noise', 'mean_surf_sm']
+        for n in sm:
+            # account for nan values: remove them from calculation by setting
+            # them to np.nan and using np.nansum later on
+            data[n][data[n] == float32_nan] = np.nan
+            # the weighting also depends on nan values of the data
+            # if we don't use a data value we have to exclude the
+            # corresponding weight from the total_weights calculation
+            weights_exc = weights.copy()
+            weights_exc[np.isnan(data[n])[index]] = np.nan
+            total_weights_exc = np.nansum(weights, axis=1)
+            resOrbit[n] = (np.nansum(data[n][index] * weights, axis=1)
+                        / total_weights_exc)
+            # set the empty values to nan to keep consistency and avoid
+            # 0 which could also be an actual value
+            resOrbit[n][np.isnan(resOrbit[n])] = float32_nan
+            resOrbit[n][np.nansum(weights_exc, axis=1) == 0] = float32_nan
+
+        # resample dB variables
+        sigmaNought = ['sigf', 'sigm', 'siga', 'sig40', 'sig40_noise',
+                       'slope40', 'slope40_noise', 'sm_sensitivity',
+                       'dry_backscatter', 'wet_backscatter']
+        for sigma in sigmaNought:
+            data[sigma][data[sigma] == float32_nan] = np.nan
+
+            weights_exc = weights.copy()
+            weights_exc[np.isnan(data[sigma])[index]] = np.nan
+            total_weights_exc = np.nansum(weights, axis=1)
+            resOrbit[sigma] = lin2db(np.nansum(db2lin(data[sigma])[index]
+                                           * weights,
+                                           axis=1)
+                                 / total_weights_exc)
+            resOrbit[sigma][np.isnan(resOrbit[sigma])] = float32_nan
+            resOrbit[sigma][np.nansum(weights_exc, axis=1) == 0] = float32_nan
+
+        # resample measurement geometry
+        measgeos = ['incf', 'incm', 'inca', 'azif', 'azim', 'azia']
+        for mg in measgeos:
+            data[mg][data[mg] == float32_nan] = np.nan
+
+            weights_exc = weights.copy()
+            weights_exc[np.isnan(data[mg])[index]] = np.nan
+            total_weights_exc = np.nansum(weights, axis=1)
+            resOrbit[mg] = (np.nansum(data[mg][index] * weights, axis=1)
+                        / total_weights_exc)
+            resOrbit[mg][np.isnan(resOrbit[mg])] = float32_nan
+            resOrbit[mg][np.nansum(weights_exc, axis=1) == 0] = float32_nan
+
+        # nearest neighbour resampling values
+        nnResample = ['jd', 'sat_id', 'abs_line_nr', 'abs_orbit_nr',
+                      'node_num', 'line_num', 'swath', 'as_des_pass']
+        # index of min. distance is equal to 0 because of kd-tree usage
+        for nn in nnResample:
+            resOrbit[nn] = data[nn][index][:, 0]
+
+        # set number of measurements for resampling
+        resOrbit['num_obs'] = np.sum(distance != np.inf, axis=1)
+
+        return resOrbit
 
     def write(self, *args, **kwargs):
         pass
@@ -426,8 +531,7 @@ def eps2generic(native_Image):
               ('siga', 'a_SIGMA0_TRIP', long_nan),
               ('sm', 'SOIL_MOISTURE', uint16_nan),
               ('sm_noise', 'SOIL_MOISTURE_ERROR', uint16_nan),
-              ('sm_sensitivity', 'SOIL_MOISTURE_SENSETIVITY',
-               np.float32(uint32_nan)),
+              ('sm_sensitivity', 'SOIL_MOISTURE_SENSETIVITY', np.float32(uint32_nan)),
               ('sig40', 'SIGMA40', long_nan),
               ('sig40_noise', 'SIGMA40_ERROR', long_nan),
               ('slope40', 'SLOPE40', long_nan),
@@ -437,14 +541,11 @@ def eps2generic(native_Image):
               ('mean_surf_sm', 'MEAN_SURF_SOIL_MOISTURE', uint16_nan),
               ('correction_flag', 'CORRECTION_FLAGS', uint16_nan),
               ('processing_flag', 'PROCESSING_FLAGS', uint16_nan),
-              (
-              'aggregated_quality_flag', 'AGGREGATED_QUALITY_FLAG', ubyte_nan),
+              ('aggregated_quality_flag', 'AGGREGATED_QUALITY_FLAG', ubyte_nan),
               ('snow_cover_probability', 'SNOW_COVER_PROBABILITY', ubyte_nan),
-              (
-              'frozen_soil_probability', 'FROZEN_SOIL_PROBABILITY', ubyte_nan),
+              ('frozen_soil_probability', 'FROZEN_SOIL_PROBABILITY', ubyte_nan),
               ('innudation_or_wetland', 'INNUDATION_OR_WETLAND', ubyte_nan),
-              ('topographical_complexity', 'TOPOGRAPHICAL_COMPLEXITY',
-               ubyte_nan)]
+              ('topographical_complexity', 'TOPOGRAPHICAL_COMPLEXITY', ubyte_nan)]
 
     for field in fields:
         if field[1] is None:
@@ -500,15 +601,12 @@ def bfr2generic(native_Image):
               ('sigm', 'm_Backscatter', 1.7e+38),
               ('siga', 'a_Backscatter', 1.7e+38),
               ('sm', 'Surface Soil Moisture (Ms)', 1.7e+38),
-              (
-              'sm_noise', 'Estimated Error In Surface Soil Moisture', 1.7e+38),
+              ('sm_noise', 'Estimated Error In Surface Soil Moisture', 1.7e+38),
               ('sm_sensitivity', 'Soil Moisture Sensitivity', 1.7e+38),
               ('sig40', 'Backscatter', 1.7e+38),
-              ('sig40_noise',
-               'Estimated Error In Sigma0 At 40 Deg Incidence Angle', 1.7e+38),
+              ('sig40_noise', 'Estimated Error In Sigma0 At 40 Deg Incidence Angle', 1.7e+38),
               ('slope40', 'Slope At 40 Deg Incidence Angle', 1.7e+38),
-              ('slope40_noise',
-               'Estimated Error In Slope At 40 Deg Incidence Angle', 1.7e+38),
+              ('slope40_noise', 'Estimated Error In Slope At 40 Deg Incidence Angle', 1.7e+38),
               ('dry_backscatter', 'Dry Backscatter', 1.7e+38),
               ('wet_backscatter', 'Wet Backscatter', 1.7e+38),
               ('mean_surf_sm', 'Mean Surface Soil Moisture', 1.7e+40),
@@ -516,10 +614,8 @@ def bfr2generic(native_Image):
               ('processing_flag', 'Soil Moisture Processing Flag', 1.7e+38),
               ('aggregated_quality_flag', None),
               ('snow_cover_probability', 'Snow Cover', 1.7e+38),
-              ('frozen_soil_probability', 'Frozen Land Surface Fraction',
-               1.7e+38),
-              ('innudation_or_wetland', 'Inundation And Wetland Fraction',
-               1.7e+38),
+              ('frozen_soil_probability', 'Frozen Land Surface Fraction', 1.7e+38),
+              ('innudation_or_wetland', 'Inundation And Wetland Fraction', 1.7e+38),
               ('topographical_complexity', 'Topographic Complexity', 1.7e+38)]
 
     for field in fields:
@@ -596,5 +692,51 @@ def get_template_ASCATL2_SMX(n=1):
                         float32_nan, float32_nan, uint8_nan, uint16_nan,
                         uint8_nan, float32_nan, float32_nan, float32_nan,
                         float32_nan)], dtype=struct)
+
+    return np.repeat(record, n)
+
+def get_resample_template_ASCATL2_SMX(n=1):
+    """
+    Generic lvl2 SMX template.
+    """
+    metadata = {'temp_name': 'ASCATL2'}
+
+    struct = np.dtype([('jd', np.float64),
+                       ('sat_id', np.byte),
+                       ('abs_line_nr', np.uint32),
+                       ('abs_orbit_nr', np.uint32),
+                       ('node_num', np.uint8),
+                       ('line_num', np.uint16),
+                       ('as_des_pass', np.byte),
+                       ('swath', np.byte),
+                       ('azif', np.float32),
+                       ('azim', np.float32),
+                       ('azia', np.float32),
+                       ('incf', np.float32),
+                       ('incm', np.float32),
+                       ('inca', np.float32),
+                       ('sigf', np.float32),
+                       ('sigm', np.float32),
+                       ('siga', np.float32),
+                       ('sm', np.float32),
+                       ('sm_noise', np.float32),
+                       ('sm_sensitivity', np.float32),
+                       ('sig40', np.float32),
+                       ('sig40_noise', np.float32),
+                       ('slope40', np.float32),
+                       ('slope40_noise', np.float32),
+                       ('dry_backscatter', np.float32),
+                       ('wet_backscatter', np.float32),
+                       ('mean_surf_sm', np.float32),
+                       ('num_obs', np.uint16)],
+                       metadata=metadata)
+
+    record = np.array([(float64_nan, byte_nan, uint32_nan, uint32_nan,
+                        uint8_nan, uint16_nan, byte_nan, byte_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, uint16_nan)], dtype=struct)
 
     return np.repeat(record, n)

@@ -107,15 +107,15 @@ class AscatL1Image(ImageBase):
 
         return img
 
-    def read_masked_data(self, **kwargs):
+    def read_masked_data(self, usable_flag=2, land_flag=0.095, **kwargs):
         orbit = self.read(**kwargs)
 
         valid = np.ones(orbit.data[orbit.data.dtype.names[0]].shape, dtype=np.bool)
         beams = ['f', 'm', 'a']
 
         for b in beams:
-            valid = (valid & (orbit.data['usable_flag' + b] < 2))
-            valid = (valid & (orbit.data['land_flag' + b] > 0.095))
+            valid = (valid & (orbit.data['usable_flag' + b] < usable_flag))
+            valid = (valid & (orbit.data['land_flag' + b] > land_flag))
 
         valid_num = orbit.data['jd'][valid].shape[0]
         masked_data = get_template_ASCATL1B_SZX(valid_num)
@@ -140,26 +140,47 @@ class AscatL1Image(ImageBase):
         # resample backscatter
         sigmaNought = ['sigf', 'sigm', 'siga']
         for sigma in sigmaNought:
+            data[sigma][data[sigma] == float32_nan] = np.nan
+
+            weights_exc = weights.copy()
+            weights_exc[np.isnan(data[sigma])[index]] = np.nan
+            total_weights_exc = np.nansum(weights, axis=1)
             resOrbit[sigma] = lin2db(np.nansum(db2lin(data[sigma])[index]
-                                               * weights,
-                                               axis=1)
-                                     / total_weights)
+                                           * weights,
+                                           axis=1)
+                                 / total_weights_exc)
+            resOrbit[sigma][np.isnan(resOrbit[sigma])] = float32_nan
+            resOrbit[sigma][np.nansum(weights_exc, axis=1) == 0] = float32_nan
 
         # resample measurement geometry
         measgeos = ['incf', 'incm', 'inca', 'azif', 'azim', 'azia']
         for mg in measgeos:
+            data[mg][data[mg] == float32_nan] = np.nan
+
+            weights_exc = weights.copy()
+            weights_exc[np.isnan(data[mg])[index]] = np.nan
+            total_weights_exc = np.nansum(weights, axis=1)
             resOrbit[mg] = (np.nansum(data[mg][index] * weights, axis=1)
-                            / total_weights)
+                        / total_weights_exc)
+            resOrbit[mg][np.isnan(resOrbit[mg])] = float32_nan
+            resOrbit[mg][np.nansum(weights_exc, axis=1) == 0] = float32_nan
 
         # noise estimate
         noise = ['kpf', 'kpm', 'kpa']
         for n in noise:
+            data[n][data[n] == float32_nan] = np.nan
+
+            weights_exc = weights.copy()
+            weights_exc[np.isnan(data[n])[index]] = np.nan
+            total_weights_exc = np.nansum(weights, axis=1)
             resOrbit[n] = (np.nansum(data[n][index] * weights, axis=1)
-                           / total_weights)
+                            / total_weights_exc)
+            resOrbit[n][np.isnan(resOrbit[n])] = float32_nan
+            resOrbit[n][np.nansum(weights_exc, axis=1) == 0] = float32_nan
 
         # nearest neighbour resampling values
         nnResample = ['jd', 'sat_id', 'abs_line_nr', 'abs_orbit_nr',
-                      'node_num', 'line_num', 'swath']
+                      'node_num', 'line_num', 'swath', 'as_des_pass']
         # index of min. distance is equal to 0 because of kd-tree usage
         for nn in nnResample:
             resOrbit[nn] = data[nn][index][:, 0]
