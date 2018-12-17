@@ -110,21 +110,39 @@ class AscatL1Image(ImageBase):
     def read_masked_data(self, usable_flag=2, land_flag=0.095, **kwargs):
         orbit = self.read(**kwargs)
 
-        valid = np.ones(orbit.data[orbit.data.dtype.names[0]].shape, dtype=np.bool)
-        beams = ['f', 'm', 'a']
+        if type(orbit) is dict:
+            img = {'img1': {}, 'img2': {}, 'img3': {}, 'img4': {},
+                          'img5': {}, 'img6': {}}
+            for single_img in orbit:
 
-        for b in beams:
-            valid = (valid & (orbit.data['usable_flag' + b] < usable_flag))
-            valid = (valid & (orbit.data['land_flag' + b] > land_flag))
+                valid = np.ones(orbit[single_img].data[orbit[single_img].data.dtype.names[0]].shape, dtype=np.bool)
 
-        valid_num = orbit.data['jd'][valid].shape[0]
-        masked_data = get_template_ASCATL1B_SZX(valid_num)
-        for key in orbit.data.dtype.names:
-            masked_data[key] = orbit.data[key][valid]
+                valid = (valid & (orbit[single_img].data['usable_flag'] < usable_flag))
+                valid = (valid & (orbit[single_img].data['land_flag'] > land_flag))
+                valid_num = orbit[single_img].data['jd'][valid].shape[0]
+                masked_data = get_template_ASCATL1B_SZF(valid_num)
+                for key in orbit[single_img].data.dtype.names:
+                    masked_data[key] = orbit[single_img].data[key][valid]
 
-        img = Image(orbit.lon[valid], orbit.lat[valid], masked_data,
-                    orbit.metadata, orbit.timestamp,
-                    timekey='jd')
+                img[single_img] = Image(orbit[single_img].lon[valid], orbit[single_img].lat[valid], masked_data,
+                            orbit[single_img].metadata, orbit[single_img].timestamp,
+                            timekey='jd')
+        else:
+            valid = np.ones(orbit.data[orbit.data.dtype.names[0]].shape, dtype=np.bool)
+            beams = ['f', 'm', 'a']
+
+            for b in beams:
+                valid = (valid & (orbit.data['usable_flag' + b] < usable_flag))
+                valid = (valid & (orbit.data['land_flag' + b] > land_flag))
+
+            valid_num = orbit.data['jd'][valid].shape[0]
+            masked_data = get_template_ASCATL1B_SZX(valid_num)
+            for key in orbit.data.dtype.names:
+                masked_data[key] = orbit.data[key][valid]
+
+            img = Image(orbit.lon[valid], orbit.lat[valid], masked_data,
+                        orbit.metadata, orbit.timestamp,
+                        timekey='jd')
 
         return img
 
