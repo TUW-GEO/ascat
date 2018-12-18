@@ -136,9 +136,9 @@ class Test_AscatL1Image(unittest.TestCase):
                                    atol=1e-4)
 
             matching = ['jd', 'sat_id', 'beam_number', 'abs_orbit_nr',
-                        'node_num', 'line_num', 'as_des_pass', 'azi', 'inc',
-                        'sig', 'land_frac', 'flagfield_rf1', 'flagfield_rf2',
-                        'flagfield_pl', 'flagfield_gen1', 'flagfield_gen2',
+                        'as_des_pass', 'azi', 'inc', 'sig', 'land_frac',
+                        'flagfield_rf1', 'flagfield_rf2', 'flagfield_pl',
+                        'flagfield_gen1', 'flagfield_gen2',
                         'land_flag', 'usable_flag'
                         ]
 

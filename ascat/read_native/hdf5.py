@@ -127,10 +127,6 @@ class AscatL1H5File(ImageBase):
 
         data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
 
-        data['line_num'] = np.arange(num_lines / 6).repeat(num_cells * 6)
-        data['node_num'] = np.tile((np.arange(num_cells) + 1),
-                                   num_lines)
-
         for name in raw_metadata.keys():
             for subname in raw_metadata[name].keys():
                 if name not in metadata:

@@ -979,10 +979,6 @@ def read_szf_fmv_12(eps_file):
 
     data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
 
-    data['line_num'] = np.arange(n_lines / 6).repeat(n_node_per_line * 6)
-    data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
-                               n_lines)
-
     return data, metadata, orbit_grid
 
 

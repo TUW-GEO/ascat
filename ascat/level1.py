@@ -463,8 +463,6 @@ def eps_dict2generic(native_Image):
                   ('sat_id', None),
                   ('beam_number', 'BEAM_NUMBER'),
                   ('abs_orbit_nr', None),
-                  ('node_num', 'node_num'),
-                  ('line_num', 'line_num'),
                   ('as_des_pass', 'AS_DES_PASS'),
                   ('azi', 'AZI_ANGLE_FULL'),
                   ('inc', 'INC_ANGLE_FULL'),
@@ -651,8 +649,6 @@ def hdf2generic(native_Image):
                   ('sat_id', None),
                   ('beam_number', 'BEAM_NUMBER'),
                   ('abs_orbit_nr', None),
-                  ('node_num', 'node_num'),
-                  ('line_num', 'line_num'),
                   ('as_des_pass', 'AS_DES_PASS'),
                   ('azi', 'AZI_ANGLE_FULL'),
                   ('inc', 'INC_ANGLE_FULL'),
@@ -751,8 +747,6 @@ def get_template_ASCATL1B_SZF(n=1):
                        ('sat_id', np.byte),
                        ('beam_number', np.byte),
                        ('abs_orbit_nr', np.uint32),
-                       ('node_num', np.uint8),
-                       ('line_num', np.uint16),
                        ('as_des_pass', np.byte),
                        ('azi', np.float32),
                        ('inc', np.float32),
@@ -766,10 +760,9 @@ def get_template_ASCATL1B_SZF(n=1):
                        ('land_flag', np.uint8),
                        ('usable_flag', np.uint8)], metadata=metadata)
 
-    record = np.array([(float64_nan, byte_nan, byte_nan, uint32_nan,
-                        uint8_nan, uint16_nan, byte_nan, float32_nan,
-                        float32_nan, float32_nan, float32_nan, uint8_nan,
+    record = np.array([(float64_nan, byte_nan, byte_nan, uint32_nan, byte_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
                         uint8_nan, uint8_nan, uint8_nan, uint8_nan, uint8_nan,
-                        uint8_nan)], dtype=struct)
+                        uint8_nan, uint8_nan)], dtype=struct)
 
     return np.repeat(record, n)
