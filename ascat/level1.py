@@ -863,14 +863,13 @@ def get_template_ASCATL1B_SZF(n=1):
                        ('flagfield_pl', np.uint8),
                        ('flagfield_gen1', np.uint8),
                        ('flagfield_gen2', np.uint8),
-                       ('land_flag', np.float32),
+                       ('land_flag', np.uint8),
                        ('usable_flag', np.uint8)], metadata=metadata)
 
-    record = np.array([(float64_nan, byte_nan, byte_nan, uint32_nan,
-                        uint8_nan, uint16_nan, byte_nan, float32_nan,
-                        float32_nan, float32_nan, float32_nan, uint8_nan,
-                        uint8_nan, uint8_nan, uint8_nan, uint8_nan, float32_nan,
-                        uint8_nan)], dtype=struct)
+    record = np.array([(float64_nan, byte_nan, byte_nan, uint32_nan, byte_nan,
+                        float32_nan, float32_nan, float32_nan, float32_nan,
+                        uint8_nan, uint8_nan, uint8_nan, uint8_nan, uint8_nan,
+                        uint8_nan, uint8_nan)], dtype=struct)
 
     return np.repeat(record, n)
 
