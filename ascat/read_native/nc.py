@@ -33,8 +33,9 @@ Readers for lvl1b and lvl2 data in nc format.
 import os
 from datetime import datetime, timedelta
 
-import numpy as np
 import netCDF4
+import numpy as np
+import pandas as pd
 
 from pygeobase.io_base import ImageBase
 from pygeobase.io_base import MultiTemporalImageBase
@@ -123,7 +124,7 @@ class AscatL1NcFile(ImageBase):
 
             if name == 'utc_line_nodes':
                 utc_dates = netCDF4.num2date(dd[name], variable.units)
-                dd['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
+                dd['jd'] = pd.DatetimeIndex(utc_dates).to_julian_date().values
 
         dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
 
@@ -217,7 +218,7 @@ class AscatL2SsmNcFile(ImageBase):
 
             if name == 'utc_line_nodes':
                 utc_dates = netCDF4.num2date(dd[name], variable.units)
-                dd['jd'] = netCDF4.netcdftime.JulianDayFromDate(utc_dates)
+                dd['jd'] = pd.DatetimeIndex(utc_dates).to_julian_date().values
 
         # if the ssm_masked is True we mask out data with missing ssm value
         if 'soil_moisture' in dd and ssm_masked is True:
