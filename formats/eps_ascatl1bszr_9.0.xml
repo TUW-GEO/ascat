@@ -1,0 +1,698 @@
+<?xml version="1.0"?>
+<!DOCTYPE format SYSTEM "eps.dtd">
+<?xml-stylesheet type="text/xsl" href="eps.xsl"?>
+
+
+<!--
+    File: eps_ascatl1bszr_7.0.xml
+
+    Copyright (c) 2004-2008 Eumetsat
+
+    This file is part of the EPSXML format specification generated
+    automatically using pfs2xml.
+
+    This XML description is distributed under the GPL license; you can
+    redistribute it and/or modify it under the terms of the GNU General
+    Public License as published by the Free Software Foundation; either
+    version 2 of the License, or (at your option) any later version.
+
+    This XML description is distributed in the hope that it will be
+    useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+    of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with the pfs2xml package; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+-->
+
+
+<format>
+
+
+<version-control>
+    <format-version>
+        <major>12</major><minor>0</minor>
+	<baseline>current</baseline>
+    </format-version>
+    <pfs-version>
+        <major>9</major><minor>0</minor>
+    </pfs-version>
+</version-control>
+
+
+<brief-description>EPS ASCAT Level SZR_1B Format</brief-description>
+
+
+<full-description>
+    This ASCAT SZR_1B description was generated using the ASCAT PFS Excel document Issue 6 Revision 6 (eps_ascatl1_6.6_names_masks.xls) and pfs2xml version 3.3
+</full-description>
+
+
+<file-extensions>
+    <glob>ASCA_SZR_1B_*Z*</glob>
+</file-extensions>
+
+
+<geolocation>
+    <name>Geolocation</name>
+    <description>ASCAT SZR L1B 25km Geolocation Coverage (Latitude, Longitude)</description>
+    <latitude>mdr-1b-25km[].LATITUDE[]</latitude>
+    <longitude>mdr-1b-25km[].LONGITUDE[]</longitude>
+</geolocation>
+
+
+<image>
+    <name>SIGMA0_TRIP FORE</name>
+    <description>ASCAT SZR L1B 25km SIGMA0_TRIP FORE</description>
+    <source>mdr-1b-25km[].SIGMA0_TRIP[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>SIGMA0_TRIP MID</name>
+    <description>ASCAT SZR L1B 25km SIGMA0_TRIP MID</description>
+    <source>mdr-1b-25km[].SIGMA0_TRIP[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>SIGMA0_TRIP AFT</name>
+    <description>ASCAT SZR L1B 25km SIGMA0_TRIP AFT</description>
+    <source>mdr-1b-25km[].SIGMA0_TRIP[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_KP FORE</name>
+    <description>ASCAT SZR L1B 25km KP Estimate Flag FORE</description>
+    <source>mdr-1b-25km[].F_KP[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_KP MID</name>
+    <description>ASCAT SZR L1B 25km KP Estimate Flag MID</description>
+    <source>mdr-1b-25km[].F_KP[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_KP AFT</name>
+    <description>ASCAT SZR L1B 25km KP Estimate Flag AFT</description>
+    <source>mdr-1b-25km[].F_KP[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_USABLE FORE</name>
+    <description>ASCAT SZR L1B 25km usability of averaged values FORE</description>
+    <source>mdr-1b-25km[].F_USABLE[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_USABLE MID</name>
+    <description>ASCAT SZR L1B 25km usability of averaged values MID</description>
+    <source>mdr-1b-25km[].F_USABLE[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_USABLE AFT</name>
+    <description>ASCAT SZR L1B 25km usability of averaged values AFT</description>
+    <source>mdr-1b-25km[].F_USABLE[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_F FORE</name>
+    <description>ASCAT SZR L1B 25km synthetic data used flag FORE</description>
+    <source>mdr-1b-25km[].F_F[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_F MID</name>
+    <description>ASCAT SZR L1B 25km synthetic data used flag MID</description>
+    <source>mdr-1b-25km[].F_F[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_F AFT</name>
+    <description>ASCAT SZR L1B 25km synthetic data used flag AFT</description>
+    <source>mdr-1b-25km[].F_F[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_V FORE</name>
+    <description>ASCAT SZR L1B 25km quality of synthetic data use flag FORE</description>
+    <source>mdr-1b-25km[].F_V[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_V MID</name>
+    <description>ASCAT SZR L1B 25km quality of synthetic data use flag MID</description>
+    <source>mdr-1b-25km[].F_V[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_V AFT</name>
+    <description>ASCAT SZR L1B 25km quality of synthetic data use flag AFT</description>
+    <source>mdr-1b-25km[].F_V[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_OA FORE</name>
+    <description>ASCAT SZR L1B 25km orbit attitdue quality flag FORE</description>
+    <source>mdr-1b-25km[].F_OA[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_OA MID</name>
+    <description>ASCAT SZR L1B 25km orbit attitdue quality flag MID</description>
+    <source>mdr-1b-25km[].F_OA[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_OA AFT</name>
+    <description>ASCAT SZR L1B 25km orbit attitdue quality flag AFT</description>
+    <source>mdr-1b-25km[].F_OA[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_SA FORE</name>
+    <description>ASCAT SZR L1B 25km solar array reflection contamination flag FORE</description>
+    <source>mdr-1b-25km[].F_SA[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_SA MID</name>
+    <description>ASCAT SZR L1B 25km solar array reflection contamination flag MID</description>
+    <source>mdr-1b-25km[].F_SA[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_SA AFT</name>
+    <description>ASCAT SZR L1B 25km solar array reflection contamination flag AFT</description>
+    <source>mdr-1b-25km[].F_SA[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_TEL FORE</name>
+    <description>ASCAT SZR L1B 25km telemtry quality flag FORE</description>
+    <source>mdr-1b-25km[].F_TEL[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_TEL MID</name>
+    <description>ASCAT SZR L1B 25km telemtry quality flag MID</description>
+    <source>mdr-1b-25km[].F_TEL[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_TEL AFT</name>
+    <description>ASCAT SZR L1B 25km telemtry quality flag AFT</description>
+    <source>mdr-1b-25km[].F_TEL[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_EXT_FIL FORE</name>
+    <description>ASCAT SZR L1B 25km presence of extrapolated reference functions flag FORE</description>
+    <source>mdr-1b-25km[].F_EXT_FIL[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_EXT_FIL MID</name>
+    <description>ASCAT SZR L1B 25km presence of extrapolated reference functions flag MID</description>
+    <source>mdr-1b-25km[].F_EXT_FIL[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_EXT_FIL AFT</name>
+    <description>ASCAT SZR L1B 25km presence of extrapolated reference functions flag AFT</description>
+    <source>mdr-1b-25km[].F_EXT_FIL[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_LAND FORE</name>
+    <description>ASCAT SZR L1B 25km use of measurements over land flag FORE</description>
+    <source>mdr-1b-25km[].F_LAND[][0]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_LAND MID</name>
+    <description>ASCAT SZR L1B 25km use of measurements over land flag MID</description>
+    <source>mdr-1b-25km[].F_LAND[][1]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<image>
+    <name>F_LAND AFT</name>
+    <description>ASCAT SZR L1B 25km use of measurements over land flag AFT</description>
+    <source>mdr-1b-25km[].F_LAND[][2]</source>
+    <geolocation>Geolocation</geolocation>
+</image>
+
+
+<protocol>eps-product</protocol>
+
+<product name="ASCAT-SZR_1B" version="Issue 6 Revision 6">
+
+    <mphr name="mphr" version="2" description="Main Product Header Record ">
+        <delimiter name="Product Details"/>
+        <field name="PRODUCT_NAME" type="string" length="67" description="Complete name of the product"/>
+        <field name="PARENT_PRODUCT_NAME_1" type="string" length="67" description="Name of the parent product from which this product has been produced. For Level 0 products, this field is filled with lower case x's."/>
+        <field name="PARENT_PRODUCT_NAME_2" type="string" length="67" description="Name of the parent product from which this product has been produced. For Level 0 products or products for which this is not appropriate, this field is filled with lower case x's."/>
+        <field name="PARENT_PRODUCT_NAME_3" type="string" length="67" description="Name of the parent product from which this product has been produced. For Level 0 products or products for which this is not appropriate, this field is filled with lower case x's."/>
+        <field name="PARENT_PRODUCT_NAME_4" type="string" length="67" description="Name of the parent product from which this product has been produced. For Level 0 products or products for which this is not appropriate, this field is filled with lower case x's."/>
+        <field name="INSTRUMENT_ID" type="enumerated" length="4" description="Instrument identification">
+            <item value="AMSA" name="AMSU-A"/>
+            <item value="ASCA" name="ASCAT"/>
+            <item value="ATOV" name="ATOVS" description="instruments: AVHRR/3, HIRS/4, AMSU-A, MHS"/>
+            <item value="AVHR" name="AVHRR/3"/>
+            <item value="GOME" name="GOME"/>
+            <item value="GRAS" name="GRAS"/>
+            <item value="HIRS" name="HIRS/4"/>
+            <item value="IASI" name="IASI"/>
+            <item value="MHSx" name="MHS"/>
+            <item value="NOAA" name="All NOAA" description="instruments specific to Level 0 NOAA product"/>
+            <item value="SEMx" name="SEM"/>
+            <item value="ADCS" name="ADCS"/>
+            <item value="SBUV" name="SBUV"/>
+            <item value="xxxx" name="No specific instrument"/>
+            <item value="HKTM" name="VCDU34" description="data specific to Level 0"/>
+        </field>
+        <field name="INSTRUMENT_MODEL" type="enumerated" length="3" description="Instrument Model identification">
+            <item value="0" name="Reserved"/>
+            <item value="1" name="Flight Model 1"/>
+            <item value="2" name="Flight Model 2"/>
+            <item value="3" name="Engineering Model"/>
+            <item value="4" name="Protoflight Model"/>
+        </field>
+        <field name="PRODUCT_TYPE" type="enumerated" length="3" description="Product Type">
+            <item value="ENG" description="IASI engineering data"/>
+            <item value="GAC" description="NOAC Global Area Coverage AVHRR data"/>
+            <item value="SND" description="Sounding Data"/>
+            <item value="SZF" description="ASCAT calibrated s0 data at full resolution"/>
+            <item value="SZO" description="ASCAT calibrated s0 data at operational resolution (50 km)"/>
+            <item value="SZR" description="ASCAT calibrated s0 data at research resolution (25 km)"/>
+            <item value="VER" description="IASI verification data"/>
+            <item value="xxx" description="No specific product type specified"/>
+            <item value="AIP" description="NOAA AIP/SAIP data"/>
+            <item value="TIP" description="NOAA TIP/STIP data"/>
+            <item value="HRP" description="HRPT data"/>
+            <item value="LRP" description="LRPT data"/>
+        </field>
+        <field name="PROCESSING_LEVEL" type="enumerated" length="2" description="Processing Level Identification">
+            <item value="00" name="Level 0"/>
+            <item value="01" name="Level 1"/>
+            <item value="1A" name="Level 1a"/>
+            <item value="1B" name="Level 1b"/>
+            <item value="1C" name="Level 1c"/>
+            <item value="02" name="Level 2"/>
+            <item value="03" name="Level 3"/>
+            <item value="xx" name="No Specific Level"/>
+        </field>
+        <field name="SPACECRAFT_ID" type="enumerated" length="3" description="Spacecraft identification">
+            <item value="xxx" description="No specific spacecraft"/>
+            <item value="M01" description="METOP 01"/>
+            <item value="M02" description="METOP 02"/>
+            <item value="M02" description="METOP 03"/>
+            <item value="N15" description="NOAA-K"/>
+            <item value="N16" description="NOAA-L"/>
+            <item value="N17" description="NOAA-M"/>
+            <item value="N18" description="NOAA-N"/>
+            <item value="N19" description="NOAA-N'"/>
+        </field>
+        <field name="SENSING_START" type="time" length="15" description="UTC Time of start of sensing data in this object (PDU, ROI or Full Product)"/>
+        <field name="SENSING_END" type="time" length="15" description="UTC Time of end of sensing data in this object (PDU, ROI or Full Product)"/>
+        <field name="SENSING_START_THEORETICAL" type="time" length="15" description="Theoretical UTC Time of start of sensing data in the dump from which this object is derived. This data is the predicted start time at the MPF level."/>
+        <field name="SENSING_END_THEORETICAL" type="time" length="15" description="Theoretical UTC Time of end of sensing data in the dump from which this object is derived. This data is the predicted end time at the MPF level."/>
+        <field name="PROCESSING_CENTRE" type="enumerated" length="4" description="Processing Centre Identification">
+            <item value="CGS1" description="First EUMETSAT EPS Core Ground Segment"/>
+            <item value="CGS2" description="Second EUMETSAT EPS Core Ground Segment"/>
+            <item value="CGS3" description="Third EUMETSAT EPS Core Ground Segment"/>
+            <item value="NSSx" description="NOAA/NESDIS"/>
+            <item value="RUSx" description="Reference User Station"/>
+            <item value="DMIx" description="DMI, Copenhagen (GRAS SAF)"/>
+            <item value="DWDx" description="DWD, Offenbach (Climate SAF)"/>
+            <item value="FMIx" description="FMI , Helsinki (Ozone SAF)"/>
+            <item value="IMPx" description="IMP, Lisbon  (Land SAF)"/>
+            <item value="INMx" description="INM, Madrid (NCW SAF)"/>
+            <item value="MFxx" description="MF, Lannion (OSI SAF)"/>
+            <item value="UKMO" description="UKMO, Bracknell (NWP SAF)"/>
+            <item value="ERF1" description="R-EPS reprocessing facility 1"/>
+            <item value="ERF2" description="R-EPS reprocessing facility 2"/>
+            <item value="ERF3" description="R-EPS reprocessing facility 3"/>
+        </field>
+        <field name="PROCESSOR_MAJOR_VERSION" type="uinteger" length="5" description="Processing chain major version number"/>
+        <field name="PROCESSOR_MINOR_VERSION" type="uinteger" length="5" description="Processing chain minor version number"/>
+        <field name="FORMAT_MAJOR_VERSION" type="uinteger" length="5" description="Dataset Format Major Version number"/>
+        <field name="FORMAT_MINOR_VERSION" type="uinteger" length="5" description="Dataset Format Minor Version number"/>
+        <field name="PROCESSING_TIME_START" type="time" length="15" description="UTC time of the processing at start of processing for the product"/>
+        <field name="PROCESSING_TIME_END" type="time" length="15" description="UTC time of the processing at end of processing for the product"/>
+        <field name="PROCESSING_MODE" type="enumerated" length="1" description="Identification of the mode of processing">
+            <item value="N" name="Nominal" description="NRT processing"/>
+            <item value="B" name="Backlog Processing"/>
+            <item value="R" name="Reprocessing"/>
+            <item value="V" name="Validation"/>
+        </field>
+        <field name="DISPOSITION_MODE" type="enumerated" length="1" description="Identification of the diposition mode">
+            <item value="T" name="Testing"/>
+            <item value="O" name="Operational"/>
+            <item value="C" name="Commissioning"/>
+        </field>
+        <field name="RECEIVING_GROUND_STATION" type="enumerated" length="3" description="Acquisition Station Identification">
+            <item value="SVL" description="Svalbard"/>
+            <item value="WAL" description="Wallops Island, Virginia"/>
+            <item value="FBK" description="Fairbanks, Alaska"/>
+            <item value="SOC" description="SOCC (NESDIS Satellite Operations Control Centre), Suitland, Maryland"/>
+            <item value="RUS" description="Reference User Station"/>
+        </field>
+        <field name="RECEIVE_TIME_START" type="time" length="15" description="UTC time of the reception at CDA for first Data Item"/>
+        <field name="RECEIVE_TIME_END" type="time" length="15" description="UTC time of the reception at CDA for last Data Item"/>
+        <field name="ORBIT_START" type="uinteger" length="5" description="Start Orbit Number, counted incrementally since launch"/>
+        <field name="ORBIT_END" type="uinteger" length="5" description="Stop Orbit Number"/>
+        <field name="ACTUAL_PRODUCT_SIZE" type="uinteger" length="11" units="bytes" description="Size of the complete product"/>
+        <delimiter name="ASCENDING NODE ORBIT PARAMETERS"/>
+        <field name="STATE_VECTOR_TIME" type="longtime" length="18" units="UTC" description="Epoch time (in UTC) of the orbital elements and the orbit state vector. this corresponds to the time of crossing the ascending node for ORBIT_START"/>
+        <field name="SEMI_MAJOR_AXIS" type="integer" length="11" units="mm" description="Semi major axis of orbit at time of the ascending node crossing."/>
+        <field name="ECCENTRICITY" type="integer" length="11" scaling-factor="10^6" description="Orbit eccentricity at time of the ascending node crossing"/>
+        <field name="INCLINATION" type="integer" length="11" scaling-factor="10^3" units="deg" description="Orbit inclination at time of the ascending node crossing"/>
+        <field name="PERIGEE_ARGUMENT" type="integer" length="11" scaling-factor="10^3" units="deg" description="Argument of perigee at time of the ascending node crossing"/>
+        <field name="RIGHT_ASCENSION" type="integer" length="11" scaling-factor="10^3" units="deg" description="Right ascension at time of the ascending node crossing"/>
+        <field name="MEAN_ANOMALY" type="integer" length="11" scaling-factor="10^3" units="deg" description="Mean anomaly at time of the ascending node crossing"/>
+        <field name="X_POSITION" type="integer" length="11" scaling-factor="10^3" units="m" description="X position of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="Y_POSITION" type="integer" length="11" scaling-factor="10^3" units="m" description="Y position of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="Z_POSITION" type="integer" length="11" scaling-factor="10^3" units="m" description="Z position of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="X_VELOCITY" type="integer" length="11" scaling-factor="10^3" units="m/s" description="X velocity of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="Y_VELOCITY" type="integer" length="11" scaling-factor="10^3" units="m/s" description="Y velocity of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="Z_VELOCITY" type="integer" length="11" scaling-factor="10^3" units="m/s" description="Z velocity of the orbit state vector in the orbit frame at ascending node"/>
+        <field name="EARTH_SUN_DISTANCE_RATIO" type="integer" length="11" scaling-factor="10^6" description="Earth-Sun distance ratio - ratio of current Earth-Sun distance to Mean Earth-Sun distance"/>
+        <field name="LOCATION_TOLERANCE_RADIAL" type="integer" length="11" units="m" description="Nadir Earth location tolerance radial"/>
+        <field name="LOCATION_TOLERANCE_CROSSTRACK" type="integer" length="11" units="m" description="Nadir Earth location tolerance cross-track"/>
+        <field name="LOCATION_TOLERANCE_ALONGTRACK" type="integer" length="11" units="m" description="Nadir Earth location tolerance along-track"/>
+        <field name="YAW_ERROR" type="integer" length="11" scaling-factor="10^3" units="deg" description="Constant Yaw attitude error"/>
+        <field name="ROLL_ERROR" type="integer" length="11" scaling-factor="10^3" units="deg" description="Constant Roll attitude error"/>
+        <field name="PITCH_ERROR" type="integer" length="11" scaling-factor="10^3" units="deg" description="Constant Pitch attitude error"/>
+        <delimiter name="LOCATION SUMMARY"/>
+        <field name="SUBSAT_LATITUDE_START" type="integer" length="11" scaling-factor="10^3" units="Deg" description="Latitude of sub-satellite point at start of the data set"/>
+        <field name="SUBSAT_LONGITUDE_START" type="integer" length="11" scaling-factor="10^3" units="Deg" description="Longitude of sub-satellite point at start of the data set"/>
+        <field name="SUBSAT_LATITUDE_END" type="integer" length="11" scaling-factor="10^3" units="Deg" description="Latitude of sub-satellite point at end of the data set"/>
+        <field name="SUBSAT_LONGITUDE_END" type="integer" length="11" scaling-factor="10^3" units="Deg" description="Longitude of sub-satellite point at end of the data set"/>
+        <delimiter name="Leap Second Information"/>
+        <field name="LEAP_SECOND" type="integer" length="2" description="Occurence of Leap second within the product. Field is set to -1, 0 or +1 dependent upon occurrence of leap second and direction."/>
+        <field name="LEAP_SECOND_UTC" type="time" length="15" description="UTC time of occurrence of the Leap Second (If no leap second in the product, value is null)"/>
+        <delimiter name="Record counts"/>
+        <field name="TOTAL_RECORDS" type="uinteger" length="6" description="Total count of all records in the product"/>
+        <field name="TOTAL_MPHR" type="uinteger" length="6" description="Total count of all MPHRs in product (should always be 1!)"/>
+        <field name="TOTAL_SPHR" type="uinteger" length="6" description="Total count of all SPHRs in product (should be 0 or 1 only)"/>
+        <field name="TOTAL_IPR" type="uinteger" length="6" description="Total count of all IPRs in the product"/>
+        <field name="TOTAL_GEADR" type="uinteger" length="6" description="Total count of all GEADRs in the product"/>
+        <field name="TOTAL_GIADR" type="uinteger" length="6" description="Total count of all GIADRs in the product"/>
+        <field name="TOTAL_VEADR" type="uinteger" length="6" description="Total count of all VEADRs in the product"/>
+        <field name="TOTAL_VIADR" type="uinteger" length="6" description="Total count of all VIADRs in the product"/>
+        <field name="TOTAL_MDR" type="uinteger" length="6" description="Total count of all MDRs in the product"/>
+        <delimiter name="Record Based Generic Quality Flags"/>
+        <field name="COUNT_DEGRADED_INST_MDR" type="uinteger" length="6" description="Count of MDRs with degradation due to instrument problems"/>
+        <field name="COUNT_DEGRADED_PROC_MDR" type="uinteger" length="6" description="Count of MDRs with degradation due to processing problems"/>
+        <field name="COUNT_DEGRADED_INST_MDR_BLOCKS" type="uinteger" length="6" description="Count of the number of blocks of MDRs degraded due to degraded instrument"/>
+        <field name="COUNT_DEGRADED_PROC_MDR_BLOCKS" type="uinteger" length="6" description="Count of the number of blocks of MDRs degraded due to degraded processing"/>
+        <delimiter name="Time Based Generic Quality Flags"/>
+        <field name="DURATION_OF_PRODUCT" type="uinteger" length="8" units="ms" description="The duration of the product in milliseconds"/>
+        <field name="MILLISECONDS_OF_DATA_PRESENT" type="uinteger" length="8" units="ms" description="The total amount of data present in the product"/>
+        <field name="MILLISECONDS_OF_DATA_MISSING" type="uinteger" length="8" units="ms" description="The total amount of data missing from the prodcut"/>
+        <delimiter name="Regional Product Information"/>
+        <field name="SUBSETTED_PRODUCT" type="boolean" length="1" description="Set when product has been subsetted (e.g. geographically subsetted using a region of interest filter). Implies the presence of one or more UMARF GIADRs in GAD section for product retrieved from UMARF."/>
+    </mphr>
+
+    <sphr name="sphr" subclass="1" version="2" instrument="ASCAT" description="Secondary Product Record Header">
+		<delimiter name="L1A Product Details"/>
+		<field name="N_L1A_MDR" type="uinteger" length="8" description="Total number of MDRs in the L1A product"/>
+		<field name="N_L1A_MDR_B0" type="uinteger" length="8" description="Number of MDRs in the L1Aproduct corresponding to Beam 0"/>
+		<field name="N_L1A_MDR_B1" type="uinteger" length="8" description="Number of MDRs in the L1A product corresponding to Beam 1"/>
+		<field name="N_L1A_MDR_B2" type="uinteger" length="8" description="Number of MDRs in the L1A product corresponding to Beam 2"/>
+		<field name="N_L1A_MDR_B3" type="uinteger" length="8" description="Number of MDRs in the L1A product corresponding to Beam 3"/>
+		<field name="N_L1A_MDR_B4" type="uinteger" length="8" description="Number of MDRs in the L1A product corresponding to Beam 4"/>
+		<field name="N_L1A_MDR_B5" type="uinteger" length="8" description="Number of MDRs in the L1A product corresponding to Beam 5"/>
+		<field name="N_GAPS" type="uinteger" length="8" description="Number of data gaps"/>
+		<field name="TOTAL_GAPS_SIZE" type="uinteger" length="8" description="Total gap size in miliseconds"/>
+		<field name="N_HKTM_PACKETS_RECEIVED" type="uinteger" length="8" description="Number of HKTM telemetry packets received within the sensing time of the product"/>
+		<delimiter name="L1A Product Quality"/>
+		<field name="N_F_NOISE" type="uinteger" length="8" description="Number of instances where the flag F_NOISE is 1"/>
+		<field name="N_F_PG" type="uinteger" length="8" description="Number of instances where the flag F_PG is 1"/>
+		<field name="N_V_PG" type="uinteger" length="8" description="Number of instances where the flag V_PG is 1"/>
+		<field name="N_F_FILTER" type="uinteger" length="8" description="Number of instances where the flag F_FILTER is 1"/>
+		<field name="N_V_FILTER" type="uinteger" length="8" description="Number of instances where the flag V_FILTER is 1"/>
+		<field name="N_F_PGP" type="uinteger" length="8" description="Number of instances where the flag F_PGP is 1"/>
+		<field name="N_F_NP" type="uinteger" length="8" description="Number of instances where the flag F_NP is 1"/>
+		<field name="N_F_ORBIT" type="uinteger" length="8" description="Number of instances where the flag F_ORBIT is 1"/>
+		<field name="N_F_ATTITUDE" type="uinteger" length="8" description="Number of instances where the flag F_ATTITUDE is 1"/>
+		<field name="N_F_OMEGA" type="uinteger" length="8" description="Number of instances where the flag F_OMEGA is 1"/>
+		<field name="N_F_MAN" type="uinteger" length="8" description="Number of instances where the flag F_MAN is 1"/>
+		<field name="N_F_OSV" type="uinteger" length="8" description="Number of instances where the flag F_OSV is 1"/>
+		<field name="N_F_E_TEL_PRES" type="uinteger" length="8" description="Number of instances where the flag F_E_TEL_PRES is 1"/>
+		<field name="N_F_E_TEL_IR" type="uinteger" length="8" description="Number of instances where the flag F_E_TEL_IR is 1"/>
+		<field name="N_F_CE" type="uinteger" length="8" description="Number of instances where the flag F_CE is 1"/>
+		<field name="N_V_CE" type="uinteger" length="8" description="Number of instances where the flag V_CE is 1"/>
+		<field name="N_F_OA" type="uinteger" length="8" description="Number of instances where the flag F_OA is 1"/>
+		<field name="N_F_TEL" type="uinteger" length="8" description="Number of instances where the flag F_TEL is 1"/>
+		<field name="N_F_REF" type="uinteger" length="8" description="Number of instances where the flag F_REF is 1"/>
+		<field name="N_F_SA" type="uinteger" length="8" description="Number of instances where the flag F_SA is 1"/>
+		<field name="N_F_LAND" type="uinteger" length="8" description="Number of instances where the flag F_LAND is 1"/>
+		<field name="N_F_GEO" type="uinteger" length="8" description="Number of instances where the flag F_GEO is 1"/>
+		<field name="N_F_SIGN" type="uinteger" length="8" description="Number of instances where the flag F_SIGN is 1"/>
+		<delimiter name="L1b product details Note: If the SPHR is part of a L1A product, the field values in this section will be filled in with the value 99999999"/>
+		<field name="N_L1B_MDR" type="uinteger" length="8" description="Total number of MDRs in the L1B product"/>
+		<field name="N_EMPTY_S0_TRIP" type="uinteger" length="8" description="Number of fully empty s0 triplets"/>
+		<field name="N_L1B_MDR_F" type="uinteger" length="8" description="Number of s0 FORE valid values"/>
+		<field name="N_EMPTY_S0_TRIP_F" type="uinteger" length="8" description="Number of s0 FORE default values"/>
+		<field name="N_L1B_MDR_M" type="uinteger" length="8" description="Number of s0 MID valid values"/>
+		<field name="N_EMPTY_S0_TRIP_M" type="uinteger" length="8" description="Number of s0 MID default values"/>
+		<field name="N_L1B_MDR_A" type="uinteger" length="8" description="Number of s0 AFT valid values"/>
+		<field name="N_EMPTY_S0_TRIP_A" type="uinteger" length="8" description="Number of s0 AFT default values"/>
+		<delimiter name="L1b product quality Note: If the SPHR is part of a L1A product, the field values in this section will be filled in with  the value 99999999"/>
+		<field name="N_F_KP_F" type="uinteger" length="8" description="Number of instances where the flag F_KP is set to 1for FORE s0s"/>
+		<field name="N_F_USABLE_F" type="uinteger" length="8" description="Number of instances where the flag F_USABLE is set to 2 for FORE s0s"/>
+		<field name="N_F_F_F" type="uinteger" length="8" description="Number of instances where F_F is greater than 0 for FORE s0s"/>
+		<field name="N_F_V_F" type="uinteger" length="8" description="Number of instances where F_V is greater than 0 for FORE s0s"/>
+		<field name="N_F_OA_F" type="uinteger" length="8" description="Number of instances where F_OA is greater than 0 for FORE s0s"/>
+		<field name="N_F_SA_F" type="uinteger" length="8" description="Number of instances where F_SA is greater than 0 for FORE s0s"/>
+		<field name="N_F_TEL_F" type="uinteger" length="8" description="Number of instances where F_TEL is greater than 0 for FORE s0s"/>
+		<field name="N_F_REF_F" type="uinteger" length="8" description="Number of instances where F_REF is greater than 0 for FORE s0s"/>
+		<field name="N_F_LAND_F" type="uinteger" length="8" description="Number of instances where F_LAND is greater than 0 for FORE s0s"/>
+		<field name="N_F_KP_M" type="uinteger" length="8" description="Number of instances where the flag F_KP is set to 1 for MID s0s"/>
+		<field name="N_F_USABLE_M" type="uinteger" length="8" description="Number of instances where the flag F_USABLE is set to 2 for MID s0s"/>
+		<field name="N_F_F_M" type="uinteger" length="8" description="Number of instances where F_F is greater than 0 for MID s0s"/>
+		<field name="N_F_V_M" type="uinteger" length="8" description="Number of instances where F_V is greater than 0 for MID s0s"/>
+		<field name="N_F_OA_M" type="uinteger" length="8" description="Number of instances where F_OA is greater than 0 for MID s0s"/>
+		<field name="N_F_SA_M" type="uinteger" length="8" description="Number of instances where F_SA is greater than 0 for MID s0s"/>
+		<field name="N_F_TEL_M" type="uinteger" length="8" description="Number of instances where F_TEL is greater than 0 for MID s0s"/>
+		<field name="N_F_REF_M" type="uinteger" length="8" description="Number of instances where F_REF is greater than 0 for MID s0s"/>
+		<field name="N_F_LAND_M" type="uinteger" length="8" description="Number of instances where F_LAND is greater than 0 for MID s0s"/>
+		<field name="N_F_KP_A" type="uinteger" length="8" description="Number of instances where the flag F_KP is set to 1 for AFT s0s"/>
+		<field name="N_F_USABLE_A" type="uinteger" length="8" description="Number of instances where the flag F_USABLE is set to 2 for AFT s0s"/>
+		<field name="N_F_F_A" type="uinteger" length="8" description="Number of instances where F_F is greater than 0 for AFT s0s"/>
+		<field name="N_F_V_A" type="uinteger" length="8" description="Number of instances where F_V is greater than 0 for AFT s0s"/>
+		<field name="N_F_OA_A" type="uinteger" length="8" description="Number of instances where F_OA is greater than 0 for AFT s0s"/>
+		<field name="N_F_SA_A" type="uinteger" length="8" description="Number of instances where F_SA is greater than 0 for AFT s0s"/>
+		<field name="N_F_TEL_A" type="uinteger" length="8" description="Number of instances where F_TEL is greater than 0 for AFT s0s"/>
+		<field name="N_F_REF_A" type="uinteger" length="8" description="Number of instances where F_REF is greater than 0 for AFT s0s"/>
+		<field name="N_F_LAND_A" type="uinteger" length="8" description="Number of instances where F_LAND is greater than 0 for AFT s0s"/>
+		<field name="PROCESSING_MESSAGE_1" type="string" length="50" description="Processing Message free text"/>
+		<field name="PROCESSING_MESSAGE_2" type="string" length="50" description="Processing Message free text"/>
+		<delimiter name="Size of the Record"/>
+	</sphr>
+
+    <!-- <geadr name="geadr-osv" subclass="1" version="1" instrument="ASCAT" description="OSV"/> -->
+
+    <geadr name="geadr-lsm" subclass="2" version="1" instrument="ASCAT" description="LSM"/>
+
+    <viadr name="viadr-oa" subclass="4" version="2" instrument="ASCAT" description="Orbit/attitude parameters">
+        <field name="AC_UTC_TIME" type="longtime" length="8" units="UTC" description="Ascending node UTC time"/>
+        <array name="AC_SV_POSITION" length="3" labels="x,y,z">
+            <field type="integer8" scaling-factor="10^4" units="k m" description="State vector at Ascending Node - Position"/>
+        </array>
+        <array name="AC_SV_VELOCITY" length="3" labels="vx,vy,vz">
+            <field type="integer8" scaling-factor="10^4" units="m/s" description="State vector at Ascending Node - Velocity"/>
+        </array>
+        <array name="ATT_YS_LAW" length="3" labels="pitch,roll,yaw">
+            <field type="integer4" scaling-factor="10^6" units="radians" description="Attitude Yaw Steering Law: Amplitude parameters: Cx (pitch), Cy (roll) and Cz (yaw)"/>
+        </array>
+        <array name="ATT_DIST_LAW" length="4" label="attitude-angle">
+            <array length="3" label="value">
+                <array length="3" label="coefficient">
+                    <field type="integer4" scaling-factor="10^6" description="Attitude Distortion Law parameters, DIM1 is for 3 different coefficients, DIM3 is for 4 different values per coefficient, DIM2 is for three different attitude angles"/>
+                </array>
+            </array>
+        </array>
+    </viadr>
+
+   <viadr name="viadr-ver" subclass="6" version="2" instrument="ASCAT" description="Processor and auxiliary file versions used">
+		<field name="PROCESSOR_VERSION1" type="enumerated" description="PPF major release number"/>
+		<field name="PROCESSOR_VERSION2" type="enumerated" description="PPF release number"/>
+		<field name="PROCESSOR_VERSION3" type="enumerated" description="PPF patch number"/>
+		<field name="PRC_VERSION1" type="enumerated" description="ASCA_PRC_xx_ Major Version"/>
+		<field name="PRC_VERSION2" type="enumerated" description="ASCA_PRC_xx_ Minor Version"/>
+		<field name="INS_VERSION1" type="enumerated" description="ASCA_INS_xx_ Major Version"/>
+		<field name="INS_VERSION2" type="enumerated" description="ASCA_INS_xx_ Minor Version"/>
+		<field name="NTB_VERSION1" type="enumerated" description="ASCA_NTB_xx_ Major Version"/>
+		<field name="NTB_VERSION2" type="enumerated" description="ASCA_NTB_xx_ Minor Version"/>
+		<field name="XCL_VERSION1" type="enumerated" description="ASCA_XCL_xx_ Major Version "/>
+		<field name="XCL_VERSION2" type="enumerated" description="ASCA_XCL_xx_ Minor Version "/>
+	</viadr>
+
+    <veadr name="veadr-prc" subclass="1" version="1" instrument="ASCAT" />
+
+    <veadr name="veadr-ins" subclass="2" version="1" instrument="ASCAT" />
+
+    <veadr name="veadr-ntb" subclass="3" version="1" instrument="ASCAT" />
+
+    <veadr name="veadr-xcl" subclass="5" version="1" instrument="ASCAT" />
+
+    <veadr name="veadr-osv" subclass="6" version="1" instrument="ASCAT" />
+
+	<mdr name="mdr-1b-125" subclass="1" version="3" instrument="ASCAT" description="Level 1B 12.5km resolution record">
+		<delimiter name="Quality of MDR has been degraded from nominal due to a processing degradation."/>
+		<field name="DEGRADED_INST_MDR" type="boolean" units="n/a" description="Quality of MDR has been degraded from nominal due to an instrument degradation."/>
+		<field name="DEGRADED_PROC_MDR" type="boolean" units="n/a" description="Quality of MDR has been degraded from nominal due to a processing degradation. "/>
+		<delimiter name="SWATH GRID LINE and associated data"/>
+		<field name="UTC_LINE_NODES" type="time" units="UTC" description="UTC time of line of nodes"/>
+		<field name="ABS_LINE_NUMBER" type="integer4" units="count" description="Absolute (unique) counter for the line of nodes (from format version 12.0 onwards only)"/>
+		<field name="SAT_TRACK_AZI" type="uinteger2" scaling-factor="10^2" units="deg" description="Azimuth angle bearing (range: 0 to 360) of nadir track velocity"/>
+		<field name="AS_DES_PASS" type="boolean" units="n/a" description="Ascending/descending pass indicator"/>
+		<delimiter name="NODE and associated data"/>
+		<array name="SWATH INDICATOR" length="82">
+			<field type="boolean" units="n/a" description="Swath (0=LEFT, 1=RIGHT)"/>
+		</array>
+		<array name="LATITUDE" length="82">
+			<field type="integer4" scaling-factor="10^6" units="deg" description="Latitude (-90 to 90 deg)"/>
+		</array>
+		<array name="LONGITUDE" length="82">
+			<field type="integer4" scaling-factor="10^6" units="deg" description="Longitude (0 to 360 deg)"/>
+		</array>
+		<delimiter name="TRIPLET and associated data"/>
+		<array name="SIGMA0_TRIP" length="82">
+			<array length="3">
+				<field type="integer4" scaling-factor="10^6" units="dB" description="Sigma0 triplet, re-sampled to swath grid, for 3 beams (fore, mid, aft) "/>
+			</array>
+		</array>
+		<array name="KP" length="82">
+			<array length="3">
+				<field type="uinteger2" scaling-factor="10^4" units="n/a" description="Kp for re-sampled sigma0 tripplet. Values between 0 and 1"/>
+			</array>
+		</array>
+		<array name="INC_ANGLE_TRIP" length="82">
+			<array length="3">
+				<field type="uinteger2" scaling-factor="10^2" units="deg" description="Incidence angle for re-sampled sigma0 tripplet."/>
+			</array>
+		</array>
+		<array name="AZI_ANGLE_TRIP" length="82">
+			<array length="3">
+				<field type="integer2" scaling-factor="10^2" units="deg" description="Incidence angle for re-sampled sigma0 tripplet. Values range from -180 to +180, where minus is west and plus is east."/>
+			</array>
+		</array>
+		<array name="NUM_VAL_TRIP" length="82">
+			<array length="3">
+				<field type="uinteger4" units="count" description="Number of full resolution sigma0 values contributing to the re-sampled sigma0 tripplet."/>
+			</array>
+		</array>
+		<array name="F_KP" length="82">
+			<array length="3">
+				<field type="boolean" units="n/a" description="Flag related to the quality of the Kp estimate (0=NOMINAL, 1=NON-NOMINAL)"/>
+			</array>
+		</array>
+		<array name="F_USABLE" length="82">
+			<array length="3">
+				<field type="uinteger1" units="n/a" description="Flag related to the usability of the sigma0 tripplet (0=GOOD, 1=USABLE, 2=NOT USABLE)"/>
+			</array>
+		</array>
+		<array name="F_F" length="82">
+			<array length="3">
+				<field type="uinteger2" scaling-factor="10^3" units="n/a" description="Flag related to non-nominal amount of input raw data to calculate echo corrections (value between 0 and 1 shows the fraction of original samples affected)"/>
+			</array>
+		</array>
+		<array name="F_V" length="82">
+			<array length="3">
+				<field type="uinteger2" scaling-factor="10^3" units="n/a" description="Flag related to non enough amount of input raw data to calculate echo corrections (value between 0 and 1 shows the fraction of original samples affected)"/>
+			</array>
+		</array>
+		<array name="F_OA" length="82">
+			<array length="3">
+				<field type="uinteger2" scaling-factor="10^3" units="n/a" description="Flag related to lack of accuracy of orbit/atticute knowledge (value between 0 and 1 shows the fraction of original samples affected)"/>
+			</array>
+		</array>
+		<array name="F_SA" length="82">
+			<array length="3">
+				<field type="uinteger2" scaling-factor="10^3" units="n/a" description="Flag related to solar array reflection contamination (value between 0 and 1 shows the fraction of original samples affected)"/>
+			</array>
+		</array>
+		<array name="F_TEL" length="82">
+			<array length="3">
+				<field type="uinteger2" scaling-factor="10^3" units="n/a" description="Flag related to non-nominal telemetry check results (value between 0 and 1 shows the fraction of original samples affected)"/>
+			</array>
+		</array>
+		<array name="F_REF" length="82">
+			<array length="3">
+				<field type="uinteger2" scaling-factor="10^3" units="n/a" description="Flag related to non-nominal raw echo correction reference functions (value between 0 and 1 shows the fraction of original samples affected)"/>
+			</array>
+		</array>
+		<array name="F_LAND" length="82">
+			<array length="3">
+				<field type="uinteger2" scaling-factor="10^3" units="n/a" description="Flag related to presence of land in the re-sampled sigma0 tripllet (value between 0 and 1 shows the fraction of original samples affected)"/>
+			</array>
+		</array>
+	</mdr>
+
+
+</product>
+
+</format>

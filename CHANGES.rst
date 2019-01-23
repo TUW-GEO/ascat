@@ -5,6 +5,8 @@ Changelog
 Version 0.XX
 ============
 
+- Adding generic readers for lvl1b and lvl2 data in eps_native, bufr, netCDF
+  and hdf5 formats
 - Update readme structure
 - Fix read the docs error
 - Adding cython to travis requirements

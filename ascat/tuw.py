@@ -37,7 +37,7 @@ import pygeogrids.grids as grids
 import pygeogrids.netcdf as ncgrid
 from pynetcf.time_series import GriddedNcContiguousRaggedTs
 
-from ascat.timeseries import AscatTimeSeries
+from ascat.read_native.cdr import AscatTimeSeries
 
 
 class Ascat_data(object):

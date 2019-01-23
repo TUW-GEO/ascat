@@ -110,21 +110,19 @@ EUMETSAT
 EUMETSAT provides ASCAT Level 1 and Level 2 data among others through the `EUMETSAT Data Centre <http://www.eumetsat.int/website/home/Data/DataDelivery/EUMETSATDataCentre/index.html>`_. At the moment this package supports the following products:
 
 * ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in BUFR format
-  :py:class:`ascat.eumetsat.AscatAL2Ssm125` and :py:class:`ascat.eumetsat.AscatBL2Ssm125`.
+  :py:class:`ascat.eumetsat.AscatL2Ssm125`.
 * ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in BUFR format - 3 Minute PDU files.
-  :py:class:`ascat.eumetsat.AscatAL2Ssm125PDU` and :py:class:`ascat.eumetsat.AscatBL2Ssm125PDU`.
-  For reading half orbits use :py:class:`ascat.eumetsat.AscatAL2Ssm125PDUChunked`
-  and :py:class:`ascat.eumetsat.AscatBL2Ssm125PDUChunked`
+  :py:class:`ascat.eumetsat.AscatL2Ssm125PDU`.
+  For reading half orbits use :py:class:`ascat.eumetsat.AscatL2Ssm125PDUChunked`
 * ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in netCDF format
-  :py:class:`ascat.eumetsat.AscatAL2Ssm125Nc` and :py:class:`ascat.eumetsat.AscatBL2Ssm125Nc`.
+  :py:class:`ascat.eumetsat.AscatL2Ssm125Nc`.
 * ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in BUFR format
-  :py:class:`ascat.eumetsat.AscatAL2Ssm250` and :py:class:`ascat.eumetsat.AscatBL2Ssm250`.
+  :py:class:`ascat.eumetsat.AscatL2Ssm250`.
 * ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in BUFR format - 3 Minute PDU files.
-  :py:class:`ascat.eumetsat.AscatAL2Ssm250PDU` and :py:class:`ascat.eumetsat.AscatBL2Ssm250PDU`.
-  For reading half orbits use :py:class:`ascat.eumetsat.AscatAL2Ssm250PDUChunked`
-  and :py:class:`ascat.eumetsat.AscatBL2Ssm250PDUChunked`
+  :py:class:`ascat.eumetsat.AscatL2Ssm250PDU`.
+  For reading half orbits use :py:class:`ascat.eumetsat.AscatL2Ssm250PDUChunked`
 * ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in netCDF format
-  :py:class:`ascat.eumetsat.AscatAL2Ssm250Nc` and :py:class:`ascat.eumetsat.AscatBL2Ssm250Nc`.
+  :py:class:`ascat.eumetsat.AscatL2Ssm250Nc`.
 
 Contribute
 ==========

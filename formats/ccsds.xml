@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!DOCTYPE format SYSTEM "product.dtd">
+
+<format>
+<product name="CCSDS packets">
+
+    <array name="packets">
+        <section name="header">
+	    <field name="vn_type_2ndhdr" type="uinteger1" />
+	    <field name="apid" type="uinteger1" />
+	    <field name="sequence" type="uinteger2" />
+	    <field name="length" type="uinteger2" variable="len" />
+	</section>
+	<field name="utc_time" type="longtime" />
+	<section name="obt">
+	    <field name="coarse" type="uinteger4" />
+	    <field name="fine" type="uinteger2" />
+	</section>
+	<array length="$len-15">
+	    <field type="uinteger1" />
+	</array>
+	<field name="error_control" type="uinteger2" />
+    </array>
+
+</product>
+</format>

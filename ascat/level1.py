@@ -26,7 +26,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-General Level 2 data readers for ASCAT data in all formats.
+General Level 1 data readers for ASCAT data in all formats.
 Not specific to distributor.
 """
 import os
@@ -36,9 +36,10 @@ from datetime import datetime
 from pygeobase.io_base import ImageBase
 from pygeobase.object_base import Image
 
-import ascat.read_native.eps_native as read_eps
-import ascat.read_native.bufr as read_bufr
-import ascat.read_native.nc as read_nc
+import ascat.read_native.eps_native as eps_native
+import ascat.read_native.bufr as bufr
+import ascat.read_native.nc as nc
+import ascat.read_native.hdf5 as h5
 from ascat.base import ASCAT_MultiTemporalImageBase
 
 byte_nan = np.iinfo(np.byte).min
@@ -52,16 +53,16 @@ long_nan = np.iinfo(np.int32).min
 int_nan = np.iinfo(np.int16).min
 
 
-class AscatL2Image(ImageBase):
+class AscatL1Image(ImageBase):
     """
-    General Level 2 Image
+    General Level 1b Image for ASCAT data
     """
 
     def __init__(self, *args, **kwargs):
         """
         Initialization of i/o object.
         """
-        super(AscatL2Image, self).__init__(*args, **kwargs)
+        super(AscatL1Image, self).__init__(*args, **kwargs)
 
     def read(self, timestamp=None, file_format=None, native=False, **kwargs):
 
@@ -70,33 +71,38 @@ class AscatL2Image(ImageBase):
 
         if file_format == ".nat":
             if native:
-                img = read_eps.AscatL2EPSImage(self.filename).read(timestamp)
+                img = eps_native.AscatL1bEPSImage(self.filename).read(
+                    timestamp)
             else:
-                img_raw = read_eps.AscatL2EPSImage(self.filename).read(
+                img_raw = eps_native.AscatL1bEPSImage(self.filename).read(
                     timestamp)
                 img = eps2generic(img_raw)
 
         elif file_format == ".nc":
             if native:
-                img = read_nc.AscatL2SsmNcFile(self.filename).read(timestamp)
+                img = nc.AscatL1NcFile(self.filename).read(timestamp)
             else:
-                img_raw = read_nc.AscatL2SsmNcFile(self.filename).read(
-                    timestamp)
+                img_raw = nc.AscatL1NcFile(self.filename).read(timestamp)
                 img = nc2generic(img_raw)
 
         elif file_format == ".bfr" or file_format == ".buf":
             if native:
-                img = read_bufr.AscatL2SsmBufrFile(self.filename).read(
-                    timestamp)
+                img = bufr.AscatL1BufrFile(self.filename).read(timestamp)
             else:
-                img_raw = read_bufr.AscatL2SsmBufrFile(self.filename).read(
-                    timestamp)
+                img_raw = bufr.AscatL1BufrFile(self.filename).read(timestamp)
                 img = bfr2generic(img_raw)
+
+        elif file_format == ".h5":
+            if native:
+                img = h5.AscatL1H5File(self.filename).read(timestamp)
+            else:
+                img_raw = h5.AscatL1H5File(self.filename).read(timestamp)
+                img = hdf2generic(img_raw)
 
         else:
             raise RuntimeError(
                 "Format not found, please indicate the file_format. "
-                "[\".nat\", \".nc\", \".bfr\"]")
+                "[\".nat\", \".nc\", \".bfr\", \".h5\"]")
 
         return img
 
@@ -110,9 +116,9 @@ class AscatL2Image(ImageBase):
         pass
 
 
-class AscatL2Bufr(ASCAT_MultiTemporalImageBase):
+class AscatL1Bufr(ASCAT_MultiTemporalImageBase):
     """
-    Class for reading multiple ASCAT level2 images in bufr format.
+    Class for reading multiple ASCAT level1 images in bufr format.
 
     Parameters
     ----------
@@ -147,7 +153,7 @@ class AscatL2Bufr(ASCAT_MultiTemporalImageBase):
                  day_search_str='*-ASCA-*-NA-*-%Y%m%d*-*-*.bfr',
                  file_search_str='*-ASCA-*-NA-*-{datetime}.*.bfr',
                  datetime_format='%Y%m%d%H%M%S',
-                 filename_datetime_format=(25, 39, '%Y%m%d%H%M%S'),
+                 filename_datetime_format=(26, 40, '%Y%m%d%H%M%S'),
                  msg_name_lookup=None,
                  eo_portal=False):
         self.path = path
@@ -157,7 +163,7 @@ class AscatL2Bufr(ASCAT_MultiTemporalImageBase):
         self.datetime_format = datetime_format
         self.filename_datetime_format = filename_datetime_format
         self.eo_portal = eo_portal
-        super(AscatL2Bufr, self).__init__(path, AscatL2Image,
+        super(AscatL1Bufr, self).__init__(path, AscatL1Image,
                                           subpath_templ=[month_path_str],
                                           fname_templ=file_search_str,
                                           datetime_format=datetime_format,
@@ -194,9 +200,9 @@ class AscatL2Bufr(ASCAT_MultiTemporalImageBase):
                                      self.filename_datetime_format[2])
 
 
-class AscatL2Eps(ASCAT_MultiTemporalImageBase):
+class AscatL1Eps(ASCAT_MultiTemporalImageBase):
     """
-    Class for reading multiple ASCAT level2 images in eps format.
+    Class for reading multiple ASCAT level1 images in eps format.
 
     Parameters
     ----------
@@ -237,16 +243,66 @@ class AscatL2Eps(ASCAT_MultiTemporalImageBase):
         self.datetime_format = datetime_format
         self.filename_datetime_format = filename_datetime_format
         self.eo_portal = eo_portal
-        super(AscatL2Eps, self).__init__(path, AscatL2Image,
+        super(AscatL1Eps, self).__init__(path, AscatL1Image,
                                          subpath_templ=[month_path_str],
                                          fname_templ=file_search_str,
                                          datetime_format=datetime_format,
                                          exact_templ=False)
 
 
-class AscatL2Nc(ASCAT_MultiTemporalImageBase):
+class AscatL1Hdf5(ASCAT_MultiTemporalImageBase):
     """
-    Class for reading multiple ASCAT level2 images in nc format.
+    Class for reading multiple ASCAT level1 images in hdf5 format.
+
+    Parameters
+    ----------
+    path: string
+        path where the data is stored
+    month_path_str: string, optional
+        if the files are stored in folders by month then please specify the
+        string that should be used in datetime.datetime.strftime
+    day_search_str: string, optional
+        to provide an iterator over all images of a day the method
+        _get_possible_timestamps looks for all available images on a day on the
+        harddisk.
+        Default: 'ASCA_*_*_*_%Y%m%d*_*_*_*_*.h5'
+    file_search_str: string, optional
+        this string is used to find a bufr file by the exact date.
+        Default: 'ASCA_*_*_*_{datetime}Z_*_*_*_*.h5'
+    datetime_format: string, optional
+        datetime format by which {datetime} will be replaced in file_search_str
+        Default: %Y%m%d%H%M%S
+    eo_portal : boolean optional
+        If your data is from the EUMETSAT EO portal you can set this flag to
+        True. This way the the datetime can automatically be read from the
+        filename. Otherwise it needs the filename_datetime_format class
+        variable set correctly.
+    """
+
+    def __init__(self, path,
+                 month_path_str='',
+                 day_search_str='ASCA_*_*_*_%Y%m%d*_*_*_*_*.h5',
+                 file_search_str='ASCA_*_*_*_{datetime}Z_*_*_*_*.h5',
+                 datetime_format='%Y%m%d%H%M%S',
+                 filename_datetime_format=(16, 30, '%Y%m%d%H%M%S'),
+                 eo_portal=False):
+        self.path = path
+        self.month_path_str = month_path_str
+        self.day_search_str = day_search_str
+        self.file_search_str = file_search_str
+        self.datetime_format = datetime_format
+        self.filename_datetime_format = filename_datetime_format
+        self.eo_portal = eo_portal
+        super(AscatL1Hdf5, self).__init__(path, AscatL1Image,
+                                          subpath_templ=[month_path_str],
+                                          fname_templ=file_search_str,
+                                          datetime_format=datetime_format,
+                                          exact_templ=False)
+
+
+class AscatL1Nc(ASCAT_MultiTemporalImageBase):
+    """
+    Class for reading multiple ASCAT level1 images in nc format.
 
     Parameters
     ----------
@@ -291,7 +347,7 @@ class AscatL2Nc(ASCAT_MultiTemporalImageBase):
         self.datetime_format = datetime_format
         self.filename_datetime_format = filename_datetime_format
         self.eo_portal = eo_portal
-        super(AscatL2Nc, self).__init__(path, AscatL2Image,
+        super(AscatL1Nc, self).__init__(path, AscatL1Image,
                                         subpath_templ=[month_path_str],
                                         fname_templ=file_search_str,
                                         datetime_format=datetime_format,
@@ -312,12 +368,145 @@ def get_file_format(filename):
     return file_format
 
 
+def eps2generic(native_Image):
+    """
+    Convert the native eps Image into a generic one.
+    Use different convert-function for szf and szx data
+    """
+    if type(native_Image) is dict:
+        img = eps_dict2generic(native_Image)
+    else:
+        img = eps_img2generic(native_Image)
+
+    return img
+
+
+def eps_img2generic(native_Image):
+    """
+    Convert single eps Images into a generic one
+    """
+    n_records = native_Image.lat.shape[0]
+    generic_data = get_template_ASCATL1B_SZX(n_records)
+
+    fields = [('jd', 'jd', None),
+              ('sat_id', None, None),
+              ('abs_line_nr', None, None),
+              ('abs_orbit_nr', None, None),
+              ('node_num', 'NODE_NUM', None),
+              ('line_num', 'LINE_NUM', None),
+              ('as_des_pass', 'AS_DES_PASS', None),
+              ('swath', 'SWATH INDICATOR', byte_nan),
+              ('azif', 'f_AZI_ANGLE_TRIP', int_nan),
+              ('azim', 'm_AZI_ANGLE_TRIP', int_nan),
+              ('azia', 'a_AZI_ANGLE_TRIP', int_nan),
+              ('incf', 'f_INC_ANGLE_TRIP', uint16_nan),
+              ('incm', 'm_INC_ANGLE_TRIP', uint16_nan),
+              ('inca', 'a_INC_ANGLE_TRIP', uint16_nan),
+              ('sigf', 'f_SIGMA0_TRIP', long_nan),
+              ('sigm', 'm_SIGMA0_TRIP', long_nan),
+              ('siga', 'a_SIGMA0_TRIP', long_nan),
+              ('kpf', 'f_KP', uint16_nan),
+              ('kpm', 'm_KP', uint16_nan),
+              ('kpa', 'a_KP', uint16_nan),
+              ('kpf_quality', 'f_F_KP', byte_nan),
+              ('kpm_quality', 'm_F_KP', byte_nan),
+              ('kpa_quality', 'a_F_KP', byte_nan),
+              ('land_flagf', 'f_F_LAND', uint16_nan),
+              ('land_flagm', 'm_F_LAND', uint16_nan),
+              ('land_flaga', 'a_F_LAND', uint16_nan),
+              ('usable_flagf', 'f_F_USABLE', byte_nan),
+              ('usable_flagm', 'm_F_USABLE', byte_nan),
+              ('usable_flaga', 'a_F_USABLE', byte_nan),
+              ]
+    for field in fields:
+        if field[1] is None:
+            continue
+
+        if field[2] is not None:
+            valid_mask = (native_Image.data[field[1]] != field[2])
+            generic_data[field[0]][valid_mask] = native_Image.data[field[1]][
+                valid_mask]
+        else:
+            generic_data[field[0]] = native_Image.data[field[1]]
+
+    if 'ABS_LINE_NUMBER' in native_Image.data:
+        generic_data['abs_line_nr'] = native_Image.data['ABS_LINE_NUMBER']
+
+    fields = [('sat_id', 'SPACECRAFT_ID'),
+              ('abs_orbit_nr', 'ORBIT_START')]
+    for field in fields:
+        generic_data[field[0]] = native_Image.metadata[field[1]].repeat(
+            n_records)
+
+    # convert sat_id (spacecraft id) to the department intern definition
+    # use an array as look up table
+    sat_id_lut = np.array([0, 4, 3, 5])
+    generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
+
+    img = Image(native_Image.lon, native_Image.lat, generic_data,
+                native_Image.metadata, native_Image.timestamp,
+                timekey='jd')
+    return img
+
+
+def eps_dict2generic(native_Image):
+    """
+    Convert dict of eps Images into a dict with generic Images
+    """
+    img = {'img1': {}, 'img2': {}, 'img3': {}, 'img4': {}, 'img5': {},
+           'img6': {}}
+    for szf_img in native_Image:
+        n_records = native_Image[szf_img].lat.shape[0]
+        generic_data = get_template_ASCATL1B_SZF(n_records)
+
+        fields = [('jd', 'jd'),
+                  ('sat_id', None),
+                  ('beam_number', 'BEAM_NUMBER'),
+                  ('abs_orbit_nr', None),
+                  ('as_des_pass', 'AS_DES_PASS'),
+                  ('azi', 'AZI_ANGLE_FULL'),
+                  ('inc', 'INC_ANGLE_FULL'),
+                  ('sig', 'SIGMA0_FULL'),
+                  ('land_frac', 'LAND_FRAC'),
+                  ('flagfield_rf1', 'FLAGFIELD_RF1'),
+                  ('flagfield_rf2', 'FLAGFIELD_RF2'),
+                  ('flagfield_pl', 'FLAGFIELD_PL'),
+                  ('flagfield_gen1', 'FLAGFIELD_GEN1'),
+                  ('flagfield_gen2', 'FLAGFIELD_GEN2'),
+                  ('land_flag', 'F_LAND'),
+                  ('usable_flag', 'F_USABLE')
+                  ]
+        for field in fields:
+            if field[1] is None:
+                continue
+            generic_data[field[0]] = native_Image[szf_img].data[field[1]]
+
+        fields = [('sat_id', 'SPACECRAFT_ID'),
+                  ('abs_orbit_nr', 'ORBIT_START')]
+        for field in fields:
+            generic_data[field[0]] = native_Image[szf_img].metadata[
+                field[1]].repeat(n_records)
+
+        # convert sat_id (spacecraft id) to the department intern definition
+        # use an array as look up table
+        sat_id_lut = np.array([0, 4, 3, 5])
+        generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
+
+        img[szf_img] = Image(native_Image[szf_img].lon,
+                             native_Image[szf_img].lat,
+                             generic_data,
+                             native_Image[szf_img].metadata,
+                             native_Image[szf_img].timestamp,
+                             timekey='jd')
+    return img
+
+
 def nc2generic(native_Image):
     """
     Convert the native nc Image into a generic one.
     """
     n_records = native_Image.lat.shape[0]
-    generic_data = get_template_ASCATL2_SMX(n_records)
+    generic_data = get_template_ASCATL1B_SZX(n_records)
 
     fields = [('jd', 'jd'),
               ('sat_id', None),
@@ -327,26 +516,28 @@ def nc2generic(native_Image):
               ('line_num', 'line_num'),
               ('as_des_pass', 'as_des_pass'),
               ('swath', 'swath_indicator'),
-              ('azif', None),
-              ('azim', None),
-              ('azia', None),
-              ('incf', None),
-              ('incm', None),
-              ('inca', None),
-              ('sigf', None),
-              ('sigm', None),
-              ('siga', None),
-              ('sm', 'soil_moisture'),
-              ('sm_noise', 'soil_moisture_error'),
-              ('sm_sensitivity', 'soil_moisture_sensitivity'),
-              ('sig40', 'sigma40'),
-              ('sig40_noise', 'sigma40_error'),
-              ('slope40', 'slope40'),
-              ('slope40_noise', 'slope40_error'),
-              ('dry_backscatter', 'dry_backscatter'),
-              ('wet_backscatter', 'wet_backscatter'),
-              ('mean_surf_sm', 'mean_soil_moisture')]
-
+              ('azif', 'f_azi_angle_trip'),
+              ('azim', 'm_azi_angle_trip'),
+              ('azia', 'a_azi_angle_trip'),
+              ('incf', 'f_inc_angle_trip'),
+              ('incm', 'm_inc_angle_trip'),
+              ('inca', 'a_inc_angle_trip'),
+              ('sigf', 'f_sigma0_trip'),
+              ('sigm', 'm_sigma0_trip'),
+              ('siga', 'a_sigma0_trip'),
+              ('kpf', 'f_kp'),
+              ('kpm', 'm_kp'),
+              ('kpa', 'a_kp'),
+              ('kpf_quality', 'f_f_kp'),
+              ('kpm_quality', 'm_f_kp'),
+              ('kpa_quality', 'a_f_kp'),
+              ('land_flagf', 'f_f_land'),
+              ('land_flagm', 'm_f_land'),
+              ('land_flaga', 'a_f_land'),
+              ('usable_flagf', 'f_f_usable'),
+              ('usable_flagm', 'm_f_usable'),
+              ('usable_flaga', 'a_f_usable'),
+              ]
     for field in fields:
         if field[1] is None:
             continue
@@ -361,104 +552,8 @@ def nc2generic(native_Image):
     if 'abs_line_number' in native_Image.data:
         generic_data['abs_line_nr'] = native_Image.data['abs_line_number']
 
-    # flag_fields need to be treated differently since they are not masked
-    # arrays
-    # so we need to check for nan values
-    flags = [('correction_flag', 'corr_flags'),
-             # There is a processing flag but it is different to the other
-             # formats
-             ('processing_flag', None),
-             ('aggregated_quality_flag', 'aggregated_quality_flag'),
-             ('snow_cover_probability', 'snow_cover_probability'),
-             ('frozen_soil_probability', 'frozen_soil_probability'),
-             ('innudation_or_wetland', 'wetland_flag'),
-             ('topographical_complexity', 'topography_flag')]
-
-    for field in flags:
-        if field[1] is None:
-            continue
-
-        valid_mask = (native_Image.data[field[1]] != ubyte_nan)
-        generic_data[field[0]][valid_mask] = native_Image.data[field[1]][
-            valid_mask]
-
     fields = [('sat_id', 'sat_id'),
               ('abs_orbit_nr', 'orbit_start')]
-    for field in fields:
-        generic_data[field[0]] = np.repeat(native_Image.metadata[field[1]],
-                                           n_records)
-
-    # convert sat_id (spacecraft id) to the department intern definition
-    # use an array as look up table
-    sat_id_lut = np.array([0, 4, 3, 5])
-    generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
-
-    img = Image(native_Image.lon, native_Image.lat, generic_data,
-                native_Image.metadata, native_Image.timestamp,
-                timekey='jd')
-
-    return img
-
-
-def eps2generic(native_Image):
-    """
-    Convert the native eps Image into a generic one.
-    """
-    n_records = native_Image.lat.shape[0]
-    generic_data = get_template_ASCATL2_SMX(n_records)
-
-    fields = [('jd', 'jd', None),
-              ('sat_id', None, None),
-              ('abs_line_nr', 'ABS_LINE_NUMBER', None),
-              ('abs_orbit_nr', None, None),
-              ('node_num', 'NODE_NUM', None),
-              ('line_num', 'LINE_NUM', None),
-              ('as_des_pass', 'AS_DES_PASS', None),
-              ('swath', 'SWATH_INDICATOR', byte_nan),
-              ('azif', 'f_AZI_ANGLE_TRIP', int_nan),
-              ('azim', 'm_AZI_ANGLE_TRIP', int_nan),
-              ('azia', 'a_AZI_ANGLE_TRIP', int_nan),
-              ('incf', 'f_INC_ANGLE_TRIP', uint16_nan),
-              ('incm', 'm_INC_ANGLE_TRIP', uint16_nan),
-              ('inca', 'a_INC_ANGLE_TRIP', uint16_nan),
-              ('sigf', 'f_SIGMA0_TRIP', long_nan),
-              ('sigm', 'm_SIGMA0_TRIP', long_nan),
-              ('siga', 'a_SIGMA0_TRIP', long_nan),
-              ('sm', 'SOIL_MOISTURE', uint16_nan),
-              ('sm_noise', 'SOIL_MOISTURE_ERROR', uint16_nan),
-              ('sm_sensitivity', 'SOIL_MOISTURE_SENSETIVITY',
-               np.float32(uint32_nan)),
-              ('sig40', 'SIGMA40', long_nan),
-              ('sig40_noise', 'SIGMA40_ERROR', long_nan),
-              ('slope40', 'SLOPE40', long_nan),
-              ('slope40_noise', 'SLOPE40_ERROR', long_nan),
-              ('dry_backscatter', 'DRY_BACKSCATTER', long_nan),
-              ('wet_backscatter', 'WET_BACKSCATTER', long_nan),
-              ('mean_surf_sm', 'MEAN_SURF_SOIL_MOISTURE', uint16_nan),
-              ('correction_flag', 'CORRECTION_FLAGS', uint16_nan),
-              ('processing_flag', 'PROCESSING_FLAGS', uint16_nan),
-              (
-              'aggregated_quality_flag', 'AGGREGATED_QUALITY_FLAG', ubyte_nan),
-              ('snow_cover_probability', 'SNOW_COVER_PROBABILITY', ubyte_nan),
-              (
-              'frozen_soil_probability', 'FROZEN_SOIL_PROBABILITY', ubyte_nan),
-              ('innudation_or_wetland', 'INNUDATION_OR_WETLAND', ubyte_nan),
-              ('topographical_complexity', 'TOPOGRAPHICAL_COMPLEXITY',
-               ubyte_nan)]
-
-    for field in fields:
-        if field[1] is None:
-            continue
-
-        if field[2] is not None:
-            valid_mask = (native_Image.data[field[1]] != field[2])
-            generic_data[field[0]][valid_mask] = native_Image.data[field[1]][
-                valid_mask]
-        else:
-            generic_data[field[0]] = native_Image.data[field[1]]
-
-    fields = [('sat_id', 'SPACECRAFT_ID'),
-              ('abs_orbit_nr', 'ORBIT_START')]
     for field in fields:
         generic_data[field[0]] = np.repeat(native_Image.metadata[field[1]],
                                            n_records)
@@ -480,7 +575,7 @@ def bfr2generic(native_Image):
     Convert the native bfr Image into a generic one.
     """
     n_records = native_Image.lat.shape[0]
-    generic_data = get_template_ASCATL2_SMX(n_records)
+    generic_data = get_template_ASCATL1B_SZX(n_records)
 
     fields = [('jd', 'jd', None),
               ('sat_id', 'Satellite Identifier', None),
@@ -499,37 +594,32 @@ def bfr2generic(native_Image):
               ('sigf', 'f_Backscatter', 1.7e+38),
               ('sigm', 'm_Backscatter', 1.7e+38),
               ('siga', 'a_Backscatter', 1.7e+38),
-              ('sm', 'Surface Soil Moisture (Ms)', 1.7e+38),
-              (
-              'sm_noise', 'Estimated Error In Surface Soil Moisture', 1.7e+38),
-              ('sm_sensitivity', 'Soil Moisture Sensitivity', 1.7e+38),
-              ('sig40', 'Backscatter', 1.7e+38),
-              ('sig40_noise',
-               'Estimated Error In Sigma0 At 40 Deg Incidence Angle', 1.7e+38),
-              ('slope40', 'Slope At 40 Deg Incidence Angle', 1.7e+38),
-              ('slope40_noise',
-               'Estimated Error In Slope At 40 Deg Incidence Angle', 1.7e+38),
-              ('dry_backscatter', 'Dry Backscatter', 1.7e+38),
-              ('wet_backscatter', 'Wet Backscatter', 1.7e+38),
-              ('mean_surf_sm', 'Mean Surface Soil Moisture', 1.7e+40),
-              ('correction_flag', 'Soil Moisture Correction Flag', 1.7e+38),
-              ('processing_flag', 'Soil Moisture Processing Flag', 1.7e+38),
-              ('aggregated_quality_flag', None),
-              ('snow_cover_probability', 'Snow Cover', 1.7e+38),
-              ('frozen_soil_probability', 'Frozen Land Surface Fraction',
-               1.7e+38),
-              ('innudation_or_wetland', 'Inundation And Wetland Fraction',
-               1.7e+38),
-              ('topographical_complexity', 'Topographic Complexity', 1.7e+38)]
-
+              ('kpf', 'f_Radiometric Resolution (Noise Value)', 1.7e+38),
+              ('kpm', 'm_Radiometric Resolution (Noise Value)', 1.7e+38),
+              ('kpa', 'a_Radiometric Resolution (Noise Value)', 1.7e+38),
+              ('kpf_quality', 'f_ASCAT KP Estimate Quality', None),
+              ('kpm_quality', 'm_ASCAT KP Estimate Quality', None),
+              ('kpa_quality', 'a_ASCAT KP Estimate Quality', None),
+              ('land_flagf', 'f_ASCAT Land Fraction', None),
+              ('land_flagm', 'm_ASCAT Land Fraction', None),
+              ('land_flaga', 'a_ASCAT Land Fraction', None),
+              ('usable_flagf', 'f_ASCAT Sigma-0 Usability', None),
+              ('usable_flagm', 'm_ASCAT Sigma-0 Usability', None),
+              ('usable_flaga', 'a_ASCAT Sigma-0 Usability', None),
+              ]
+    kp_vars = ['kpf', 'kpm', 'kpa']
     for field in fields:
         if field[1] is None:
             continue
 
         if field[2] is not None:
             valid_mask = (native_Image.data[field[1]] != field[2])
-            generic_data[field[0]][valid_mask] = native_Image.data[field[1]][
-                valid_mask]
+            if field[0] in kp_vars:
+                generic_data[field[0]][valid_mask] = \
+                    native_Image.data[field[1]][valid_mask] / 100
+            else:
+                generic_data[field[0]][valid_mask] = \
+                    native_Image.data[field[1]][valid_mask]
         else:
             generic_data[field[0]] = native_Image.data[field[1]]
 
@@ -545,11 +635,64 @@ def bfr2generic(native_Image):
     return img
 
 
-def get_template_ASCATL2_SMX(n=1):
+def hdf2generic(native_Image):
     """
-    Generic lvl2 SMX template.
+    Convert the native nc Image into a generic one.
     """
-    metadata = {'temp_name': 'ASCATL2'}
+    img = {'img1': {}, 'img2': {}, 'img3': {}, 'img4': {}, 'img5': {},
+           'img6': {}}
+    for szf_img in native_Image:
+        n_records = native_Image[szf_img].lat.shape[0]
+        generic_data = get_template_ASCATL1B_SZF(n_records)
+
+        fields = [('jd', 'jd'),
+                  ('sat_id', None),
+                  ('beam_number', 'BEAM_NUMBER'),
+                  ('abs_orbit_nr', None),
+                  ('as_des_pass', 'AS_DES_PASS'),
+                  ('azi', 'AZI_ANGLE_FULL'),
+                  ('inc', 'INC_ANGLE_FULL'),
+                  ('sig', 'SIGMA0_FULL'),
+                  ('land_frac', 'LAND_FRAC'),
+                  ('flagfield_rf1', 'FLAGFIELD_RF1'),
+                  ('flagfield_rf2', 'FLAGFIELD_RF2'),
+                  ('flagfield_pl', 'FLAGFIELD_PL'),
+                  ('flagfield_gen1', 'FLAGFIELD_GEN1'),
+                  ('flagfield_gen2', 'FLAGFIELD_GEN2'),
+                  ('land_flag', 'F_LAND'),
+                  ('usable_flag', 'F_USABLE')
+                  ]
+        for field in fields:
+            if field[1] is None:
+                continue
+            generic_data[field[0]] = native_Image[szf_img].data[field[1]]
+
+        fields = [('sat_id', 'SPACECRAFT_ID'),
+                  ('abs_orbit_nr', 'ORBIT_START')]
+        for field in fields:
+            generic_data[field[0]] = np.repeat(native_Image[szf_img].metadata[
+                                                   field[1]], n_records)
+
+        # convert sat_id (spacecraft id) to the department intern definition
+        # use an array as look up table
+        sat_id_lut = np.array([0, 4, 3, 5])
+        generic_data['sat_id'] = sat_id_lut[generic_data['sat_id']]
+
+        img[szf_img] = Image(native_Image[szf_img].lon,
+                             native_Image[szf_img].lat,
+                             generic_data,
+                             native_Image[szf_img].metadata,
+                             native_Image[szf_img].timestamp,
+                             timekey='jd')
+
+    return img
+
+
+def get_template_ASCATL1B_SZX(n=1):
+    """
+    Generic lvl1b SZX template.
+    """
+    metadata = {'temp_name': 'ASCATL1B_SZX'}
 
     struct = np.dtype([('jd', np.float64),
                        ('sat_id', np.byte),
@@ -568,33 +711,58 @@ def get_template_ASCATL2_SMX(n=1):
                        ('sigf', np.float32),
                        ('sigm', np.float32),
                        ('siga', np.float32),
-                       ('sm', np.float32),
-                       ('sm_noise', np.float32),
-                       ('sm_sensitivity', np.float32),
-                       ('sig40', np.float32),
-                       ('sig40_noise', np.float32),
-                       ('slope40', np.float32),
-                       ('slope40_noise', np.float32),
-                       ('dry_backscatter', np.float32),
-                       ('wet_backscatter', np.float32),
-                       ('mean_surf_sm', np.float32),
-                       ('correction_flag', np.uint8),
-                       ('processing_flag', np.uint16),
-                       ('aggregated_quality_flag', np.uint8),
-                       ('snow_cover_probability', np.float32),
-                       ('frozen_soil_probability', np.float32),
-                       ('innudation_or_wetland', np.float32),
-                       ('topographical_complexity', np.float32)],
-                      metadata=metadata)
+                       ('kpf', np.float32),
+                       ('kpm', np.float32),
+                       ('kpa', np.float32),
+                       ('kpf_quality', np.float32),
+                       ('kpm_quality', np.float32),
+                       ('kpa_quality', np.float32),
+                       ('land_flagf', np.uint8),
+                       ('land_flagm', np.uint8),
+                       ('land_flaga', np.uint8),
+                       ('usable_flagf', np.uint8),
+                       ('usable_flagm', np.uint8),
+                       ('usable_flaga', np.uint8),
+                       ], metadata=metadata)
 
     record = np.array([(float64_nan, byte_nan, uint32_nan, uint32_nan,
                         uint8_nan, uint16_nan, byte_nan, byte_nan, float32_nan,
                         float32_nan, float32_nan, float32_nan, float32_nan,
                         float32_nan, float32_nan, float32_nan, float32_nan,
                         float32_nan, float32_nan, float32_nan, float32_nan,
+                        float32_nan, float32_nan, uint8_nan, uint8_nan,
+                        uint8_nan, uint8_nan, uint8_nan, uint8_nan)],
+                      dtype=struct)
+
+    return np.repeat(record, n)
+
+
+def get_template_ASCATL1B_SZF(n=1):
+    """
+    Generic lvl1b SZF template.
+    """
+    metadata = {'temp_name': 'ASCATL1B_SZF'}
+
+    struct = np.dtype([('jd', np.float64),
+                       ('sat_id', np.byte),
+                       ('beam_number', np.byte),
+                       ('abs_orbit_nr', np.uint32),
+                       ('as_des_pass', np.byte),
+                       ('azi', np.float32),
+                       ('inc', np.float32),
+                       ('sig', np.float32),
+                       ('land_frac', np.float32),
+                       ('flagfield_rf1', np.uint8),
+                       ('flagfield_rf2', np.uint8),
+                       ('flagfield_pl', np.uint8),
+                       ('flagfield_gen1', np.uint8),
+                       ('flagfield_gen2', np.uint8),
+                       ('land_flag', np.uint8),
+                       ('usable_flag', np.uint8)], metadata=metadata)
+
+    record = np.array([(float64_nan, byte_nan, byte_nan, uint32_nan, byte_nan,
                         float32_nan, float32_nan, float32_nan, float32_nan,
-                        float32_nan, float32_nan, uint8_nan, uint16_nan,
-                        uint8_nan, float32_nan, float32_nan, float32_nan,
-                        float32_nan)], dtype=struct)
+                        uint8_nan, uint8_nan, uint8_nan, uint8_nan, uint8_nan,
+                        uint8_nan, uint8_nan)], dtype=struct)
 
     return np.repeat(record, n)
