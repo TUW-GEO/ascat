@@ -21,7 +21,7 @@ env:
   - PYGRIB="1.9.9"
   - PYGRIB="2.0.1"
 before_install:
-  - git lfs pull
+  # - git lfs pull
 install:
   # You may want to periodically update this, although the conda update
   # conda line below will keep everything up-to-date.  We do this
@@ -39,18 +39,14 @@ install:
   # Useful for debugging any issues with conda
   - conda info -a
 
-  - conda create -q -n test-environment -c conda-forge python=$TRAVIS_PYTHON_VERSION numpy pandas netCDF4=1.3 pytest pip pyproj pybufr-ecmwf cython h5py
+  - conda create -q -n test-environment -c conda-forge python=$TRAVIS_PYTHON_VERSION numpy pandas netCDF4 pytest pip pyproj pybufr-ecmwf cython h5py
   - source activate test-environment
   - if [[ "$PYGRIB" == "1.9.9" ]]; then
       pip install pygrib==1.9.9;
     else
       conda install -c conda-forge pygrib;
     fi
-  - pip install pykdtree
-  - pip install pygeobase
-  - pip install pynetcf==0.1.18
-  - pip install pygeogrids
-  - pip install lxml
+  - pip install pykdtree pygeobase pygeogrids pynetcf lxml
   - pip install .
   - pip list
   - which pip
