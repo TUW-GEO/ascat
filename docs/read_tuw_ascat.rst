@@ -11,7 +11,7 @@ using the test data included in the ascat package.
     import matplotlib.pyplot as plt
     import ascat.tuw as tuw
     
-    test_data_path = os.path.join('..', 'tests','test-data', 'tuw')
+    test_data_path = os.path.join('..', 'tests','ascat_test_data', 'tuw')
     sm_path = os.path.join(test_data_path, 'ascat', 'ssm')
     grid_path = os.path.join(test_data_path, 'grid')
     advisory_flags_path = os.path.join(test_data_path, 'advisory_flags')

@@ -10,7 +10,7 @@ H110 and H111 using the test data included in the ascat package.
     import os
     import ascat.h_saf as h_saf
     
-    test_data_path = os.path.join('..', 'tests','test-data', 'hsaf')
+    test_data_path = os.path.join('..', 'tests','ascat_test_data', 'hsaf')
     h109_path = os.path.join(test_data_path, 'h109')
     h110_path = os.path.join(test_data_path, 'h110')
     h111_path = os.path.join(test_data_path, 'h111')

@@ -40,7 +40,7 @@ import ascat.h_saf as H_SAF
 class Test_H08(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__), 'test-data',
+        data_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
                                  'hsaf', 'h08')
         self.reader = H_SAF.H08img(data_path)
 
@@ -95,7 +95,7 @@ class Test_H08(unittest.TestCase):
 class Test_H07(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+        data_path = os.path.join(os.path.dirname(__file__),  'ascat_test_data',
                                  'hsaf', 'h07')
         self.reader = H_SAF.H07img(data_path)
 
@@ -159,7 +159,7 @@ class Test_H16(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'hsaf', 'h16')
+            os.path.dirname(__file__),  'ascat_test_data', 'hsaf', 'h16')
         self.reader = H_SAF.H16img(data_path, month_path_str='')
 
     def tearDown(self):
@@ -217,7 +217,7 @@ class Test_H101(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'hsaf', 'h101')
+            os.path.dirname(__file__),  'ascat_test_data', 'hsaf', 'h101')
         self.reader = H_SAF.H101img(data_path, month_path_str='')
 
     def tearDown(self):
@@ -265,7 +265,7 @@ class Test_H102(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'hsaf', 'h102')
+            os.path.dirname(__file__),  'ascat_test_data', 'hsaf', 'h102')
         self.reader = H_SAF.H102img(data_path, month_path_str='')
 
     def tearDown(self):
@@ -313,7 +313,7 @@ class Test_H103(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'hsaf', 'h103')
+            os.path.dirname(__file__),  'ascat_test_data', 'hsaf', 'h103')
         self.reader = H_SAF.H103img(data_path, month_path_str='')
 
     def tearDown(self):
@@ -360,7 +360,7 @@ class Test_H14(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__),  'test-data', 'hsaf', 'h14')
+            os.path.dirname(__file__),  'ascat_test_data', 'hsaf', 'h14')
         self.reader = H_SAF.H14img(data_path, expand_grid=False)
         self.expand_reader = H_SAF.H14img(data_path, expand_grid=True)
 
@@ -403,9 +403,9 @@ class Test_H25Ts(unittest.TestCase):
 
         path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'test-data', 'hsaf', 'h25')
-        grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
-        static_layer_path = os.path.join(path, 'test-data', 'hsaf',
+        cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'h25')
+        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
+        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
                                          'static_layer')
 
         self.ascat_reader = H_SAF.H25Ts(cdr_path, grid_path,
@@ -461,9 +461,9 @@ class Test_H108Ts(unittest.TestCase):
 
         path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'test-data', 'hsaf', 'h108')
-        grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
-        static_layer_path = os.path.join(path, 'test-data', 'hsaf',
+        cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'h108')
+        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
+        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
                                          'static_layer')
 
         self.ascat_reader = H_SAF.H108Ts(cdr_path, grid_path,
@@ -519,9 +519,9 @@ class Test_H109Ts(unittest.TestCase):
 
         path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'test-data', 'hsaf', 'h109')
-        grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
-        static_layer_path = os.path.join(path, 'test-data', 'hsaf',
+        cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'h109')
+        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
+        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
                                          'static_layer')
 
         self.ascat_reader = H_SAF.H109Ts(cdr_path, grid_path,
@@ -579,9 +579,9 @@ class Test_H110Ts(unittest.TestCase):
 
         path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'test-data', 'hsaf', 'h110')
-        grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
-        static_layer_path = os.path.join(path, 'test-data', 'hsaf',
+        cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'h110')
+        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
+        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
                                          'static_layer')
 
         self.ascat_reader = H_SAF.H110Ts(cdr_path, grid_path,
@@ -639,9 +639,9 @@ class Test_H111Ts(unittest.TestCase):
 
         path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'test-data', 'hsaf', 'h111')
-        grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
-        static_layer_path = os.path.join(path, 'test-data', 'hsaf',
+        cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'h111')
+        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
+        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
                                          'static_layer')
 
         self.ascat_reader = H_SAF.H111Ts(cdr_path, grid_path,
@@ -713,7 +713,7 @@ def test_hsaf_ts_class_init():
     """
 
     path = os.path.dirname(__file__)
-    grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
+    grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
     H_SAF.H112Ts('Test', grid_path)
     H_SAF.H113Ts('Test', grid_path)
     H_SAF.H114Ts('Test', grid_path)

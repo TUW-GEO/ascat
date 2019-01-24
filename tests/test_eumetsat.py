@@ -49,7 +49,7 @@ from ascat.eumetsat import AscatL2Ssm250Nc
 class Test_ASCAT_A_L2_SSM_125_BUFR(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+        data_path = os.path.join(os.path.dirname(__file__),  'ascat_test_data',
                                  'eumetsat', 'ASCAT_L2_SM_125', 'bufr')
         self.reader_A = AscatL2Ssm125(data_path, 'Metop_A')
         self.reader_B = AscatL2Ssm125(data_path, 'Metop_B')
@@ -133,7 +133,7 @@ class Test_ASCAT_A_L2_SSM_125_BUFR(unittest.TestCase):
 class Test_ASCAT_L2_SSM_125_BUFR_PDU(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+        data_path = os.path.join(os.path.dirname(__file__),  'ascat_test_data',
                                  'eumetsat', 'ASCAT_L2_SM_125', 'PDU')
         self.reader_A = AscatL2Ssm125PDU(data_path, 'Metop_A')
         self.reader_B = AscatL2Ssm125PDU(data_path, 'Metop_B')
@@ -220,7 +220,7 @@ class Test_ASCAT_L2_SSM_125_BUFR_PDU(unittest.TestCase):
 class Test_ASCAT_L2_SSM_250_BUFR(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+        data_path = os.path.join(os.path.dirname(__file__),  'ascat_test_data',
                                  'eumetsat', 'ASCAT_L2_SM_250', 'bufr')
         self.reader_A = AscatL2Ssm250(data_path, 'Metop_A')
         self.reader_B = AscatL2Ssm250(data_path, 'Metop_B')
@@ -305,7 +305,7 @@ pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_ASCAT_L2_SSM_250_BUFR_PDU(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+        data_path = os.path.join(os.path.dirname(__file__),  'ascat_test_data',
                                  'eumetsat', 'ASCAT_L2_SM_250', 'PDU')
         self.reader_A = AscatL2Ssm250PDU(data_path, 'Metop_A')
         self.reader_B = AscatL2Ssm250PDU(data_path, 'Metop_B')
@@ -385,7 +385,7 @@ class Test_ASCAT_L2_SSM_250_BUFR_PDU(unittest.TestCase):
 class Test_ASCAT_L2_SSM_125_NC(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+        data_path = os.path.join(os.path.dirname(__file__),  'ascat_test_data',
                                  'eumetsat', 'ASCAT_L2_SM_125', 'nc')
         self.reader_A = AscatL2Ssm125Nc(data_path, 'Metop_A')
         self.reader_B = AscatL2Ssm125Nc(data_path, 'Metop_B')
@@ -468,7 +468,7 @@ class Test_ASCAT_L2_SSM_125_NC(unittest.TestCase):
 class Test_ASCAT_L2_SSM_250_NC(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'test-data',
+        data_path = os.path.join(os.path.dirname(__file__),  'ascat_test_data',
                                  'eumetsat', 'ASCAT_L2_SM_250', 'nc')
         self.reader_A = AscatL2Ssm250Nc(data_path, 'Metop_A')
         self.reader_B = AscatL2Ssm250Nc(data_path, 'Metop_B')

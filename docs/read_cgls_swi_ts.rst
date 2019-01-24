@@ -14,7 +14,7 @@ and the unzipped SWI-TS products in one folder like so:
 
 .. code:: ipython2
 
-    ls ../tests/test-data/cglops/swi_ts
+    ls ../tests/ascat_test_data/cglops/swi_ts
 
 
 .. parsed-literal::
@@ -27,7 +27,7 @@ Now we can initialize the data reader
 
 .. code:: ipython2
 
-    data_path = os.path.join('..', 'tests', 'test-data', 'cglops', 'swi_ts')
+    data_path = os.path.join('..', 'tests', 'ascat_test_data', 'cglops', 'swi_ts')
     rd = SWI_TS(data_path)
 
 With this object we can read the data

@@ -43,7 +43,7 @@ class Test_AscatL1Image(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data')
         name_b = os.path.join(data_path, 'bufr',
                               'M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr')
@@ -281,7 +281,7 @@ class Test_AscatL1Bufr(unittest.TestCase):
 
     def setUp(self):
         self.data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data', 'bufr')
 
         self.image_bufr = level1.AscatL1Bufr(self.data_path, eo_portal=True)
@@ -316,7 +316,7 @@ class Test_AscatL1Eps(unittest.TestCase):
 
     def setUp(self):
         self.data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data', 'eps_nat')
 
         self.image_eps = level1.AscatL1Eps(self.data_path, eo_portal=True)
@@ -359,7 +359,7 @@ class Test_AscatL1Nc(unittest.TestCase):
 
     def setUp(self):
         self.data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data', 'nc')
 
         self.image_nc = level1.AscatL1Nc(self.data_path, eo_portal=True)
@@ -394,7 +394,7 @@ class Test_AscatL1Hdf5(unittest.TestCase):
 
     def setUp(self):
         self.data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data', 'hdf5')
 
         self.image_h5 = level1.AscatL1Hdf5(self.data_path, eo_portal=True)

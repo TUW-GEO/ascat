@@ -38,14 +38,14 @@ class TestAscat(unittest.TestCase):
 
     def setUp(self):
         self.ascat_folder = os.path.join(os.path.dirname(__file__),
-                                         'test-data', 'tuw', 'ascat', 'ssm')
+                                         'ascat_test_data', 'tuw', 'ascat', 'ssm')
 
         self.ascat_adv_folder = os.path.join(os.path.dirname(__file__),
-                                             'test-data', 'tuw',
+                                             'ascat_test_data', 'tuw',
                                              'advisory_flags')
 
         self.ascat_grid_folder = os.path.join(os.path.dirname(__file__),
-                                              'test-data', 'tuw',
+                                              'ascat_test_data', 'tuw',
                                               'grid')
 
         # init the ASCAT_SSM reader with the paths
@@ -83,10 +83,10 @@ class TestAscatVodTs(unittest.TestCase):
 
     def setUp(self):
         self.ascat_folder = os.path.join(os.path.dirname(__file__),
-                                         'test-data', 'tuw', 'ascat', 'vod')
+                                         'ascat_test_data', 'tuw', 'ascat', 'vod')
 
         self.ascat_grid_folder = os.path.join(os.path.dirname(__file__),
-                                              'test-data', 'hsaf', 'grid')
+                                              'ascat_test_data', 'hsaf', 'grid')
 
         # init the ASCAT_SSM reader with the paths
         self.ascat_VOD_reader = AscatVodTs(self.ascat_folder,

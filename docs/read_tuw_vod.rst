@@ -11,7 +11,7 @@ Depth (VOD) using the test data included in the ascat package.
     import matplotlib.pyplot as plt
     import ascat.tuw as tuw
     
-    test_data_path = os.path.join('..', 'tests','test-data')
+    test_data_path = os.path.join('..', 'tests','ascat_test_data')
     sm_path = os.path.join(test_data_path, 'tuw', 'ascat', 'vod')
     grid_path = os.path.join(test_data_path, 'hsaf', 'grid')
 

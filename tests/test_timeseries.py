@@ -41,10 +41,10 @@ class TestAscatNcV55R12(unittest.TestCase):
 
         path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'test-data', 'tuw', 'ascat', 'ssm',
+        cdr_path = os.path.join(path, 'ascat_test_data', 'tuw', 'ascat', 'ssm',
                                 '55R12')
 
-        grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
+        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
 
         ioclass_kws = {'loc_dim_name': 'gp', 'loc_ids_name': 'gpi'}
 
@@ -83,12 +83,12 @@ class TestAscatNcV55R21(unittest.TestCase):
     def setUp(self):
         path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'test-data', 'tuw', 'ascat', 'ssm',
+        cdr_path = os.path.join(path, 'ascat_test_data', 'tuw', 'ascat', 'ssm',
                                 '55R21')
 
-        grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
+        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
 
-        static_layer_path = os.path.join(path, 'test-data', 'hsaf',
+        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
                                          'static_layer')
 
         self.ascat_reader = ascat.AscatSsmCdr(
@@ -150,12 +150,12 @@ class TestAscatNcV55R22(unittest.TestCase):
 
         path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'test-data', 'tuw', 'ascat', 'ssm',
+        cdr_path = os.path.join(path, 'ascat_test_data', 'tuw', 'ascat', 'ssm',
                                 '55R22')
 
-        grid_path = os.path.join(path, 'test-data', 'hsaf', 'grid')
+        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
 
-        static_layer_path = os.path.join(path, 'test-data', 'hsaf',
+        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
                                          'static_layer')
 
         self.ascat_reader = ascat.AscatSsmCdr(

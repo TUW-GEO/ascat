@@ -48,7 +48,7 @@ import ascat.level2 as level2
 class Test_AscatL2SsmBufr_ioclass_kws(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__), 'test-data',
+        data_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
                                  'hsaf', 'h07')
         self.reader = AscatL2SsmBufr(data_path,
                                      msg_name_lookup={65: 'ssm',
@@ -113,7 +113,7 @@ class Test_AscatL2SsmBufrFile(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_L2_SM_125', 'bufr', 'Metop_B')
         fname = os.path.join(
             data_path,
@@ -184,7 +184,7 @@ class Test_AscatL2SsmNcFile(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_L2_SM_125', 'nc', 'Metop_A')
         fname = os.path.join(
             data_path,
@@ -279,7 +279,7 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_L2_SM_125')
         fname_nc = os.path.join(
             data_path, 'nc', 'Metop_A',
@@ -355,7 +355,7 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
 
 def test_AscatL2SsmBufrChunked():
     data_path = os.path.join(
-        os.path.dirname(__file__), 'test-data', 'eumetsat', 'ASCAT_L2_SM_125',
+        os.path.dirname(__file__), 'ascat_test_data', 'eumetsat', 'ASCAT_L2_SM_125',
         'PDU', 'Metop_B')
     day_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.bin'
     file_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_{datetime}*_125_ssm_l2.bin'
@@ -380,7 +380,7 @@ class Test_AscatL2Image(unittest.TestCase):
 
     def setUp(self):
         data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data')
         name_b = os.path.join(data_path, 'bufr',
                               'M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr')
@@ -493,7 +493,7 @@ class Test_AscatL2Bufr(unittest.TestCase):
 
     def setUp(self):
         self.data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data', 'bufr')
 
         self.image_bufr = level2.AscatL2Bufr(self.data_path, eo_portal=True)
@@ -528,7 +528,7 @@ class Test_AscatL2Eps(unittest.TestCase):
 
     def setUp(self):
         self.data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data', 'eps_nat')
 
         self.image_eps = level2.AscatL2Eps(self.data_path, eo_portal=True)
@@ -563,7 +563,7 @@ class Test_AscatL2Nc(unittest.TestCase):
 
     def setUp(self):
         self.data_path = os.path.join(
-            os.path.dirname(__file__), 'test-data', 'eumetsat',
+            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data', 'nc')
 
         self.image_nc = level2.AscatL2Nc(self.data_path, eo_portal=True)

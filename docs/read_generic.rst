@@ -13,7 +13,7 @@ classes for the other formats work the same.
 Level 1b
 --------
 
-First let’s do the import, set the path to the test-data and initialise the objects. The path for to the bufr test-data is split so we can use it for the MultiTemporal class.
+First let’s do the import, set the path to the ascat_test_data and initialise the objects. The path for to the bufr ascat_test_data is split so we can use it for the MultiTemporal class.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code:: ipython2
@@ -21,7 +21,7 @@ First let’s do the import, set the path to the test-data and initialise the ob
     import os
     import ascat.level1 as level1
     
-    test_data_path = os.path.join('..', 'tests','test-data', 'eumetsat', 'ASCAT_generic_reader_data')
+    test_data_path = os.path.join('..', 'tests','ascat_test_data', 'eumetsat', 'ASCAT_generic_reader_data')
     bufr_file_path = os.path.join(test_data_path, 'bufr')
     single_file_path_bufr = os.path.join(bufr_file_path, 'M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr')
     single_file_path_eps = os.path.join(test_data_path, 'eps_nat', 'ASCA_SZR_1B_M02_20100609013900Z_20100609032058Z_R_O_20130824233100Z.nat')
@@ -183,7 +183,7 @@ Same thing as for lvl1b: import, path to data files, creation of objects
     import os
     import ascat.level2 as level2
     
-    test_data_path = os.path.join('..', 'tests','test-data', 'eumetsat', 'ASCAT_generic_reader_data')
+    test_data_path = os.path.join('..', 'tests','ascat_test_data', 'eumetsat', 'ASCAT_generic_reader_data')
     bufr_file_path = os.path.join(test_data_path, 'bufr')
     single_file_path_bufr = os.path.join(bufr_file_path, 'M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr')
     single_file_path_eps = os.path.join(test_data_path, 'eps_nat', 'ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat')

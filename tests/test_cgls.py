@@ -41,7 +41,7 @@ def test_swi_ts_reader():
     Test SWI time series reader.
     """
     data_path = os.path.join(
-        os.path.dirname(__file__), 'test-data', 'cglops', 'swi_ts')
+        os.path.dirname(__file__), 'ascat_test_data', 'cglops', 'swi_ts')
 
     rd = SWI_TS(data_path)
     data = rd.read_ts(3002621, mask_frozen=False)
@@ -69,7 +69,7 @@ def test_swi_ts_reader_no_data_in_folder():
     Test SWI time series reader when no data is in folder.
     """
     data_path = os.path.join(
-        os.path.dirname(__file__), 'test-data', 'cglops', 'swi_ts_non_existing')
+        os.path.dirname(__file__), 'ascat_test_data', 'cglops', 'swi_ts_non_existing')
 
     with pytest.raises(IOError):
         SWI_TS(data_path)
@@ -80,7 +80,7 @@ def test_swi_ts_qflag_reading():
     Test SWI time series quality flag reader.
     """
     data_path = os.path.join(
-        os.path.dirname(__file__), 'test-data', 'cglops', 'swi_ts')
+        os.path.dirname(__file__), 'ascat_test_data', 'cglops', 'swi_ts')
     rd = SWI_TS(data_path, parameters=['SWI_001', 'QFLAG_001', 'SSF'])
     data = rd.read_ts(3002621, mask_frozen=True)
     # check if QFLAG is correctly read. It should have as many NaN values as

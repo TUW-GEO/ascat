@@ -13,7 +13,7 @@ H08, H14 and H16 using the test images included in the ascat package.
     import pytesmo.colormaps.load_cmap as smcolormaps
     import ascat.h_saf as h_saf
     
-    test_data_path = os.path.join('..', 'tests','test-data', 'hsaf')
+    test_data_path = os.path.join('..', 'tests','ascat_test_data', 'hsaf')
     
     h08_path = os.path.join(test_data_path, 'h08')
     h14_path = os.path.join(test_data_path, 'h14')
