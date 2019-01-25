@@ -212,15 +212,15 @@ class AscatL1BufrFile(ImageBase):
         if 'Direction Of Motion Of Moving Observing Platform' in data:
             data['as_des_pass'] = (data[
                 "Direction Of Motion Of Moving Observing Platform"
-                                   ] < 270).astype(np.uint8)
+            ] < 270).astype(np.uint8)
 
         if 'Cross-Track Cell Number' in data:
             if data['Cross-Track Cell Number'].max() == 82:
                 data['swath_indicator'] = 1 * (
-                            data['Cross-Track Cell Number'] > 41)
+                    data['Cross-Track Cell Number'] > 41)
             elif data['Cross-Track Cell Number'].max() == 42:
                 data['swath_indicator'] = 1 * (
-                            data['Cross-Track Cell Number'] > 21)
+                    data['Cross-Track Cell Number'] > 21)
             else:
                 raise ValueError("Unsuspected node number.")
             n_lines = n_records / max(data['Cross-Track Cell Number'])
@@ -474,16 +474,16 @@ class AscatL2SsmBufrFile(ImageBase):
 
         if 'Direction Of Motion Of Moving Observing Platform' in data:
             data['as_des_pass'] = (data[
-                            "Direction Of Motion Of Moving Observing Platform"]
-                                   <= 270).astype(np.uint8)
+                "Direction Of Motion Of Moving Observing Platform"]
+                <= 270).astype(np.uint8)
 
         if 'Cross-Track Cell Number' in data:
             if data['Cross-Track Cell Number'].max() == 82:
                 data['swath_indicator'] = 1 * (
-                            data['Cross-Track Cell Number'] > 41)
+                    data['Cross-Track Cell Number'] > 41)
             elif data['Cross-Track Cell Number'].max() == 42:
                 data['swath_indicator'] = 1 * (
-                            data['Cross-Track Cell Number'] > 21)
+                    data['Cross-Track Cell Number'] > 21)
             else:
                 raise ValueError("Unsuspected node number.")
             n_lines = n_records / max(data['Cross-Track Cell Number'])
@@ -735,7 +735,7 @@ class AscatL2SsmBufr(MultiTemporalImageBase):
             timestamps.append(self._get_orbit_start_date(filename))
 
         timestamps = [dt for dt in timestamps if (
-                startdate <= dt <= enddate)]
+            startdate <= dt <= enddate)]
         return timestamps
 
 
@@ -857,18 +857,22 @@ class BUFRReader(object):
             while increment_arraysize:
                 cnames = np.zeros((kelem, 64), dtype='|S1')
                 cunits = np.zeros((kelem, 24), dtype='|S1')
-                ecmwfbufr.bufrex(data[0],  # input
-                                 ksup,  # output
-                                 ksec0,  # output
-                                 ksec1,  # output
-                                 ksec2,  # output
-                                 ksec3,  # output
-                                 ksec4,  # output
-                                 cnames,  # output
-                                 cunits,  # output
-                                 self.init_values,  # output
-                                 self.cvals,  # output
-                                 kerr)  # output
+
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore", category=DeprecationWarning)
+                    ecmwfbufr.bufrex(data[0],  # input
+                                     ksup,  # output
+                                     ksec0,  # output
+                                     ksec1,  # output
+                                     ksec2,  # output
+                                     ksec3,  # output
+                                     ksec4,  # output
+                                     cnames,  # output
+                                     cunits,  # output
+                                     self.init_values,  # output
+                                     self.cvals,  # output
+                                     kerr)  # output
                 # no error - stop loop
                 if kerr == 0 and ksec4[0] != 0:
                     increment_arraysize = False
