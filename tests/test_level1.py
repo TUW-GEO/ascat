@@ -97,8 +97,7 @@ class Test_AscatL1Image(unittest.TestCase):
                     'incf', 'incm', 'inca', 'sigf', 'sigm', 'siga', 'kpf',
                     'kpm', 'kpa', 'kpf_quality', 'kpm_quality', 'kpa_quality',
                     'land_flagf', 'land_flagm', 'land_flaga', 'usable_flagf',
-                    'usable_flagm', 'usable_flaga',
-                    ]
+                    'usable_flagm', 'usable_flaga']
 
         # lists with no data fields or different definition
         bufr_none = ['abs_line_nr', 'abs_orbit_nr', 'as_des_pass']
@@ -139,8 +138,7 @@ class Test_AscatL1Image(unittest.TestCase):
                         'as_des_pass', 'azi', 'inc', 'sig', 'land_frac',
                         'flagfield_rf1', 'flagfield_rf2', 'flagfield_pl',
                         'flagfield_gen1', 'flagfield_gen2',
-                        'land_flag', 'usable_flag'
-                        ]
+                        'land_flag', 'usable_flag']
 
             for field in matching:
                 nptest.assert_allclose(
