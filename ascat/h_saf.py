@@ -721,3 +721,20 @@ class H114Ts(AscatNc):
 
         super(H114Ts, self).__init__(cdr_path, fn_format, grid_filename,
                                      static_layer_path, **kwargs)
+
+
+class H115Ts(AscatNc):
+
+    """
+    Class reading H115 soil moisture climate data record (CDR).
+    """
+
+    def __init__(self, cdr_path, grid_path,
+                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
+                 static_layer_path=None, **kwargs):
+
+        fn_format = 'H115_{:04d}'
+        grid_filename = os.path.join(grid_path, grid_filename)
+
+        super(H115Ts, self).__init__(cdr_path, fn_format, grid_filename,
+                                     static_layer_path, **kwargs)
