@@ -159,21 +159,19 @@ class StaticLayers(object):
 
     def __init__(self, path):
 
-        self.topo_wetland = netCDF4.Dataset(
-            os.path.join(path, 'topo_wetland.nc'))
+        with netCDF4.Dataset(os.path.join(
+                path, 'topo_wetland.nc')) as nc_file:
+            self.topo_wetland = {'wetland': nc_file['wetland'][:],
+                                 'topo': nc_file['topo'][:]}
 
-        self.frozen_snow_prob = netCDF4.Dataset(
-            os.path.join(path, 'frozen_snow_probability.nc'))
+        with netCDF4.Dataset(os.path.join(
+                path, 'frozen_snow_probability.nc')) as nc_file:
+            self.frozen_snow_prob = {'snow_prob': nc_file['snow_prob'][:],
+                                     'frozen_prob': nc_file['frozen_prob'][:]}
 
-        self.porosity = netCDF4.Dataset(os.path.join(path, 'porosity.nc'))
-
-    def __del__(self):
-        """
-        Close files when object is deleted.
-        """
-        self.topo_wetland.close()
-        self.frozen_snow_prob.close()
-        self.porosity.close()
+        with netCDF4.Dataset(os.path.join(path, 'porosity.nc')) as nc_file:
+            self.porosity = {'por_gldas': nc_file['por_gldas'][:],
+                             'por_hwsd': nc_file['por_hwsd'][:]}
 
 
 class AscatNc(GriddedNcContiguousRaggedTs):
@@ -258,16 +256,12 @@ class AscatNc(GriddedNcContiguousRaggedTs):
         cell = self.grid.gpi2cell(gpi)
 
         if self.slayer is not None:
-            topo_complex = self.slayer.topo_wetland.variables[
-                'topo'][gpi]
-            wetland_frac = self.slayer.topo_wetland.variables[
-                'wetland'][gpi]
-            snow_prob = self.slayer.frozen_snow_prob.variables[
-                'snow_prob'][gpi, :]
-            frozen_prob = self.slayer.frozen_snow_prob.variables[
-                'frozen_prob'][gpi, :]
-            porosity_gldas = self.slayer.porosity.variables['por_gldas'][gpi]
-            porosity_hwsd = self.slayer.porosity.variables['por_hwsd'][gpi]
+            topo_complex = self.slayer.topo_wetland['topo'][gpi]
+            wetland_frac = self.slayer.topo_wetland['wetland'][gpi]
+            snow_prob = self.slayer.frozen_snow_prob['snow_prob'][gpi, :]
+            frozen_prob = self.slayer.frozen_snow_prob['frozen_prob'][gpi, :]
+            porosity_gldas = self.slayer.porosity['por_gldas'][gpi]
+            porosity_hwsd = self.slayer.porosity['por_hwsd'][gpi]
 
             if np.ma.is_masked(porosity_gldas):
                 porosity_gldas = np.nan
@@ -275,8 +269,9 @@ class AscatNc(GriddedNcContiguousRaggedTs):
             if np.ma.is_masked(porosity_hwsd):
                 porosity_hwsd = np.nan
 
-            data['snow_prob'] = snow_prob[data.index.dayofyear - 1]
-            data['frozen_prob'] = frozen_prob[data.index.dayofyear - 1]
+            if data is not None:
+                data['snow_prob'] = snow_prob[data.index.dayofyear - 1]
+                data['frozen_prob'] = frozen_prob[data.index.dayofyear - 1]
         else:
             topo_complex = np.nan
             wetland_frac = np.nan
