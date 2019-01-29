@@ -2,14 +2,17 @@
 Changelog
 =========
 
-Version 0.XX
-============
+Version 1.0
+===========
 
-- Adding generic readers for lvl1b and lvl2 data in eps_native, bufr, netCDF
-  and hdf5 formats
+- Adding generic readers for ASCAT Level 1b and Level 2 data in EPS Native, BUFR, NetCDF and HDF5 formats
 - Update readme structure
 - Fix read the docs error
-- Adding cython to travis requirements
+- Add cython to travis requirements
+- Add script to setup miniconda development environment
+- Read static layers into memory, instead of using NetCDF variables
+- Add reader for H115
+- Update copyright year
 
 Version 0.10
 ============
