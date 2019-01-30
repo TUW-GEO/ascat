@@ -187,8 +187,8 @@ class AscatNc(GriddedNcContiguousRaggedTs):
         Filename format string, typical '<prefix>_{:04d}'
     grid_filename : str
         Grid filename.
-    static_layer_path : str
-        Path to static layer files.
+    static_layer_path : str, optional
+        Path to static layer files (default: None).
     thresholds : dict, optional
         Thresholds for topographic complexity (default 50) and
         wetland fraction (default 50).
@@ -204,7 +204,7 @@ class AscatNc(GriddedNcContiguousRaggedTs):
         StaticLayer object
     """
 
-    def __init__(self, path, fn_format, grid_filename, static_layer_path,
+    def __init__(self, path, fn_format, grid_filename, static_layer_path=None,
                  thresholds=None, **kwargs):
 
         grid = load_grid(grid_filename)
