@@ -831,7 +831,6 @@ class BUFRReader(object):
             ksec0 = np.zeros(self.size_ksec0, dtype=np.int)
             ksec1 = np.zeros(self.size_ksec1, dtype=np.int)
             ksec2 = np.zeros(self.size_ksec2, dtype=np.int)
-            key = np.zeros(self.size_key, dtype=np.int)
             ksec3 = np.zeros(self.size_ksec3, dtype=np.int)
             ksec4 = np.zeros(self.size_ksec4, dtype=np.int)
 
