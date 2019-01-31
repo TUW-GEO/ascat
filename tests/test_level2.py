@@ -43,6 +43,8 @@ from ascat.read_native.bufr import AscatL2SsmBufrFile
 from ascat.read_native.nc import AscatL2SsmNcFile
 import ascat.level2 as level2
 
+float32_nan = np.finfo(np.float32).min
+
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL2SsmBufr_ioclass_kws(unittest.TestCase):
@@ -355,7 +357,8 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
 
 def test_AscatL2SsmBufrChunked():
     data_path = os.path.join(
-        os.path.dirname(__file__), 'ascat_test_data', 'eumetsat', 'ASCAT_L2_SM_125',
+        os.path.dirname(
+            __file__), 'ascat_test_data', 'eumetsat', 'ASCAT_L2_SM_125',
         'PDU', 'Metop_B')
     day_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.bin'
     file_search_str = 'W_XX-EUMETSAT-Darmstadt,SOUNDING+SATELLITE,METOPB+ASCAT_C_EUMP_{datetime}*_125_ssm_l2.bin'
@@ -434,6 +437,20 @@ class Test_AscatL2Image(unittest.TestCase):
         # BUFR files contain less accurate data so we only compare to one 0.1
         # accuracy.
         for field in matching:
+
+            # difference between the files should not be the case
+            if field == 'sig40':
+                mask = self.reader_nc.data[field] == float32_nan
+                self.reader_bufr.data[field][mask] = float32_nan
+                self.reader_eps.data[field][mask] = float32_nan
+
+            # difference between the files should not be the case
+            if field in ['snow_cover_probability', 'frozen_soil_probability',
+                         'innudation_or_wetland', 'topographical_complexity']:
+                mask = self.reader_eps.data[field] == float32_nan
+                self.reader_nc.data[field][mask] = float32_nan
+                self.reader_eps.data[field][mask] = float32_nan
+
             if field not in bufr_none:
                 nptest.assert_allclose(self.reader_bufr.data[field],
                                        self.reader_eps.data[field], atol=0.1)

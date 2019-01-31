@@ -45,18 +45,21 @@ class Test_AscatL1Image(unittest.TestCase):
         data_path = os.path.join(
             os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data')
+
         name_b = os.path.join(data_path, 'bufr',
                               'M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr')
         name_e = os.path.join(data_path, 'eps_nat',
                               'ASCA_SZR_1B_M02_20100609013900Z_20100609032058Z_R_O_20130824233100Z.nat')
         name_n = os.path.join(data_path, 'nc',
                               'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20100609013900_18872_eps_o_125_l1.nc')
+
         name_e11 = os.path.join(data_path, 'eps_nat',
                                 'ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat')
         name_e_szf = os.path.join(data_path, 'eps_nat',
                                   'ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.nat')
         name_h = os.path.join(data_path, 'hdf5',
                               'ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.h5')
+
         self.image_bufr = level1.AscatL1Image(name_b)
         self.image_eps = level1.AscatL1Image(name_e)
         self.image_nc = level1.AscatL1Image(name_n)
@@ -78,6 +81,7 @@ class Test_AscatL1Image(unittest.TestCase):
         self.reader_bufr = self.image_bufr.read()
         self.reader_eps = self.image_eps.read()
         self.reader_nc = self.image_nc.read()
+
         nptest.assert_allclose(self.reader_bufr.lat, self.reader_eps.lat,
                                atol=1e-4)
         nptest.assert_allclose(self.reader_eps.lat, self.reader_nc.lat,
@@ -113,6 +117,11 @@ class Test_AscatL1Image(unittest.TestCase):
                     sig_mask = (self.reader_eps.data[field] < -50)
                     self.reader_eps.data[field][sig_mask] = float32_nan
                     self.reader_nc.data[field][sig_mask] = float32_nan
+                    self.reader_bufr.data[field][sig_mask] = float32_nan
+
+                    nan_mask = (self.reader_nc.data[field] == float32_nan)
+                    self.reader_eps.data[field][nan_mask] = float32_nan
+                    self.reader_bufr.data[field][nan_mask] = float32_nan
 
                 nptest.assert_allclose(self.reader_bufr.data[field],
                                        self.reader_eps.data[field], atol=0.1)
