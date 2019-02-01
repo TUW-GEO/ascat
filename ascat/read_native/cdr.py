@@ -37,6 +37,8 @@ import pygeogrids.grids as grids
 
 from pynetcf.time_series import GriddedNcContiguousRaggedTs
 
+float32_nan = -999999.0
+
 
 class AscatTimeSeries(TS):
 
@@ -146,32 +148,108 @@ class StaticLayers(object):
     ----------
     path : str
         Path of static layer files.
+    topo_wetland_file : str, optional
+        Topographic and complexity file (default: None).
+    frozen_snow_file : str, optional
+        Frozen and snow cover probability file (default: None).
+    porosity_file : str, optional
+        Porosity file (default: None).
+    cache : bool, optional
+        If true all static layers are loaded into memory (default: False).
 
     Attributes
     ----------
-    topo_wetland : pynetcf.point_data.GriddedPointData
+    topo_wetland : dict
         Topographic complexity and inundation and wetland fraction.
-    frozen_snow_prob : pynetcf.time_series.GriddedNcOrthoMultiTs
+    frozen_snow_prob : dict
         Frozen soil/canopy probability and snow cover probability.
-    porosity : pynetcf.time_series.GriddedNcOrthoMultiTs
+    porosity : dict
         Soil porosity information.
     """
 
-    def __init__(self, path):
+    def __init__(self, path, topo_wetland_file=None,
+                 frozen_snow_file=None, porosity_file=None, cache=False):
 
-        with netCDF4.Dataset(os.path.join(
-                path, 'topo_wetland.nc')) as nc_file:
-            self.topo_wetland = {'wetland': nc_file['wetland'][:],
-                                 'topo': nc_file['topo'][:]}
+        if cache:
+            print("Static layers will be loaded, this may take some time.")
 
-        with netCDF4.Dataset(os.path.join(
-                path, 'frozen_snow_probability.nc')) as nc_file:
-            self.frozen_snow_prob = {'snow_prob': nc_file['snow_prob'][:],
-                                     'frozen_prob': nc_file['frozen_prob'][:]}
+        if topo_wetland_file is None:
+            topo_wetland_file = os.path.join(path, 'topo_wetland.nc')
 
-        with netCDF4.Dataset(os.path.join(path, 'porosity.nc')) as nc_file:
-            self.porosity = {'por_gldas': nc_file['por_gldas'][:],
-                             'por_hwsd': nc_file['por_hwsd'][:]}
+        self.topo_wetland = StaticFile(topo_wetland_file,
+                                       ['wetland', 'topo'],
+                                       cache=cache)
+
+        if frozen_snow_file is None:
+            frozen_snow_file = os.path.join(path, 'frozen_snow_probability.nc')
+
+        self.frozen_snow_prob = StaticFile(frozen_snow_file,
+                                           ['snow_prob', 'frozen_prob'],
+                                           cache=cache)
+        if porosity_file is None:
+            porosity_file = os.path.join(path, 'porosity.nc')
+
+        self.porosity = StaticFile(porosity_file,
+                                   ['por_gldas', 'por_hwsd'],
+                                   cache=cache)
+
+
+class StaticFile(object):
+
+    """
+    Class 
+
+    Parameters
+    ----------
+    filename : str
+        File name.
+    variables : list of str
+        List of variables.
+    cache : bool, optional
+        Flag to cache data stored in file (default: False).
+
+    Attributes
+    ----------
+    filename : str
+        Static layer file name.
+    variables : list of str
+        List of variables.
+    cache : bool
+        Flag to cache data stored in file.
+    data : dict
+        Dictionary containing static layer data.
+    """
+
+    def __init__(self, filename, variables, cache=False):
+        self.filename = filename
+        self.cache = cache
+        self.variables = variables
+        self.data = {}
+
+        if self.cache:
+            with netCDF4.Dataset(self.filename) as nc_file:
+                for v in self.variables:
+                    self.data[v] = nc_file.variables[v][:].filled()
+
+    def __getitem__(self, gpi):
+        """
+        Get data at given GPI.
+
+        Parameters
+        ----------
+        gpi : int
+            Grid point index.
+        """
+        data = {}
+        if self.cache:
+            for v in self.variables:
+                data[v] = self.data[v][gpi]
+        else:
+            with netCDF4.Dataset(self.filename) as nc_file:
+                for v in self.variables:
+                    data[v] = nc_file.variables[v][[gpi]].filled()[0]
+
+        return data
 
 
 class AscatNc(GriddedNcContiguousRaggedTs):
@@ -205,7 +283,7 @@ class AscatNc(GriddedNcContiguousRaggedTs):
     """
 
     def __init__(self, path, fn_format, grid_filename, static_layer_path=None,
-                 thresholds=None, **kwargs):
+                 cache_static_layer=False, thresholds=None, **kwargs):
 
         grid = load_grid(grid_filename)
 
@@ -215,9 +293,10 @@ class AscatNc(GriddedNcContiguousRaggedTs):
             self.thresholds.update(thresholds)
 
         self.slayer = None
+
         if static_layer_path is not None:
-            if self.slayer is None:
-                self.slayer = StaticLayers(static_layer_path)
+            self.slayer = StaticLayers(static_layer_path,
+                                       cache=cache_static_layer)
 
         super(AscatNc, self).__init__(path, grid, fn_format=fn_format,
                                       **kwargs)
@@ -256,17 +335,17 @@ class AscatNc(GriddedNcContiguousRaggedTs):
         cell = self.grid.gpi2cell(gpi)
 
         if self.slayer is not None:
-            topo_complex = self.slayer.topo_wetland['topo'][gpi]
-            wetland_frac = self.slayer.topo_wetland['wetland'][gpi]
-            snow_prob = self.slayer.frozen_snow_prob['snow_prob'][gpi, :]
-            frozen_prob = self.slayer.frozen_snow_prob['frozen_prob'][gpi, :]
-            porosity_gldas = self.slayer.porosity['por_gldas'][gpi]
-            porosity_hwsd = self.slayer.porosity['por_hwsd'][gpi]
+            topo_complex = self.slayer.topo_wetland[gpi]['topo']
+            wetland_frac = self.slayer.topo_wetland[gpi]['wetland']
+            snow_prob = self.slayer.frozen_snow_prob[gpi]['snow_prob']
+            frozen_prob = self.slayer.frozen_snow_prob[gpi]['frozen_prob']
+            porosity_gldas = self.slayer.porosity[gpi]['por_gldas']
+            porosity_hwsd = self.slayer.porosity[gpi]['por_hwsd']
 
-            if np.ma.is_masked(porosity_gldas):
+            if porosity_gldas == float32_nan:
                 porosity_gldas = np.nan
 
-            if np.ma.is_masked(porosity_hwsd):
+            if porosity_hwsd == float32_nan:
                 porosity_hwsd = np.nan
 
             if data is not None:
