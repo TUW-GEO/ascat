@@ -136,7 +136,7 @@ class H08Single(ImageBase):
                     ssm_proc_flag.append(message[:, 7::4])
 
         if zipped:
-            os.remove(self.filename)
+            os.remove(filename)
 
         if data_in_bbox:
 
