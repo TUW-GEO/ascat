@@ -1,0 +1,3 @@
+[submodule "tests/ascat_test_data"]
+	path = tests/ascat_test_data
+	url = https://www.geo.tuwien.ac.at/downloads/gittd/ascat_test_data.git/
