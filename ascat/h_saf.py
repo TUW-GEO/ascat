@@ -28,6 +28,8 @@
 import sys
 import os
 import warnings
+from gzip import GzipFile
+from tempfile import NamedTemporaryFile
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -82,8 +84,20 @@ class H08Single(ImageBase):
             variable name of observation times in the data dict, if None all
             observations have the same timestamp
         """
+        zipped = False
+        if os.path.splitext(self.filename)[1] == '.gz':
+            zipped = True
 
-        with bufr_reader.BUFRReader(self.filename) as bufr:
+        # for zipped files use an unzipped temporary copy
+        if zipped:
+            with NamedTemporaryFile(delete=False) as tmp_fid:
+                with GzipFile(self.filename) as gz_fid:
+                    tmp_fid.write(gz_fid.read())
+                filename = tmp_fid.name
+        else:
+            filename = self.filename
+
+        with bufr_reader.BUFRReader(filename) as bufr:
 
             lons = []
             ssm = []
@@ -120,6 +134,9 @@ class H08Single(ImageBase):
                     ssm_noise.append(message[:, 5::4])
                     ssm_corr_flag.append(message[:, 6::4])
                     ssm_proc_flag.append(message[:, 7::4])
+
+        if zipped:
+            os.remove(self.filename)
 
         if data_in_bbox:
 
@@ -220,10 +237,12 @@ class H08Single(ImageBase):
                     data[key] = data[key][data_ind].reshape(
                         lats_dim_shape, lons_dim_shape)
 
-            return Image(lons, lats, data, {}, timestamp)
-
         else:
-            return Image(None, None, None, {}, timestamp)
+            lons = None
+            lats = None
+            data = None
+
+        return Image(lons, lats, data, {}, timestamp)
 
     def write(self, data):
         raise NotImplementedError()
