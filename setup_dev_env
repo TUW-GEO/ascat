@@ -2,6 +2,6 @@ wget https://repo.continuum.io/miniconda/Miniconda2-4.5.12-Linux-x86_64.sh -O mi
 bash miniconda.sh -b -p $HOME/ascat_conda
 export PATH="$HOME/ascat_conda/bin:$PATH"
 conda config --set always_yes yes --set changeps1 no
-conda create -q -n ascat-dev -c conda-forge python=2.7 numpy pandas netCDF4 pytest pip pyproj pybufr-ecmwf cython h5py
-source activate ascat-dev
+conda create -q -n ascat_dev -c conda-forge python=2.7 numpy pandas netCDF4 pytest pip pyproj pybufr-ecmwf cython h5py
+source activate ascat_dev
 pip install pygeobase pygeogrids pynetcf lxml autopep8

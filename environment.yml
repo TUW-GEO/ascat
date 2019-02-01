@@ -1,4 +1,4 @@
-name: ascat-dev
+name: ascat_dev
 channels: !!python/tuple
 - !!python/unicode
   'defaults'
@@ -57,4 +57,3 @@ dependencies:
   - simplegeneric==0.8.1
   - traitlets==4.2.2
   - wcwidth==0.1.7
-

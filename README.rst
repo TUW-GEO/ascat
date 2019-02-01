@@ -44,7 +44,7 @@ The following script will download and install all the needed packages.
 
 .. code::
 
-    conda create -q -n ascat python=2 numpy pandas netCDF4 pytest pip pyproj
+    conda create -q -n ascat python=2 numpy pandas netCDF4 pytest pip pyproj h5py
     source activate ascat
     conda install -c conda-forge pybufr-ecmwf # for reading BUFR files
     conda install -c conda-forge pygrib=2.0.1 # for reading GRIB files
@@ -64,7 +64,7 @@ Time Series Products
 
 * Metop ASCAT Surface Soil Moisture (SSM) Climate Data Record (CDR) in time series format
 
-  Available in netCDF format from `H SAF <http://hsaf.meteoam.it/soil-moisture.php>`_ (H25, H108-H112)
+  Available in netCDF format from `H SAF <http://hsaf.meteoam.it/soil-moisture.php>`_ (H25, H108-H115)
 
 
 * CGLS SWI(Soil Water Index) Time Series (SWI_TS)
@@ -74,7 +74,7 @@ Time Series Products
 
 * ASCAT SWI(Soil Water Index) Time Series
 
-  Available in binary format from `TU Wien <http://rs.geo.tuwien.ac.at/products/>`_
+  Available in binary format (outdated product).
 
 Image products
 --------------
@@ -88,15 +88,15 @@ H SAF
 * H103 - SSM ASCAT-B NRT O : Metop-B ASCAT soil moisture 25km sampling NRT
 * H101 - SSM ASCAT-A NRT R : Metop-A ASCAT soil moisture 12.5km sampling NRT
 * H102 - SSM ASCAT-A NRT O : Metop-A ASCAT soil moisture 25km sampling NRT
-* SM OBS 2 - H08 - Small scale surface soil moisture by radar scatterometer in BUFR format over Europe
-* SM DAS 2 - H14 - Profile index in the roots region by scatterometer data assimilation in GRIB format, global
+* H08 - Small scale surface soil moisture by radar scatterometer in BUFR format over Europe
+* H14 - Profile index in the roots region by scatterometer data assimilation in GRIB format, global
 
 The products H16, H103, H101, H102 come in the same BUFR format. Since the default filenames are slightly different the following readers should be used:
 
 * H16 - :py:class:`ascat.h_saf.H16img`
+* H103 - :py:class:`ascat.h_saf.H103img`
 * H101 - :py:class:`ascat.h_saf.H101img`
 * H102 - :py:class:`ascat.h_saf.H102img`
-* H103 - :py:class:`ascat.h_saf.H103img`
 
 They are available after registration from the `H SAF Website <http://hsaf.meteoam.it/soil-moisture.php>`_
 
@@ -132,7 +132,7 @@ We are happy if you want to contribute. Please raise an issue explaining what is
 Development setup
 -----------------
 
-For Development we also recommend a ``conda`` environment. You can create one including test dependencies and debugger by running ``conda env create -f environment.yml``. This will create a new ``ascat-dev`` environment which you can activate by using ``source activate ascat-dev``.
+For Development we also recommend a ``conda`` environment. You can create one including test dependencies and debugger by running ``conda env create -f environment.yml``. This will create a new ``ascat_dev`` environment which you can activate by using ``source activate ascat_dev``.
 
 Guidelines
 ----------
