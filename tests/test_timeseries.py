@@ -64,7 +64,7 @@ class TestAscatNcV55R12(unittest.TestCase):
 
         assert len(result.data) == 2292
         assert result.data.iloc[15].name == datetime(2007, 1, 15, 19, 34, 41,
-                                                   771032)
+                                                     771032)
         assert result.data.iloc[15]['sm'] == 52
         assert result.data.iloc[15]['ssf'] == 1
         assert result.data.iloc[15]['sm_noise'] == 7
@@ -108,7 +108,8 @@ class TestAscatNcV55R21(unittest.TestCase):
             result.latitude, 45.698074, significant=4)
 
         assert len(result.data) == 2457
-        assert result.data.iloc[15].name == datetime(2007, 1, 15, 19, 34, 41, 5)
+        assert result.data.iloc[15].name == datetime(
+            2007, 1, 15, 19, 34, 41, 5)
         assert result.data.iloc[15]['sm'] == 55
         assert result.data.iloc[15]['ssf'] == 1
         assert result.data.iloc[15]['sm_noise'] == 7
@@ -174,16 +175,15 @@ class TestAscatNcV55R22(unittest.TestCase):
         np.testing.assert_approx_equal(result.latitude, 45.698074,
                                        significant=4)
 
-        assert list(result.data.columns) == ['orbit_dir', 'proc_flag',
-                                             'sm', 'sm_noise', 'ssf',
-                                             'snow_prob', 'frozen_prob',
-                                             'abs_sm_gldas',
-                                             'abs_sm_noise_gldas',
-                                             'abs_sm_hwsd',
-                                             'abs_sm_noise_hwsd']
+        ref_list = ['orbit_dir', 'proc_flag', 'sm', 'sm_noise', 'ssf',
+                    'snow_prob', 'frozen_prob', 'abs_sm_gldas',
+                    'abs_sm_noise_gldas', 'abs_sm_hwsd', 'abs_sm_noise_hwsd']
+
+        assert sorted(list(result.data.columns)) == sorted(ref_list)
 
         assert len(result.data) == 2642
-        assert result.data.iloc[15].name == datetime(2007, 1, 15, 19, 34, 41, 5)
+        assert result.data.iloc[15].name == datetime(
+            2007, 1, 15, 19, 34, 41, 5)
         assert result.data.iloc[15]['sm'] == 55
         assert result.data.iloc[15]['ssf'] == 1
         assert result.data.iloc[15]['sm_noise'] == 7

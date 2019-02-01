@@ -60,8 +60,8 @@ class TestAscat(unittest.TestCase):
         assert result.gpi == gpi
         assert result.longitude == 14.28413
         assert result.latitude == 45.698074
-        assert list(result.data.columns) == [
-            'ERR', 'SSF', 'SSM', 'frozen_prob', 'snow_prob']
+        assert sorted(list(result.data.columns)) == sorted([
+            'ERR', 'SSF', 'SSM', 'frozen_prob', 'snow_prob'])
         assert len(result.data) == 2058
         assert result.data.iloc[15].name == datetime(2007, 1, 15, 19)
         assert result.data.iloc[15]['ERR'] == 7
