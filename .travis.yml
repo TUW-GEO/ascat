@@ -17,15 +17,9 @@ python:
   - "2.7"
   - "3.5"
   - "3.6"
-git:
-  submodules:
-    false
 env:
   - PYGRIB="1.9.9"
   - PYGRIB="2.0.1"
-before_install:
-  - echo -e "machine gitlab.com\n login $CI_USER\n password $CI_PW" >~/.netrc
-  - git submodule update --init --recursive
 install:
   # You may want to periodically update this, although the conda update
   # conda line below will keep everything up-to-date.  We do this
