@@ -41,6 +41,7 @@ install:
       conda create -q -n test-environment -c conda-forge python=$TRAVIS_PYTHON_VERSION numpy pandas netCDF4 pytest==4.6.4 pip pyproj pybufr-ecmwf cython h5py;
     else
       conda create -q -n test-environment -c conda-forge python=$TRAVIS_PYTHON_VERSION numpy pandas netCDF4 pytest pip pyproj pybufr-ecmwf cython h5py;
+    fi
   - source activate test-environment
   - if [[ "$PYGRIB" == "1.9.9" ]]; then
       pip install pygrib==1.9.9;
