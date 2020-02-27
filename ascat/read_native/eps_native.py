@@ -323,7 +323,7 @@ class EPSProduct(object):
         """
         Find the corresponding eps xml file.
         """
-        format_path = os.path.join(os.path.dirname(__file__), '..', 
+        format_path = os.path.join(os.path.dirname(__file__), '..',
                                    'formats')
 
         # loop through files where filename starts with 'eps_ascat'.
@@ -416,18 +416,21 @@ class EPSProduct(object):
 
             if 'scaling-factor' in value:
                 sf_dtype = np.float32
-                sf = eval(value['scaling-factor'].replace('^', '**'))
+                sf = float(eval(value['scaling-factor'].replace('^', '**')))
             else:
                 sf_dtype = conv[value['type']]
-                sf = 1
+                sf = 1.
+
+            if not isinstance(value['length'], list):
+                length = [value['length']]
+            else:
+                length = value['length']
 
             scaling_factor.append(sf)
-            scaled_dtype.append((key, sf_dtype, value['length']))
-            dtype.append((key, conv[value['type']], value['length']))
+            scaled_dtype.append((key, sf_dtype, length))
+            dtype.append((key, conv[value['type']], length))
 
-        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(
-            scaling_factor,
-            dtype=np.float32)
+        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(scaling_factor)
 
     def _read_xml_mdr(self):
         """
@@ -506,18 +509,22 @@ class EPSProduct(object):
 
             if 'scaling-factor' in value:
                 sf_dtype = np.float32
-                sf = eval(value['scaling-factor'].replace('^', '**'))
+                sf = float(eval(value['scaling-factor'].replace('^', '**')))
             else:
                 sf_dtype = conv[value['type']]
-                sf = 1
+                sf = 1.
 
             scaling_factor.append(sf)
-            scaled_dtype.append((key, sf_dtype, value['length']))
-            dtype.append((key, conv[value['type']], value['length']))
 
-        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(
-            scaling_factor,
-            dtype=np.float32)
+            if not isinstance(value['length'], list):
+                length = [value['length']]
+            else:
+                length = value['length']
+
+            scaled_dtype.append((key, sf_dtype, length))
+            dtype.append((key, conv[value['type']], length))
+
+        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(scaling_factor)
 
 
 def grh_record():
