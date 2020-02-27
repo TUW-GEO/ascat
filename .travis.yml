@@ -37,7 +37,7 @@ install:
   - source activate test-environment
   - pip install pykdtree pygeobase pygeogrids pynetcf lxml
   - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
-      pip install pytest==4.6.4
+      pip install pytest==4.6.4;
     fi
   - pip install .
   - pip list
