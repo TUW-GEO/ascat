@@ -33,6 +33,8 @@ Readers for lvl1b and lvl2 data in bufr format.
 import os
 from datetime import datetime, timedelta
 import warnings
+from tempfile import NamedTemporaryFile
+from gzip import GzipFile
 
 import numpy as np
 
@@ -106,6 +108,17 @@ class AscatL1BufrFile(ImageBase):
         Initialization of i/o object.
 
         """
+        zipped = False
+        if os.path.splitext(filename)[1] == '.gz':
+            zipped = True
+
+        # for zipped files use an unzipped temporary copy
+        if zipped:
+            with NamedTemporaryFile(delete=False) as tmp_fid:
+                with GzipFile(filename) as gz_fid:
+                    tmp_fid.write(gz_fid.read())
+                filename = tmp_fid.name
+
         super(AscatL1BufrFile, self).__init__(filename, mode=mode,
                                               **kwargs)
         if msg_name_lookup is None:
@@ -243,7 +256,11 @@ class AscatL1BufrFile(ImageBase):
                 mask = np.all([mask_azi, mask_sig, mask_inc], axis=0)
                 data[azi][mask] = 1.7e+38
 
-        return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
+        metadata = {}
+        metadata['SPACECRAFT_ID'] = np.int8(data['Satellite Identifier'][0])
+        metadata['ORBIT_START'] = np.uint32(data['Orbit Number'][0])
+
+        return Image(longitude, latitude, data, metadata, timestamp, timekey='jd')
 
     def write(self, data):
         raise NotImplementedError()
