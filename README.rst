@@ -59,14 +59,14 @@ This gives a short overview over the supported products. Please see the document
 Read ASCAT data from different sources into a common format supported by pytesmo.
 
 - `H SAF <http://h-saf.eumetsat.int/>`_
-  - Surface Soil Moisture (SSM) and Root Zone Soil Moisture (RZSM) products
+    - Surface Soil Moisture (SSM) and Root Zone Soil Moisture (RZSM) products
 - `Copernicus Global Land Service (CGLS) <http://land.copernicus.eu/global/products/swi>`_
-  - CGLS Soil Water Index (SWI) products
+    - CGLS Soil Water Index (SWI) products
 - `EUMETSAT <https://navigator.eumetsat.int/search?query=ascat/>`_
-  - ASCAT Soil Moisture at 12.5 km Swath Grid - Metop
-  - ASCAT Soil Moisture at 25 km Swath Grid - Metop
-  - ASCAT GDS Level 1 Sigma0 resampled at 12.5 km Swath Grid - Metop 
-  - ASCAT GDS Level 1 Sigma0 resampled at 25 km Swath Grid - Metop 
+    - ASCAT Soil Moisture at 12.5 km Swath Grid - Metop
+    - ASCAT Soil Moisture at 25 km Swath Grid - Metop
+    - ASCAT GDS Level 1 Sigma0 resampled at 12.5 km Swath Grid - Metop 
+    - ASCAT GDS Level 1 Sigma0 resampled at 25 km Swath Grid - Metop 
 
 Contribute
 ==========
