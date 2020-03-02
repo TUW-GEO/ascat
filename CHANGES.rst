@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 1.0.1
+=============
+
+- Add unzip support for AscatL1Bufr and add metadata information
+- Fix numpy FutureWarning
+
 Version 1.0
 ===========
 
