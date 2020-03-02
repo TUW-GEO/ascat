@@ -549,9 +549,17 @@ class AscatL2SsmBufrFile(ImageBase):
         sat_id = {3: 1, 4: 2, 5: 3}
 
         metadata = {}
-        metadata['SPACECRAFT_ID'] = np.int8(
-            sat_id[data['Satellite Identifier'][0]])
-        metadata['ORBIT_START'] = np.uint32(data['Orbit Number'][0])
+
+        try:
+            metadata['SPACECRAFT_ID'] = np.int8(
+                sat_id[data['Satellite Identifier'][0]])
+        except KeyError:
+            metadata['SPACECRAFT_ID'] = 0
+
+        try:
+            metadata['ORBIT_START'] = np.uint32(data['Orbit Number'][0])
+        except KeyError:
+            metadata['ORBIT_START'] = 0
 
         return Image(longitude, latitude, data, metadata,
                      timestamp, timekey='jd')
