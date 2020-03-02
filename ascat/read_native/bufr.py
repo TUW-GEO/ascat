@@ -256,11 +256,20 @@ class AscatL1BufrFile(ImageBase):
                 mask = np.all([mask_azi, mask_sig, mask_inc], axis=0)
                 data[azi][mask] = 1.7e+38
 
+        # 1 ERS 1
+        # 2 ERS 2
+        # 3 METOP-1 (Metop-B)
+        # 4 METOP-2 (Metop-A)
+        # 5 METOP-3 (Metop-C)
+        sat_id = {3: 1, 4: 2, 5: 3}
+
         metadata = {}
-        metadata['SPACECRAFT_ID'] = np.int8(data['Satellite Identifier'][0])
+        metadata['SPACECRAFT_ID'] = np.int8(
+            sat_id[data['Satellite Identifier'][0]])
         metadata['ORBIT_START'] = np.uint32(data['Orbit Number'][0])
 
-        return Image(longitude, latitude, data, metadata, timestamp, timekey='jd')
+        return Image(longitude, latitude, data, metadata,
+                     timestamp, timekey='jd')
 
     def write(self, data):
         raise NotImplementedError()
@@ -532,7 +541,20 @@ class AscatL2SsmBufrFile(ImageBase):
             for name in data:
                 data[name] = data[name][valid_data]
 
-        return Image(longitude, latitude, data, {}, timestamp, timekey='jd')
+        # 1 ERS 1
+        # 2 ERS 2
+        # 3 METOP-1 (Metop-B)
+        # 4 METOP-2 (Metop-A)
+        # 5 METOP-3 (Metop-C)
+        sat_id = {3: 1, 4: 2, 5: 3}
+
+        metadata = {}
+        metadata['SPACECRAFT_ID'] = np.int8(
+            sat_id[data['Satellite Identifier'][0]])
+        metadata['ORBIT_START'] = np.uint32(data['Orbit Number'][0])
+
+        return Image(longitude, latitude, data, metadata,
+                     timestamp, timekey='jd')
 
     def resample_data(self, image, index, distance, weights, **kwargs):
         """
