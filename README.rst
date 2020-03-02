@@ -36,7 +36,7 @@ You can find additional information regarding DOI versioning at http://help.zeno
 Installation
 ============
 
-The packages you have to install depend on the features you want to use. The H SAF soil moisture NRT products are disseminated in BUFR (H16, H103, H101, H102, H08) or GRIB (H14) format. So to read them you will have to install the appropriate packages which will be explained shortly. Unfortunately neither BUFR nor GRIB readers work on Windows so if you need these formats then Linux or OS X are your only options.
+The packages you have to install depend on the features you want to use. The H SAF soil moisture products are disseminated in BUFR, NetCDF or GRIB format. In order to read them you will have to install the appropriate packages which will be explained shortly. Unfortunately neither BUFR nor GRIB readers work on Windows so if you need these formats then Linux or OS X are your only options.
 
 For installation we recommend `Miniconda <http://conda.pydata.org/miniconda.html>`_. So please install it according to the official installation instructions. As soon as you have the ``conda`` command in your shell you can continue.
 
@@ -44,10 +44,9 @@ The following script will download and install all the needed packages.
 
 .. code::
 
-    conda create -q -n ascat python=2 numpy pandas netCDF4 pytest pip pyproj h5py
-    source activate ascat
-    conda install -c conda-forge pybufr-ecmwf # for reading BUFR files
-    conda install -c conda-forge pygrib=2.0.1 # for reading GRIB files
+    conda create -q -n ascat_env -c conda-forge python=3.6 numpy pandas netCDF4 pip pyproj pybufr-ecmwf cython h5py pygrib
+    source activate ascat_dev
+    pip install pygeobase pygeogrids pynetcf lxml
     pip install ascat
 
 This script should work on Windows, Linux or OSX but on Windows you will get errors for the installation commands of pybufr-ecmwf and pygrib.
@@ -59,70 +58,15 @@ This gives a short overview over the supported products. Please see the document
 
 Read ASCAT data from different sources into a common format supported by pytesmo.
 
-Time Series Products
---------------------
-
-* Metop ASCAT Surface Soil Moisture (SSM) Climate Data Record (CDR) in time series format
-
-  Available in netCDF format from `H SAF <http://hsaf.meteoam.it/soil-moisture.php>`_ (H25, H108-H115)
-
-
-* CGLS SWI(Soil Water Index) Time Series (SWI_TS)
-
-  Available from the `Copernicus Global Land Service (CGLS) <http://land.copernicus.eu/global/products/swi>`_
-
-
-* ASCAT SWI(Soil Water Index) Time Series
-
-  Available in binary format (outdated product).
-
-Image products
---------------
-
-H SAF
-~~~~~
-
-`H SAF <http://hsaf.meteoam.it/soil-moisture.php>`_ provides several different image products:
-
-* H16 - SSM ASCAT-B NRT R : Metop-B ASCAT soil moisture 12.5km sampling NRT
-* H103 - SSM ASCAT-B NRT O : Metop-B ASCAT soil moisture 25km sampling NRT
-* H101 - SSM ASCAT-A NRT R : Metop-A ASCAT soil moisture 12.5km sampling NRT
-* H102 - SSM ASCAT-A NRT O : Metop-A ASCAT soil moisture 25km sampling NRT
-* H08 - Small scale surface soil moisture by radar scatterometer in BUFR format over Europe
-* H14 - Profile index in the roots region by scatterometer data assimilation in GRIB format, global
-
-The products H16, H103, H101, H102 come in the same BUFR format. Since the default filenames are slightly different the following readers should be used:
-
-* H16 - :py:class:`ascat.h_saf.H16img`
-* H103 - :py:class:`ascat.h_saf.H103img`
-* H101 - :py:class:`ascat.h_saf.H101img`
-* H102 - :py:class:`ascat.h_saf.H102img`
-
-They are available after registration from the `H SAF Website <http://hsaf.meteoam.it/soil-moisture.php>`_
-
-The H07 (SM OBS 1) is discontinued and replaced by H101, H102, H16 and H103.
-
-* H07 - :py:class:`ascat.h_saf.H07img`
-
-EUMETSAT
-~~~~~~~~
-
-EUMETSAT provides ASCAT Level 1 and Level 2 data among others through the `EUMETSAT Data Centre <http://www.eumetsat.int/website/home/Data/DataDelivery/EUMETSATDataCentre/index.html>`_. At the moment this package supports the following products:
-
-* ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in BUFR format
-  :py:class:`ascat.eumetsat.AscatL2Ssm125`.
-* ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in BUFR format - 3 Minute PDU files.
-  :py:class:`ascat.eumetsat.AscatL2Ssm125PDU`.
-  For reading half orbits use :py:class:`ascat.eumetsat.AscatL2Ssm125PDUChunked`
-* ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in netCDF format
-  :py:class:`ascat.eumetsat.AscatL2Ssm125Nc`.
-* ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in BUFR format
-  :py:class:`ascat.eumetsat.AscatL2Ssm250`.
-* ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in BUFR format - 3 Minute PDU files.
-  :py:class:`ascat.eumetsat.AscatL2Ssm250PDU`.
-  For reading half orbits use :py:class:`ascat.eumetsat.AscatL2Ssm250PDUChunked`
-* ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in netCDF format
-  :py:class:`ascat.eumetsat.AscatL2Ssm250Nc`.
+* `H SAF <http://h-saf.eumetsat.int/>`_
+  * Surface Soil Moisture (SSM) and Root Zone Soil Moisture (RZSM) products
+* `Copernicus Global Land Service (CGLS) <http://land.copernicus.eu/global/products/swi>`_
+  * CGLS Soil Water Index (SWI) products
+* `EUMETSAT <https://navigator.eumetsat.int/search?query=ascat/>`_
+  * ASCAT Soil Moisture at 12.5 km Swath Grid - Metop
+  * ASCAT Soil Moisture at 25 km Swath Grid - Metop
+  * ASCAT GDS Level 1 Sigma0 resampled at 12.5 km Swath Grid - Metop 
+  * ASCAT GDS Level 1 Sigma0 resampled at 25 km Swath Grid - Metop 
 
 Contribute
 ==========
