@@ -1,9 +1,12 @@
 name: ascat_env
 channels:
+  - default
   - conda-forge
 dependencies:
 - numpy
 - pandas
+- h5py
+- pygrib
 - netCDF4
 - pykdtree
 - pybufr-ecmwf
