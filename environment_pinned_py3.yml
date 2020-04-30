@@ -4,6 +4,7 @@ channels:
 dependencies:
 - numpy
 - pandas
+- h5py
 - netCDF4
 - pykdtree
 - pybufr-ecmwf
