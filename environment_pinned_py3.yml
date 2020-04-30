@@ -8,6 +8,7 @@ dependencies:
 - h5py
 - lxml
 - pykdtree
+- pybufr-ecmwf
 - pip
 - pip: 
   - pygeobase>=0.4.0
