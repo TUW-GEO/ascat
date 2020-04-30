@@ -1,4 +1,4 @@
-name: ascat_dev
+name: ascat_env
 channels:
   - conda-forge
 dependencies:
