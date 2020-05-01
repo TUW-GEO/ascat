@@ -4,13 +4,13 @@ channels:
 dependencies:
 - numpy
 - pandas
-- h5py
 - pygrib
 - netCDF4
 - pykdtree
-- pybufr-ecmwf
 - pip
 - pip: 
+  - pybufr-ecmwf
+  - h5py
   - lxml
   - pygeobase>=0.4.0
   - pygeogrids>=0.3.0
