@@ -1,4 +1,4 @@
-# Copyright (c) 2019, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2020, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -61,8 +61,8 @@ class ASCAT_MultiTemporalImageBase(MultiTemporalImageBase):
 
         else:
             orbit_start_str = os.path.basename(filename)[
-                              self.filename_datetime_format[0]:
-                              self.filename_datetime_format[1]]
+                self.filename_datetime_format[0]:
+                self.filename_datetime_format[1]]
             return datetime.strptime(orbit_start_str,
                                      self.filename_datetime_format[2])
 
@@ -99,5 +99,5 @@ class ASCAT_MultiTemporalImageBase(MultiTemporalImageBase):
             timestamps.append(self._get_orbit_start_date(filename))
 
         timestamps = [dt for dt in timestamps if (
-                dt >= startdate and dt <= enddate)]
+            dt >= startdate and dt <= enddate)]
         return timestamps

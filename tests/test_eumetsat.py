@@ -1,4 +1,4 @@
-# Copyright (c) 2019, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2020, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -302,6 +302,8 @@ class Test_ASCAT_L2_SSM_250_BUFR(unittest.TestCase):
 
 
 pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
+
+
 class Test_ASCAT_L2_SSM_250_BUFR_PDU(unittest.TestCase):
 
     def setUp(self):

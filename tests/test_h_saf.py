@@ -1,4 +1,4 @@
-# Copyright (c) 2019, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2020, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -717,6 +717,7 @@ def test_hsaf_ts_class_init():
     H_SAF.H112Ts('Test', grid_path)
     H_SAF.H113Ts('Test', grid_path)
     H_SAF.H114Ts('Test', grid_path)
+
 
 if __name__ == "__main__":
     unittest.main()

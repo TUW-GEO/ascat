@@ -10,7 +10,7 @@
 	Initial revision
 
 
-	Copyright (c) Eumetsat 2003, 2004
+	Copyright (c) Eumetsat 2003, 2004
 -->
 
 <xsl:output method="html" />
