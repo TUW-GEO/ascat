@@ -1,6 +1,5 @@
 name: ascat_env
 channels:
-  - default
   - conda-forge
 dependencies:
 - numpy

@@ -3,6 +3,7 @@
 *.py[cod]
 *.so
 *.cfg
+!.isort.cfg
 !setup.cfg
 *.orig
 *.log
@@ -10,6 +11,8 @@
 __pycache__/*
 .cache/*
 .*.swp
+*/.ipynb_checkpoints/*
+.DS_Store
 
 # Project files
 .ropeproject
@@ -17,7 +20,7 @@ __pycache__/*
 .pydevproject
 .settings
 .idea
-.python-version
+tags
 
 # Package files
 *.egg
@@ -31,14 +34,17 @@ htmlcov/*
 .tox
 junit.xml
 coverage.xml
+.pytest_cache/
 
 # Build and docs folder/files
 build/*
 dist/*
 sdist/*
 docs/api/*
+docs/_rst/*
 docs/_build/*
 cover/*
 MANIFEST
 
-miniconda.sh 
+# Per-project virtualenvs
+.venv*/

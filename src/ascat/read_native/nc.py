@@ -41,6 +41,9 @@ from pygeobase.io_base import ImageBase
 from pygeobase.io_base import MultiTemporalImageBase
 from pygeobase.object_base import Image
 
+ref_dt = np.datetime64('1970-01-01')
+ref_jd = 2440587.5  # julian date on 1970-01-01 00:00:00
+
 
 class AscatL1NcFile(ImageBase):
     """
@@ -123,8 +126,9 @@ class AscatL1NcFile(ImageBase):
                 raise RuntimeError("Unexpected variable shape.")
 
             if name == 'utc_line_nodes':
-                utc_dates = netCDF4.num2date(dd[name], variable.units)
-                dd['jd'] = pd.DatetimeIndex(utc_dates).to_julian_date().values
+                utc_dates = netCDF4.num2date(
+                    dd[name], variable.units).astype('datetime64[ns]')
+                dd['jd'] = (utc_dates - ref_dt)/np.timedelta64(1, 'D') + ref_jd
 
         dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
 
@@ -217,8 +221,9 @@ class AscatL2SsmNcFile(ImageBase):
                 dd[name] = np.repeat(dd[name], num_cells)
 
             if name == 'utc_line_nodes':
-                utc_dates = netCDF4.num2date(dd[name], variable.units)
-                dd['jd'] = pd.DatetimeIndex(utc_dates).to_julian_date().values
+                utc_dates = netCDF4.num2date(
+                    dd[name], variable.units).astype('datetime64[ns]')
+                dd['jd'] = (utc_dates - ref_dt)/np.timedelta64(1, 'D') + ref_jd
 
         # if the ssm_masked is True we mask out data with missing ssm value
         if 'soil_moisture' in dd and ssm_masked is True:

@@ -2,6 +2,13 @@
 Changelog
 =========
 
+Version 1.1.0
+=============
+
+- Python 2.7 no longer supported
+- Update pyscaffold v3.2.3
+- Fix netCDF4.num2date conversion problem
+
 Version 1.0.2
 =============
 
