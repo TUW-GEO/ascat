@@ -1041,7 +1041,7 @@ def get_resample_template_ASCATL1B_SZX(n=1):
     records : numpy.ndarray
         Array filled with default values.
     """
-    metadata = {'temp_name': 'resample_ASCATL1B_SZX'}
+    metadata = {'temp_name': 'ASCRS010'}
 
     struct = np.dtype([('jd', np.float64),
                        ('sat_id', np.byte),
