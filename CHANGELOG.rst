@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 1.1.1
+=============
+
+- Update template name for consistency reason
+
 Version 1.1.0
 =============
 
