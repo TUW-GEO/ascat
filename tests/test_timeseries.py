@@ -64,7 +64,7 @@ class TestAscatNcV55R12(unittest.TestCase):
 
         assert len(result.data) == 2292
         assert result.data.iloc[15].name == datetime(2007, 1, 15, 19, 34, 41,
-                                                     771032)
+                                                     771033)
         assert result.data.iloc[15]['sm'] == 52
         assert result.data.iloc[15]['ssf'] == 1
         assert result.data.iloc[15]['sm_noise'] == 7
