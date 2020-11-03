@@ -6,13 +6,13 @@ dependencies:
 - numpy
 - pandas
 - pygrib
-- pybufr-ecmwf
 - h5py=2.10
 - netCDF4
 - pykdtree
 - pip
 - pip: 
   - lxml
+  - pybufr-ecmwf
   - pygeobase>=0.4.0
   - pygeogrids>=0.3.0
   - pynetcf>=0.2.2
