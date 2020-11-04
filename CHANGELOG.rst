@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 1.1.2
+=============
+
+- Fix dependencies in setup.cfg
+- Pin dependency of h5py=2.10
+
 Version 1.1.1
 =============
 
