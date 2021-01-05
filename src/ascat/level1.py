@@ -41,7 +41,7 @@ import ascat.read_native.bufr as bufr
 import ascat.read_native.nc as nc
 import ascat.read_native.hdf5 as h5
 from ascat.base import ASCAT_MultiTemporalImageBase
-from ascat.math import db2lin, lin2db, hamming_window
+from ascat.ascat_math import db2lin, lin2db, hamming_window
 
 byte_nan = np.iinfo(np.byte).min
 ubyte_nan = np.iinfo(np.ubyte).max
