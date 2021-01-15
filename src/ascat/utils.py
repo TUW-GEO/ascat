@@ -176,3 +176,60 @@ def get_window_weights(window, radius, distance, norm=False):
         weights = weights / w_sum
 
     return weights
+
+def get_toi_subset(ds, toi):
+    """
+    Filter dataset for given time of interest.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to be filtered for time of interest.
+    toi : tuple of datetime
+        Time of interest.
+
+    Returns
+    -------
+    ds : xarray.Dataset
+        Filtered dataset.
+    """
+    if isinstance(ds, dict):
+        for key in ds.keys():
+            subset = ((ds[key].time > np.datetime64(toi[0])) &
+                      (ds[key].time < np.datetime64(toi[1])))
+            ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
+    else:
+        subset = ((ds.time > np.datetime64(toi[0])) &
+                  (ds.time < np.datetime64(toi[1])))
+        ds = ds.sel(obs=np.nonzero(subset.values)[0])
+
+    return ds
+
+
+def get_roi_subset(ds, roi):
+    """
+    Filter dataset for given region of interest.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to be filtered for region of interest.
+    roi : tuple of 4 float
+        Region of interest: latmin, lonmin, latmax, lonmax
+
+    Returns
+    -------
+    ds : xarray.Dataset
+        Filtered dataset.
+    """
+    if isinstance(ds, dict):
+        for key in ds.keys():
+            subset = ((ds[key].lat > roi[0]) & (ds[key].lon > roi[2]) &
+                      (ds[key].lat < roi[1]) & (ds[key].lon < roi[3]))
+            ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
+    else:
+        subset = ((ds.lat > roi[0]) & (ds.lon > roi[2]) &
+                  (ds.lat < roi[1]) & (ds.lon < roi[3]))
+        ds = ds.sel(obs=np.nonzero(subset.values)[0])
+
+    return ds

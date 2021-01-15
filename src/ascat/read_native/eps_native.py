@@ -27,20 +27,21 @@
 
 
 """
-Readers for lvl1b and lvl2 data in eps format.
+Readers for ASCAT Level 1b and Level 2 data in EPS Native format.
 """
-from __future__ import division
 
 import os
 import fnmatch
-import lxml.etree as etree
-from tempfile import NamedTemporaryFile
 from gzip import GzipFile
 from collections import OrderedDict
-from pygeobase.io_base import ImageBase
-from pygeobase.object_base import Image
+from tempfile import NamedTemporaryFile
 
 import numpy as np
+import xarray as xr
+import lxml.etree as etree
+from cadati.jd_date import jd2dt
+
+from ascat.utils import get_toi_subset, get_roi_subset
 
 short_cds_time = np.dtype([('day', np.uint16), ('time', np.uint32)])
 
@@ -53,69 +54,120 @@ int_nan = np.iinfo(np.int16).min
 uint_nan = np.iinfo(np.uint16).max
 byte_nan = np.iinfo(np.byte).min
 
+int8_nan = np.iinfo(np.int8).max
+uint8_nan = np.iinfo(np.uint8).max
+
 # 1.1.2000 00:00:00 as jd
 julian_epoch = 2451544.5
 
 
-class AscatL1bEPSImage(ImageBase):
-    def __init__(self, *args, **kwargs):
+class AscatL1EpsFile:
+
+    def __init__(self, filename, mode='r'):
         """
-        Initialization of i/o object.
+        Initialize AscatL1EpsFile.
 
-        SZF - beam_num
-        - 1 Left Fore Antenna
-        - 2 Left Mid Antenna
-        - 3 Left Aft Antenna
-        - 4 Right Fore Antenna
-        - 5 Right Mid Antenna
-        - 6 Right Aft Antenna
+        Parameters
+        ----------
+        filename : str
+            Filename.
+        mode : str, optional
+            File mode (default: 'r')
         """
-        super(AscatL1bEPSImage, self).__init__(*args, **kwargs)
+        self.filename = filename
+        self.mode = mode
 
-    def read(self, timestamp=None, file_format=None, **kwargs):
-        img = read_eps_l1b(
-            self.filename, timestamp)
-
-        return img
-
-    def write(self, *args, **kwargs):
-        pass
-
-    def flush(self):
-        pass
-
-    def close(self):
-        pass
-
-
-class AscatL2EPSImage(ImageBase):
-    def __init__(self, *args, **kwargs):
+    def read(self, toi=None, roi=None):
         """
-        Initialization of i/o object.
+        Read ASCAT Level 1 data.
+
+        Parameters
+        ----------
+        toi : tuple of datetime, optional
+            Filter data for given time of interest (default: None).
+        roi : tuple of 4 float, optional
+            Filter data for region of interest (default: None).
+            latmin, lonmin, latmax, lonmax
+
+        Returns
+        -------
+        ds : dict, xarray.Dataset
+            ASCAT Level 1b data.
         """
-        super(AscatL2EPSImage, self).__init__(*args, **kwargs)
+        ds = read_eps_l1b(self.filename)
 
-    def read(self, timestamp=None, file_format=None, **kwargs):
-        img = read_eps_l2(self.filename, timestamp)
+        if toi:
+            ds = get_toi_subset(ds, toi)
 
-        return img
+        if roi:
+            ds = get_roi_subset(ds, roi)
 
-    def write(self, *args, **kwargs):
-        pass
-
-    def flush(self):
-        pass
-
-    def close(self):
-        pass
+        return ds
 
 
-class EPSProduct(object):
+class AscatL2EpsFile:
+
+    def __init__(self, filename, mode='r'):
+        """
+        Initialize AscatL2EpsFile.
+
+        Parameters
+        ----------
+        filename : str
+            Filename.
+        mode : str, optional
+            File mode (default: 'r')
+        """
+        self.filename = filename
+        self.mode = mode
+
+    def read(self, toi=None, roi=None):
+        """
+        Read ASCAT Level 1 data.
+
+        Parameters
+        ----------
+        toi : tuple of datetime, optional
+            Filter data for given time of interest (default: None).
+        roi : tuple of 4 float, optional
+            Filter data for region of interest (default: None).
+            latmin, lonmin, latmax, lonmax
+        native : bool, optional
+            Return native or generic data set format (default: False).
+            The main difference is that in the original native format fields
+            are called differently.
+
+        Returns
+        -------
+        ds : dict, xarray.Dataset
+            ASCAT Level 1b data.
+        """
+        ds = read_eps_l2(self.filename)
+
+        if toi:
+            ds = get_toi_subset(ds, toi)
+
+        if roi:
+            ds = get_roi_subset(ds, roi)
+
+        return ds
+
+
+class EPSProduct:
+
     """
     Class for reading EPS products.
     """
 
     def __init__(self, filename):
+        """
+        Initialize EPSProduct.
+
+        Parameters
+        ----------
+        filename : str
+            EPS Native Filename.
+        """
         self.filename = filename
         self.fid = None
         self.grh = None
@@ -268,9 +320,6 @@ class EPSProduct(object):
         self.mdr = np.hstack(self.mdr)
         self.scaled_mdr = self._scaling(self.mdr, self.scaled_template,
                                         self.sfactor)
-
-    def _append_list(self, new_element):
-        return
 
     def _scaling(self, unscaled_data, scaled_template, sfactor):
         """
@@ -553,44 +602,48 @@ def ipr_record():
     return record_dtype
 
 
-def read_eps_l1b(filename, timestamp):
+def read_eps_l1b(filename):
     """
-    Use of correct lvl1b reader and data preparation.
+    Use of correct Level 1b reader and data preparation.
+
+    Parameters
+    ----------
+    filename : str
+        ASCAT Level 1b file name in EPS Native format.
+
+    Returns
+    -------
+    ds : xarray.Dataset, dict of xarray.Dataset
+        ASCAT Level 1b data.
     """
-    data = {}
     eps_file = read_eps(filename)
     ptype = eps_file.mphr['PRODUCT_TYPE']
     fmv = int(eps_file.mphr['FORMAT_MAJOR_VERSION'])
 
     if ptype == 'SZF':
-        image_dict = {'img1': {}, 'img2': {}, 'img3': {}, 'img4': {},
-                      'img5': {}, 'img6': {}}
-        data_full = {'d1': {}, 'd2': {}, 'd3': {}, 'd4': {}, 'd5': {},
-                     'd6': {}}
         if fmv == 12:
             raw_data, metadata, orbit_grid = read_szf_fmv_12(eps_file)
         else:
             raise RuntimeError("SZF format version not supported.")
 
-        for field in raw_data:
-            data[field] = raw_data[field]
+        # 1 Left Fore Antenna, 2 Left Mid Antenna 3 Left Aft Antenna
+        # 4 Right Fore Antenna, 5 Right Mid Antenna, 6 Right Aft Antenna
+        antennas = ['lf', 'lm', 'la', 'rf', 'rm', 'ra']
+        ds = OrderedDict()
+        for i, antenna in enumerate(antennas):
+            beam_subset = ((raw_data['beam_number']) == i+1)
 
-        # separate data into single beam images
-        for i in range(1, 7):
-            dataset = 'd' + str(i)
-            img = 'img' + str(i)
-            mask = ((data['BEAM_NUMBER']) == i)
-            for field in data:
-                data_full[dataset][field] = data[field][mask]
+            data_var = {}
+            for field in raw_data:
+                data_var[field.lower()] = (['obs'],
+                                           raw_data[field][beam_subset])
 
-            lon = data_full[dataset].pop('LONGITUDE_FULL')
-            lat = data_full[dataset].pop('LATITUDE_FULL')
-            image_dict[img] = Image(lon, lat, data_full[dataset], metadata,
-                                    timestamp, timekey='jd')
+            coords = {"lon": (['obs'], data_var.pop('longitude_full')[1]),
+                      "lat": (['obs'], data_var.pop('latitude_full')[1]),
+                      "time": (['obs'], jd2dt(data_var.pop('jd')[1]))}
+            ds[antenna] = xr.Dataset(data_var, coords=coords, attrs=metadata)
 
-        return image_dict
-
-    elif (ptype == 'SZR') or (ptype == 'SZO'):
+    elif ptype in ['SZR', 'SZO']:
         if fmv == 11:
             raw_data, metadata = read_szx_fmv_11(eps_file)
         elif fmv == 12:
@@ -598,62 +651,76 @@ def read_eps_l1b(filename, timestamp):
         else:
             raise RuntimeError("SZX format version not supported.")
 
-        beams = ['f_', 'm_', 'a_']
+        coords = {"lon": (['obs'], raw_data.pop('longitude')),
+                  "lat": (['obs'], raw_data.pop('latitude')),
+                  "time": (['obs'], jd2dt(raw_data.pop('jd')))}
 
-        for field in raw_data:
-            if len(raw_data[field].shape) == 1:
-                data[field] = raw_data[field]
-            # split data if it is triplet data
-            elif len(raw_data[field].shape) == 2:
-                for i, beam in enumerate(beams):
-                    data[beam + field] = raw_data[field][:, i]
+        data_var = {}
+        for k, v in raw_data.items():
+            if len(v.shape) == 1:
+                dim = ['obs']
+            elif len(v.shape) == 2:
+                dim = ['obs', 'beam']
             else:
-                raise RuntimeError("Unexpected variable shape.")
+                raise RuntimeError('Unknown dimension')
 
-        longitude = data.pop('LONGITUDE')
-        latitude = data.pop('LATITUDE')
+            data_var[k.lower()] = (dim, v)
 
-        return Image(longitude, latitude, data, metadata, timestamp,
-                     timekey='jd')
+        ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
     else:
-        raise ValueError("Format not supported. Product type {:1}"
-                         " Format major version: {:2}".format(ptype, fmv))
+        raise RuntimeError("Format not supported. Product type {:1}"
+                           " Format major version: {:2}".format(ptype, fmv))
+
+    return ds
 
 
-def read_eps_l2(filename, timestamp):
+def read_eps_l2(filename):
     """
-    Use of correct lvl2 reader and data preparation.
+    Use of correct Level 2 reader and data preparation.
+
+    Parameters
+    ----------
+    filename : str
+        ASCAT Level 2 file name in EPS Native format.
+
+    Returns
+    -------
+    ds : xarray.Dataset, dict of xarray.Dataset
+        ASCAT Level 2 data.
     """
     data = {}
     eps_file = read_eps(filename)
     ptype = eps_file.mphr['PRODUCT_TYPE']
     fmv = int(eps_file.mphr['FORMAT_MAJOR_VERSION'])
 
-    if (ptype == 'SMR') or (ptype == 'SMO'):
+    if ptype in ['SMR', 'SMO']:
         if fmv == 12:
             raw_data, metadata = read_smx_fmv_12(eps_file)
         else:
             raise RuntimeError("SMX format version not supported.")
 
-        beams = ['f_', 'm_', 'a_']
+        coords = {"lon": (['obs'], data.pop('longitude')),
+                  "lat": (['obs'], data.pop('latitude')),
+                  "time": (['obs'], jd2dt(data.pop('jd')))}
 
-        for field in raw_data:
-            if len(raw_data[field].shape) == 1:
-                data[field] = raw_data[field]
-            elif len(raw_data[field].shape) == 2:
-                for i, beam in enumerate(beams):
-                    data[beam + field] = raw_data[field][:, i]
+        data_var = {}
+        for k, v in raw_data.items():
+            if len(v.shape) == 1:
+                dim = ['obs']
+            elif len(v.shape) == 2:
+                dim = ['obs', 'beam']
             else:
-                raise RuntimeError("Unexpected variable shape.")
+                raise RuntimeError('Unknown dimension')
 
-        longitude = data.pop('LONGITUDE')
-        latitude = data.pop('LATITUDE')
+            data_var[k.lower()] = (dim, v)
+
+        ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
 
     else:
         raise ValueError("Format not supported. Product type {:1}"
                          " Format major version: {:2}".format(ptype, fmv))
 
-    return Image(longitude, latitude, data, metadata, timestamp, timekey='jd')
+    return ds
 
 
 def read_eps(filename):
@@ -703,6 +770,7 @@ def read_szx_fmv_11(eps_file):
     n_node_per_line = raw_data['LONGITUDE'].shape[1]
     n_lines = raw_data['LONGITUDE'].shape[0]
     n_records = raw_data['LONGITUDE'].size
+
     data = {}
     metadata = {}
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
@@ -711,62 +779,62 @@ def read_szx_fmv_11(eps_file):
                                  raw_data['UTC_LINE_NODES'].flatten()['time'])
     data['jd'] = ascat_time[idx_nodes]
 
-    metadata['SPACECRAFT_ID'] = np.int8(mphr['SPACECRAFT_ID'][-1])
-    metadata['ORBIT_START'] = np.uint32(mphr['ORBIT_START'])
+    metadata['spacecraft_id'] = np.int8(mphr['SPACECRAFT_ID'][-1])
+    metadata['orbit_start'] = np.uint32(mphr['ORBIT_START'])
 
-    fields = ['PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION',
-              'FORMAT_MAJOR_VERSION', 'FORMAT_MINOR_VERSION']
-    for field in fields:
-        # metadata[field] = np.repeat(np.int16(mphr[field]),n_records)
-        metadata[field] = np.int16(mphr[field])
+    fields = ['processor_major_version', 'processor_minor_version',
+              'format_major_version', 'format_minor_version']
 
-    fields = ['SAT_TRACK_AZI']
-    for field in fields:
-        data[field] = raw_data[field].flatten()[idx_nodes]
+    for f in fields:
+        metadata[f] = np.int16(mphr[f.upper()])
 
-    fields = [('LONGITUDE', long_nan),
-              ('LATITUDE', long_nan),
-              ('SWATH_INDICATOR', byte_nan)]
-    for field in fields:
-        data[field[0]] = raw_data[field[0]].flatten()
-        valid = raw_unscaled[field[0]].flatten() != field[1]
-        data[field[0]][~valid] = field[1]
+    fields = ['sat_track_azi']
+    for f in fields:
+        data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
-    fields = [('SIGMA0_TRIP', long_nan),
-              ('INC_ANGLE_TRIP', uint_nan),
-              ('AZI_ANGLE_TRIP', int_nan),
-              ('KP', uint_nan),
-              ('F_KP', byte_nan),
-              ('F_USABLE', byte_nan),
-              ('F_F', uint_nan),
-              ('F_V', uint_nan),
-              ('F_OA', uint_nan),
-              ('F_SA', uint_nan),
-              ('F_TEL', uint_nan),
-              ('F_LAND', uint_nan)]
-    for field in fields:
-        data[field[0]] = raw_data[field[0]].reshape(n_records, 3)
-        # valid = data[field[0]] != field[2]
-        valid = raw_unscaled[field[0]].reshape(n_records, 3) != field[1]
-        data[field[0]][~valid] = field[1]
+    fields = [('longitude', long_nan), ('latitude', long_nan),
+              ('swath_indicator', byte_nan)]
+
+    for f, nan_val in fields:
+        data[f] = raw_data[f.upper()].flatten()
+        valid = raw_unscaled[f.upper()].flatten() != nan_val
+        data[f][~valid] = nan_val
+
+    fields = [('sigma0_trip', long_nan),
+              ('inc_angle_trip', uint_nan),
+              ('azi_angle_trip', int_nan),
+              ('kp', uint_nan),
+              ('f_kp', byte_nan),
+              ('f_usable', byte_nan),
+              ('f_f', uint_nan),
+              ('f_v', uint_nan),
+              ('f_oa', uint_nan),
+              ('f_sa', uint_nan),
+              ('f_tel', uint_nan),
+              ('f_land', uint_nan)]
+
+    for f, nan_val in fields:
+        data[f] = raw_data[f.upper()].reshape(n_records, 3)
+        valid = raw_unscaled[f.upper()].reshape(n_records, 3) != nan_val
+        data[f][~valid] = nan_val
 
     # modify longitudes from (0, 360) to (-180,180)
-    mask = np.logical_and(data['LONGITUDE'] != long_nan,
-                          data['LONGITUDE'] > 180)
-    data['LONGITUDE'][mask] += -360.
+    mask = np.logical_and(data['longitude'] != long_nan,
+                          data['longitude'] > 180)
+    data['longitude'][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
-    mask = (data['AZI_ANGLE_TRIP'] != int_nan) & (data['AZI_ANGLE_TRIP'] < 0)
-    data['AZI_ANGLE_TRIP'][mask] += 360
+    mask = (data['azi_angle_trip'] != int_nan) & (data['azi_angle_trip'] < 0)
+    data['azi_angle_trip'][mask] += 360
 
-    data['NODE_NUM'] = np.tile((np.arange(n_node_per_line) + 1),
+    data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
                                n_lines)
 
-    data['LINE_NUM'] = idx_nodes
+    data['line_num'] = idx_nodes
 
-    data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
+    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
 
-    data['SWATH INDICATOR'] = data.pop('SWATH_INDICATOR')
+    data['swath indicator'] = data.pop('swath_indicator')
 
     return data, metadata
 
@@ -789,74 +857,75 @@ def read_szx_fmv_12(eps_file):
     raw_unscaled = eps_file.mdr
     mphr = eps_file.mphr
 
-    n_node_per_line = raw_data['LONGITUDE'].shape[1]
-    n_lines = raw_data['LONGITUDE'].shape[0]
-    n_records = raw_data['LONGITUDE'].size
+    n_node_per_line = raw_data['longitude'].shape[1]
+    n_lines = raw_data['longitude'].shape[0]
+    n_records = raw_data['longitude'].size
     data = {}
     metadata = {}
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
 
-    ascat_time = shortcdstime2jd(raw_data['UTC_LINE_NODES'].flatten()['day'],
-                                 raw_data['UTC_LINE_NODES'].flatten()['time'])
+    ascat_time = shortcdstime2jd(raw_data['utc_line_nodes'].flatten()['day'],
+                                 raw_data['utc_line_nodes'].flatten()['time'])
     data['jd'] = ascat_time[idx_nodes]
 
-    metadata['SPACECRAFT_ID'] = np.int8(mphr['SPACECRAFT_ID'][-1])
-    metadata['ORBIT_START'] = np.uint32(mphr['ORBIT_START'])
+    metadata['spacecraft_id'] = np.int8(mphr['spacecraft_id'][-1])
+    metadata['orbit_start'] = np.uint32(mphr['orbit_start'])
 
-    fields = ['PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION',
-              'FORMAT_MAJOR_VERSION', 'FORMAT_MINOR_VERSION']
-    for field in fields:
-        # metadata[field] = np.repeat(np.int16(mphr[field]),n_records)
-        metadata[field] = np.int16(mphr[field])
+    fields = ['processor_major_version', 'processor_minor_version',
+              'format_major_version', 'format_minor_version']
 
-    fields = ['DEGRADED_INST_MDR', 'DEGRADED_PROC_MDR', 'SAT_TRACK_AZI',
-              'ABS_LINE_NUMBER']
-    for field in fields:
-        data[field] = raw_data[field].flatten()[idx_nodes]
+    for f in fields:
+        metadata[f] = np.int16(mphr[f.upper()])
 
-    fields = [('LONGITUDE', long_nan),
-              ('LATITUDE', long_nan),
-              ('SWATH INDICATOR', byte_nan)]
-    for field in fields:
-        data[field[0]] = raw_data[field[0]].flatten()
-        valid = raw_unscaled[field[0]].flatten() != field[1]
-        data[field[0]][~valid] = field[1]
+    fields = ['degraded_inst_mdr', 'degraded_proc_mdr', 'sat_track_azi',
+              'abs_line_number']
 
-    fields = [('SIGMA0_TRIP', long_nan),
-              ('INC_ANGLE_TRIP', uint_nan),
-              ('AZI_ANGLE_TRIP', int_nan),
-              ('KP', uint_nan),
-              ('NUM_VAL_TRIP', ulong_nan),
-              ('F_KP', byte_nan),
-              ('F_USABLE', byte_nan),
-              ('F_F', uint_nan),
-              ('F_V', uint_nan),
-              ('F_OA', uint_nan),
-              ('F_SA', uint_nan),
-              ('F_TEL', uint_nan),
-              ('F_REF', uint_nan),
-              ('F_LAND', uint_nan)]
-    for field in fields:
-        data[field[0]] = raw_data[field[0]].reshape(n_records, 3)
-        # valid = data[field[0]] != field[2]
-        valid = raw_unscaled[field[0]].reshape(n_records, 3) != field[1]
-        data[field[0]][~valid] = field[1]
+    for f in fields:
+        data[f] = raw_data[f].flatten()[idx_nodes]
+
+    fields = [('longitude', long_nan), ('latitude', long_nan),
+              ('swath_indicator', byte_nan)]
+
+    for f, nan_val in fields:
+        data[f] = raw_data[f.upper()].flatten()
+        valid = raw_unscaled[f.upper()].flatten() != nan_val
+        data[f][~valid] = nan_val
+
+    fields = [('sigma0_trip', long_nan),
+              ('inc_angle_trip', uint_nan),
+              ('azi_angle_trip', int_nan),
+              ('kp', uint_nan),
+              ('num_val_trip', ulong_nan),
+              ('f_kp', byte_nan),
+              ('f_usable', byte_nan),
+              ('f_f', uint_nan),
+              ('f_v', uint_nan),
+              ('f_oa', uint_nan),
+              ('f_sa', uint_nan),
+              ('f_tel', uint_nan),
+              ('f_ref', uint_nan),
+              ('f_land', uint_nan)]
+
+    for f, nan_val in fields:
+        data[f] = raw_data[f.upper()].reshape(n_records, 3)
+        valid = raw_unscaled[f.upper()].reshape(n_records, 3) != nan_val
+        data[f][~valid] = nan_val
 
     # modify longitudes from (0, 360) to (-180,180)
-    mask = np.logical_and(data['LONGITUDE'] != long_nan,
-                          data['LONGITUDE'] > 180)
-    data['LONGITUDE'][mask] += -360.
+    mask = np.logical_and(data['longitude'] != long_nan,
+                          data['longitude'] > 180)
+    data['longitude'][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
-    mask = (data['AZI_ANGLE_TRIP'] != int_nan) & (data['AZI_ANGLE_TRIP'] < 0)
-    data['AZI_ANGLE_TRIP'][mask] += 360
+    mask = (data['azi_angle_trip'] != int_nan) & (data['azi_angle_trip'] < 0)
+    data['azi_angle_trip'][mask] += 360
 
-    data['NODE_NUM'] = np.tile((np.arange(n_node_per_line) + 1),
+    data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
                                n_lines)
 
-    data['LINE_NUM'] = idx_nodes
+    data['line_num'] = idx_nodes
 
-    data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
+    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
 
     return data, metadata
 
@@ -898,6 +967,7 @@ def read_szf_fmv_12(eps_file):
 
     n_node_per_line = raw_data['LONGITUDE_FULL'].shape[1]
     n_lines = eps_file.mdr_counter
+
     data = {}
     metadata = {}
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
@@ -907,42 +977,43 @@ def read_szf_fmv_12(eps_file):
                                      'time'])
     data['jd'] = ascat_time[idx_nodes]
 
-    metadata['SPACECRAFT_ID'] = np.int8(mphr['SPACECRAFT_ID'][-1])
-    metadata['ORBIT_START'] = np.uint32(eps_file.mphr['ORBIT_START'])
+    metadata['spacecraft_id'] = np.int8(mphr['SPACECRAFT_ID'][-1])
+    metadata['orbit_start'] = np.uint32(eps_file.mphr['ORBIT_START'])
 
-    fields = ['PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION',
-              'FORMAT_MAJOR_VERSION', 'FORMAT_MINOR_VERSION']
-    for field in fields:
-        metadata[field] = np.int16(mphr[field])
+    fields = ['processor_major_version', 'processor_minor_version',
+              'format_major_version', 'format_minor_version']
+    for f in fields:
+        metadata[f] = np.int16(mphr[f.upper()])
 
-    fields = ['DEGRADED_INST_MDR', 'DEGRADED_PROC_MDR', 'SAT_TRACK_AZI',
-              'BEAM_NUMBER', 'FLAGFIELD_RF1', 'FLAGFIELD_RF2',
-              'FLAGFIELD_PL', 'FLAGFIELD_GEN1']
-    for field in fields:
-        data[field] = raw_data[field].flatten()[idx_nodes]
+    fields = ['degraded_inst_mdr', 'degraded_proc_mdr', 'sat_track_azi',
+              'beam_number', 'flagfield_rf1', 'flagfield_rf2',
+              'flagfield_pl', 'flagfield_gen1']
+    for f in fields:
+        data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
-    data['SWATH_INDICATOR'] = np.int8(data['BEAM_NUMBER'].flatten() > 3)
+    data['swath_indicator'] = np.int8(data['beam_number'].flatten() > 3)
 
-    fields = [('LONGITUDE_FULL', long_nan),
-              ('LATITUDE_FULL', long_nan),
-              ('SIGMA0_FULL', long_nan),
-              ('INC_ANGLE_FULL', uint_nan),
-              ('AZI_ANGLE_FULL', int_nan),
-              ('LAND_FRAC', uint_nan),
-              ('FLAGFIELD_GEN2', byte_nan)]
-    for field in fields:
-        data[field[0]] = raw_data[field[0]].flatten()
-        valid = data[field[0]] != field[1]
-        data[field[0]][valid] = data[field[0]][valid]
+    fields = [('longitude_full', long_nan),
+              ('latitude_full', long_nan),
+              ('sigma0_full', long_nan),
+              ('inc_angle_full', uint_nan),
+              ('azi_angle_full', int_nan),
+              ('land_frac', uint_nan),
+              ('flagfield_gen2', byte_nan)]
+
+    for f, nan_val in fields:
+        data[f] = raw_data[f.upper()].flatten()
+        valid = eps_file.mdr[f.upper()].flatten() != nan_val
+        data[f][~valid] = nan_val
 
     # modify longitudes from (0, 360) to (-180,180)
-    mask = np.logical_and(data['LONGITUDE_FULL'] != long_nan,
-                          data['LONGITUDE_FULL'] > 180)
-    data['LONGITUDE_FULL'][mask] += -360.
+    mask = np.logical_and(data['longitude_full'] != long_nan,
+                          data['longitude_full'] > 180)
+    data['longitude_full'][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
-    mask = (data['AZI_ANGLE_FULL'] != int_nan) & (data['AZI_ANGLE_FULL'] < 0)
-    data['AZI_ANGLE_FULL'][mask] += 360
+    mask = (data['azi_angle_full'] != int_nan) & (data['azi_angle_full'] < 0)
+    data['azi_angle_full'][mask] += 360
 
     grid_nodes_per_line = 2 * 81
 
@@ -984,7 +1055,7 @@ def read_szf_fmv_12(eps_file):
 
     set_flags(data)
 
-    data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
+    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
 
     return data, metadata, orbit_grid
 
@@ -999,23 +1070,12 @@ def set_flags(data):
     data : numpy.ndarray
         SZF data.
     """
-
     # category:status = 'red': 2, 'amber': 1, 'warning': 0
-    flag_status_bit = {'FLAGFIELD_RF1': {'2': [2, 4],
-                                         '1': [0, 1, 3]},
-
-                       'FLAGFIELD_RF2': {'2': [0, 1]},
-
-                       'FLAGFIELD_PL': {'2': [0, 1, 2, 3],
-                                        '0': [4]},
-
-                       'FLAGFIELD_GEN1': {'2': [1],
-                                          '0': [0]},
-
-                       'FLAGFIELD_GEN2': {'2': [2],
-                                          '1': [0],
-                                          '0': [1]}
-                       }
+    flag_status_bit = {'flagfield_rf1': {'2': [2, 4], '1': [0, 1, 3]},
+                       'flagfield_rf2': {'2': [0, 1]},
+                       'flagfield_pl': {'2': [0, 1, 2, 3], '0': [4]},
+                       'flagfield_gen1': {'2': [1], '0': [0]},
+                       'flagfield_gen2': {'2': [2], '1': [0], '0': [1]}}
 
     for flagfield in flag_status_bit.keys():
         # get flag data in binary format to get flags
@@ -1027,18 +1087,18 @@ def set_flags(data):
             pos_8 = 7 - (set_bits % 8)
 
             for category in sorted(flag_status_bit[flagfield].keys()):
-                if (int(category) == 0) and (flagfield != 'FLAGFIELD_GEN2'):
+                if (int(category) == 0) and (flagfield != 'flagfield_gen2'):
                     continue
 
                 for bit2check in flag_status_bit[flagfield][category]:
                     pos = np.where(pos_8 == bit2check)[0]
-                    data['F_USABLE'] = np.zeros(data['FLAGFIELD_GEN2'].size)
-                    data['F_USABLE'][set_bits[pos] // 8] = int(category)
+                    data['f_usable'] = np.zeros(data['flagfield_gen2'].size)
+                    data['f_usable'][set_bits[pos] // 8] = int(category)
 
                     # land points
-                    if (flagfield == 'FLAGFIELD_GEN2') and (bit2check == 1):
-                        data['F_LAND'] = np.zeros(data['FLAGFIELD_GEN2'].size)
-                        data['F_LAND'][set_bits[pos] // 8] = 1
+                    if (flagfield == 'flagfield_gen2') and (bit2check == 1):
+                        data['f_land'] = np.zeros(data['flagfield_gen2'].size)
+                        data['f_land'][set_bits[pos] // 8] = 1
 
 
 def read_smx_fmv_12(eps_file):
@@ -1058,92 +1118,103 @@ def read_smx_fmv_12(eps_file):
     raw_data = eps_file.scaled_mdr
     raw_unscaled = eps_file.mdr
 
-    n_node_per_line = raw_data['LONGITUDE'].shape[1]
-    n_lines = raw_data['LONGITUDE'].shape[0]
+    n_node_per_line = raw_data['longitude'].shape[1]
+    n_lines = raw_data['longitude'].shape[0]
     n_records = eps_file.mdr_counter * n_node_per_line
     idx_nodes = np.arange(eps_file.mdr_counter).repeat(n_node_per_line)
 
     data = {}
     metadata = {}
 
-    metadata['SPACECRAFT_ID'] = np.int8(eps_file.mphr['SPACECRAFT_ID'][-1])
-    metadata['ORBIT_START'] = np.uint32(eps_file.mphr['ORBIT_START'])
+    metadata['spacecraft_id'] = np.int8(eps_file.mphr['spacecraft_id'][-1])
+    metadata['orbit_start'] = np.uint32(eps_file.mphr['orbit_start'])
 
-    ascat_time = shortcdstime2jd(raw_data['UTC_LINE_NODES'].flatten()['day'],
-                                 raw_data['UTC_LINE_NODES'].flatten()['time'])
+    ascat_time = shortcdstime2jd(raw_data['utc_line_nodes'].flatten()['day'],
+                                 raw_data['utc_line_nodes'].flatten()['time'])
     data['jd'] = ascat_time[idx_nodes]
 
-    fields = [('SIGMA0_TRIP', long_nan),
-              ('INC_ANGLE_TRIP', uint_nan),
-              ('AZI_ANGLE_TRIP', int_nan),
-              ('KP', uint_nan),
-              ('F_LAND', uint_nan)]
+    fields = [('sigma0_trip', long_nan),
+              ('inc_angle_trip', uint_nan),
+              ('azi_angle_trip', int_nan),
+              ('kp', uint_nan),
+              ('f_land', uint_nan)]
 
-    for field in fields:
-        data[field[0]] = raw_data[field[0]].reshape(n_records, 3)
-        valid = raw_unscaled[field[0]].reshape(n_records, 3) != field[1]
-        data[field[0]][~valid] = field[1]
+    for f, nan_val in fields:
+        data[f] = raw_data[f.upper()].reshape(n_records, 3)
+        valid = raw_unscaled[f.upper()].reshape(n_records, 3) != nan_val
+        data[f][~valid] = nan_val
 
-    fields = ['SAT_TRACK_AZI', 'ABS_LINE_NUMBER']
-    for field in fields:
-        data[field] = raw_data[field].flatten()[idx_nodes]
+    fields = ['sat_track_azi', 'abs_line_number']
+    for f in fields:
+        data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
-    fields = [('LONGITUDE', long_nan),
-              ('LATITUDE', long_nan),
-              ('SOIL_MOISTURE', uint_nan),
-              ('SWATH_INDICATOR', byte_nan),
-              ('SOIL_MOISTURE_ERROR', uint_nan),
-              ('SIGMA40', long_nan),
-              ('SIGMA40_ERROR', long_nan),
-              ('SLOPE40', long_nan),
-              ('SLOPE40_ERROR', long_nan),
-              ('DRY_BACKSCATTER', long_nan),
-              ('WET_BACKSCATTER', long_nan),
-              ('MEAN_SURF_SOIL_MOISTURE', uint_nan),
-              ('SOIL_MOISTURE_SENSETIVITY', ulong_nan),
-              ('CORRECTION_FLAGS', None),
-              ('PROCESSING_FLAGS', None),
-              ('AGGREGATED_QUALITY_FLAG', None),
-              ('SNOW_COVER_PROBABILITY', None),
-              ('FROZEN_SOIL_PROBABILITY', None),
-              ('INNUDATION_OR_WETLAND', None),
-              ('TOPOGRAPHICAL_COMPLEXITY', None)]
+    fields = [('longitude', long_nan),
+              ('latitude', long_nan),
+              ('soil_moisture', uint_nan),
+              ('swath_indicator', byte_nan),
+              ('soil_moisture_error', uint_nan),
+              ('sigma40', long_nan),
+              ('sigma40_error', long_nan),
+              ('slope40', long_nan),
+              ('slope40_error', long_nan),
+              ('dry_backscatter', long_nan),
+              ('wet_backscatter', long_nan),
+              ('mean_surf_soil_moisture', uint_nan),
+              ('soil_moisture_sensetivity', ulong_nan),
+              ('correction_flags', uint8_nan),
+              ('processing_flags', uint8_nan),
+              ('aggregated_quality_flag', uint8_nan),
+              ('snow_cover_probability', uint8_nan),
+              ('frozen_soil_probability', uint8_nan),
+              ('innudation_or_wetland', uint8_nan),
+              ('topographical_complexity', uint8_nan)]
 
-    for field in fields:
-        data[field[0]] = raw_data[field[0]].flatten()
-        if field[1] is not None:
-            valid = raw_unscaled[field[0]].flatten() != field[1]
-            data[field[0]][~valid] = field[1]
+    for f, nan_val in fields:
+        data[f] = raw_data[f.upper()].flatten()
+        valid = raw_unscaled[f.upper()].flatten() != nan_val
+        data[f][~valid] = nan_val
 
     # sat_track_azi (uint)
-    data['AS_DES_PASS'] = \
-        np.array(raw_data['SAT_TRACK_AZI'].flatten()[idx_nodes] < 270)
+    data['as_des_pass'] = \
+        np.array(raw_data['sat_track_azi'].flatten()[idx_nodes] < 270)
 
     # modify longitudes from [0,360] to [-180,180]
-    mask = np.logical_and(data['LONGITUDE'] != long_nan,
-                          data['LONGITUDE'] > 180)
-    data['LONGITUDE'][mask] += -360.
+    mask = np.logical_and(data['longitude'] != long_nan,
+                          data['longitude'] > 180)
+    data['longitude'][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
-    mask = (data['AZI_ANGLE_TRIP'] != int_nan) & (data['AZI_ANGLE_TRIP'] < 0)
-    data['AZI_ANGLE_TRIP'][mask] += 360
+    mask = (data['azi_angle_trip'] != int_nan) & (data['azi_angle_trip'] < 0)
+    data['azi_angle_trip'][mask] += 360
 
-    fields = ['PARAM_DB_VERSION', 'WARP_NRT_VERSION']
-    for field in fields:
-        data[field] = raw_data['PARAM_DB_VERSION'].flatten()[idx_nodes]
+    fields = ['param_db_version', 'warp_nrt_version']
+    for f in fields:
+        data[f] = raw_data['param_db_version'].flatten()[idx_nodes]
 
-    metadata['SPACECRAFT_ID'] = int(eps_file.mphr['SPACECRAFT_ID'][2])
+    metadata['spacecraft_id'] = int(eps_file.mphr['spacecraft_id'][2])
 
-    data['NODE_NUM'] = np.tile((np.arange(n_node_per_line) + 1), n_lines)
+    data['node_num'] = np.tile((np.arange(n_node_per_line) + 1), n_lines)
 
-    data['LINE_NUM'] = idx_nodes
+    data['line_num'] = idx_nodes
 
     return data, metadata
 
 
 def shortcdstime2jd(days, milliseconds):
     """
-    Convert cds time to julian date
+    Convert cds time to julian date.
+
+    Parameters
+    ----------
+    days : int
+        Days since 2000-01-01
+    milliseconds : int
+        Milliseconds.
+
+    Returns
+    -------
+    jd : float
+        Julian date.
     """
     offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)
     return julian_epoch + offset

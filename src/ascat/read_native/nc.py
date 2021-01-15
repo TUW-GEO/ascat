@@ -27,328 +27,211 @@
 
 
 """
-Readers for lvl1b and lvl2 data in nc format.
+Readers for ASCAT Level 1b and Level 2 data in NetCDF format.
 """
-
-import os
-from datetime import datetime, timedelta
 
 import netCDF4
 import numpy as np
-import pandas as pd
+import xarray as xr
 
-from pygeobase.io_base import ImageBase
-from pygeobase.io_base import MultiTemporalImageBase
-from pygeobase.object_base import Image
+from ascat.utils import get_toi_subset, get_roi_subset
 
-ref_dt = np.datetime64('1970-01-01')
-ref_jd = 2440587.5  # julian date on 1970-01-01 00:00:00
+class AscatL1NcFile():
 
-
-class AscatL1NcFile(ImageBase):
-    """
-    Read ASCAT L1 File in netCDF format, as downloaded from EUMETSAT
-
-    Parameters
-    ----------
-    filename : str
-        Filename path.
-    mode : str, optional
-        Opening mode. Default: r
-    nc_variables: list, optional
-        list of variables to read from netCDF.
-        Default: read all available variables
-    """
-
-    def __init__(self, filename, mode='r', nc_variables=None, **kwargs):
+    def __init__(self, filename, mode='r'):
         """
-        Initialization of i/o object.
-
-        """
-        super(AscatL1NcFile, self).__init__(filename, mode=mode,
-                                            **kwargs)
-        self.nc_variables = nc_variables
-        self.ds = None
-
-    def read(self, timestamp=None):
-        """
-        reads from the netCDF file given by the filename
-
-        Returns
-        -------
-        data : pygeobase.object_base.Image
-        """
-
-        if self.ds is None:
-            self.ds = netCDF4.Dataset(self.filename)
-
-        if self.nc_variables is None:
-            var_to_read = self.ds.variables.keys()
-        else:
-            var_to_read = self.nc_variables
-
-        # make sure that essential variables are read always:
-        if 'latitude' not in var_to_read:
-            var_to_read.append('latitude')
-        if 'longitude' not in var_to_read:
-            var_to_read.append('longitude')
-
-        # store data in dictionary
-        dd = {}
-        metadata = {}
-        beams = ['f_', 'm_', 'a_']
-
-        metadata['sat_id'] = self.ds.platform[-1]
-        metadata['orbit_start'] = self.ds.start_orbit_number
-        metadata['processor_major_version'] = self.ds.processor_major_version
-        metadata['product_minor_version'] = self.ds.product_minor_version
-        metadata['format_major_version'] = self.ds.format_major_version
-        metadata['format_minor_version'] = self.ds.format_minor_version
-
-        num_cells = self.ds.dimensions['numCells'].size
-        for name in var_to_read:
-            variable = self.ds.variables[name]
-
-            if len(variable.shape) == 1:
-                # If the data is 1D then we repeat it for each cell
-                dd[name] = variable[:].flatten()
-                dd[name] = np.repeat(dd[name], num_cells)
-            elif len(variable.shape) == 2:
-                dd[name] = variable[:].flatten()
-            elif len(variable.shape) == 3:
-                # length of 3 means it is triplet data, so we split it
-                for i, beam in enumerate(beams):
-                    dd[beam + name] = variable[:, :, i].flatten()
-                    if name == 'azi_angle_trip':
-                        mask = dd[beam + name] < 0
-                        dd[beam + name][mask] += 360
-            else:
-                raise RuntimeError("Unexpected variable shape.")
-
-            if name == 'utc_line_nodes':
-                utc_dates = netCDF4.num2date(
-                    dd[name], variable.units).astype('datetime64[ns]')
-                dd['jd'] = (utc_dates - ref_dt)/np.timedelta64(1, 'D') + ref_jd
-
-        dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
-
-        longitude = dd.pop('longitude')
-        latitude = dd.pop('latitude')
-
-        n_records = latitude.shape[0]
-        n_lines = n_records // num_cells
-        dd['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
-        dd['line_num'] = np.arange(n_lines).repeat(num_cells)
-
-        return Image(longitude, latitude, dd, metadata, timestamp,
-                     timekey='utc_line_nodes')
-
-    def write(self, data):
-        raise NotImplementedError()
-
-    def flush(self):
-        pass
-
-    def close(self):
-        pass
-
-
-class AscatL2SsmNcFile(ImageBase):
-    """
-    Read ASCAT L2 SSM File in netCDF format, as downloaded from EUMETSAT
-
-    Parameters
-    ----------
-    filename : str
-        Filename path.
-    mode : str, optional
-        Opening mode. Default: r
-    nc_variables: list, optional
-        list of variables to read from netCDF.
-        Default: read all available variables
-    """
-
-    def __init__(self, filename, mode='r', nc_variables=None, **kwargs):
-        """
-        Initialization of i/o object.
-
-        """
-        super(AscatL2SsmNcFile, self).__init__(filename, mode=mode,
-                                               **kwargs)
-        self.nc_variables = nc_variables
-        self.ds = None
-
-    def read(self, timestamp=None, ssm_masked=False):
-        """
-        reads from the netCDF file given by the filename
-
-        Returns
-        -------
-        data : pygeobase.object_base.Image
-        """
-
-        if self.ds is None:
-            self.ds = netCDF4.Dataset(self.filename)
-
-        if self.nc_variables is None:
-            var_to_read = self.ds.variables.keys()
-        else:
-            var_to_read = self.nc_variables
-
-        # make sure that essential variables are read always:
-        if 'latitude' not in var_to_read:
-            var_to_read.append('latitude')
-        if 'longitude' not in var_to_read:
-            var_to_read.append('longitude')
-
-        # store data in dictionary
-        dd = {}
-        metadata = {}
-
-        metadata['sat_id'] = self.ds.platform_long_name[-1]
-        metadata['orbit_start'] = self.ds.start_orbit_number
-        metadata['processor_major_version'] = self.ds.processor_major_version
-        metadata['product_minor_version'] = self.ds.product_minor_version
-        metadata['format_major_version'] = self.ds.format_major_version
-        metadata['format_minor_version'] = self.ds.format_minor_version
-
-        num_cells = self.ds.dimensions['numCells'].size
-        for name in var_to_read:
-            variable = self.ds.variables[name]
-            dd[name] = variable[:].flatten()
-            if len(variable.shape) == 1:
-                # If the data is 1D then we repeat it for each cell
-                dd[name] = np.repeat(dd[name], num_cells)
-
-            if name == 'utc_line_nodes':
-                utc_dates = netCDF4.num2date(
-                    dd[name], variable.units).astype('datetime64[ns]')
-                dd['jd'] = (utc_dates - ref_dt)/np.timedelta64(1, 'D') + ref_jd
-
-        # if the ssm_masked is True we mask out data with missing ssm value
-        if 'soil_moisture' in dd and ssm_masked is True:
-            # mask all the arrays based on fill_value of latitude
-            valid_data = ~dd['soil_moisture'].mask
-            for name in dd:
-                dd[name] = dd[name][valid_data]
-
-        longitude = dd.pop('longitude')
-        latitude = dd.pop('latitude')
-
-        n_records = latitude.shape[0]
-        n_lines = n_records // num_cells
-        dd['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
-        dd['line_num'] = np.arange(n_lines).repeat(num_cells)
-
-        dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
-
-        return Image(longitude, latitude, dd, metadata, timestamp,
-                     timekey='utc_line_nodes')
-
-    def write(self, data):
-        raise NotImplementedError()
-
-    def flush(self):
-        pass
-
-    def close(self):
-        pass
-
-
-class AscatL2SsmNc(MultiTemporalImageBase):
-    """
-    Class for reading HSAF ASCAT SSM images in netCDF format.
-    The images have to be uncompressed in the following folder structure
-
-    Parameters
-    ----------
-    path: string
-        path where the data is stored
-    month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on
-        the HSAF FTP Server then please specify the string that should be used
-        in datetime.datetime.strftime Default: ''
-    day_search_str: string, optional
-        to provide an iterator over all images of a day the method
-        _get_possible_timestamps looks for all available images on a day on the
-        harddisk. This string is used in datetime.datetime.strftime and in
-        glob.glob to search for all files on a day.
-    file_search_str: string, optional
-        this string is used in datetime.datetime.strftime and glob.glob to find
-        a 3 minute bufr file by the exact date.
-    datetime_format: string, optional
-        datetime format by which {datetime} will be replaced in file_search_str
-    nc_variables: list, optional
-        list of variables to read from netCDF.
-        Default: read all available variables
-    """
-
-    def __init__(self, path, month_path_str='',
-                 day_search_str='W_XX-EUMETSAT-Darmstadt,'
-                                'SURFACE+SATELLITE,METOPA+'
-                                'ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.nc',
-                 file_search_str='W_XX-EUMETSAT-Darmstadt,'
-                                 'SURFACE+SATELLITE,METOPA+'
-                                 'ASCAT_C_EUMP_{datetime}*_125_ssm_l2.nc',
-                 datetime_format='%Y%m%d%H%M%S',
-                 filename_datetime_format=(62, 76, '%Y%m%d%H%M%S'),
-                 nc_variables=None):
-        self.path = path
-        self.month_path_str = month_path_str
-        self.day_search_str = day_search_str
-        self.file_search_str = file_search_str
-        self.filename_datetime_format = filename_datetime_format
-        super(AscatL2SsmNc, self).__init__(path, AscatL2SsmNcFile,
-                                           subpath_templ=[month_path_str],
-                                           fname_templ=file_search_str,
-                                           datetime_format=datetime_format,
-                                           exact_templ=False,
-                                           ioclass_kws={
-                                               'nc_variables': nc_variables})
-
-    def _get_orbit_start_date(self, filename):
-        orbit_start_str = \
-            os.path.basename(filename)[self.filename_datetime_format[0]:
-                                       self.filename_datetime_format[1]]
-        return datetime.strptime(orbit_start_str,
-                                 self.filename_datetime_format[2])
-
-    def tstamps_for_daterange(self, startdate, enddate):
-        """
-        Get the timestamps as datetime array that are possible for the
-        given day, if the timestamps are
-
-        For this product it is not fixed but has to be looked up from
-        the hard disk since bufr files are not regular spaced and only
-        europe is in this product. For a global product a 3 minute
-        spacing could be used as a fist approximation
+        Initialize AscatL1NcFile.
 
         Parameters
         ----------
-        startdate : datetime.date or datetime.datetime
-            start date
-        enddate : datetime.date or datetime.datetime
-            end date
+        filename : str
+            Filename.
+        mode : str, optional
+            File mode (default: 'r')
+        """
+        self.filename = filename
+        self.mode = mode
+
+    def read(self, toi=None, roi=None):
+        """
+        Read ASCAT Level 1 data.
+
+        Parameters
+        ----------
+        toi : tuple of datetime, optional
+            Filter data for given time of interest (default: None).
+        roi : tuple of 4 float, optional
+            Filter data for region of interest (default: None).
+            e.g. latmin, lonmin, latmax, lonmax
 
         Returns
         -------
-        dates : list
-            list of datetimes
+        ds : dict, xarray.Dataset
+            ASCAT Level 1 data.
         """
-        file_list = []
-        delta_all = enddate - startdate
-        timestamps = []
+        data_var = {}
+        metadata = {}
 
-        for i in range(delta_all.days + 1):
-            timestamp = startdate + timedelta(days=i)
+        with netCDF4.Dataset(self.filename) as fid:
 
-            files = self._search_files(
-                timestamp, custom_templ=self.day_search_str)
+            metadata['sat_id'] = fid.platform[-1]
+            metadata['orbit_start'] = fid.start_orbit_number
+            metadata['processor_major_version'] = fid.processor_major_version
+            metadata['product_minor_version'] = fid.product_minor_version
+            metadata['format_major_version'] = fid.format_major_version
+            metadata['format_minor_version'] = fid.format_minor_version
 
-            file_list.extend(sorted(files))
+            num_cells = fid.dimensions['numCells'].size
+            num_rows = fid.dimensions['numRows'].size
 
-        for filename in file_list:
-            timestamps.append(self._get_orbit_start_date(filename))
+            for var_name in fid.variables.keys():
 
-        timestamps = [dt for dt in timestamps if startdate <= dt <= enddate]
-        return timestamps
+                if var_name in ['sigma0']:
+                    continue
+
+                if len(fid.variables[var_name].shape) == 1:
+                    dim = ['num_rows']
+                elif len(fid.variables[var_name].shape) == 2:
+                    dim = ['num_rows', 'num_cells']
+                elif len(fid.variables[var_name].shape) == 3:
+                    dim = ['num_rows', 'num_cells', 'num_sigma0']
+                else:
+                    raise RuntimeError('Unknown dimension')
+
+                if var_name == 'utc_line_nodes':
+                    data_var[var_name] = (dim, fid.variables[
+                        var_name][:].filled().astype(
+                            'timedelta64[s]') + np.datetime64('2000-01-01'))
+                else:
+                    data_var[var_name] = (
+                        dim, fid.variables[var_name][:].filled())
+
+            data_var['as_des_pass'] = (
+                ['num_rows'], (data_var[
+                    'sat_track_azi'][1] < 270).astype(np.uint8))
+
+        coords = {"lon": data_var.pop('longitude'),
+                  "lat": data_var.pop('latitude'),
+                  "time": data_var.pop('utc_line_nodes')}
+
+        data_var['node_num'] = (['num_rows', 'num_cells'], np.tile(np.arange(
+            1, num_cells+1), (num_rows, 1)))
+        data_var['line_num'] = (['num_rows', 'num_cells'], np.arange(
+            1, num_rows+1).repeat(num_cells).reshape(-1, num_cells))
+
+        ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
+
+        if toi:
+            ds = get_toi_subset(ds, toi)
+
+        if roi:
+            ds = get_roi_subset(ds, roi)
+
+        return ds
+
+    def close(self):
+        """
+        Close file.
+        """
+        pass
+
+
+class AscatL2NcFile:
+
+    """
+    Read ASCAT Level 2 file in NetCDF format.
+    """
+
+    def __init__(self, filename, mode='r'):
+        """
+        Initialize AscatL1NcFile.
+
+        Parameters
+        ----------
+        filename : str
+            Filename.
+        mode : str, optional
+            File mode (default: 'r')
+        """
+        self.filename = filename
+        self.mode = mode
+
+    def read(self, toi=None, roi=None):
+        """
+        Read ASCAT Level 2 data.
+
+        Parameters
+        ----------
+        toi : tuple of datetime, optional
+            Filter data for given time of interest (default: None).
+        roi : tuple of 4 float, optional
+            Filter data for region of interest (default: None).
+            latmin, lonmin, latmax, lonmax
+
+        Returns
+        -------
+        ds : dict, xarray.Dataset
+            ASCAT Level 2 data.
+        """
+        data_var = {}
+        metadata = {}
+
+        with netCDF4.Dataset(self.filename) as fid:
+
+            metadata['sat_id'] = fid.platform_long_name[-1]
+            metadata['orbit_start'] = fid.start_orbit_number
+            metadata['processor_major_version'] = fid.processor_major_version
+            metadata['product_minor_version'] = fid.product_minor_version
+            metadata['format_major_version'] = fid.format_major_version
+            metadata['format_minor_version'] = fid.format_minor_version
+
+            num_cells = fid.dimensions['numCells'].size
+            num_rows = fid.dimensions['numRows'].size
+
+            for var_name in fid.variables.keys():
+
+                if len(fid.variables[var_name].shape) == 1:
+                    dim = ['num_rows']
+                elif len(fid.variables[var_name].shape) == 2:
+                    dim = ['num_rows', 'num_cells']
+                elif len(fid.variables[var_name].shape) == 3:
+                    dim = ['num_rows', 'num_cells', 'num_sigma0']
+                else:
+                    raise RuntimeError('Unknown dimension')
+
+                if var_name == 'utc_line_nodes':
+                    data_var[var_name] = (dim, fid.variables[
+                        var_name][:].filled().astype(
+                            'timedelta64[s]') + np.datetime64('2000-01-01'))
+                else:
+                    data_var[var_name] = (
+                        dim, fid.variables[var_name][:].filled())
+
+        data_var['as_des_pass'] = (
+            ['num_rows'], (data_var[
+                'sat_track_azi'][1] < 270).astype(np.uint8))
+
+        coords = {"lon": data_var.pop('longitude'),
+                  "lat": data_var.pop('latitude'),
+                  "time": data_var.pop('utc_line_nodes')}
+
+        data_var['node_num'] = (['num_rows', 'num_cells'], np.tile(np.arange(
+            1, num_cells+1), (num_rows, 1)))
+        data_var['line_num'] = (['num_rows', 'num_cells'], np.arange(
+            1, num_rows+1).repeat(num_cells).reshape(-1, num_cells))
+
+        ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
+
+        if toi:
+            ds = get_toi_subset(ds, toi)
+
+        if roi:
+            ds = get_roi_subset(ds, roi)
+
+        return ds
+
+    def close(self):
+        """
+        Close file.
+        """
+        pass

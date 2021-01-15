@@ -26,20 +26,17 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-General Level 2 data readers for ASCAT data in all formats.
+ASCAT Level 2 data readers for various data formats.
 """
 
 import os
 import numpy as np
 from datetime import datetime
 
-from pygeobase.io_base import ImageBase
-from pygeobase.object_base import Image
+import ascat.read_native.eps_native as eps_native
+import ascat.read_native.bufr as bufr
+import ascat.read_native.nc as nc
 
-import ascat.read_native.eps_native as read_eps
-import ascat.read_native.bufr as read_bufr
-import ascat.read_native.nc as read_nc
-from ascat.utils import db2lin, lin2db, hamming_window
 from ascat.base import ASCAT_MultiTemporalImageBase
 
 byte_nan = np.iinfo(np.byte).min
@@ -53,28 +50,55 @@ long_nan = np.iinfo(np.int32).min
 int_nan = np.iinfo(np.int16).min
 
 
-class AscatL2Image(ImageBase):
+class AscatL2File:
+
     """
-    General Level 2 Image
+    ASCAT Level 2 reader class.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, filename, mode='r', file_format=None):
         """
-        Initialization of i/o object.
-        """
-        super(AscatL2Image, self).__init__(*args, **kwargs)
-
-    def read(self, timestamp=None, file_format=None, native=False, **kwargs):
-        """
-        Read ASCAT swath files.
+        Initialize AscatL2File.
 
         Parameters
         ----------
-        timestamp : str, optional
-            Time stamp of file (default: None).
+        filename : str
+            Filename.
+        mode : str, optional
+            File mode (default: 'r').
         file_format : str, optional
             File format: '.nat', '.nc', '.bfr', '.h5' (default: None).
             If None file format will be guessed based on the file ending.
+        """
+        self.filename = filename
+        self.mode = mode
+        self.fid = None
+
+        if file_format is None:
+            file_format = get_file_format(self.filename)
+
+        self.file_format = file_format
+
+        if self.file_format in ['.nat', '.nat.gz']:
+            self.fid = eps_native.AscatL2EpsFile(self.filename, mode=mode)
+        elif self.file_format in ['.nc', '.nc.gz']:
+            self.fid = nc.AscatL2NcFile(self.filename, mode=mode)
+        elif self.file_format in ['.bfr', '.bfr.gz', '.buf', 'buf.gz']:
+            self.fid = bufr.AscatL2BufrFile(self.filename, mode=mode)
+        else:
+            raise RuntimeError("ASCAT Level 2 file format unknown")
+
+    def read(self, toi=None, roi=None, native=False, **kwargs):
+        """
+        Read ASCAT Level 2 data.
+
+        Parameters
+        ----------
+        toi : tuple of datetime, optional
+            Filter data for given time of interest (default: None).
+        roi : tuple of 4 float, optional
+            Filter data for region of interest (default: None).
+            e.g. latmin, lonmin, latmax, lonmax
         native : bool, optional
             Return native or generic data set format (default: False).
             The main difference is that in the original native format fields
@@ -82,210 +106,16 @@ class AscatL2Image(ImageBase):
 
         Returns
         -------
-        img : pygeobase.object_base.Image
-            ASCAT swath image.
+        ds : xarray.Dataset
+            ASCAT Level 1b data.
         """
-
-        if file_format is None:
-            file_format = get_file_format(self.filename)
-
-        if file_format in [".nat", ".nat.gz"]:
-            img = read_eps.AscatL2EPSImage(self.filename).read(timestamp)
-            if not native:
-                img = eps2generic(img)
-
-        elif file_format in [".nc", ".nc.gz"]:
-            img = read_nc.AscatL2SsmNcFile(self.filename).read(timestamp)
-            if not native:
-                img = nc2generic(img)
-
-        elif file_format in [".bfr", ".bfr.gz", ".buf", "buf.gz"]:
-            img = read_bufr.AscatL2SsmBufrFile(self.filename).read(timestamp)
-            if not native:
-                img = bfr2generic(img)
-
-        else:
-            raise RuntimeError(
-                "Format not found, please indicate the file_format. "
-                "[\".nat\", \".nc\", \".bfr\"]")
-
-        return img
-
-    def read_masked_data(self, correction_flag=0, processing_flag=0,
-                         aggregated_quality_flag=100,
-                         snow_cover_probability=100,
-                         frozen_soil_probability=100,
-                         innudation_or_wetland=100,
-                         topographical_complexity=100, **kwargs):
-        """
-        Read ASCAT swath files and mask unusable observations.
-
-        Parameters
-        ----------
-        correction_flag : int, optional
-            Correction flag (default: 0).
-        aggregated_quality_flag : int, optional
-            Aggregated quality flag (default: 0).
-        snow_cover_probability : float, optional
-            Snow cover probability (default: 100).
-        frozen_soil_probability : float, optional
-            Frozen soil probability (default: 100).
-        innudation_or_wetland : float, optional
-            Innundation and wetland flag (default: 100).
-        topographical_complexity, float, optional
-            Toographical complexity flag (default: 100).
-
-        Returns
-        -------
-        img : pygeobase.object_base.Image
-            ASCAT swath image with masking applied.
-        """
-        orbit = self.read(**kwargs)
-
-        valid = np.ones(orbit.data[orbit.data.dtype.names[0]].shape,
-                        dtype=np.bool)
-
-        # bitwise comparison, if any bitflag is set by the user and is active
-        # for the datarecord the result is bigger than 0 and the not valid
-        valid = (valid & (((orbit.data['correction_flag']
-                            & correction_flag) == 0)
-                          | (orbit.data['correction_flag'] == uint8_nan)))
-
-        valid = (valid & (((orbit.data['processing_flag']
-                            & processing_flag) == 0)
-                          | (orbit.data['processing_flag'] == uint16_nan)))
-
-        # if any probability/flag is too high the datarecord is not used
-        # nan values are not considered since not all formats provide all flags
-        # and the values are set to nan there to keep a generic structure
-        valid = (valid & ((orbit.data['aggregated_quality_flag']
-                           < aggregated_quality_flag)
-                          | (orbit.data['aggregated_quality_flag']
-                             == uint8_nan)))
-
-        valid = (valid & ((orbit.data['snow_cover_probability']
-                           < snow_cover_probability)
-                          | (orbit.data['snow_cover_probability']
-                             == float32_nan)))
-
-        valid = (valid & ((orbit.data['frozen_soil_probability']
-                           < frozen_soil_probability)
-                          | (orbit.data['frozen_soil_probability']
-                             == float32_nan)))
-
-        valid = (valid & ((orbit.data['innudation_or_wetland']
-                           < innudation_or_wetland) |
-                          (orbit.data['innudation_or_wetland']
-                           == float32_nan)))
-
-        valid = (valid & ((orbit.data['topographical_complexity']
-                           < topographical_complexity)
-                          | (orbit.data['topographical_complexity']
-                             == float32_nan)))
-
-        valid_num = orbit.data['jd'][valid].shape[0]
-        masked_data = get_template_ASCATL2_SMX(valid_num)
-
-        for key in orbit.data.dtype.names:
-            masked_data[key] = orbit.data[key][valid]
-
-        img = Image(orbit.lon[valid], orbit.lat[valid], masked_data,
-                    orbit.metadata, orbit.timestamp, timekey='jd')
-
-        return img
-
-    def resample_data(self, data, index, distance, windowRadius, **kwargs):
-        """
-
-        Parameters
-        ----------
-
-
-        Returns
-        -------
-        img : pygeobase.object_base.Image
-            ASCAT swath image with masking applied.
-
-        """
-        # target template
-        template = get_resample_template_ASCATL2_SMX()
-        res_orbit = np.repeat(template, index.shape[0])
-
-        # get weights
-        weights, _ = hamming_window(windowRadius, distance)
-
-        # resample soil moiusture variables [%]
-        sm = ['sm', 'sm_noise', 'mean_surf_sm']
-
-        for n in sm:
-            # account for nan values: remove them from calculation by setting
-            # them to np.nan and using np.nansum later on
-            data[n][data[n] == float32_nan] = np.nan
-            # the weighting also depends on nan values of the data
-            # if we don't use a data value we have to exclude the
-            # corresponding weight from the total_weights calculation
-            weights_exc = weights.copy()
-            weights_exc[np.isnan(data[n])[index]] = np.nan
-            total_weights_exc = np.nansum(weights, axis=1)
-            res_orbit[n] = (np.nansum(data[n][index] * weights, axis=1)
-                            / total_weights_exc)
-            # set the empty values to nan to keep consistency and avoid
-            # 0 which could also be an actual value
-            res_orbit[n][np.isnan(res_orbit[n])] = float32_nan
-            res_orbit[n][np.nansum(weights_exc, axis=1) == 0] = float32_nan
-
-        # resample dB variables
-        fields = ['sigf', 'sigm', 'siga', 'sig40', 'sig40_noise',
-                  'slope40', 'slope40_noise', 'sm_sensitivity',
-                  'dry_backscatter', 'wet_backscatter']
-
-        for sigma in fields:
-            data[sigma][data[sigma] == float32_nan] = np.nan
-
-            weights_exc = weights.copy()
-            weights_exc[np.isnan(data[sigma])[index]] = np.nan
-            total_weights_exc = np.nansum(weights, axis=1)
-            res_orbit[sigma] = lin2db(np.nansum(db2lin(data[sigma])[index]
-                                                * weights,
-                                                axis=1)
-                                      / total_weights_exc)
-            res_orbit[sigma][np.isnan(res_orbit[sigma])] = float32_nan
-            res_orbit[sigma][np.nansum(weights_exc, axis=1) == 0] = float32_nan
-
-        # resample measurement geometry
-        measgeos = ['incf', 'incm', 'inca', 'azif', 'azim', 'azia']
-
-        for mg in measgeos:
-            data[mg][data[mg] == float32_nan] = np.nan
-
-            weights_exc = weights.copy()
-            weights_exc[np.isnan(data[mg])[index]] = np.nan
-            total_weights_exc = np.nansum(weights, axis=1)
-            res_orbit[mg] = (np.nansum(data[mg][index] * weights, axis=1)
-                             / total_weights_exc)
-            res_orbit[mg][np.isnan(res_orbit[mg])] = float32_nan
-            res_orbit[mg][np.nansum(weights_exc, axis=1) == 0] = float32_nan
-
-        # nearest neighbour resampling values
-        nnResample = ['jd', 'sat_id', 'abs_line_nr', 'abs_orbit_nr',
-                      'node_num', 'line_num', 'swath', 'as_des_pass']
-        # index of min. distance is equal to 0 because of kd-tree usage
-        for nn in nnResample:
-            res_orbit[nn] = data[nn][index][:, 0]
-
-        # set number of measurements for resampling
-        res_orbit['num_obs'] = np.sum(distance != np.inf, axis=1)
-
-        return res_orbit
-
-    def write(self, *args, **kwargs):
-        pass
-
-    def flush(self):
-        pass
+        return self.fid.read(toi=toi, roi=roi)
 
     def close(self):
-        pass
+        """
+        Close file.
+        """
+        self.fid.close()
 
 
 class AscatL2Bufr(ASCAT_MultiTemporalImageBase):
