@@ -31,43 +31,49 @@ def parse_main_args_download(args):
     return parser.parse_args(args), parser
 
 
-def import_credentials(filename):
+def read_json(filename):
     '''
-    Function to read credentials from a JSON format
+    Function to read credentials or config from a JSON format
     file.
     
     Args:
-        fiename (str):      The credentials filename
+        fiename (str):      The credentials/config filename
 
     Returns:
-        Nothing if success, error message if fail.
+        data from file if success, error message if fail.
     '''
 
     try:
         with open(filename,'r') as json_file:
-            credentials = json.load(json_file)
+            output  = json.load(json_file)
     except:
-        print('File does not exist or is not in the correct format')
+        print(filename+' does not exist or is not in the correct format')
         return 
         
-    print('Successfully retrieved credentials....')
-    return credentials
+    print('Successfully retrieved data from file:'+filename)
+    return output
 
 def main_download(cli_args):
     args, parser = parse_main_args_download(cli_args)
 
-    credentials = import_credentials(args.credential_file)
+    credentials = read_json(args.credential_file)
+    config=None
+    if args.config_file:
+        config = read_json(args.config_file)
     #FIXME: seperate credential files per source?
     if args.source.upper() == 'HSAF':
         
         download_hsaf(credentials=credentials,
+                     config=config,
                      product=args.product,
                      download_dir=args.output_dir,
                      start_date=args.start_date,
                      end_date=args.end_date)
 
     elif args.source.upper() == 'EUMETSAT':
+
         download_eumetsat(credentials=credentials,
+                          config=config,
                           product=args.product,
                           download_dir=args.output_dir,
                           start_date=args.start_date,
@@ -75,10 +81,17 @@ def main_download(cli_args):
     
 
 def download_hsaf(credentials=None,
+                  config=None,
                   download_dir=None,
                   product=None,
                   start_date=None,
                   end_date=None):
+
+    if config:
+        download_dir = config['download_dir']
+        product = config['product']
+        start_date = config['start_date']
+        end_date = config['end_date']
 
     connector = HSAFConnector()
     connector.connect(credentials=credentials)
@@ -88,12 +101,20 @@ def download_hsaf(credentials=None,
                        end_date=end_date)
 
 def download_eumetsat(credentials=None,
+                      config=None,
+                      coords=None,
                       download_dir=None,
                       product=None,
                       start_date=None,
                       end_date=None):
-    #FIXME:move to config file or similar    
-    coords = [[-1.0, -1.0],[4.0, -4.0],[8.0, -2.0],[9.0, 2.0],[6.0, 4.0],[1.0, 5.0],[-1.0, -1.0]]
+    
+    if config:
+         download_dir = config['download_dir']
+         product = config['product']
+         coords = config['coords']
+         start_date = config['start_date']
+         end_date = config['end_date']
+
 
     connector = EumetsatConnector()
     connector.connect(credentials=credentials)

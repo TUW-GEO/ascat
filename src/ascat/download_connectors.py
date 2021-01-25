@@ -136,7 +136,7 @@ class EumetsatConnector(HTTPConnector):
 
     def connect(self, credentials):
         
-        self.access_token = generate_token(consumer_key=credentials['consumer_key'],
+        self.access_token = self.__generate_token(consumer_key=credentials['consumer_key'],
                                         consumer_secret=credentials['consumer_secret'])
 
 
@@ -201,7 +201,6 @@ class EumetsatConnector(HTTPConnector):
             data = {'grant_type': 'client_credentials'},
             headers = {"Content-Type" : "application/x-www-form-urlencoded"}
         )
-
         self.__assert_response(response)
         return response.json()['access_token']
 
