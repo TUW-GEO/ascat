@@ -634,9 +634,8 @@ def read_eps_l1b(filename):
             beam_subset = ((raw_data['beam_number']) == i+1)
 
             data_var = {}
-            for field in raw_data:
-                data_var[field.lower()] = (['obs'],
-                                           raw_data[field][beam_subset])
+            for f in raw_data:
+                data_var[f.lower()] = (['obs'], raw_data[f][beam_subset])
 
             coords = {"lon": (['obs'], data_var.pop('longitude_full')[1]),
                       "lat": (['obs'], data_var.pop('latitude_full')[1]),
@@ -1078,6 +1077,7 @@ def set_flags(data):
                        'flagfield_gen2': {'2': [2], '1': [0], '0': [1]}}
 
     for flagfield in flag_status_bit.keys():
+
         # get flag data in binary format to get flags
         unpacked_bits = np.unpackbits(data[flagfield])
 

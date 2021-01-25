@@ -31,8 +31,8 @@ Readers for lvl1b and lvl2 data in bufr format.
 """
 
 import os
-from datetime import datetime, timedelta
 import warnings
+from datetime import datetime, timedelta
 from tempfile import NamedTemporaryFile
 from gzip import GzipFile
 

@@ -27,231 +27,137 @@
 
 
 """
-Readers for SZF data in h5 format.
+Readers for ASCAT Level 1b in HDF5 format.
 """
-from __future__ import division
 
-import numpy as np
+from collections import OrderedDict
+
 import h5py
+import numpy as np
+import xarray as xr
 
-from pygeobase.io_base import ImageBase
-from pygeobase.object_base import Image
-
-# 1.1.2000 00:00:00 in jd
-julian_epoch = 2451544.5
+from ascat.read_native.eps_native import set_flags
 
 
-class AscatL1H5File(ImageBase):
+class AscatL1Hdf5File:
     """
-    Read ASCAT L2 SSM File in netCDF format, as downloaded from EUMETSAT
-
-    Parameters
-    ----------
-    filename : str
-        Filename path.
-    mode : str, optional
-        Opening mode. Default: r
-    nc_variables: list, optional
-        list of variables to read from netCDF.
-        Default: read all available variables
+    Read ASCAT Level 1 file in HDF5 format.
     """
 
-    def __init__(self, filename, mode='r', h5_keys=None, **kwargs):
+    def __init__(self, filename, mode='r'):
         """
-        Initialization of i/o object.
+        Initialize AscatL1NcFile.
 
+        Parameters
+        ----------
+        filename : str
+            Filename.
+        mode : str, optional
+            File mode (default: 'r')
         """
-        super(AscatL1H5File, self).__init__(filename, mode=mode,
-                                            **kwargs)
-        self.h5_keys = h5_keys
-        self.ds = None
+        self.filename = filename
+        self.mode = mode
 
-    def read(self, timestamp=None):
+    def read(self, toi=None, roi=None):
         """
-        reads from the netCDF file given by the filename
+        Read ASCAT Level 1 data.
+
+        Parameters
+        ----------
+        toi : tuple of datetime, optional
+            Filter data for given time of interest (default: None).
+        roi : tuple of 4 float, optional
+            Filter data for region of interest (default: None).
+            e.g. latmin, lonmin, latmax, lonmax
 
         Returns
         -------
-        data : pygeobase.object_base.Image
+        ds : dict, xarray.Dataset
+            ASCAT Level 1 data.
         """
-
-        if self.ds is None:
-            self.ds = h5py.File(self.filename)
-            while len(self.ds.keys()) == 1:
-                self.ds = self.ds[list(self.ds.keys())[0]]
-        raw_data = self.ds['DATA']
-        raw_metadata = self.ds['METADATA']
-
-        # store data in dictionary
-        data = {}
+        raw_data = {}
         metadata = {}
 
-        if self.h5_keys is None:
-            var_to_read = list(
-                raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'].dtype.names)
-        else:
-            var_to_read = self.h5_keys
+        root = 'U-MARF/EPS/ASCA_SZF_1B/'
+        mdr_path = root + 'DATA/MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'
+        mdr_descr_path = root + 'DATA/MDR_1B_FULL_ASCA_Level_1_DESCR'
+        metadata_path = root + 'METADATA'
 
-        # make sure that essential variables are read always:
-        if 'LATITUDE_FULL' not in var_to_read:
-            var_to_read.append('LATITUDE_FULL')
-        if 'LONGITUDE_FULL' not in var_to_read:
-            var_to_read.append('LONGITUDE_FULL')
+        with h5py.File(self.filename, mode='r') as fid:
+            mdr = fid[mdr_path]
+            mdr_descr = fid[mdr_descr_path]
+            mdr_metadata = fid[metadata_path]
+            var_names = list(mdr.dtype.names)
 
-        num_cells = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'][
-            'LATITUDE_FULL'].shape[1]
-        num_lines = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'][
-            'LATITUDE_FULL'].shape[0]
+            for var_name in var_names:
+                raw_data[var_name.lower()] = mdr[var_name]
 
-        # read the requested variables and scale them if they have a
-        # scaling factor
-        # encode() is needed for py3 comparison between str and byte
-        for name in var_to_read:
-            variable = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'][name]
-            if name.encode() in \
-                    raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR']['EntryName']:
-                var_index = np.where(
-                    raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'][
-                        'EntryName'] == name.encode())[0][0]
-                if raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR']['Scale Factor'][var_index] != "n/a".encode():
-                    sf = 10 ** float(
-                        raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR']['Scale Factor'][var_index])
-                    variable = variable / sf
-            data[name] = variable[:].flatten()
-            if len(variable.shape) == 1:
-                # If the data is 1D then we repeat it for each cell
-                data[name] = np.repeat(data[name], num_cells)
+                if var_name.encode() in mdr_descr['EntryName']:
+                    pos = mdr_descr['EntryName'] == var_name.encode()
+                    scale = mdr_descr['Scale Factor'][pos][0].decode()
+                    if scale != 'n/a':
+                        raw_data[var_name.lower()] = raw_data[
+                            var_name.lower()] / (10 ** float(scale))
 
-        data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
+            fields = ['SPACECRAFT_ID', 'ORBIT_START',
+                      'PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION',
+                      'FORMAT_MAJOR_VERSION', 'FORMAT_MINOR_VERSION']
 
-        for name in raw_metadata.keys():
-            for subname in raw_metadata[name].keys():
-                if name not in metadata:
-                    metadata[name] = dict()
-                metadata[name][subname] = raw_metadata[name][subname]
+            for f in fields:
+                pos = np.core.defchararray.startswith(
+                    mdr_metadata['MPHR/MPHR_TABLE']['EntryName'], f.encode())
+                var = mdr_metadata['MPHR/MPHR_TABLE']['EntryValue'][
+                    pos][0].decode()
 
-        # modify longitudes from [0,360] to [-180,180]
-        mask = data['LONGITUDE_FULL'] > 180
-        data['LONGITUDE_FULL'][mask] += -360.
+                if f == 'SPACECRAFT_ID':
+                    var = var[-1]
 
-        if 'AZI_ANGLE_FULL' in var_to_read:
-            mask = data['AZI_ANGLE_FULL'] < 0
-            data['AZI_ANGLE_FULL'][mask] += 360
+                metadata[f.lower()] = int(var)
 
-        if 'UTC_LOCALISATION-days' in var_to_read and \
-                'UTC_LOCALISATION-milliseconds' in var_to_read:
-            data['jd'] = shortcdstime2jd(data['UTC_LOCALISATION-days'],
-                                         data['UTC_LOCALISATION-milliseconds'])
+        raw_data['as_des_pass'] = (
+            raw_data['sat_track_azi'] < 270).astype(np.uint8)
 
-        set_flags(data)
+        # modify longitudes ([0,360] to [-180,180])
+        mask = raw_data['longitude_full'] > 180
+        raw_data['longitude_full'][mask] += -360.
 
-        fields = ['SPACECRAFT_ID', 'ORBIT_START',
-                  'PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION',
-                  'FORMAT_MAJOR_VERSION', 'FORMAT_MINOR_VERSION'
-                  ]
-        for field in fields:
-            var_index = np.where(
-                np.core.defchararray.startswith(
-                    metadata['MPHR']['MPHR_TABLE']['EntryName'],
-                    field.encode()))[0][0]
-            var = metadata['MPHR']['MPHR_TABLE']['EntryValue'][
-                var_index].decode()
-            if field == 'SPACECRAFT_ID':
-                var = var[-1]
-            metadata[field] = int(var)
+        # modify azimuth angles
+        if 'azi_angle_full' in var_names:
+            mask = raw_data['azi_angle_full'] < 0
+            raw_data['azi_angle_full'][mask] += 360
 
-        image_dict = {'img1': {}, 'img2': {}, 'img3': {}, 'img4': {},
-                      'img5': {}, 'img6': {}}
-        data_full = {'d1': {}, 'd2': {}, 'd3': {}, 'd4': {}, 'd5': {},
-                     'd6': {}}
+        raw_data['time'] = np.datetime64('2000-01-01') + raw_data[
+            'utc_localisation-days'].astype('timedelta64[D]') + raw_data[
+                'utc_localisation-milliseconds'].astype('timedelta64[ms]')
 
-        # separate data into single beam images
-        for i in range(1, 7):
-            dataset = 'd' + str(i)
-            img = 'img' + str(i)
-            mask = ((data['BEAM_NUMBER']) == i)
-            for field in data:
-                data_full[dataset][field] = data[field][mask]
+        set_flags(raw_data)
 
-            lon = data_full[dataset].pop('LONGITUDE_FULL')
-            lat = data_full[dataset].pop('LATITUDE_FULL')
-            image_dict[img] = Image(lon, lat, data_full[dataset], metadata,
-                                    timestamp, timekey='jd')
+        # 1 Left Fore Antenna, 2 Left Mid Antenna 3 Left Aft Antenna
+        # 4 Right Fore Antenna, 5 Right Mid Antenna, 6 Right Aft Antenna
+        antennas = ['lf', 'lm', 'la', 'rf', 'rm', 'ra']
+        ds = OrderedDict()
+        for i, antenna in enumerate(antennas):
+            data_var = {}
+            subset = ((raw_data['beam_number']) == i+1)
 
-        return image_dict
+            for k, v in raw_data.items():
+                print(k, v.shape)
+                if v.shape.size == 1:
+                    dim = ['obs']
+                elif v.shape.size == 2:
+                    dim = ['obs', 'asdf']
+                data_var[k] = (['obs'], v[subset])
 
-    def read_masked_data(self, **kwargs):
-        """
-        It does not make sense to read a orbit file unmasked
-        so we only have a masked implementation.
-        """
-        return self.read(**kwargs)
+            coords = {"lon": (['obs'], data_var.pop('longitude_full')[1]),
+                      "lat": (['obs'], data_var.pop('latitude_full')[1]),
+                      "time": (['obs'], data_var.pop('time')[1])}
 
-    def write(self, data):
-        raise NotImplementedError()
+            ds[antenna] = xr.Dataset(data_var, coords=coords, attrs=metadata)
 
-    def flush(self):
-        pass
+        return ds
 
     def close(self):
+        """
+        Close file.
+        """
         pass
-
-
-def set_flags(data):
-    """
-    Compute summary flag for each measurement with a value of 0, 1 or 2
-    indicating nominal, slightly degraded or severely degraded data.
-
-    Parameters
-    ----------
-    data : numpy.ndarray
-        SZF data.
-    """
-
-    # category:status = 'red': 2, 'amber': 1, 'warning': 0
-    flag_status_bit = {'FLAGFIELD_RF1': {'2': [2, 4],
-                                         '1': [0, 1, 3]},
-
-                       'FLAGFIELD_RF2': {'2': [0, 1]},
-
-                       'FLAGFIELD_PL': {'2': [0, 1, 2, 3],
-                                        '0': [4]},
-
-                       'FLAGFIELD_GEN1': {'2': [1],
-                                          '0': [0]},
-
-                       'FLAGFIELD_GEN2': {'2': [2],
-                                          '1': [0],
-                                          '0': [1]}
-                       }
-
-    for flagfield in flag_status_bit.keys():
-        # get flag data in binary format to get flags
-        unpacked_bits = np.unpackbits(data[flagfield])
-
-        # find indizes where a flag is set
-        set_bits = np.where(unpacked_bits == 1)[0]
-        if set_bits.size != 0:
-            pos_8 = 7 - (set_bits % 8)
-
-            for category in sorted(flag_status_bit[flagfield].keys()):
-                if (int(category) == 0) and (flagfield != 'FLAGFIELD_GEN2'):
-                    continue
-
-                for bit2check in flag_status_bit[flagfield][category]:
-                    pos = np.where(pos_8 == bit2check)[0]
-                    data['F_USABLE'] = np.zeros(data['FLAGFIELD_GEN2'].size)
-                    data['F_USABLE'][set_bits[pos] // 8] = int(category)
-
-                    # land points
-                    if (flagfield == 'FLAGFIELD_GEN2') and (bit2check == 1):
-                        data['F_LAND'] = np.zeros(data['FLAGFIELD_GEN2'].size)
-                        data['F_LAND'][set_bits[pos] // 8] = 1
-
-
-def shortcdstime2jd(days, milliseconds):
-    """
-    Convert cds time to julian date
-    """
-    offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)
-    return julian_epoch + offset
