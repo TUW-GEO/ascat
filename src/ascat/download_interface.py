@@ -55,30 +55,38 @@ def read_json(filename):
 
 def main_download(cli_args):
     args, parser = parse_main_args_download(cli_args)
-
-    credentials = read_json(args.credential_file)
-    config=None
-    if args.config_file:
-        config = read_json(args.config_file)
-    #FIXME: seperate credential files per source?
-    if args.source.upper() == 'HSAF':
-        
-        download_hsaf(credentials=credentials,
-                     config=config,
-                     product=args.product,
-                     download_dir=args.output_dir,
-                     start_date=args.start_date,
-                     end_date=args.end_date)
-
-    elif args.source.upper() == 'EUMETSAT':
-
-        download_eumetsat(credentials=credentials,
-                          config=config,
-                          product=args.product,
-                          download_dir=args.output_dir,
-                          start_date=args.start_date,
-                          end_date=args.end_date)
     
+    if args.product is not None and args.start_date is not None \
+            and args.end_date is not None or args.config_file:
+
+        credentials = read_json(args.credential_file)
+        config=None
+        if args.config_file:
+            config = read_json(args.config_file)
+        #FIXME: seperate credential files per source?
+        if args.source.upper() == 'HSAF':
+            
+            download_hsaf(credentials=credentials,
+                         config=config,
+                         product=args.product,
+                         download_dir=args.output_dir,
+                         start_date=args.start_date,
+                         end_date=args.end_date)
+
+        elif args.source.upper() == 'EUMETSAT':
+
+            download_eumetsat(credentials=credentials,
+                              config=config,
+                              product=args.product,
+                              download_dir=args.output_dir,
+                              start_date=args.start_date,
+                              end_date=args.end_date)
+        else:
+
+            raise RuntimeError('Specified source not recognized!')
+    else:
+        raise RuntimeError('Product and date range need to be speficied!')
+
 
 def download_hsaf(credentials=None,
                   config=None,

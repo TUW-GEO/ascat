@@ -6,34 +6,92 @@ from datetime import datetime, timedelta
 import urllib
 import re
 import sys
-#TODO: progress bar? tqdm?
+import tqdm
+
 
 class Connector:
 
+
+    """
+    Base Class for connecting and downloading from remote source.
+    
+        
+    Parameters
+    ----------
+    base_url : string
+        location of remote ressource.
+    """
+
+
     def __init__(self,base_url=None):
+
         self.base_url = base_url
 
+
     def connect(self, credentials=None):
+
         """
-        connect to remote source.
+        Establish connection to remote source.
+        
+        Parameters
+        ----------
+        credentials: dict
+            Dictionary of needed authentication parameters.
+
         """
+        
         pass
 
+
     def download(self, download_dir=None, start_date=None, end_date=None):
+     
         """
-        prepare download of files in daterange.
+        Fetch resource location for download of multiple files in daterange.
+
+        Parameters
+        ----------
+        download_dir : string
+            local directory, where found datasets are stored.
+        start_date : string
+            start date of daterange interval, format: YYYYmmdd
+        end_date : string
+            end date of daterange interval, format: YYYYmmdd
+                  
         """
+
         pass
+
+
     def grab_file(self, file_remote=None, file_local=None):
+        
         """
-        download single file from passed url to local file
+        Download single file from passed url to local file
+
+        Parameters
+        ----------
+        file_remote : string
+            path of file to download
+        file_local : string
+            path (local) where to save file
+
         """
+
+
         pass
 
     def close(self):
+        """
+        Close connection.
+        """
+
         pass
 
 class HTTPConnector(Connector):
+    
+    """
+    Class for HTTP Requests.
+
+    """
 
     def __init__(self, base_url=None):
         self.base_url = base_url
@@ -70,6 +128,10 @@ class HTTPConnector(Connector):
 
 class FTPConnector(Connector):
 
+    """
+    Class for downloading via FTP
+    """
+
     def __init__(self, base_url=None):
         self.base_url = base_url
         self.ftp = FTP(base_url)
@@ -95,7 +157,20 @@ class FTPConnector(Connector):
             self.ftp.retrbinary('RETR ' + file_remote, localfile.write, 1024)
             localfile.close()
 
+    def close(self):
+        
+        """
+        Close connection.
+        """
+
+        self.ftp.close()
+
 class HSAFConnector(FTPConnector):
+
+    """
+    Class for downloading from HSAF via FTP.
+    
+    """
 
     def __init__(self, base_url='ftphsaf.meteoam.it'):
         super(HSAFConnector, self).__init__(base_url = base_url)
@@ -104,6 +179,14 @@ class HSAFConnector(FTPConnector):
                        download_dir=None,
                        start_date=None,
                        end_date=None):
+        """
+        Prepares download of multiple files
+
+        Parameters
+        ----------
+        product : string
+            product string
+        """
 
         dir = product + '/' + product + '_cur_mon_data'
         self.ftp.cwd(dir)
@@ -121,9 +204,8 @@ class HSAFConnector(FTPConnector):
             tail = "_day_merged.grib2.gz"
 
         
-        for i in range(days.days):
+        for i in tqdm(range(days.days)):
             date = ((init_date + timedelta(days=i)).strftime("%Y%m%d"))
-            print(date)
             file_remote = product+"_"+date+tail
             file_local = os.path.join(download_dir, file_remote)
             
@@ -131,12 +213,18 @@ class HSAFConnector(FTPConnector):
 
 class EumetsatConnector(HTTPConnector):
 
+    """
+    Class for downloading from eumetsat via HTTP requests.
+
+    """
+
+
     def __init__(self, base_url="http://api.eumetsat.int/"):
         super(EumetsatConnector,self).__init__(base_url = base_url)
 
     def connect(self, credentials):
         
-        self.access_token = self.__generate_token(consumer_key=credentials['consumer_key'],
+        self.access_token = self._generate_token(consumer_key=credentials['consumer_key'],
                                         consumer_secret=credentials['consumer_secret'])
 
 
@@ -145,7 +233,15 @@ class EumetsatConnector(HTTPConnector):
                        coords=None,
                        start_date=None,
                        end_date=None):
+        """
+        Function to prepare download of multiple files.
 
+        Args:
+            coords : list, optional
+                the coordinates to download from
+
+
+        """
         service_search = self.base_url + "data/search-products/os"
         service_download = self.base_url + "data/download/"
 
@@ -161,7 +257,7 @@ class EumetsatConnector(HTTPConnector):
         response = requests.get(url, dataset_parameters)
         found_data_sets = response.json()
         
-        for selected_data_set in found_data_sets['features']:
+        for selected_data_set in tqdm(found_data_sets['features']):
 
             collID = selected_data_set['properties']['parentIdentifier']
             date = datetime.strptime(selected_data_set['properties']['date'].split("/",1)[0] , '%Y-%m-%dT%H:%M:%SZ')
@@ -179,7 +275,7 @@ class EumetsatConnector(HTTPConnector):
 
 
         
-    def __generate_token(self, consumer_key=None, consumer_secret=None):
+    def _generate_token(self, consumer_key=None, consumer_secret=None):
         '''
         Function to generate an access token for interacting with EUMETSAT Data 
         Service APIs
@@ -201,10 +297,10 @@ class EumetsatConnector(HTTPConnector):
             data = {'grant_type': 'client_credentials'},
             headers = {"Content-Type" : "application/x-www-form-urlencoded"}
         )
-        self.__assert_response(response)
+        self._assert_response(response)
         return response.json()['access_token']
 
-    def __assert_response(self, response, success_code=200):
+    def _assert_response(self, response, success_code=200):
         '''
         Function to check API key generation response. Will return an error 
         if the key retrieval was not successful.
