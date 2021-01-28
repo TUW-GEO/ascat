@@ -26,7 +26,6 @@ def parse_main_args_download(args):
     parser.add_argument('-from','--start_date', help='start date in YYYYMMDD format')
     parser.add_argument('-to','--end_date', help='end date in YYYYMMDD format')
 
-    #TODO: error handling when parameter is not passed
 
     return parser.parse_args(args), parser
 
