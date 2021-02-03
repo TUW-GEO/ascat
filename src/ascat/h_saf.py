@@ -44,7 +44,7 @@ from pygeobase.io_base import MultiTemporalImageBase
 from pygeobase.object_base import Image
 
 import ascat.read_native.bufr as bufr_reader
-from ascat.read_native.bufr import AscatL2SsmBufr
+from ascat.read_native.bufr import AscatL2BufrFile
 from ascat.read_native.cdr import AscatNc
 
 
@@ -354,11 +354,7 @@ class H08img(MultiTemporalImageBase):
         return timestamps
 
 
-class H07img(AscatL2SsmBufr):
-    pass
-
-
-class H16img(AscatL2SsmBufr):
+class H16img(AscatL2BufrFile):
 
     """
     Parameters
@@ -382,7 +378,7 @@ class H16img(AscatL2SsmBufr):
                                      file_search_str=file_search_str)
 
 
-class H101img(AscatL2SsmBufr):
+class H101img(AscatL2BufrFile):
 
     """
     Parameters
@@ -408,7 +404,7 @@ class H101img(AscatL2SsmBufr):
                                       filename_datetime_format=fn_datetime_fmt)
 
 
-class H102img(AscatL2SsmBufr):
+class H102img(AscatL2BufrFile):
 
     """
     Parameters
@@ -434,7 +430,7 @@ class H102img(AscatL2SsmBufr):
                                       filename_datetime_format=fn_datetime_fmt)
 
 
-class H103img(AscatL2SsmBufr):
+class H103img(AscatL2BufrFile):
 
     """
     Class reading H103 Metop-A ASCAT soil moisture in BUFR format.

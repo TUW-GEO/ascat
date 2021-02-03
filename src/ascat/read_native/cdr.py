@@ -139,7 +139,7 @@ def load_grid(grid_filename):
     return grid
 
 
-class StaticLayers(object):
+class StaticLayers():
 
     """
     Class to read static layer files.

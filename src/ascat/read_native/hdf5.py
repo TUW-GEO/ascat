@@ -36,6 +36,7 @@ import h5py
 import numpy as np
 import xarray as xr
 
+from ascat.utils import get_toi_subset, get_roi_subset
 from ascat.read_native.eps_native import set_flags
 
 
@@ -117,11 +118,11 @@ class AscatL1Hdf5File:
         raw_data['as_des_pass'] = (
             raw_data['sat_track_azi'] < 270).astype(np.uint8)
 
-        # modify longitudes ([0,360] to [-180,180])
+        # modify longitudes [0, 360] to [-180, 180]
         mask = raw_data['longitude_full'] > 180
         raw_data['longitude_full'][mask] += -360.
 
-        # modify azimuth angles
+        # modify azimuth angles to [0, 360]
         if 'azi_angle_full' in var_names:
             mask = raw_data['azi_angle_full'] < 0
             raw_data['azi_angle_full'][mask] += 360
@@ -131,6 +132,8 @@ class AscatL1Hdf5File:
                 'utc_localisation-milliseconds'].astype('timedelta64[ms]')
 
         set_flags(raw_data)
+        raw_data['f_usable'] = raw_data['f_usable'].reshape(-1, 192)
+        raw_data['f_land'] = raw_data['f_land'].reshape(-1, 192)
 
         # 1 Left Fore Antenna, 2 Left Mid Antenna 3 Left Aft Antenna
         # 4 Right Fore Antenna, 5 Right Mid Antenna, 6 Right Aft Antenna
@@ -139,20 +142,31 @@ class AscatL1Hdf5File:
         for i, antenna in enumerate(antennas):
             data_var = {}
             subset = ((raw_data['beam_number']) == i+1)
-
             for k, v in raw_data.items():
-                print(k, v.shape)
-                if v.shape.size == 1:
+                if len(v.shape) == 1:
                     dim = ['obs']
-                elif v.shape.size == 2:
-                    dim = ['obs', 'asdf']
-                data_var[k] = (['obs'], v[subset])
+                elif len(v.shape) == 2:
+                    dim = ['obs', 'sigma0']
+                else:
+                    raise RuntimeError('Wrong number of dimensions')
 
-            coords = {"lon": (['obs'], data_var.pop('longitude_full')[1]),
-                      "lat": (['obs'], data_var.pop('latitude_full')[1]),
+                data_var[k] = (dim, v[subset])
+
+            coords = {"lon": (['obs', 'sigma0'],
+                              data_var.pop('longitude_full')[1]),
+                      "lat": (['obs', 'sigma0'],
+                              data_var.pop('latitude_full')[1]),
                       "time": (['obs'], data_var.pop('time')[1])}
 
-            ds[antenna] = xr.Dataset(data_var, coords=coords, attrs=metadata)
+            ds_beam = xr.Dataset(data_var, coords=coords, attrs=metadata)
+
+            if toi:
+                ds_beam = get_toi_subset(ds_beam, toi)
+
+            if roi:
+                ds_beam = get_roi_subset(ds_beam, roi)
+
+            ds[antenna] = ds_beam
 
         return ds
 

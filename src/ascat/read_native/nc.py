@@ -36,6 +36,7 @@ import xarray as xr
 
 from ascat.utils import get_toi_subset, get_roi_subset
 
+
 class AscatL1NcFile():
 
     """

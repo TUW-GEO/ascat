@@ -828,12 +828,8 @@ def read_szx_fmv_11(eps_file):
 
     data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
                                n_lines)
-
     data['line_num'] = idx_nodes
-
     data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
-
-    data['swath indicator'] = data.pop('swath_indicator')
 
     return data, metadata
 
@@ -856,19 +852,20 @@ def read_szx_fmv_12(eps_file):
     raw_unscaled = eps_file.mdr
     mphr = eps_file.mphr
 
-    n_node_per_line = raw_data['longitude'].shape[1]
-    n_lines = raw_data['longitude'].shape[0]
-    n_records = raw_data['longitude'].size
+    n_node_per_line = raw_data['LONGITUDE'].shape[1]
+    n_lines = raw_data['LONGITUDE'].shape[0]
+    n_records = raw_data['LONGITUDE'].size
+
     data = {}
     metadata = {}
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
 
-    ascat_time = shortcdstime2jd(raw_data['utc_line_nodes'].flatten()['day'],
-                                 raw_data['utc_line_nodes'].flatten()['time'])
+    ascat_time = shortcdstime2jd(raw_data['UTC_LINE_NODES'].flatten()['day'],
+                                 raw_data['UTC_LINE_NODES'].flatten()['time'])
     data['jd'] = ascat_time[idx_nodes]
 
-    metadata['spacecraft_id'] = np.int8(mphr['spacecraft_id'][-1])
-    metadata['orbit_start'] = np.uint32(mphr['orbit_start'])
+    metadata['spacecraft_id'] = np.int8(mphr['SPACECRAFT_ID'][-1])
+    metadata['orbit_start'] = np.uint32(mphr['ORBIT_START'])
 
     fields = ['processor_major_version', 'processor_minor_version',
               'format_major_version', 'format_minor_version']
@@ -880,10 +877,10 @@ def read_szx_fmv_12(eps_file):
               'abs_line_number']
 
     for f in fields:
-        data[f] = raw_data[f].flatten()[idx_nodes]
+        data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
     fields = [('longitude', long_nan), ('latitude', long_nan),
-              ('swath_indicator', byte_nan)]
+              ('swath indicator', byte_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].flatten()
@@ -925,6 +922,8 @@ def read_szx_fmv_12(eps_file):
     data['line_num'] = idx_nodes
 
     data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
+
+    data['swath_indicator'] = data.pop('swath indicator')
 
     return data, metadata
 
