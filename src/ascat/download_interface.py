@@ -135,5 +135,4 @@ def download_eumetsat(credentials=None,
 def run_download():
     main_download(sys.argv[1:])
     
-if __name__ == "__main__":
-    run_download()
+
