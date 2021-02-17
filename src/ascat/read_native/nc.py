@@ -1,4 +1,4 @@
-# Copyright (c) 2020, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -30,107 +30,182 @@
 Readers for ASCAT Level 1b and Level 2 data in NetCDF format.
 """
 
+import os
+
 import netCDF4
 import numpy as np
 import xarray as xr
 
-from ascat.utils import get_toi_subset, get_roi_subset
+from ascat.utils import tmp_unzip
 
 
-class AscatL1NcFile():
+def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
+    """
+    Read NetCDF file.
+
+    Parameters
+    ----------
+    filename : str
+        Filename.
+    generic : bool
+        'True' reading and converting into generic format or
+        'False' reading original field names.
+    to_xarray : bool
+        'True' return data as xarray.Dataset
+        'False' return data as numpy.ndarray.
+    skip_fields : list
+        Variables to skip.
+    gen_fields_lut : dict
+        Conversion look-up table for generic names.
+
+    Returns
+    -------
+    ds : xarray.Dataset, numpy.ndarray
+        ASCAT data.
+    """
+    data_var = {}
+    metadata = {}
+
+    coords_fields = {'utc_line_nodes': 'time',
+                     'longitude': 'lon',
+                     'latitude': 'lat'}
+
+    with netCDF4.Dataset(filename) as fid:
+
+        if hasattr(fid, 'platform'):
+            metadata['platform_id'] = fid.platform[2:]
+        elif hasattr(fid, 'platform_long_name'):
+            metadata['platform_id'] = fid.platform_long_name[2:]
+
+        metadata['orbit_start'] = fid.start_orbit_number
+        metadata['processor_major_version'] = fid.processor_major_version
+        metadata['product_minor_version'] = fid.product_minor_version
+        metadata['format_major_version'] = fid.format_major_version
+        metadata['format_minor_version'] = fid.format_minor_version
+        metadata['filename'] = os.path.basename(filename)
+
+        num_rows = fid.dimensions['numRows'].size
+        num_cells = fid.dimensions['numCells'].size
+
+        dtype = []
+        for var_name in fid.variables.keys():
+
+            if var_name in ['sigma0']:
+                continue
+
+            new_var_name = var_name
+            data = fid.variables[var_name][:].filled()
+
+            if generic:
+                if var_name in skip_fields:
+                    continue
+
+                if var_name in gen_fields_lut:
+                    new_var_name = gen_fields_lut[var_name]
+
+            if len(fid.variables[var_name].shape) == 1:
+                data = data.repeat(num_cells)
+            elif len(fid.variables[var_name].shape) == 2:
+                data = data.flatten()
+            elif len(fid.variables[var_name].shape) == 3:
+                data = data.reshape(-1, 3)
+            else:
+                raise RuntimeError('Unknown dimension')
+
+            if var_name in coords_fields:
+                new_var_name = coords_fields[var_name]
+
+            if var_name == 'utc_line_nodes':
+                data = data.astype(
+                    'timedelta64[s]') + np.datetime64('2000-01-01')
+
+            data_var[new_var_name] = data
+
+            if len(data.shape) == 1:
+                dtype.append((new_var_name, data.dtype.str))
+            elif len(data.shape) > 1:
+                dtype.append((new_var_name, data.dtype.str,
+                              data.shape[1:]))
+
+    num_records = num_rows * num_cells
+    coords_fields = ['lon', 'lat', 'time']
+
+    if generic:
+        sat_id = np.array([0, 4, 3, 5], dtype=np.uint8)
+        data_var['sat_id'] = np.zeros(
+            num_records, dtype=np.uint8) + sat_id[
+            int(metadata['platform_id'])]
+        dtype.append(('sat_id', np.uint8))
+
+    if to_xarray:
+        for k in data_var.keys():
+            if len(data_var[k].shape) == 1:
+                dim = ['obs']
+            elif len(data_var[k].shape) == 2:
+                dim = ['obs', 'beam']
+
+            data_var[k] = (dim, data_var[k])
+
+        coords = {}
+        for cf in coords_fields:
+            coords[cf] = data_var.pop(cf)
+
+        ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
+    else:
+        ds = np.empty(num_records, dtype=np.dtype(dtype))
+        for k, v in data_var.items():
+            ds[k] = v
+
+    return ds
+
+
+class AscatL1bNcFile():
 
     """
-    Read ASCAT Level 1 file in NetCDF format.
+    Read ASCAT Level 1b file in NetCDF format.
     """
 
-    def __init__(self, filename, mode='r'):
+    def __init__(self, filename):
         """
-        Initialize AscatL1NcFile.
+        Initialize AscatL1bNcFile.
 
         Parameters
         ----------
         filename : str
             Filename.
-        mode : str, optional
-            File mode (default: 'r')
         """
-        self.filename = filename
-        self.mode = mode
+        if os.path.splitext(filename)[1] == '.gz':
+            self.filename = tmp_unzip(filename)
+        else:
+            self.filename = filename
 
-    def read(self, toi=None, roi=None):
+    def read(self, generic=False, to_xarray=False):
         """
-        Read ASCAT Level 1 data.
+        Read ASCAT Level 1b data.
 
         Parameters
         ----------
-        toi : tuple of datetime, optional
-            Filter data for given time of interest (default: None).
-        roi : tuple of 4 float, optional
-            Filter data for region of interest (default: None).
-            e.g. latmin, lonmin, latmax, lonmax
+        generic : bool, optional
+            'True' reading and converting into generic format or
+            'False' reading original field names (default: False).
+        to_xarray : bool, optional
+            'True' return data as xarray.Dataset
+            'False' return data as numpy.ndarray (default: False).
 
         Returns
         -------
-        ds : dict, xarray.Dataset
-            ASCAT Level 1 data.
+        ds : xarray.Dataset, numpy.ndarray
+            ASCAT Level 1b data.
         """
-        data_var = {}
-        metadata = {}
+        gen_fields_lut = {'longitude': 'lon', 'latitude': 'lat',
+                          'inc_angle_trip': 'inc', 'azi_angle_trip': 'azi',
+                          'sigma0_trip': 'sig', 'num_val_trip': 'num_val'}
 
-        with netCDF4.Dataset(self.filename) as fid:
+        skip_fields = ['sat_track_azi', 'f_f', 'f_v', 'f_oa', 'f_sa',
+                       'f_tel', 'f_ref', 'abs_line_number']
 
-            metadata['sat_id'] = fid.platform[-1]
-            metadata['orbit_start'] = fid.start_orbit_number
-            metadata['processor_major_version'] = fid.processor_major_version
-            metadata['product_minor_version'] = fid.product_minor_version
-            metadata['format_major_version'] = fid.format_major_version
-            metadata['format_minor_version'] = fid.format_minor_version
-
-            num_cells = fid.dimensions['numCells'].size
-            num_rows = fid.dimensions['numRows'].size
-
-            for var_name in fid.variables.keys():
-
-                if var_name in ['sigma0']:
-                    continue
-
-                if len(fid.variables[var_name].shape) == 1:
-                    dim = ['num_rows']
-                elif len(fid.variables[var_name].shape) == 2:
-                    dim = ['num_rows', 'num_cells']
-                elif len(fid.variables[var_name].shape) == 3:
-                    dim = ['num_rows', 'num_cells', 'num_sigma0']
-                else:
-                    raise RuntimeError('Unknown dimension')
-
-                if var_name == 'utc_line_nodes':
-                    data_var[var_name] = (dim, fid.variables[
-                        var_name][:].filled().astype(
-                            'timedelta64[s]') + np.datetime64('2000-01-01'))
-                else:
-                    data_var[var_name] = (
-                        dim, fid.variables[var_name][:].filled())
-
-            data_var['as_des_pass'] = (
-                ['num_rows'], (data_var[
-                    'sat_track_azi'][1] < 270).astype(np.uint8))
-
-        coords = {"lon": data_var.pop('longitude'),
-                  "lat": data_var.pop('latitude'),
-                  "time": data_var.pop('utc_line_nodes')}
-
-        data_var['node_num'] = (['num_rows', 'num_cells'], np.tile(np.arange(
-            1, num_cells+1), (num_rows, 1)))
-        data_var['line_num'] = (['num_rows', 'num_cells'], np.arange(
-            1, num_rows+1).repeat(num_cells).reshape(-1, num_cells))
-
-        ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
-
-        if toi:
-            ds = get_toi_subset(ds, toi)
-
-        if roi:
-            ds = get_roi_subset(ds, roi)
+        ds = read_nc(self.filename, generic, to_xarray,
+                     skip_fields, gen_fields_lut)
 
         return ds
 
@@ -147,91 +222,55 @@ class AscatL2NcFile:
     Read ASCAT Level 2 file in NetCDF format.
     """
 
-    def __init__(self, filename, mode='r'):
+    def __init__(self, filename):
         """
-        Initialize AscatL1NcFile.
+        Initialize AscatL2NcFile.
 
         Parameters
         ----------
         filename : str
             Filename.
-        mode : str, optional
-            File mode (default: 'r')
         """
-        self.filename = filename
-        self.mode = mode
+        if os.path.splitext(filename)[1] == '.gz':
+            self.filename = tmp_unzip(filename)
+        else:
+            self.filename = filename
 
-    def read(self, toi=None, roi=None):
+    def read(self, generic=False, to_xarray=False):
         """
         Read ASCAT Level 2 data.
 
         Parameters
         ----------
-        toi : tuple of datetime, optional
-            Filter data for given time of interest (default: None).
-        roi : tuple of 4 float, optional
-            Filter data for region of interest (default: None).
-            latmin, lonmin, latmax, lonmax
+        generic : bool, optional
+            'True' reading and converting into generic format or
+            'False' reading original field names (default: False).
+        to_xarray : bool, optional
+            'True' return data as xarray.Dataset
+            'False' return data as numpy.ndarray (default: False).
 
         Returns
         -------
         ds : dict, xarray.Dataset
             ASCAT Level 2 data.
         """
-        data_var = {}
-        metadata = {}
+        gen_fields_lut = {'longitude': 'lon', 'latitude': 'lat',
+                          'soil_moisture': 'sm',
+                          'soil_moisture_error': 'sm_noise', 'sigma40': 'sig40',
+                          'sigma40_error': 'sig40_noise', 'slope40': 'slop40',
+                          'slope40_error': 'slop40_noise',
+                          'soil_moisture_sensitivity': 'sens',
+                          'dry_backscatter': 'dry_ref',
+                          'wet_backscatter': 'wet_ref',
+                          'mean_soil_moisture': 'sm_mean',
+                          'snow_cover_probability': 'snow_prob',
+                          'frozen_soil_probability': 'frozen_prob',
+                          'topography_flag': 'topo_flag'}
 
-        with netCDF4.Dataset(self.filename) as fid:
+        skip_fields = ['sat_track_azi', 'abs_line_number']
 
-            metadata['sat_id'] = fid.platform_long_name[-1]
-            metadata['orbit_start'] = fid.start_orbit_number
-            metadata['processor_major_version'] = fid.processor_major_version
-            metadata['product_minor_version'] = fid.product_minor_version
-            metadata['format_major_version'] = fid.format_major_version
-            metadata['format_minor_version'] = fid.format_minor_version
-
-            num_cells = fid.dimensions['numCells'].size
-            num_rows = fid.dimensions['numRows'].size
-
-            for var_name in fid.variables.keys():
-
-                if len(fid.variables[var_name].shape) == 1:
-                    dim = ['num_rows']
-                elif len(fid.variables[var_name].shape) == 2:
-                    dim = ['num_rows', 'num_cells']
-                elif len(fid.variables[var_name].shape) == 3:
-                    dim = ['num_rows', 'num_cells', 'num_sigma0']
-                else:
-                    raise RuntimeError('Unknown dimension')
-
-                if var_name == 'utc_line_nodes':
-                    data_var[var_name] = (dim, fid.variables[
-                        var_name][:].filled().astype(
-                            'timedelta64[s]') + np.datetime64('2000-01-01'))
-                else:
-                    data_var[var_name] = (
-                        dim, fid.variables[var_name][:].filled())
-
-        data_var['as_des_pass'] = (
-            ['num_rows'], (data_var[
-                'sat_track_azi'][1] < 270).astype(np.uint8))
-
-        coords = {"lon": data_var.pop('longitude'),
-                  "lat": data_var.pop('latitude'),
-                  "time": data_var.pop('utc_line_nodes')}
-
-        data_var['node_num'] = (['num_rows', 'num_cells'], np.tile(np.arange(
-            1, num_cells+1), (num_rows, 1)))
-        data_var['line_num'] = (['num_rows', 'num_cells'], np.arange(
-            1, num_rows+1).repeat(num_cells).reshape(-1, num_cells))
-
-        ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
-
-        if toi:
-            ds = get_toi_subset(ds, toi)
-
-        if roi:
-            ds = get_roi_subset(ds, roi)
+        ds = read_nc(self.filename, generic, to_xarray,
+                     skip_fields, gen_fields_lut)
 
         return ds
 

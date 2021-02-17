@@ -1,4 +1,4 @@
-# Copyright (c) 2020, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -25,7 +25,33 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from gzip import GzipFile
+from tempfile import NamedTemporaryFile
+
 import numpy as np
+import xarray as xr
+
+
+def tmp_unzip(filename):
+    """
+    Unzip file to temporary directory.
+
+    Parameters
+    ----------
+    filename : str
+        Filename.
+
+    Returns
+    -------
+    unzipped_filename : str
+        Unzipped filename
+    """
+    with NamedTemporaryFile(delete=False) as tmp_fid:
+        with GzipFile(filename) as gz_fid:
+            tmp_fid.write(gz_fid.read())
+        unzipped_filename = tmp_fid.name
+
+    return unzipped_filename
 
 
 def db2lin(val):
@@ -195,13 +221,19 @@ def get_toi_subset(ds, toi):
     """
     if isinstance(ds, dict):
         for key in ds.keys():
-            subset = ((ds[key].time > np.datetime64(toi[0])) &
-                      (ds[key].time < np.datetime64(toi[1])))
-            ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
+            subset = ((ds[key]['time'] > np.datetime64(toi[0])) &
+                      (ds[key]['time'] < np.datetime64(toi[1])))
+            if isinstance(ds, xr.Dataset):
+                ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
+            elif isinstance(ds, np.ndarray):
+                ds[key] = ds[key][subset]
     else:
-        subset = ((ds.time > np.datetime64(toi[0])) &
-                  (ds.time < np.datetime64(toi[1])))
-        ds = ds.sel(obs=np.nonzero(subset.values)[0])
+        subset = ((ds['time'] > np.datetime64(toi[0])) &
+                  (ds['time'] < np.datetime64(toi[1])))
+        if isinstance(ds, xr.Dataset):
+            ds = ds.sel(obs=np.nonzero(subset.values)[0])
+        elif isinstance(ds, np.ndarray):
+            ds = ds[subset]
 
     return ds
 
@@ -224,12 +256,50 @@ def get_roi_subset(ds, roi):
     """
     if isinstance(ds, dict):
         for key in ds.keys():
-            subset = ((ds[key].lat > roi[0]) & (ds[key].lon > roi[2]) &
-                      (ds[key].lat < roi[1]) & (ds[key].lon < roi[3]))
-            ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
+            subset = ((ds[key]['lat'] > roi[0]) & (ds[key]['lat'] < roi[2]) &
+                      (ds[key]['lon'] > roi[1]) & (ds[key]['lon'] < roi[3]))
+            if isinstance(ds, xr.Dataset):
+                ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
+            elif isinstance(ds, np.ndarray):
+                ds[key] = ds[key][subset]
     else:
-        subset = ((ds.lat > roi[0]) & (ds.lon > roi[2]) &
-                  (ds.lat < roi[1]) & (ds.lon < roi[3]))
-        ds = ds.sel(obs=np.nonzero(subset.values)[0])
+        subset = ((ds['lat'] > roi[0]) & (ds['lat'] < roi[2]) &
+                  (ds['lon'] > roi[1]) & (ds['lon'] < roi[3]))
+        if isinstance(ds, xr.Dataset):
+            ds = ds.sel(obs=np.nonzero(subset.values)[0])
+        elif isinstance(ds, np.ndarray):
+            ds = ds[subset]
 
     return ds
+
+
+def dataset_to_array(ds, dim='obs'):
+    """
+    Convert xarray.Dataset to numpy.array.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to be converted.
+    dim : str
+        Reference dimension.
+
+    Returns
+    -------
+    arr : numpy.ndarray
+        Numpy array.
+    """
+    dtype = []
+    for var in ds.variables:
+        if len(ds.variables[var].shape) == 1:
+            dtype.append((var, ds.variables[var].dtype.str))
+        elif len(ds.variables[var].shape) > 1:
+            shape = ds.variables[var].shape[1:]
+            dtype.append((var, ds.variables[var].dtype.str, shape))
+
+    arr = np.empty(ds.dims[dim], dtype=np.dtype(dtype))
+
+    for var in ds.variables:
+        arr[var] = ds.variables[var].values
+
+    return arr

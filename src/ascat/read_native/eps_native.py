@@ -25,7 +25,6 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 """
 Readers for ASCAT Level 1b and Level 2 data in EPS Native format.
 """
@@ -40,8 +39,6 @@ import numpy as np
 import xarray as xr
 import lxml.etree as etree
 from cadati.jd_date import jd2dt
-
-from ascat.utils import get_toi_subset, get_roi_subset
 
 short_cds_time = np.dtype([('day', np.uint16), ('time', np.uint32)])
 
@@ -61,11 +58,15 @@ uint8_nan = np.iinfo(np.uint8).max
 julian_epoch = 2451544.5
 
 
-class AscatL1EpsFile:
+class AscatL1bEpsFile:
+
+    """
+    ASCAT Level 1b EPS Native reader class.
+    """
 
     def __init__(self, filename, mode='r'):
         """
-        Initialize AscatL1EpsFile.
+        Initialize AscatL1bEpsFile.
 
         Parameters
         ----------
@@ -77,35 +78,23 @@ class AscatL1EpsFile:
         self.filename = filename
         self.mode = mode
 
-    def read(self, toi=None, roi=None):
+    def read(self):
         """
-        Read ASCAT Level 1 data.
-
-        Parameters
-        ----------
-        toi : tuple of datetime, optional
-            Filter data for given time of interest (default: None).
-        roi : tuple of 4 float, optional
-            Filter data for region of interest (default: None).
-            latmin, lonmin, latmax, lonmax
+        Read ASCAT Level 1b data.
 
         Returns
         -------
-        ds : dict, xarray.Dataset
+        ds : xarray.Dataset
             ASCAT Level 1b data.
         """
-        ds = read_eps_l1b(self.filename)
-
-        if toi:
-            ds = get_toi_subset(ds, toi)
-
-        if roi:
-            ds = get_roi_subset(ds, roi)
-
-        return ds
+        return read_eps_l1b(self.filename)
 
 
 class AscatL2EpsFile:
+
+    """
+    ASCAT Level 2 EPS Native reader class.
+    """
 
     def __init__(self, filename, mode='r'):
         """
@@ -121,36 +110,16 @@ class AscatL2EpsFile:
         self.filename = filename
         self.mode = mode
 
-    def read(self, toi=None, roi=None):
+    def read(self):
         """
-        Read ASCAT Level 1 data.
-
-        Parameters
-        ----------
-        toi : tuple of datetime, optional
-            Filter data for given time of interest (default: None).
-        roi : tuple of 4 float, optional
-            Filter data for region of interest (default: None).
-            latmin, lonmin, latmax, lonmax
-        native : bool, optional
-            Return native or generic data set format (default: False).
-            The main difference is that in the original native format fields
-            are called differently.
+        Read ASCAT Level 2 data.
 
         Returns
         -------
         ds : dict, xarray.Dataset
             ASCAT Level 1b data.
         """
-        ds = read_eps_l2(self.filename)
-
-        if toi:
-            ds = get_toi_subset(ds, toi)
-
-        if roi:
-            ds = get_roi_subset(ds, roi)
-
-        return ds
+        return read_eps_l2(self.filename)
 
 
 class EPSProduct:
@@ -633,13 +602,37 @@ def read_eps_l1b(filename):
         for i, antenna in enumerate(antennas):
             beam_subset = ((raw_data['beam_number']) == i+1)
 
+            skip_fields = ['utc_localisation-days',
+                           'utc_localisation-milliseconds',
+                           'degraded_inst_mdr', 'degraded_proc_mdr',
+                           'beam_number', 'sat_track_azi', 'flagfield_rf1',
+                           'flagfield_rf2', 'flagfield_pl', 'flagfield_gen1',
+                           'flagfield_gen2']
+
+            rename_fields = {'inc_angle_full': 'inc', 'azi_angle_full': 'azi',
+                             'sigma0_full': 'sig'}
+
             data_var = {}
+
             for f in raw_data:
-                data_var[f.lower()] = (['obs'], raw_data[f][beam_subset])
+                if f.lower() in skip_fields:
+                    continue
+
+                if f.lower() in rename_fields:
+                    name = rename_fields[f.lower()]
+                else:
+                    name = f.lower()
+
+                data_var[name] = (['obs'], raw_data[f][beam_subset])
 
             coords = {"lon": (['obs'], data_var.pop('longitude_full')[1]),
                       "lat": (['obs'], data_var.pop('latitude_full')[1]),
                       "time": (['obs'], jd2dt(data_var.pop('jd')[1]))}
+
+            # convert spacecraft_id to internal sat_id
+            sat_id = np.array([4, 3, 5])
+            metadata['sat_id'] = sat_id[metadata['spacecraft_id']-1]
+
             ds[antenna] = xr.Dataset(data_var, coords=coords, attrs=metadata)
 
     elif ptype in ['SZR', 'SZO']:
@@ -654,8 +647,17 @@ def read_eps_l1b(filename):
                   "lat": (['obs'], raw_data.pop('latitude')),
                   "time": (['obs'], jd2dt(raw_data.pop('jd')))}
 
+        rename_fields = {'inc_angle_trip': 'inc', 'azi_angle_trip': 'azi',
+                         'sigma0_trip': 'sig'}
+
+        skip_fields = ['sat_track_azi', 'flagfield_rf1',
+                       'f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel']
+
         data_var = {}
         for k, v in raw_data.items():
+            if k.lower() in skip_fields:
+                continue
+
             if len(v.shape) == 1:
                 dim = ['obs']
             elif len(v.shape) == 2:
@@ -663,7 +665,16 @@ def read_eps_l1b(filename):
             else:
                 raise RuntimeError('Unknown dimension')
 
-            data_var[k.lower()] = (dim, v)
+            if k.lower() in rename_fields:
+                name = rename_fields[k.lower()]
+            else:
+                name = k.lower()
+
+            data_var[name] = (dim, v)
+
+        # convert spacecraft_id to internal sat_id
+        sat_id = np.array([4, 3, 5])
+        metadata['sat_id'] = sat_id[metadata['spacecraft_id']-1]
 
         ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
     else:
@@ -712,6 +723,9 @@ def read_eps_l2(filename):
                 raise RuntimeError('Unknown dimension')
 
             data_var[k.lower()] = (dim, v)
+
+        sat_id = np.array([4, 3, 5])
+        metadata['sat_id'] = sat_id[metadata['spacecraft_id']-1]
 
         ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
 
@@ -827,8 +841,8 @@ def read_szx_fmv_11(eps_file):
     data['azi_angle_trip'][mask] += 360
 
     data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
-                               n_lines)
-    data['line_num'] = idx_nodes
+                               n_lines).astype(np.uint8)
+    data['line_num'] = idx_nodes.astype(np.uint16)
     data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
 
     return data, metadata
@@ -917,9 +931,9 @@ def read_szx_fmv_12(eps_file):
     data['azi_angle_trip'][mask] += 360
 
     data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
-                               n_lines)
+                               n_lines).astype(np.uint8)
 
-    data['line_num'] = idx_nodes
+    data['line_num'] = idx_nodes.astype(np.uint16)
 
     data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
 
@@ -1019,8 +1033,8 @@ def read_szf_fmv_12(eps_file):
     orbit_grid = np.zeros(viadr_grid.size * grid_nodes_per_line,
                           dtype=np.dtype([('lon', np.float32),
                                           ('lat', np.float32),
-                                          ('node_num', np.int16),
-                                          ('line_num', np.int32)]))
+                                          ('node_num', np.uint8),
+                                          ('line_num', np.uint32)]))
 
     for pos_all in range(orbit_grid['lon'].size):
         line = pos_all // grid_nodes_per_line
@@ -1091,13 +1105,17 @@ def set_flags(data):
 
                 for bit2check in flag_status_bit[flagfield][category]:
                     pos = np.where(pos_8 == bit2check)[0]
-                    data['f_usable'] = np.zeros(data['flagfield_gen2'].size)
+                    data['f_usable'] = np.zeros(data['flagfield_gen2'].size,
+                                                dtype=np.int8)
                     data['f_usable'][set_bits[pos] // 8] = int(category)
 
                     # land points
                     if (flagfield == 'flagfield_gen2') and (bit2check == 1):
-                        data['f_land'] = np.zeros(data['flagfield_gen2'].size)
+                        data['f_land'] = np.zeros(data['flagfield_gen2'].size,
+                                                  dtype=np.int8)
                         data['f_land'][set_bits[pos] // 8] = 1
+
+    return data
 
 
 def read_smx_fmv_12(eps_file):
