@@ -62,7 +62,7 @@ def main_download(cli_args):
         config=None
         if args.config_file:
             config = read_json(args.config_file)
-        #FIXME: seperate credential files per source?
+        
         if args.source.upper() == 'HSAF':
             
             download_hsaf(credentials=credentials,
