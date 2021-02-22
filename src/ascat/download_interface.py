@@ -10,7 +10,7 @@ import sys
 import json
 from datetime import datetime, timedelta
 import requests
-
+import configparser
 
 from ascat.download_connectors import HSAFConnector, EumetsatConnector
 
@@ -42,7 +42,6 @@ def parse_main_args_download(args):
     parser.add_argument('-from','--start_date', help='start date in YYYYMMDD format')
     parser.add_argument('-to','--end_date', help='end date in YYYYMMDD format')
 
-    #FIXME: -o needs standard thing or exception when not set
     return parser.parse_args(args), parser
 
 
@@ -80,12 +79,14 @@ def main_download(cli_args):
 
     args, parser = parse_main_args_download(cli_args)
     
-    if args.output_dir is None:
+    output_dir = args.output_dir
+    if output_dir is None:
         output_dir = sys.argv[0]
     if args.product is not None and args.start_date is not None \
             and args.end_date is not None or args.config_file:
-
-        credentials = read_json(args.credential_file)
+        
+        credentials = configparser.ConfigParser()
+        credentials.read(args.credential_file)
         
         if args.source.upper() == 'HSAF':
             

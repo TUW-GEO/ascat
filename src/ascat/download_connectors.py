@@ -183,6 +183,23 @@ class HSAFConnector(FTPConnector):
     def __init__(self, base_url='ftphsaf.meteoam.it'):
         super(HSAFConnector, self).__init__(base_url = base_url)
 
+    def connect(self, credentials):
+        """
+        Establish connection to FTP source.
+        
+        Parameters
+        ----------
+        credentials: configparser
+            configparser for needed authentication parameters.
+
+        """
+        try:
+            
+            self.ftp.login(credentials['HSAF']["username"],
+                      credentials['HSAF']["password"])
+            print('Connected')
+        except:
+            print("Username or Password is incorrect")
     def download(self, product,
                        download_dir,
                        start_date,
@@ -250,8 +267,8 @@ class EumetsatConnector(HTTPConnector):
 
         """
         
-        self.access_token = self._generate_token(consumer_key=credentials['consumer_key'],
-                                        consumer_secret=credentials['consumer_secret'])
+        self.access_token = self._generate_token(consumer_key=credentials['EUMETSAT']['consumer_key'],
+                                        consumer_secret=credentials['EUMETSAT']['consumer_secret'])
 
 
     def download(self, product,
