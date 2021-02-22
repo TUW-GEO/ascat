@@ -15,6 +15,22 @@ import requests
 from ascat.download_connectors import HSAFConnector, EumetsatConnector
 
 def parse_main_args_download(args):
+    """
+    Parse command line arguments.
+
+    Parameters
+    ----------
+    args : list
+        Command line arguments.
+
+    Returns
+    -------
+    args : list
+        Parsed arguments.
+    parser : ArgumentParser
+        Argument Parser object.
+    """
+
     parser = argparse.ArgumentParser(
         description='ASCAT download command line interface.',
         formatter_class=argparse.RawTextHelpFormatter)
@@ -26,7 +42,7 @@ def parse_main_args_download(args):
     parser.add_argument('-from','--start_date', help='start date in YYYYMMDD format')
     parser.add_argument('-to','--end_date', help='end date in YYYYMMDD format')
 
-
+    #FIXME: -o needs standard thing or exception when not set
     return parser.parse_args(args), parser
 
 
@@ -53,75 +69,139 @@ def read_json(filename):
     return output
 
 def main_download(cli_args):
+    """
+    Command line interface routine.
+
+    Parameters
+    ----------
+    cli_args : list
+        Command line arguments.
+    """
+
     args, parser = parse_main_args_download(cli_args)
     
+    if args.output_dir is None:
+        output_dir = sys.argv[0]
     if args.product is not None and args.start_date is not None \
             and args.end_date is not None or args.config_file:
 
         credentials = read_json(args.credential_file)
-        config=None
-        if args.config_file:
-            config = read_json(args.config_file)
         
         if args.source.upper() == 'HSAF':
             
+            if args.config_file:
+                config = read_json(args.config_file)
+                download_dir = config['download_dir']
+                product = config['product']
+                start_date = config['start_date']
+                end_date = config['end_date']
+            else:
+                download_dir = output_dir
+                product = args.product
+                start_date = args.start_date
+                end_date = args.end_date
+                
             download_hsaf(credentials=credentials,
-                         config=config,
-                         product=args.product,
-                         download_dir=args.output_dir,
-                         start_date=args.start_date,
-                         end_date=args.end_date)
+                         product=product,
+                         download_dir=download_dir,
+                         start_date=start_date,
+                         end_date=end_date)
 
         elif args.source.upper() == 'EUMETSAT':
 
+            if args.config_file:
+                 
+                config = read_json(args.config_file)
+                download_dir = config['download_dir']
+                product = config['product']
+                start_date = config['start_date']
+                end_date = config['end_date']
+                coords = config['coords']
+                
+            else:
+                
+                download_dir = output_dir
+                product = args.product
+                start_date = args.start_date
+                end_date = args.end_date
+                
             download_eumetsat(credentials=credentials,
-                              config=config,
-                              product=args.product,
-                              download_dir=args.output_dir,
-                              start_date=args.start_date,
-                              end_date=args.end_date)
+                              product=product,
+                              download_dir=download_dir,
+                              start_date=start_date,
+                              end_date=end_date,
+                              coords=coords)
         else:
 
             raise RuntimeError('Specified source not recognized!')
     else:
-        raise RuntimeError('Product and date range need to be speficied!')
+        raise RuntimeError('Product and date range need to be specified!')
 
 
-def download_hsaf(credentials=None,
-                  config=None,
-                  download_dir=None,
-                  product=None,
-                  start_date=None,
-                  end_date=None):
+def download_hsaf(credentials,
+                  download_dir,
+                  product,
+                  start_date,
+                  end_date):
+    """
+    Routine to connect to HSAF and download specified files.
 
-    if config:
-        download_dir = config['download_dir']
-        product = config['product']
-        start_date = config['start_date']
-        end_date = config['end_date']
+    Parameters
+    ----------
+    credentials : dict
+        Contains credentials needed for connecting to HSAF service.
+    download_dir : string
+        Where to download files to.
+    product : string
+        Product to search for.
+    start_date : string
+        start date of files to search for, format YYYYMMDD.
+    end_date : string
+        end date of files to search for, format YYYYMMDD.
 
+    Returns
+    -------
+    None.
+
+    """
     connector = HSAFConnector()
     connector.connect(credentials=credentials)
+    
     connector.download(product=product,
                        download_dir=download_dir,
                        start_date=start_date,
                        end_date=end_date)
 
-def download_eumetsat(credentials=None,
-                      config=None,
-                      coords=None,
-                      download_dir=None,
-                      product=None,
-                      start_date=None,
-                      end_date=None):
-    
-    if config:
-         download_dir = config['download_dir']
-         product = config['product']
-         coords = config['coords']
-         start_date = config['start_date']
-         end_date = config['end_date']
+def download_eumetsat(credentials,
+                      download_dir,
+                      product,
+                      start_date,
+                      end_date,
+                      coords):
+    """
+    Routine to connect to EUMETSAT and download specified files
 
+    Parameters
+    ----------
+    credentials : dict
+        Contains credentials needed for connecting to EUMETSAT service.
+    download_dir : string
+        Where to download files to.
+    product : string
+        Product to search for.
+    start_date : string
+        start date of files to search for, format YYYYMMDD.
+    end_date : string
+        end date of files to search for, format YYYYMMDD.
+    coords : list
+        coordinates of polygon in which files are searched.
+
+    Returns
+    -------
+    None.
+
+    """
+    
 
     connector = EumetsatConnector()
     connector.connect(credentials=credentials)
@@ -133,6 +213,10 @@ def download_eumetsat(credentials=None,
                        end_date=end_date)
 
 def run_download():
+    """
+    Run command line interface.
+    """
+
     main_download(sys.argv[1:])
     
 

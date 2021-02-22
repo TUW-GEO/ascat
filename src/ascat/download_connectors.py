@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import urllib
 import re
 import sys
-import tqdm
+from tqdm import tqdm
 
 
 class Connector:
@@ -23,12 +23,12 @@ class Connector:
     """
 
 
-    def __init__(self,base_url=None):
+    def __init__(self,base_url):
 
         self.base_url = base_url
 
 
-    def connect(self, credentials=None):
+    def connect(self, credentials):
 
         """
         Establish connection to remote source.
@@ -43,7 +43,7 @@ class Connector:
         pass
 
 
-    def download(self, download_dir=None, start_date=None, end_date=None):
+    def download(self, download_dir, start_date, end_date):
      
         """
         Fetch resource location for download of multiple files in daterange.
@@ -62,7 +62,7 @@ class Connector:
         pass
 
 
-    def grab_file(self, file_remote=None, file_local=None):
+    def grab_file(self, file_remote, file_local):
         
         """
         Download single file from passed url to local file
@@ -93,7 +93,7 @@ class HTTPConnector(Connector):
 
     """
 
-    def __init__(self, base_url=None):
+    def __init__(self, base_url):
         self.base_url = base_url
 
     def grab_file(self, file_remote, file_local):
@@ -132,13 +132,21 @@ class FTPConnector(Connector):
     Class for downloading via FTP
     """
 
-    def __init__(self, base_url=None):
+    def __init__(self, base_url):
         self.base_url = base_url
         self.ftp = FTP(base_url)
         super(FTPConnector, self).__init__(base_url = base_url)
 
-    def connect(self, credentials=None):
+    def connect(self, credentials):
+        """
+        Establish connection to FTP source.
         
+        Parameters
+        ----------
+        credentials: dict
+            Dictionary of needed authentication parameters.
+
+        """
         try:
             
             self.ftp.login(credentials["username"],
@@ -175,22 +183,30 @@ class HSAFConnector(FTPConnector):
     def __init__(self, base_url='ftphsaf.meteoam.it'):
         super(HSAFConnector, self).__init__(base_url = base_url)
 
-    def download(self, product=None,
-                       download_dir=None,
-                       start_date=None,
-                       end_date=None):
+    def download(self, product,
+                       download_dir,
+                       start_date,
+                       end_date):
         """
-        Prepares download of multiple files
+        Fetch resource location for download of multiple files in daterange.
 
         Parameters
         ----------
         product : string
             product string
+        download_dir : string
+            local directory, where found datasets are stored.
+        start_date : string
+            start date of daterange interval, format: YYYYmmdd
+        end_date : string
+            end date of daterange interval, format: YYYYmmdd
+                  
         """
 
-        dir = product + '/' + product + '_cur_mon_data'
+        dir = os.path.join(product, product+'_cur_mon_data')#product + '/' + product + '_cur_mon_data'
+        
         self.ftp.cwd(dir)
-
+        
         init_date = datetime.strptime(start_date, "%Y%m%d")
         last_date = datetime.strptime(end_date, "%Y%m%d")
         filelist = [] 
@@ -219,28 +235,46 @@ class EumetsatConnector(HTTPConnector):
     """
 
 
-    def __init__(self, base_url="http://api.eumetsat.int/"):
+    def __init__(self, base_url="http://api.eumetsat.int"):
         super(EumetsatConnector,self).__init__(base_url = base_url)
 
     def connect(self, credentials):
+        
+        """
+        Establish connection to EUMETSAT.
+        
+        Parameters
+        ----------
+        credentials: dict
+            Dictionary of needed authentication parameters.
+
+        """
         
         self.access_token = self._generate_token(consumer_key=credentials['consumer_key'],
                                         consumer_secret=credentials['consumer_secret'])
 
 
-    def download(self, product=None,
-                       download_dir=None,
-                       coords=None,
-                       start_date=None,
-                       end_date=None):
+    def download(self, product,
+                       download_dir,
+                       coords,
+                       start_date,
+                       end_date):
         """
-        Function to prepare download of multiple files.
+        Fetch resource location for download of multiple files in daterange.
 
-        Args:
-            coords : list, optional
-                the coordinates to download from
-
-
+        Parameters
+        ----------
+        product : string
+            product string
+        download_dir : string
+            local directory, where found datasets are stored.
+        coords: list
+            coordinates of polygon, where files will be downloaded in
+        start_date : string
+            start date of daterange interval, format: YYYYmmdd
+        end_date : string
+            end date of daterange interval, format: YYYYmmdd
+                  
         """
         service_search = self.base_url + "data/search-products/os"
         service_download = self.base_url + "data/download/"
@@ -249,11 +283,12 @@ class EumetsatConnector(HTTPConnector):
         end_date = datetime.strptime(end_date, "%Y%m%d")
 
         dataset_parameters = {'format': 'json', 'pi': product}
-        dataset_parameters['dtstart'] = start_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-        dataset_parameters['dtend'] = end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+        dataset_parameters['start'] = start_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+        dataset_parameters['end'] = end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
         dataset_parameters['geo'] = 'POLYGON(({}))'.format(','.join(["{} {}".format(*coord) for coord in coords]))
 
         url = service_search
+        import pdb;pdb.set_trace()
         response = requests.get(url, dataset_parameters)
         found_data_sets = response.json()
         
@@ -275,7 +310,7 @@ class EumetsatConnector(HTTPConnector):
 
 
         
-    def _generate_token(self, consumer_key=None, consumer_secret=None):
+    def _generate_token(self, consumer_key, consumer_secret):
         '''
         Function to generate an access token for interacting with EUMETSAT Data 
         Service APIs
@@ -297,6 +332,7 @@ class EumetsatConnector(HTTPConnector):
             data = {'grant_type': 'client_credentials'},
             headers = {"Content-Type" : "application/x-www-form-urlencoded"}
         )
+        
         self._assert_response(response)
         return response.json()['access_token']
 
