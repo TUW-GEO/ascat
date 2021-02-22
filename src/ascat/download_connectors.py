@@ -105,7 +105,7 @@ class HTTPConnector(Connector):
         headers={'Authorization': 'Bearer {}'.format(self.access_token)}
         )
 
-        assert_response(stream_response)
+        self._assert_response(stream_response)
         tail=''
         if stream_response.headers['Content-Type'] == 'application/zip':
             tail='.zip'
@@ -276,8 +276,8 @@ class EumetsatConnector(HTTPConnector):
             end date of daterange interval, format: YYYYmmdd
                   
         """
-        service_search = self.base_url + "data/search-products/os"
-        service_download = self.base_url + "data/download/"
+        service_search = self.base_url + "/data/search-products/os"
+        service_download = self.base_url + "/data/download/"
 
         start_date = datetime.strptime(start_date, "%Y%m%d")
         end_date = datetime.strptime(end_date, "%Y%m%d")
@@ -286,9 +286,23 @@ class EumetsatConnector(HTTPConnector):
         dataset_parameters['start'] = start_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
         dataset_parameters['end'] = end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
         dataset_parameters['geo'] = 'POLYGON(({}))'.format(','.join(["{} {}".format(*coord) for coord in coords]))
+        
+        
+        # Define our polygon for spatial subsetting
+        coordinates = [[-1.0, -1.0],[4.0, -4.0],[8.0, -2.0],[9.0, 2.0],[6.0, 4.0],[1.0, 5.0],[-1.0, -1.0]]
+        
+        # Define our start and end dates for temporal subsetting
+        start_date = datetime(2018, 12, 31)
+        end_date = datetime(2019, 1, 2)
+        
+        # Format our paramters for searching
+        dataset_parameters = {'format': 'json', 'pi': product}
+        dataset_parameters['dtstart'] = start_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+        dataset_parameters['dtend'] = end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+        dataset_parameters['geo'] = 'POLYGON(({}))'.format(','.join(["{} {}".format(*coord) for coord in coordinates]))
 
+        
         url = service_search
-        import pdb;pdb.set_trace()
         response = requests.get(url, dataset_parameters)
         found_data_sets = response.json()
         
