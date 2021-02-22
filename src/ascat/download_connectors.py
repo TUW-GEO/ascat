@@ -123,9 +123,12 @@ class HTTPConnector(Connector):
                     progress += 1
             sys.stdout.write("\r%dkB" % progress)
             sys.stdout.flush()
-
-        print("\nDone")
-
+        
+        if os.path.exists(file_local+tail):
+            print("\nDone")
+        else:
+            raise RuntimeError('Error locating downloaded file!')
+            
 class FTPConnector(Connector):
 
     """
@@ -156,7 +159,7 @@ class FTPConnector(Connector):
             print("Username or Password is incorrect")
    
     def grab_file(self, file_remote, file_local):
-
+        
         if file_remote not in self.ftp.nlst():
             print(file_remote, "given file is not accesible in the FTP")
         else:
@@ -164,6 +167,11 @@ class FTPConnector(Connector):
             localfile = open(file_local, 'wb')
             self.ftp.retrbinary('RETR ' + file_remote, localfile.write, 1024)
             localfile.close()
+        
+        if os.path.exists(file_local):
+            print("\nDone")
+        else:
+            raise RuntimeError('Error locating downloaded file!')
 
     def close(self):
         
