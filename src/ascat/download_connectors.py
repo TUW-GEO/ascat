@@ -167,11 +167,10 @@ class FTPConnector(Connector):
             localfile = open(file_local, 'wb')
             self.ftp.retrbinary('RETR ' + file_remote, localfile.write, 1024)
             localfile.close()
-        
-        if os.path.exists(file_local):
-            print("\nDone")
-        else:
-            raise RuntimeError('Error locating downloaded file!')
+            if os.path.exists(file_local):
+                print("\nDone")
+            else:
+                raise RuntimeError('Error locating downloaded file!')
 
     def close(self):
         
