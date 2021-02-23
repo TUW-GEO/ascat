@@ -165,10 +165,11 @@ class FTPConnector(Connector):
         else:
             
             localfile = open(file_local, 'wb')
+            print("Downloading file ...")
             self.ftp.retrbinary('RETR ' + file_remote, localfile.write, 1024)
             localfile.close()
             if os.path.exists(file_local):
-                print("\nDone")
+                print(str(file_local)+" finished downloading")
             else:
                 raise RuntimeError('Error locating downloaded file!')
 
@@ -226,9 +227,27 @@ class HSAFConnector(FTPConnector):
             end date of daterange interval, format: YYYYmmdd
                   
         """
-
-        dir = os.path.join(product, product+'_cur_mon_data')#product + '/' + product + '_cur_mon_data'
         
+        #paths reference on hsaf server:
+        #h08    ftphsaf.meteoam.it/h08/h08_cur_mon_nc/h08_20201221_072400_metopb_42857_ZAMG.nc
+        #h10    ftphsaf.meteoam.it/h10/h10_cur_mon_data/h10_20201221_day_merged.H5.gz
+        #h16    ftphsaf.meteoam.it/h16/h16_cur_mon_data/h16_20201221_000000_METOPB_42852_EUM.buf
+        #h101   ftphsaf.meteoam.it/h101/h101_cur_mon_data/h101_20201221_000000_METOPA_73539_EUM.buf
+        #h102   ftphsaf.meteoam.it/h102/h102_cur_mon_data/h102_20201221_000000_METOPA_73539_EUM.buf
+        #h103   ftphsaf.meteoam.it/h103/h103_cur_mon_data/h103_20201221_000000_METOPB_42852_EUM.buf
+        #h104   ftphsaf.meteoam.it/h104/h104_cur_mon_data/h104_20200909_083900_METOPC_09552_EUM.buf
+        #h105   ftphsaf.meteoam.it/h105/h105_cur_mon_data/h105_20200909_083900_METOPC_09552_EUM.buf
+        
+        
+        dict_dirs = {'h08' : 'h08/h08_cur_mon_nc',
+                     'h10' : 'h10/h10_cur_mon_data',
+                     'h16' : 'h16/h16_cur_mon_data',
+                     'h101': 'h101/h101_cur_mon_data/',
+                     'h102': 'h102/h102_cur_mon_data/',
+                     'h103': 'h103/h103_cur_mon_data/',
+                     'h104': 'h104/h104_cur_mon_data/',
+                     'h105': 'h105/h105_cur_mon_data/'}
+        dir = dict_dirs[product]
         self.ftp.cwd(dir)
         
         init_date = datetime.strptime(start_date, "%Y%m%d")
@@ -236,21 +255,23 @@ class HSAFConnector(FTPConnector):
         filelist = [] 
         days = last_date - init_date
 
-        
-        tail = None
-        if product == 'h10' or product == 'h34':
-            tail = "_day_merged.H5.gz"
-        else:
-            tail = "_day_merged.grib2.gz"
 
+        list_of_files = []
+        self.ftp.retrlines('NLST ', list_of_files.append)
         
         for i in tqdm(range(days.days)):
-            date = ((init_date + timedelta(days=i)).strftime("%Y%m%d"))
-            file_remote = product+"_"+date+tail
-            file_local = os.path.join(download_dir, file_remote)
             
-            self.grab_file(file_remote=file_remote, file_local=file_local)
-
+            date = ((init_date + timedelta(days=i)).strftime("%Y%m%d"))
+            
+            #FIXME: could be made more performant
+            matches = [x for x in list_of_files if date in x]
+            
+            for file_remote in matches:
+                
+                file_local = os.path.join(download_dir, file_remote)
+                
+                self.grab_file(file_remote=file_remote, file_local=file_local)
+            
 class EumetsatConnector(HTTPConnector):
 
     """
