@@ -169,6 +169,7 @@ class FTPConnector(Connector):
             self.ftp.retrbinary('RETR ' + file_remote, localfile.write, 1024)
             localfile.close()
             if os.path.exists(file_local):
+                
                 print(str(file_local)+" finished downloading")
             else:
                 raise RuntimeError('Error locating downloaded file!')
@@ -207,11 +208,14 @@ class HSAFConnector(FTPConnector):
                       credentials['HSAF']["password"])
             print('Connected')
         except:
-            print("Username or Password is incorrect")
+            raise RuntimeError("Username or Password is incorrect")
+            
+        
     def download(self, product,
                        download_dir,
                        start_date,
-                       end_date):
+                       end_date,
+                       file_limit=-1):
         """
         Fetch resource location for download of multiple files in daterange.
 
@@ -225,6 +229,8 @@ class HSAFConnector(FTPConnector):
             start date of daterange interval, format: YYYYmmdd
         end_date : string
             end date of daterange interval, format: YYYYmmdd
+        file_limit : int, default: -1
+            cancel download after file limit, ignored if -1
                   
         """
         
@@ -265,12 +271,15 @@ class HSAFConnector(FTPConnector):
             
             #FIXME: could be made more performant
             matches = [x for x in list_of_files if date in x]
-            
+            n_grabbed_files=0
             for file_remote in matches:
                 
                 file_local = os.path.join(download_dir, file_remote)
                 
                 self.grab_file(file_remote=file_remote, file_local=file_local)
+                n_grabbed_files+=1
+                if n_grabbed_files - file_limit == 0:
+                    break
             
 class EumetsatConnector(HTTPConnector):
 
@@ -303,7 +312,8 @@ class EumetsatConnector(HTTPConnector):
                        download_dir,
                        coords,
                        start_date,
-                       end_date):
+                       end_date,
+                       file_limit=-1):
         """
         Fetch resource location for download of multiple files in daterange.
 
@@ -319,6 +329,8 @@ class EumetsatConnector(HTTPConnector):
             start date of daterange interval, format: YYYYmmdd
         end_date : string
             end date of daterange interval, format: YYYYmmdd
+        file_limit : int, default: -1
+            cancel download after file limit, ignored if -1
                   
         """
         service_search = self.base_url + "/data/search-products/os"
@@ -332,25 +344,13 @@ class EumetsatConnector(HTTPConnector):
         dataset_parameters['end'] = end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
         dataset_parameters['geo'] = 'POLYGON(({}))'.format(','.join(["{} {}".format(*coord) for coord in coords]))
         
-        
-        # Define our polygon for spatial subsetting
-        coordinates = [[-1.0, -1.0],[4.0, -4.0],[8.0, -2.0],[9.0, 2.0],[6.0, 4.0],[1.0, 5.0],[-1.0, -1.0]]
-        
-        # Define our start and end dates for temporal subsetting
-        start_date = datetime(2018, 12, 31)
-        end_date = datetime(2019, 1, 2)
-        
-        # Format our paramters for searching
-        dataset_parameters = {'format': 'json', 'pi': product}
-        dataset_parameters['dtstart'] = start_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-        dataset_parameters['dtend'] = end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-        dataset_parameters['geo'] = 'POLYGON(({}))'.format(','.join(["{} {}".format(*coord) for coord in coordinates]))
 
         
         url = service_search
         response = requests.get(url, dataset_parameters)
         found_data_sets = response.json()
         
+        n_grabbed_files = 0
         for selected_data_set in tqdm(found_data_sets['features']):
 
             collID = selected_data_set['properties']['parentIdentifier']
@@ -365,7 +365,11 @@ class EumetsatConnector(HTTPConnector):
 
             self.grab_file(file_remote=download_url,
                            file_local=file_local)
-
+            
+            n_grabbed_files+=1
+            if n_grabbed_files - file_limit == 0:
+                break
+                
 
 
         
