@@ -1,0 +1,20 @@
+name: test_ascat
+channels:
+  - default
+  - conda-forge
+dependencies:
+- numpy
+- pandas
+- pygrib
+- h5py=2.10
+- netCDF4
+- pykdtree
+- pip
+- pip: 
+  - lxml
+  - pybufr-ecmwf
+  - pygeobase
+  - pygeogrids
+  - pynetcf
+  - requests
+  - tqdm
