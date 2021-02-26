@@ -14,9 +14,7 @@ import numpy as np
 
 import sys
 sys.path.append('..')
-sys.path.append('../src/')
-
-import ascat
+sys.path.append('../src/ascat')
 
 from ascat.download_connectors import HSAFConnector, EumetsatConnector
 from ascat.download_interface import download_hsaf, download_eumetsat
