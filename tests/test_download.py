@@ -14,7 +14,7 @@ import numpy as np
 
 import sys
 sys.path.append('..')
-sys.path.append('../src/ascat')
+sys.path.append('../src')
 
 from ascat.download_connectors import HSAFConnector, EumetsatConnector
 from ascat.download_interface import download_hsaf, download_eumetsat
@@ -27,7 +27,7 @@ class TestDownload(unittest.TestCase):
     
     def setUp(self):
         
-        self.credential_file = 'tests/test_credentials.ini'
+        self.credential_file = 'test_credentials.ini'
         yesterday = (datetime.now() - timedelta(1)).strftime('%Y%m%d')
         today = datetime.today().strftime('%Y%m%d')
         self.start_date = yesterday
