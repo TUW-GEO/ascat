@@ -11,13 +11,14 @@ dependencies:
 - pykdtree
 - pip
 - pip: 
-  - lxml
   - pybufr-ecmwf
-  - pygeobase
-  - pygeogrids
-  - pynetcf
   - requests
   - tqdm
+  - h5py
+  - lxml
+  - pygeobase>=0.4.0
+  - pygeogrids>=0.3.0
+  - pynetcf>=0.2.2
 
   - coveralls
   - pytest
