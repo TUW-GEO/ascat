@@ -24,9 +24,9 @@ except VersionConflict:
 
 setup(name='ascat',
       
-      packages = find_packages(),
-      package_dir={'ascat': 'src/ascat'}
-      
+      packages = ['src/ascat'],#find_packages(),
+      # package_dir={'ascat': 'src/ascat'}
+      use_pyscaffold=True
       
       
       )
