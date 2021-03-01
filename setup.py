@@ -10,7 +10,7 @@
 import sys
 
 from pkg_resources import VersionConflict, require
-from setuptools import setup
+from setuptools import setup,find_packages
 
 try:
     require('setuptools>=38.3')
@@ -19,5 +19,14 @@ except VersionConflict:
     sys.exit(1)
 
 
-if __name__ == "__main__":
-    setup(use_pyscaffold=True)
+# if __name__ == "__main__":
+#     setup(use_pyscaffold=True)
+
+setup(name='ascat',
+      
+      packages = find_packages(),
+      package_dir={'ascat': 'src/ascat'}
+      
+      
+      
+      )
