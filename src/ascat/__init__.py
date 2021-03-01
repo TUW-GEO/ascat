@@ -7,5 +7,5 @@ try:
 except:
     __version__ = 'unknown'
 
-from ascat.read_native.cdr import *
-from ascat.h_saf import *
+from src.ascat.read_native.cdr import *
+from src.ascat.h_saf import *
