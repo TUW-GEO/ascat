@@ -12,8 +12,11 @@ from datetime import datetime, timedelta
 
 import numpy as np
 
-from ascat.download_connectors import HSAFConnector, EumetsatConnector
-from ascat.download_interface import download_hsaf, download_eumetsat
+import sys
+sys.path.append('..')
+
+from src.ascat.download_connectors import HSAFConnector, EumetsatConnector
+from src.ascat.download_interface import download_hsaf, download_eumetsat
 
 from tempfile import mkdtemp
 
