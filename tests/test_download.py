@@ -15,8 +15,8 @@ import numpy as np
 import sys
 sys.path.insert(1,'../src/')
 
-from src.ascat.download_connectors import HSAFConnector, EumetsatConnector
-from src.ascat.download_interface import download_hsaf, download_eumetsat
+from ascat.download_connectors import HSAFConnector, EumetsatConnector
+from ascat.download_interface import download_hsaf, download_eumetsat
 
 from tempfile import mkdtemp
 

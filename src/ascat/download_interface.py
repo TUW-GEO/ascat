@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import requests
 import configparser
 
-from src.ascat.download_connectors import HSAFConnector, EumetsatConnector
+from ascat.download_connectors import HSAFConnector, EumetsatConnector
 
 def parse_main_args_download(args):
     """
