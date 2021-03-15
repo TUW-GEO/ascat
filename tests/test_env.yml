@@ -8,15 +8,12 @@ dependencies:
 - netCDF4
 - pykdtree
 - h5py
+- pybufr-ecmwf
 - pip
 - pip: 
-  - pybufr-ecmwf
   - requests
   - tqdm
   - lxml
   - pygeobase>=0.4.0
   - pygeogrids>=0.3.0
   - pynetcf>=0.2.2
-  - coveralls
-  - pytest
-  - pytest-cov
