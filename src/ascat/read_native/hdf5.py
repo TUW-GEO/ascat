@@ -109,16 +109,13 @@ class AscatL1H5File(ImageBase):
         for name in var_to_read:
             variable = raw_data['MDR_1B_FULL_ASCA_Level_1_ARRAY_000001'][name]
             if name.encode() in \
-                    raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value[
-                        'EntryName']:
+                    raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR']['EntryName']:
                 var_index = np.where(
                     raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'][
                         'EntryName'] == name.encode())[0][0]
-                if raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value[
-                        'Scale Factor'][var_index] != "n/a".encode():
+                if raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR']['Scale Factor'][var_index] != "n/a".encode():
                     sf = 10 ** float(
-                        raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR'].value[
-                            'Scale Factor'][var_index])
+                        raw_data['MDR_1B_FULL_ASCA_Level_1_DESCR']['Scale Factor'][var_index])
                     variable = variable / sf
             data[name] = variable[:].flatten()
             if len(variable.shape) == 1:
@@ -131,7 +128,7 @@ class AscatL1H5File(ImageBase):
             for subname in raw_metadata[name].keys():
                 if name not in metadata:
                     metadata[name] = dict()
-                metadata[name][subname] = raw_metadata[name][subname].value
+                metadata[name][subname] = raw_metadata[name][subname]
 
         # modify longitudes from [0,360] to [-180,180]
         mask = data['LONGITUDE_FULL'] > 180

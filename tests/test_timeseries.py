@@ -32,7 +32,7 @@ from datetime import datetime
 
 import numpy as np
 
-import ascat
+from ascat.read_native.cdr import AscatSsmCdr
 
 
 class TestAscatNcV55R12(unittest.TestCase):
@@ -48,8 +48,8 @@ class TestAscatNcV55R12(unittest.TestCase):
 
         ioclass_kws = {'loc_dim_name': 'gp', 'loc_ids_name': 'gpi'}
 
-        self.ascat_reader = ascat.AscatSsmCdr(cdr_path, grid_path,
-                                              ioclass_kws=ioclass_kws)
+        self.ascat_reader = AscatSsmCdr(cdr_path, grid_path,
+                                        ioclass_kws=ioclass_kws)
 
     def test_read(self):
 
@@ -91,7 +91,7 @@ class TestAscatNcV55R21(unittest.TestCase):
         static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
                                          'static_layer')
 
-        self.ascat_reader = ascat.AscatSsmCdr(
+        self.ascat_reader = AscatSsmCdr(
             cdr_path, grid_path, static_layer_path=static_layer_path)
 
     def tearDown(self):
@@ -159,7 +159,7 @@ class TestAscatNcV55R22(unittest.TestCase):
         static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
                                          'static_layer')
 
-        self.ascat_reader = ascat.AscatSsmCdr(
+        self.ascat_reader = AscatSsmCdr(
             cdr_path, grid_path, static_layer_path=static_layer_path)
 
     def tearDown(self):
