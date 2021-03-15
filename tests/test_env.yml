@@ -7,12 +7,12 @@ dependencies:
 - pygrib
 - netCDF4
 - pykdtree
+- h5py
 - pip
 - pip: 
   - pybufr-ecmwf
   - requests
   - tqdm
-  - h5py
   - lxml
   - pygeobase>=0.4.0
   - pygeogrids>=0.3.0

@@ -8,9 +8,9 @@ dependencies:
 - netCDF4
 - pykdtree
 - h5py
+- pybufr-ecmwf
 - pip
 - pip: 
-  - pybufr-ecmwf
   - requests
   - tqdm
   - lxml
