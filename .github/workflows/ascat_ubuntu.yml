@@ -18,7 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          submodules: true
+          submodules: false # does not work with self-hosted testdata
+      - name: Checkout ascat_test_data
       - uses: conda-incubator/setup-miniconda@v2.0.1
         with:
           miniconda-version: "latest"
