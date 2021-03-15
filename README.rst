@@ -2,8 +2,8 @@
 ascat
 =====
 
-.. image:: https://travis-ci.org/TUW-GEO/ascat.svg?branch=master
-    :target: https://travis-ci.org/TUW-GEO/ascat
+.. image:: https://github.com/TUW-GEO/ascat/workflows/main/badge.svg
+    :target: https://github.com/TUW-GEO/ascat/actions/workflows/main.yml
 
 .. image:: https://coveralls.io/repos/github/TUW-GEO/ascat/badge.svg?branch=master
    :target: https://coveralls.io/github/TUW-GEO/ascat?branch=master
