@@ -1,4 +1,4 @@
-name: Testing ASCAT on Ubuntu/Linux
+name: ascat_ubuntu
 
 on:
   push:
