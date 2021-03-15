@@ -29,10 +29,15 @@ import os
 import sys
 import urllib
 import requests
+import logging
 from ftplib import FTP
 from datetime import datetime, timedelta
 
 from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s %(levelname)s: %(message)s')
 
 
 class Connector:
@@ -98,10 +103,10 @@ class Connector:
         pass
 
 
-class HTTPConnector(Connector):
+class HttpConnector(Connector):
 
     """
-    Class for HTTP Requests.
+    Class for http requests.
     """
 
     def __init__(self, base_url):
@@ -137,10 +142,12 @@ class HTTPConnector(Connector):
         tail = ''
         if stream_response.headers['Content-Type'] == 'application/zip':
             tail = '.zip'
+
         # Download the file (and display progress)
         progress = 0
 
-        print("Downloading", file_local)
+        logging.info('Start download: {}'.format(file_local))
+
         with open(file_local+tail, 'wb') as f:
             for chunk in stream_response.iter_content(chunk_size=1024):
                 if chunk:
@@ -154,12 +161,12 @@ class HTTPConnector(Connector):
             sys.stdout.flush()
 
         if os.path.exists(file_local+tail):
-            print("\nDone")
+            logging.info('Download finished')
         else:
-            raise RuntimeError('Error locating downloaded file!')
+            logging.error('Downloaded file not found')
 
 
-class FTPConnector(Connector):
+class FtpConnector(Connector):
 
     """
     Class for downloading via FTP
@@ -174,9 +181,8 @@ class FTPConnector(Connector):
         base_url : string
             Location of remote resource.
         """
-        self.base_url = base_url
-        self.ftp = FTP(base_url)
-        super(FTPConnector, self).__init__(base_url=base_url)
+        super().__init__(base_url)
+        self.ftp = FTP(self.base_url)
 
     def connect(self, credentials):
         """
@@ -188,10 +194,10 @@ class FTPConnector(Connector):
             Dictionary of needed authentication parameters.
         """
         try:
-            self.ftp.login(credentials["username"], credentials["password"])
-            print('Connected')
+            self.ftp.login(credentials['user'], credentials['password'])
+            logging.info('FTP connection successfully established')
         except:
-            raise RuntimeError("Username or Password is incorrect")
+            logging.error('FTP connection failed. User or password incorrect')
 
     def grab_file(self, file_remote, file_local):
         """
@@ -205,25 +211,27 @@ class FTPConnector(Connector):
             path (local) where to save file
         """
         if file_remote not in self.ftp.nlst():
-            print(file_remote, "given file is not accesible in the FTP")
+            logging.warning('File not accessible on FTP: {}'.format(
+                file_remote))
         else:
             localfile = open(file_local, 'wb')
-            print("Downloading file ...")
+            logging.info('Start download: {}'.format(file_remote))
             self.ftp.retrbinary('RETR ' + file_remote, localfile.write, 1024)
             localfile.close()
             if os.path.exists(file_local):
-                print(str(file_local)+" finished downloading")
+                logging.info('Finished download: {}'.format(file_local))
             else:
-                raise RuntimeError('Error locating downloaded file!')
+                logging.error('Downloaded file not found')
 
     def close(self):
         """
         Close connection.
         """
         self.ftp.close()
+        logging.info('FTP disconnect')
 
 
-class HSAFConnector(FTPConnector):
+class HsafConnector(FtpConnector):
 
     """
     Class for downloading from HSAF via FTP.
@@ -238,74 +246,95 @@ class HSAFConnector(FTPConnector):
         base_url : string, optional
             Location of remote resource (default: ftphsaf.meteoam.it).
         """
-        super(HSAFConnector, self).__init__(base_url=base_url)
+        super().__init__(base_url)
 
-    def connect(self, credentials):
-        """
-        Establish connection to FTP.
-
-        Parameters
-        ----------
-        credentials : configparser
-            Configparser for needed authentication parameters.
-        """
-        try:
-            self.ftp.login(credentials['HSAF']["username"],
-                           credentials['HSAF']["password"])
-            print('Connected')
-        except:
-            raise RuntimeError("Username or Password is incorrect")
-
-    def download(self, product, path, start_date, end_date, file_limit=-1):
+    def download(self, remote_path, local_path, start_date, end_date,
+                 limit=None):
         """
         Fetch resource location for download of multiple files in date range.
 
         Parameters
         ----------
-        product : string
-            Product string.
-        path : string
+        remote_path : string
+            Remote directory, where found datasets are stored.
+        local_path : string
             Local directory, where found datasets are stored.
         start_date : datetime
             Start date of date range interval.
         end_date : datetime
             End date of date range interval.
-        file_limit : int, default: -1
-            Cancel download after file limit, ignored if -1
+        limit : int, optional
+            Filter used to limit the returned results (default: 1).
         """
-        dict_dirs = {'h08': 'h08/h08_cur_mon_nc',
-                     'h10': 'h10/h10_cur_mon_data',
-                     'h16': 'h16/h16_cur_mon_data',
-                     'h101': 'h101/h101_cur_mon_data/',
-                     'h102': 'h102/h102_cur_mon_data/',
-                     'h103': 'h103/h103_cur_mon_data/',
-                     'h104': 'h104/h104_cur_mon_data/',
-                     'h105': 'h105/h105_cur_mon_data/'}
+        i = 0
+        for daily_files in self.files(remote_path, start_date, end_date):
+            for file_remote in daily_files:
+                file_local = os.path.join(local_path, file_remote)
+                self.grab_file(file_remote, file_local)
+                i = i + 1
+                if limit and limit == i:
+                    break
 
-        dir = dict_dirs[product]
-        self.ftp.cwd(dir)
+    def files(self, remote_path, start_date, end_date):
+        """
+        Generator retrieving file list for given date range.
 
-        init_date = datetime.strptime(start_date, "%Y%m%d")
-        last_date = datetime.strptime(end_date, "%Y%m%d")
-        days = last_date - init_date
+        Parameters
+        ----------
+        remote_path : string
+            Remote directory, where found datasets are stored.
+        local_path : string
+            Local directory, where found datasets are stored.
+        start_date : datetime
+            Start date of date range interval.
+        end_date : datetime
+            End date of date range interval.
+
+        Yields
+        ------
+        matches : list
+            List of daily files.
+        """
+        self.ftp.cwd(remote_path)
 
         list_of_files = []
         self.ftp.retrlines('NLST ', list_of_files.append)
 
+        days = end_date - start_date
         for i in tqdm(range(days.days)):
-            date = ((init_date + timedelta(days=i)).strftime("%Y%m%d"))
-            matches = [x for x in list_of_files if date in x]
-            n_grabbed_files = 0
-
-            for file_remote in matches:
-                file_local = os.path.join(path, file_remote)
-                self.grab_file(file_remote=file_remote, file_local=file_local)
-                n_grabbed_files += 1
-                if n_grabbed_files - file_limit == 0:
-                    break
+            date = ((start_date + timedelta(days=i)).strftime("%Y%m%d"))
+            matches = sorted([x for x in list_of_files if date in x],
+                             reverse=True)
+            yield matches
 
 
-class EUMConnector(HTTPConnector):
+def hsaf_download(credentials, remote_path, local_path, start_date,
+                  end_date, limit=None):
+    """
+    Function to start H SAF download.
+
+    Parameters
+    ----------
+    credentials : dict
+        Dictionary of needed authentication parameters ('user', 'password').
+    remote_path : string
+        Remote directory, where found datasets are stored.
+    local_path : string
+        Local directory, where found datasets are stored.
+    start_date : datetime
+        Start date of date range interval.
+    end_date : datetime
+        End date of date range interval.
+    limit : int, optional
+        Filter used to limit the returned results (default: 1).
+    """
+    connector = HsafConnector()
+    connector.connect(credentials)
+    connector.download(remote_path, local_path, start_date, end_date, limit)
+    connector.close()
+
+
+class EumConnector(HttpConnector):
 
     """
     Class for downloading from EUMETSAT via HTTP requests.
@@ -320,7 +349,7 @@ class EUMConnector(HTTPConnector):
         base_url : string, optional
             Location of remote resource (default: http://api.eumetsat.int).
         """
-        super(EUMConnector, self).__init__(base_url=base_url)
+        super().__init__(base_url)
 
     def connect(self, credentials):
         """
@@ -332,76 +361,78 @@ class EUMConnector(HTTPConnector):
             Dictionary of needed authentication parameters.
         """
         self.access_token = self._generate_token(
-            consumer_key=credentials['EUMETSAT']['consumer_key'],
-            consumer_secret=credentials['EUMETSAT']['consumer_secret'])
+            consumer_key=credentials['consumer_key'],
+            consumer_secret=credentials['consumer_secret'])
 
-    def download(self, product, path, coords, start_date, end_date,
-                 file_limit=-1):
+    def download(self, product, local_path, start_date, end_date,
+                 coords=None, limit=None):
         """
         Fetch resource location for download of multiple files in daterange.
 
         Parameters
         ----------
         product : string
-            Product string.
-        path : string
+            Product.
+        coords : list
+            Coordinates of polygon, where files will be downloaded
+        local_path : string
             Local directory, where found datasets are stored.
-        coords: list
-            Coordinates of polygon, where files will be downloaded in
         start_date : datetime
             Start date of date range interval.
         end_date : datetime
             End date of date range interval.
-        file_limit : int, default: -1
-            Cancel download after file limit, ignored if -1
+        coords : list of float, optional
+            A custom polygon using EPSG:4326 decimal degrees (default: None).
+        limit : int, optional
+            Filter used to limit the returned results (default: None).
         """
         service_search = self.base_url + "/data/search-products/os"
         service_download = self.base_url + "/data/download/"
 
-        start_date = datetime.strptime(start_date, "%Y%m%d")
-        end_date = datetime.strptime(end_date, "%Y%m%d")
-
         dataset_parameters = {'format': 'json', 'pi': product}
+
         dataset_parameters['start'] = start_date.strftime(
             '%Y-%m-%dT%H:%M:%S.%fZ')
         dataset_parameters['end'] = end_date.strftime(
             '%Y-%m-%dT%H:%M:%S.%fZ')
-        dataset_parameters['geo'] = 'POLYGON(({}))'.format(
-            ','.join(["{} {}".format(*coord) for coord in coords]))
+
+        if coords:
+            dataset_parameters['geo'] = 'POLYGON(({}))'.format(
+                ','.join(["{} {}".format(*coord) for coord in coords]))
 
         url = service_search
         response = requests.get(url, dataset_parameters)
         found_data_sets = response.json()
 
-        url_temp = ('collections/{collID}/dates/{year}/{month}/{day}/'
+        url_temp = ('collections/{coll_id}/dates/{year}/{month}/{day}/'
                     'times/{hour}/{minute}')
 
-        n_grabbed_files = 0
+        i = 0
         for selected_data_set in tqdm(found_data_sets['features']):
 
-            collID = selected_data_set['properties']['parentIdentifier']
+            coll_id = selected_data_set['properties']['parentIdentifier']
             date = datetime.strptime(selected_data_set[
                 'properties']['date'].split("/", 1)[0], '%Y-%m-%dT%H:%M:%SZ')
 
             download_url = service_download + urllib.parse.quote(
                 url_temp.format(
-                    collID=collID, year=date.strftime('%Y'),
+                    coll_id=coll_id, year=date.strftime('%Y'),
                     month=date.strftime('%m'), day=date.strftime('%d'),
                     hour=date.strftime('%H'), minute=date.strftime('%M')))
 
             file_local = os.path.join(
-                path, selected_data_set['properties']['identifier'])
+                local_path, selected_data_set['properties']['identifier'])
 
-            self.grab_file(file_remote=download_url, file_local=file_local)
+            self.grab_file(download_url, file_local)
 
-            n_grabbed_files += 1
-            if n_grabbed_files - file_limit == 0:
+            i = i + 1
+            if limit and limit == i:
                 break
 
     def _generate_token(self, consumer_key, consumer_secret):
         """
         Function to generate an access token for interacting with
-        EUMETSAT Data Service APIs
+        EUMETSAT Data Service APIs.
 
         Parameters
         ----------
@@ -415,7 +446,6 @@ class EUMConnector(HTTPConnector):
         access_token : str
             An access token (if pass) or None (if fail).
         """
-        # build the token URL:
         token_url = self.base_url + "/token"
 
         response = requests.post(
@@ -447,3 +477,31 @@ class EUMConnector(HTTPConnector):
         assert response.status_code == success_code,\
             "API Request Failed: {}\n{}".format(response.status_code,
                                                 response.content)
+
+
+def eumetsat_download(credentials, product, local_path, start_date,
+                      end_date, coords=None, limit=None):
+    """
+    Function to start H SAF download.
+
+    Parameters
+    ----------
+    credentials : dict
+        Dictionary of needed authentication parameters ('user', 'password').
+    remote_path : string
+        Remote directory, where found datasets are stored.
+    local_path : string
+        Local directory, where found datasets are stored.
+    start_date : datetime
+        Start date of date range interval.
+    end_date : datetime
+        End date of date range interval.
+    coords : list of float, optional
+        A custom polygon using EPSG:4326 decimal degrees (default: None).
+    limit : int, optional
+        Filter used to limit the returned results (default: None).
+    """
+    connector = EumConnector()
+    connector.connect(credentials)
+    connector.download(product, coords, local_path, start_date, end_date,
+                       limit)
