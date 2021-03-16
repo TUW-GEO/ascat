@@ -63,8 +63,8 @@ class TestAscatNcV55R12(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 2292
-        assert result.data.iloc[15].name == datetime(2007, 1, 15, 19, 34, 41,
-                                                     771033)
+        assert result.data.iloc[15].name.strftime(
+            '%Y-%m-%d %H:%M:%S') == '2007-01-15 19:34:41'
         assert result.data.iloc[15]['sm'] == 52
         assert result.data.iloc[15]['ssf'] == 1
         assert result.data.iloc[15]['sm_noise'] == 7
@@ -108,8 +108,11 @@ class TestAscatNcV55R21(unittest.TestCase):
             result.latitude, 45.698074, significant=4)
 
         assert len(result.data) == 2457
-        assert result.data.iloc[15].name == datetime(
-            2007, 1, 15, 19, 34, 41, 5)
+
+        import pdb
+        pdb.set_trace()
+        assert result.data.iloc[15].name.strftime(
+            '%Y-%m-%d %H:%M:%S') == '2007-01-15 19:34:41'
         assert result.data.iloc[15]['sm'] == 55
         assert result.data.iloc[15]['ssf'] == 1
         assert result.data.iloc[15]['sm_noise'] == 7
@@ -183,7 +186,7 @@ class TestAscatNcV55R22(unittest.TestCase):
 
         assert len(result.data) == 2642
         assert result.data.iloc[15].name == datetime(
-            2007, 1, 15, 19, 34, 41, 5)
+            2007, 1, 15, 19, 34, 41)
         assert result.data.iloc[15]['sm'] == 55
         assert result.data.iloc[15]['ssf'] == 1
         assert result.data.iloc[15]['sm_noise'] == 7
