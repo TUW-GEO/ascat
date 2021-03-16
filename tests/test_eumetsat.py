@@ -301,9 +301,7 @@ class Test_ASCAT_L2_SSM_250_BUFR(unittest.TestCase):
                                atol=0.01)
 
 
-pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-
-
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_ASCAT_L2_SSM_250_BUFR_PDU(unittest.TestCase):
 
     def setUp(self):
