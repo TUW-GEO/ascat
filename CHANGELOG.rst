@@ -5,8 +5,8 @@ Changelog
 Version 1.2.0
 =============
 
-- Move CI to Github actions
 - Add download interface for H SAF FTP and EUMETSAT Data Store
+- Move CI to Github actions (Ubuntu and Windows CI)
 
 Version 1.1.2
 =============
