@@ -15,9 +15,6 @@ jobs:
         python-version: ['3.6']
         os: ['windows-latest']
 
-    name: RT1_test ${{ matrix.os }}  ${{ matrix.python-version }}
-
-
     steps:
       - uses: actions/checkout@v2
         with:
