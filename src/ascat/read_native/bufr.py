@@ -46,6 +46,7 @@ from pygeobase.object_base import Image
 try:
     import pybufr_ecmwf
 except ImportError:
+    pybufr_ecmwf = None
     warnings.warn('pybufr-ecmwf not imported, BUFR format cannot be read')
 
 
