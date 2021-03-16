@@ -3,7 +3,10 @@ ascat
 =====
 
 .. image:: https://github.com/TUW-GEO/ascat/workflows/ascat_ubuntu/badge.svg
-    :target: https://github.com/TUW-GEO/ascat/actions/workflows/ascat_ubuntu.yml
+   :target: https://github.com/TUW-GEO/ascat/actions/workflows/ascat_ubuntu.yml
+
+.. image:: https://github.com/TUW-GEO/ascat/workflows/ascat_windows/badge.svg
+   :target: https://github.com/TUW-GEO/ascat/actions/workflows/ascat_windows.yml
 
 .. image:: https://coveralls.io/repos/github/TUW-GEO/ascat/badge.svg?branch=master
    :target: https://coveralls.io/github/TUW-GEO/ascat?branch=master
