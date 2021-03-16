@@ -1,20 +1,99 @@
+# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
+# All rights reserved.
+
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#    * Redistributions of source code must retain the above copyright notice,
+#      this list of conditions and the following disclaimer.
+#    * Redistributions in binary form must reproduce the above copyright
+#      notice, this list of conditions and the following disclaimer in the
+#      documentation and/or other materials provided with the distribution.
+#    * Neither the name of TU Wien, Department of Geodesy and Geoinformation
+#      nor the names of its contributors may be used to endorse or promote
+#      products derived from this software without specific prior written
+#      permission.
+
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL TU WIEN DEPARTMENT OF GEODESY AND
+# GEOINFORMATION BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+import sys
+import datetime
 import argparse
-import sys
-from ftplib import FTP
-import getpass
-import urllib
-import gzip
-import re
-import os
-import sys
-import json
-from datetime import datetime, timedelta
-import requests
 import configparser
 
-from ascat.download_connectors import HSAFConnector, EumetsatConnector
+from ascat.download.connectors import HsafConnector
+from ascat.download.connectors import EumConnector
 
-def parse_main_args_download(args):
+
+def parse_date(s):
+    return datetime.datetime.strptime(s, '%Y%m%d')
+
+
+def hsaf_download(credentials, remote_path, local_path, start_date,
+                  end_date, limit=None):
+    """
+    Function to start H SAF download.
+
+    Parameters
+    ----------
+    credentials : dict
+        Dictionary of needed authentication parameters ('user', 'password').
+    remote_path : string
+        Remote directory, where found datasets are stored.
+    local_path : string
+        Local directory, where found datasets are stored.
+    start_date : datetime
+        Start date of date range interval.
+    end_date : datetime
+        End date of date range interval.
+    limit : int, optional
+        Filter used to limit the returned results (default: 1).
+    """
+    connector = HsafConnector()
+    connector.connect(credentials)
+    connector.download(remote_path, local_path, start_date, end_date, limit)
+    connector.close()
+
+
+def eumetsat_download(credentials, product, local_path, start_date,
+                      end_date, coords=None, limit=None):
+    """
+    Function to start EUMETSAT download.
+
+    Parameters
+    ----------
+    credentials : dict
+        Dictionary of needed authentication parameters ('user', 'password').
+    remote_path : string
+        Remote directory, where found datasets are stored.
+    local_path : string
+        Local directory, where found datasets are stored.
+    start_date : datetime
+        Start date of date range interval.
+    end_date : datetime
+        End date of date range interval.
+    coords : list of float, optional
+        A custom polygon using EPSG:4326 decimal degrees (default: None).
+    limit : int, optional
+        Filter used to limit the returned results (default: None).
+    """
+    connector = EumConnector()
+    connector.connect(credentials)
+    connector.download(product, local_path, start_date, end_date, coords,
+                       limit)
+
+
+def parse_args_hsaf_download(args):
     """
     Parse command line arguments.
 
@@ -30,44 +109,75 @@ def parse_main_args_download(args):
     parser : ArgumentParser
         Argument Parser object.
     """
-
     parser = argparse.ArgumentParser(
-        description='ASCAT download command line interface.',
+        description='H SAF download command line interface.',
         formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('-s', '--source', choices=['hsaf','eumetsat'], help='Download source, EUMETSAT or HSAF')
-    parser.add_argument('-pr','--product', help='Name of product')
-    parser.add_argument('-cred','--credential_file', help='File where credentials are stored')
-    parser.add_argument('-conf','--config_file', help='File where configs are stored')
-    parser.add_argument('-o','--output_dir', help='Directory to write output')
-    parser.add_argument('-from','--start_date', help='start date in YYYYMMDD format')
-    parser.add_argument('-to','--end_date', help='end date in YYYYMMDD format')
+
+    parser.add_argument('-cf', '--credential_file',
+                        help='File where credentials are stored')
+
+    parser.add_argument('-r', '--remote_path', help='FTP remote path')
+
+    parser.add_argument('-o', '--output_dir', help='Directory to write output')
+
+    parser.add_argument('-from', '--start_date', type=parse_date,
+                        help='start date in YYYYMMDD format')
+
+    parser.add_argument('-to', '--end_date', type=parse_date,
+                        help='end date in YYYYMMDD format')
+
+    parser.add_argument('-co', '--coords',
+                        help='end date in YYYYMMDD format')
+
+    parser.add_argument('-l', '--limit',
+                        help='Filter number of results')
 
     return parser.parse_args(args), parser
 
 
-def read_json(filename):
-    '''
-    Function to read credentials or config from a JSON format
-    file.
-    
-    Args:
-        fiename (str):      The credentials/config filename
+def parse_args_eumetsat_download(args):
+    """
+    Parse command line arguments.
 
-    Returns:
-        data from file if success, error message if fail.
-    '''
+    Parameters
+    ----------
+    args : list
+        Command line arguments.
 
-    try:
-        with open(filename,'r') as json_file:
-            output  = json.load(json_file)
-    except:
-        print(filename+' does not exist or is not in the correct format')
-        return 
-        
-    print('Successfully retrieved data from file:'+filename)
-    return output
+    Returns
+    -------
+    args : list
+        Parsed arguments.
+    parser : ArgumentParser
+        Argument Parser object.
+    """
+    parser = argparse.ArgumentParser(
+        description='EUMETSAT download command line interface.',
+        formatter_class=argparse.RawTextHelpFormatter)
 
-def main_download(cli_args):
+    parser.add_argument('-cf', '--credential_file',
+                        help='File where credentials are stored')
+
+    parser.add_argument('-p', '--product', help='Name of product')
+
+    parser.add_argument('-o', '--output_dir', help='Directory to write output')
+
+    parser.add_argument('-from', '--start_date', type=parse_date,
+                        help='start date in YYYYMMDD format')
+
+    parser.add_argument('-to', '--end_date', type=parse_date,
+                        help='end date in YYYYMMDD format')
+
+    parser.add_argument('-co', '--coords',
+                        help='end date in YYYYMMDD format')
+
+    parser.add_argument('-l', '--limit',
+                        help='Filter number of results')
+
+    return parser.parse_args(args), parser
+
+
+def hsaf_main(cli_args):
     """
     Command line interface routine.
 
@@ -76,148 +186,42 @@ def main_download(cli_args):
     cli_args : list
         Command line arguments.
     """
+    args, parser = parse_args_hsaf_download(cli_args)
 
-    args, parser = parse_main_args_download(cli_args)
-    
-    output_dir = args.output_dir
-    if output_dir is None:
-        output_dir = sys.argv[0]
-    if args.product is not None and args.start_date is not None \
-            and args.end_date is not None or args.config_file:
-        
-        credentials = configparser.ConfigParser()
-        credentials.read(args.credential_file)
-        
-        if args.source.upper() == 'HSAF':
-            
-            if args.config_file:
-                config = read_json(args.config_file)
-                download_dir = config['download_dir']
-                product = config['product']
-                start_date = config['start_date']
-                end_date = config['end_date']
-            else:
-                download_dir = output_dir
-                product = args.product
-                start_date = args.start_date
-                end_date = args.end_date
-                
-            download_hsaf(credentials=credentials,
-                         product=product,
-                         download_dir=download_dir,
-                         start_date=start_date,
-                         end_date=end_date)
+    credentials = configparser.ConfigParser()
+    credentials.read(args.credential_file)
 
-        elif args.source.upper() == 'EUMETSAT':
-
-            if args.config_file:
-                 
-                config = read_json(args.config_file)
-                download_dir = config['download_dir']
-                product = config['product']
-                start_date = config['start_date']
-                end_date = config['end_date']
-                coords = config['coords']
-                
-            else:
-                
-                download_dir = output_dir
-                product = args.product
-                start_date = args.start_date
-                end_date = args.end_date
-                
-            download_eumetsat(credentials=credentials,
-                              product=product,
-                              download_dir=download_dir,
-                              start_date=start_date,
-                              end_date=end_date,
-                              coords=coords)
-        else:
-
-            raise RuntimeError('Specified source not recognized!')
-    else:
-        raise RuntimeError('Product and date range need to be specified!')
+    hsaf_download(credentials['hsaf'], args.remote_path, args.output_dir,
+                  args.start_date, args.end_date, args.limit)
 
 
-def download_hsaf(credentials,
-                  download_dir,
-                  product,
-                  start_date,
-                  end_date):
+def eumetsat_main(cli_args):
     """
-    Routine to connect to HSAF and download specified files.
+    Command line interface routine.
 
     Parameters
     ----------
-    credentials : dict
-        Contains credentials needed for connecting to HSAF service.
-    download_dir : string
-        Where to download files to.
-    product : string
-        Product to search for.
-    start_date : string
-        start date of files to search for, format YYYYMMDD.
-    end_date : string
-        end date of files to search for, format YYYYMMDD.
-
-    Returns
-    -------
-    None.
-
+    cli_args : list
+        Command line arguments.
     """
-    connector = HSAFConnector()
-    connector.connect(credentials=credentials)
-    
-    connector.download(product=product,
-                       download_dir=download_dir,
-                       start_date=start_date,
-                       end_date=end_date)
+    args, parser = parse_args_eumetsat_download(cli_args)
 
-def download_eumetsat(credentials,
-                      download_dir,
-                      product,
-                      start_date,
-                      end_date,
-                      coords):
+    credentials = configparser.ConfigParser()
+    credentials.read(args.credential_file)
+
+    eumetsat_download(credentials['eumetsat'], args.product, args.output_dir,
+                      args.start_date, args.end_date, args.coords, args.limit)
+
+
+def run_hsaf_download():
     """
-    Routine to connect to EUMETSAT and download specified files
-
-    Parameters
-    ----------
-    credentials : dict
-        Contains credentials needed for connecting to EUMETSAT service.
-    download_dir : string
-        Where to download files to.
-    product : string
-        Product to search for.
-    start_date : string
-        start date of files to search for, format YYYYMMDD.
-    end_date : string
-        end date of files to search for, format YYYYMMDD.
-    coords : list
-        coordinates of polygon in which files are searched.
-
-    Returns
-    -------
-    None.
-
+    Run command line interface for H SAF download.
     """
-    
+    hsaf_main(sys.argv[1:])
 
-    connector = EumetsatConnector()
-    connector.connect(credentials=credentials)
 
-    connector.download(product=product,
-                       download_dir=download_dir,
-                       coords=coords,
-                       start_date=start_date,
-                       end_date=end_date)
-
-def run_download():
+def run_eumetsat_download():
     """
-    Run command line interface.
+    Run command line interface for EUMETSAT download.
     """
-
-    main_download(sys.argv[1:])
-    
-
+    eumetsat_main(sys.argv[1:])

@@ -308,32 +308,6 @@ class HsafConnector(FtpConnector):
             yield matches
 
 
-def hsaf_download(credentials, remote_path, local_path, start_date,
-                  end_date, limit=None):
-    """
-    Function to start H SAF download.
-
-    Parameters
-    ----------
-    credentials : dict
-        Dictionary of needed authentication parameters ('user', 'password').
-    remote_path : string
-        Remote directory, where found datasets are stored.
-    local_path : string
-        Local directory, where found datasets are stored.
-    start_date : datetime
-        Start date of date range interval.
-    end_date : datetime
-        End date of date range interval.
-    limit : int, optional
-        Filter used to limit the returned results (default: 1).
-    """
-    connector = HsafConnector()
-    connector.connect(credentials)
-    connector.download(remote_path, local_path, start_date, end_date, limit)
-    connector.close()
-
-
 class EumConnector(HttpConnector):
 
     """
@@ -477,31 +451,3 @@ class EumConnector(HttpConnector):
         assert response.status_code == success_code,\
             "API Request Failed: {}\n{}".format(response.status_code,
                                                 response.content)
-
-
-def eumetsat_download(credentials, product, local_path, start_date,
-                      end_date, coords=None, limit=None):
-    """
-    Function to start H SAF download.
-
-    Parameters
-    ----------
-    credentials : dict
-        Dictionary of needed authentication parameters ('user', 'password').
-    remote_path : string
-        Remote directory, where found datasets are stored.
-    local_path : string
-        Local directory, where found datasets are stored.
-    start_date : datetime
-        Start date of date range interval.
-    end_date : datetime
-        End date of date range interval.
-    coords : list of float, optional
-        A custom polygon using EPSG:4326 decimal degrees (default: None).
-    limit : int, optional
-        Filter used to limit the returned results (default: None).
-    """
-    connector = EumConnector()
-    connector.connect(credentials)
-    connector.download(product, coords, local_path, start_date, end_date,
-                       limit)
