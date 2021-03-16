@@ -108,9 +108,6 @@ class TestAscatNcV55R21(unittest.TestCase):
             result.latitude, 45.698074, significant=4)
 
         assert len(result.data) == 2457
-
-        import pdb
-        pdb.set_trace()
         assert result.data.iloc[15].name.strftime(
             '%Y-%m-%d %H:%M:%S') == '2007-01-15 19:34:41'
         assert result.data.iloc[15]['sm'] == 55
