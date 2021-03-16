@@ -44,13 +44,9 @@ from pygeobase.io_base import IntervalReadingMixin
 from pygeobase.object_base import Image
 
 try:
-    from pybufr_ecmwf import raw_bufr_file
-    from pybufr_ecmwf import ecmwfbufr
-    from pybufr_ecmwf import ecmwfbufr_parameters
+    import pybufr_ecmwf
 except ImportError:
-    warnings.warn(
-        'pybufr-ecmwf can not be imported, H08 and H07 images can '
-        'not be read.')
+    warnings.warn('pybufr-ecmwf not imported, BUFR format cannot be read')
 
 
 class AscatL1BufrFile(ImageBase):
@@ -838,24 +834,24 @@ class BUFRReader(object):
     """
 
     def __init__(self, filename, kelem_guess=500, max_tries=10):
-        self.bufr = raw_bufr_file.RawBUFRFile()
+        self.bufr = pybufr_ecmwf.raw_bufr_file.RawBUFRFile()
         self.bufr.open(filename, 'rb')
         self.nr_messages = self.bufr.get_num_bufr_msgs()
         self.max_tries = max_tries
 
         if 'BUFR_TABLES' not in os.environ:
-            path = os.path.split(ecmwfbufr.__file__)[0]
+            path = os.path.split(pybufr_ecmwf.ecmwfbufr.__file__)[0]
             os.environ["BUFR_TABLES"] = os.path.join(
                 path, 'ecmwf_bufrtables' + os.sep)
             # os.environ['PRINT_TABLE_NAMES'] = "false"
 
-        self.size_ksup = ecmwfbufr_parameters.JSUP
-        self.size_ksec0 = ecmwfbufr_parameters.JSEC0
-        self.size_ksec1 = ecmwfbufr_parameters.JSEC1
-        self.size_ksec2 = ecmwfbufr_parameters.JSEC2
-        self.size_key = ecmwfbufr_parameters.JKEY
-        self.size_ksec3 = ecmwfbufr_parameters.JSEC3
-        self.size_ksec4 = ecmwfbufr_parameters.JSEC4
+        self.size_ksup = pybufr_ecmwf.ecmwfbufr_parameters.JSUP
+        self.size_ksec0 = pybufr_ecmwf.ecmwfbufr_parameters.JSEC0
+        self.size_ksec1 = pybufr_ecmwf.ecmwfbufr_parameters.JSEC1
+        self.size_ksec2 = pybufr_ecmwf.ecmwfbufr_parameters.JSEC2
+        self.size_key = pybufr_ecmwf.ecmwfbufr_parameters.JKEY
+        self.size_ksec3 = pybufr_ecmwf.ecmwfbufr_parameters.JSEC3
+        self.size_ksec4 = pybufr_ecmwf.ecmwfbufr_parameters.JSEC4
 
         self.kelem_guess = kelem_guess
 
@@ -884,12 +880,12 @@ class BUFRReader(object):
             kerr = 0
             data = self.bufr.get_raw_bufr_msg(i)
 
-            ecmwfbufr.bus012(data[0],  # input
-                             ksup,  # output
-                             ksec0,  # output
-                             ksec1,  # output
-                             ksec2,  # output
-                             kerr)  # output
+            pybufr_ecmwf.ecmwfbufr.bus012(data[0],  # input
+                                          ksup,  # output
+                                          ksec0,  # output
+                                          ksec1,  # output
+                                          ksec2,  # output
+                                          kerr)  # output
 
             kelem = self.kelem_guess
             ksup_first = ksup[5]
@@ -907,18 +903,18 @@ class BUFRReader(object):
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
                         "ignore", category=DeprecationWarning)
-                    ecmwfbufr.bufrex(data[0],  # input
-                                     ksup,  # output
-                                     ksec0,  # output
-                                     ksec1,  # output
-                                     ksec2,  # output
-                                     ksec3,  # output
-                                     ksec4,  # output
-                                     cnames,  # output
-                                     cunits,  # output
-                                     self.init_values,  # output
-                                     self.cvals,  # output
-                                     kerr)  # output
+                    pybufr_ecmwf.ecmwfbufr.bufrex(data[0],  # input
+                                                  ksup,  # output
+                                                  ksec0,  # output
+                                                  ksec1,  # output
+                                                  ksec2,  # output
+                                                  ksec3,  # output
+                                                  ksec4,  # output
+                                                  cnames,  # output
+                                                  cunits,  # output
+                                                  self.init_values,  # output
+                                                  self.cvals,  # output
+                                                  kerr)  # output
                 # no error - stop loop
                 if kerr == 0 and ksec4[0] != 0:
                     increment_arraysize = False
