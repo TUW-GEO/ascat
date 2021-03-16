@@ -182,8 +182,8 @@ class TestAscatNcV55R22(unittest.TestCase):
         assert sorted(list(result.data.columns)) == sorted(ref_list)
 
         assert len(result.data) == 2642
-        assert result.data.iloc[15].name == datetime(
-            2007, 1, 15, 19, 34, 41)
+        assert result.data.iloc[15].name.strftime(
+            '%Y-%m-%d %H:%M:%S') == '2007-01-15 19:34:41'
         assert result.data.iloc[15]['sm'] == 55
         assert result.data.iloc[15]['ssf'] == 1
         assert result.data.iloc[15]['sm_noise'] == 7
