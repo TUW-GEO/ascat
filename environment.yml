@@ -1,6 +1,5 @@
 name: ascat_env
 channels:
-  - default
   - conda-forge
 dependencies:
 - numpy
@@ -8,10 +7,12 @@ dependencies:
 - pygrib
 - netCDF4
 - pykdtree
+- h5py
+- pybufr-ecmwf
 - pip
 - pip: 
-  - pybufr-ecmwf
-  - h5py
+  - requests
+  - tqdm
   - lxml
   - pygeobase>=0.4.0
   - pygeogrids>=0.3.0

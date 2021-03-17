@@ -2,8 +2,11 @@
 ascat
 =====
 
-.. image:: https://travis-ci.org/TUW-GEO/ascat.svg?branch=master
-    :target: https://travis-ci.org/TUW-GEO/ascat
+.. image:: https://github.com/TUW-GEO/ascat/workflows/ascat_ubuntu/badge.svg
+   :target: https://github.com/TUW-GEO/ascat/actions/workflows/ascat_ubuntu.yml
+
+.. image:: https://github.com/TUW-GEO/ascat/workflows/ascat_windows/badge.svg
+   :target: https://github.com/TUW-GEO/ascat/actions/workflows/ascat_windows.yml
 
 .. image:: https://coveralls.io/repos/github/TUW-GEO/ascat/badge.svg?branch=master
    :target: https://coveralls.io/github/TUW-GEO/ascat?branch=master
@@ -36,20 +39,22 @@ You can find additional information regarding DOI versioning at http://help.zeno
 Installation
 ============
 
-The packages you have to install depend on the features you want to use. The H SAF soil moisture products are disseminated in BUFR, NetCDF or GRIB format. In order to read them you will have to install the appropriate packages which will be explained shortly. Unfortunately neither BUFR nor GRIB readers work on Windows so if you need these formats then Linux or OS X are your only options.
+The packages you have to install depend on the features you want to use. The ASCAT soil moisture products are disseminated in BUFR, NetCDF or GRIB format. In order to read them you will have to install the appropriate packages which will be explained shortly. Unfortunately neither BUFR nor GRIB readers work on Windows so if you need these formats then Linux or OS X are your only options.
 
 For installation we recommend `Miniconda <http://conda.pydata.org/miniconda.html>`_. So please install it according to the official installation instructions. As soon as you have the ``conda`` command in your shell you can continue.
 
 The following script will download and install all the needed packages.
 
+Linux:
+
 .. code::
+    conda env create -f environment.yml
 
-    conda create -q -n ascat_env -c conda-forge python=3.6 numpy pandas netCDF4 pip pyproj pybufr-ecmwf cython h5py pygrib
-    source activate ascat_dev
-    pip install pygeobase pygeogrids pynetcf lxml
-    pip install ascat
+Windows:
 
-This script should work on Windows, Linux or OSX but on Windows you will get errors for the installation commands of pybufr-ecmwf and pygrib.
+.. code::
+    conda env create -f environment_win.yml
+
 
 Supported Products
 ==================
@@ -76,7 +81,7 @@ We are happy if you want to contribute. Please raise an issue explaining what is
 Development setup
 -----------------
 
-For Development we also recommend a ``conda`` environment. You can create one including test dependencies and debugger by running ``conda env create -f environment.yml``. This will create a new ``ascat_dev`` environment which you can activate by using ``source activate ascat_dev``.
+For Development we also recommend a ``conda`` environment. You can create one including test dependencies and debugger by running ``conda env create -f environment.yml``. 
 
 Guidelines
 ----------
@@ -85,10 +90,10 @@ If you want to contribute please follow these steps:
 
 - Fork the ascat repository to your account
 - Clone the repository, make sure you use ``git clone --recursive`` to also get the test data repository.
-- make a new feature branch from the ascat master branch
+- Make a new feature branch from the ascat master branch
 - Add your feature
 - Please include tests for your contributions in one of the test directories. We use py.test so a simple function called test_my_feature is enough
-- submit a pull request to our master branch
+- Submit a pull request to our master branch
 
 Note
 ====

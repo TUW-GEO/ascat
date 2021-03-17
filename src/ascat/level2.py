@@ -39,7 +39,7 @@ from pygeobase.object_base import Image
 import ascat.read_native.eps_native as read_eps
 import ascat.read_native.bufr as read_bufr
 import ascat.read_native.nc as read_nc
-from ascat.math import db2lin, lin2db, hamming_window
+from ascat.utils import db2lin, lin2db, hamming_window
 from ascat.base import ASCAT_MultiTemporalImageBase
 
 byte_nan = np.iinfo(np.byte).min
