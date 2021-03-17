@@ -48,11 +48,13 @@ The following script will download and install all the needed packages.
 Linux:
 
 .. code::
+
     conda env create -f environment.yml
 
 Windows:
 
 .. code::
+
     conda env create -f environment_win.yml
 
 
