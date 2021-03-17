@@ -32,6 +32,8 @@ import numpy as np
 import numpy.testing as nptest
 import unittest
 import os
+import sys
+import pytest
 from datetime import datetime
 
 import ascat.level1 as level1
@@ -39,6 +41,7 @@ import ascat.level1 as level1
 float32_nan = np.finfo(np.float32).min
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL1Image(unittest.TestCase):
 
     def setUp(self):
@@ -284,6 +287,7 @@ class Test_AscatL1Image(unittest.TestCase):
                                jd_should, atol=1e-5)
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL1Bufr(unittest.TestCase):
 
     def setUp(self):

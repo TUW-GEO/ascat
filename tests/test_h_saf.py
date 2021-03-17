@@ -25,13 +25,14 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import unittest
-from datetime import datetime, timedelta
-import numpy as np
-import numpy.testing as nptest
 import os
 import sys
 import pytest
+import unittest
+from datetime import datetime, timedelta
+
+import numpy as np
+import numpy.testing as nptest
 
 import ascat.h_saf as H_SAF
 

@@ -32,7 +32,7 @@ from datetime import datetime
 
 import numpy as np
 
-import ascat
+from ascat.read_native.cdr import AscatSsmCdr
 
 
 class TestAscatNcV55R12(unittest.TestCase):
@@ -48,8 +48,8 @@ class TestAscatNcV55R12(unittest.TestCase):
 
         ioclass_kws = {'loc_dim_name': 'gp', 'loc_ids_name': 'gpi'}
 
-        self.ascat_reader = ascat.AscatSsmCdr(cdr_path, grid_path,
-                                              ioclass_kws=ioclass_kws)
+        self.ascat_reader = AscatSsmCdr(cdr_path, grid_path,
+                                        ioclass_kws=ioclass_kws)
 
     def test_read(self):
 
@@ -63,8 +63,8 @@ class TestAscatNcV55R12(unittest.TestCase):
                                        significant=4)
 
         assert len(result.data) == 2292
-        assert result.data.iloc[15].name == datetime(2007, 1, 15, 19, 34, 41,
-                                                     771033)
+        assert result.data.iloc[15].name.strftime(
+            '%Y-%m-%d %H:%M:%S') == '2007-01-15 19:34:41'
         assert result.data.iloc[15]['sm'] == 52
         assert result.data.iloc[15]['ssf'] == 1
         assert result.data.iloc[15]['sm_noise'] == 7
@@ -91,7 +91,7 @@ class TestAscatNcV55R21(unittest.TestCase):
         static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
                                          'static_layer')
 
-        self.ascat_reader = ascat.AscatSsmCdr(
+        self.ascat_reader = AscatSsmCdr(
             cdr_path, grid_path, static_layer_path=static_layer_path)
 
     def tearDown(self):
@@ -108,8 +108,8 @@ class TestAscatNcV55R21(unittest.TestCase):
             result.latitude, 45.698074, significant=4)
 
         assert len(result.data) == 2457
-        assert result.data.iloc[15].name == datetime(
-            2007, 1, 15, 19, 34, 41, 5)
+        assert result.data.iloc[15].name.strftime(
+            '%Y-%m-%d %H:%M:%S') == '2007-01-15 19:34:41'
         assert result.data.iloc[15]['sm'] == 55
         assert result.data.iloc[15]['ssf'] == 1
         assert result.data.iloc[15]['sm_noise'] == 7
@@ -159,7 +159,7 @@ class TestAscatNcV55R22(unittest.TestCase):
         static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
                                          'static_layer')
 
-        self.ascat_reader = ascat.AscatSsmCdr(
+        self.ascat_reader = AscatSsmCdr(
             cdr_path, grid_path, static_layer_path=static_layer_path)
 
     def tearDown(self):
@@ -182,8 +182,8 @@ class TestAscatNcV55R22(unittest.TestCase):
         assert sorted(list(result.data.columns)) == sorted(ref_list)
 
         assert len(result.data) == 2642
-        assert result.data.iloc[15].name == datetime(
-            2007, 1, 15, 19, 34, 41, 5)
+        assert result.data.iloc[15].name.strftime(
+            '%Y-%m-%d %H:%M:%S') == '2007-01-15 19:34:41'
         assert result.data.iloc[15]['sm'] == 55
         assert result.data.iloc[15]['ssf'] == 1
         assert result.data.iloc[15]['sm_noise'] == 7

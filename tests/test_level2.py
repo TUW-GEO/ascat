@@ -111,6 +111,7 @@ class Test_AscatL2SsmBufr_ioclass_kws(unittest.TestCase):
                                atol=0.01)
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL2SsmBufrFile(unittest.TestCase):
 
     def setUp(self):
@@ -277,6 +278,7 @@ class Test_AscatL2SsmNcFile(unittest.TestCase):
                                atol=1e-5)
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
 
     def setUp(self):
@@ -355,6 +357,7 @@ class Test_AscatL2SsmNcFile_vsAscatL2SsmBufrFile(unittest.TestCase):
                                    data_bufr[bufr_name], atol=0.1)
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 def test_AscatL2SsmBufrChunked():
     data_path = os.path.join(
         os.path.dirname(
@@ -379,6 +382,7 @@ def test_AscatL2SsmBufrChunked():
     assert data.lat.shape == (23616,)
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL2Image(unittest.TestCase):
 
     def setUp(self):
@@ -506,6 +510,7 @@ class Test_AscatL2Image(unittest.TestCase):
                                jd_should, atol=1e-5)
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL2Bufr(unittest.TestCase):
 
     def setUp(self):

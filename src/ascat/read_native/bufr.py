@@ -48,9 +48,7 @@ try:
     from pybufr_ecmwf import ecmwfbufr
     from pybufr_ecmwf import ecmwfbufr_parameters
 except ImportError:
-    warnings.warn(
-        'pybufr-ecmwf can not be imported, H08 and H07 images can '
-        'not be read.')
+    warnings.warn('pybufr-ecmwf not imported, BUFR format cannot be read')
 
 
 class AscatL1BufrFile(ImageBase):
