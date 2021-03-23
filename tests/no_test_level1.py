@@ -111,8 +111,6 @@ class Test_AscatL1Image(unittest.TestCase):
                 # have to mask those values in nc and eps
                 if field in sig:
 
-
-<< << << < HEAD
                     sig_mask = (self.reader_eps.data[field] < -50)
                     self.reader_eps.data[field][sig_mask] = float32_nan
                     self.reader_nc.data[field][sig_mask] = float32_nan
@@ -291,24 +289,23 @@ class Test_AscatL1Bufr(unittest.TestCase):
             os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data', 'bufr')
 
-        self.image_bufr = level1.AscatL1Bufr(self.data_path, eo_portal=True)
-=======
-                    sig_mask = (self.eps_ds[field] < -50)
-                    self.eps_ds[field][sig_mask] = float32_nan
-                    self.nc_ds[field][sig_mask] = float32_nan
-                    self.bufr_ds[field][sig_mask] = float32_nan
+        # self.image_bufr = level1.AscatL1Bufr(self.data_path, eo_portal=True)
+        # sig_mask = (self.eps_ds[field] < -50)
+        # self.eps_ds[field][sig_mask] = float32_nan
+        # self.nc_ds[field][sig_mask] = float32_nan
+        # self.bufr_ds[field][sig_mask] = float32_nan
 
-                    nan_mask = (self.nc_ds[field] == float32_nan)
-                    self.eps_ds[field][nan_mask] = float32_nan
-                    self.bufr_ds[field][nan_mask] = float32_nan
+        # nan_mask = (self.nc_ds[field] == float32_nan)
+        # self.eps_ds[field][nan_mask] = float32_nan
+        # self.bufr_ds[field][nan_mask] = float32_nan
 
-                nptest.assert_allclose(self.bufr_ds[field],
-                                       self.eps_ds[field], atol=0.1)
-                nptest.assert_allclose(self.nc_ds[field],
-                                       self.bufr_ds[field], atol=0.1)
+        # nptest.assert_allclose(self.bufr_ds[field],
+        #                         self.eps_ds[field], atol=0.1)
+        # nptest.assert_allclose(self.nc_ds[field],
+        #                         self.bufr_ds[field], atol=0.1)
 
-            nptest.assert_allclose(self.eps_ds[field],
-                                   self.nc_ds[field], atol=0.1)
+        # nptest.assert_allclose(self.eps_ds[field],
+        #                         self.nc_ds[field], atol=0.1)
 
     # def test_image_reading_szf_all_formats(self):
     #     self.reader_eps_szf = self.image_e_szf.read()
@@ -478,7 +475,6 @@ class Test_AscatL1Bufr(unittest.TestCase):
 #     def test_image_reading(self):
 #         data, meta, timestamp, lon, lat, time_var = self.image_bufr.read(
 #             datetime(2010, 6, 9, 1, 39))
->>>>>>> f964a4b (Update bufr reader, rewriting tests)
 
 #         assert lon.shape == (267648,)
 #         assert lat.shape == (267648,)

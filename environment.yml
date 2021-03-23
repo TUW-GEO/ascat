@@ -8,9 +8,11 @@ dependencies:
 - netCDF4
 - pykdtree
 - h5py
+- xarray
 - pybufr-ecmwf
 - pip
 - pip: 
+  - cadati
   - requests
   - tqdm
   - lxml

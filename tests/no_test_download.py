@@ -38,11 +38,11 @@ import sys
 import pytest
 
 from ascat.eumetsat import AscatL2Ssm125
-# from ascat.eumetsat import AscatL2Ssm125PDU
-# from ascat.eumetsat import AscatL2Ssm250
-# from ascat.eumetsat import AscatL2Ssm250PDU
-# from ascat.eumetsat import AscatL2Ssm125Nc
-# from ascat.eumetsat import AscatL2Ssm250Nc
+from ascat.eumetsat import AscatL2Ssm125PDU
+from ascat.eumetsat import AscatL2Ssm250
+from ascat.eumetsat import AscatL2Ssm250PDU
+from ascat.eumetsat import AscatL2Ssm125Nc
+from ascat.eumetsat import AscatL2Ssm250Nc
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
