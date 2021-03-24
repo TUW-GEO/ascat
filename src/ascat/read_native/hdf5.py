@@ -1,4 +1,4 @@
-# Copyright (c) 2020, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -45,7 +45,7 @@ class AscatL1bHdf5File:
     Read ASCAT Level 1b file in HDF5 format.
     """
 
-    def __init__(self, filename, mode='r'):
+    def __init__(self, filename):
         """
         Initialize AscatL1bHdf5File.
 
@@ -53,22 +53,28 @@ class AscatL1bHdf5File:
         ----------
         filename : str
             Filename.
-        mode : str, optional
-            File mode (default: 'r')
         """
         self.filename = filename
-        self.mode = mode
 
-    def read(self):
+    def read(self, generic=False, to_xarray=False):
         """
         Read ASCAT Level 1b data.
 
+        Parameters
+        ----------
+        generic : bool, optional
+            'True' reading and converting into generic format or
+            'False' reading original field names (default: False).
+        to_xarray : bool, optional
+            'True' return data as xarray.Dataset
+            'False' return data as numpy.ndarray (default: False).
+
         Returns
         -------
-        ds : dict of xarray.Dataset
-            ASCAT Level 1 data.
+        ds : xarray.Dataset, numpy.ndarray
+            ASCAT Level 1b data.
         """
-        raw_data = {}
+        data = {}
         metadata = {}
 
         root = 'U-MARF/EPS/ASCA_SZF_1B/'
@@ -83,14 +89,14 @@ class AscatL1bHdf5File:
             var_names = list(mdr.dtype.names)
 
             for var_name in var_names:
-                raw_data[var_name.lower()] = mdr[var_name]
+                data[var_name.lower()] = mdr[var_name]
 
                 if var_name.encode() in mdr_descr['EntryName']:
                     pos = mdr_descr['EntryName'] == var_name.encode()
                     scale = mdr_descr['Scale Factor'][pos][0].decode()
 
                     if scale != 'n/a':
-                        raw_data[var_name.lower()] = raw_data[
+                        data[var_name.lower()] = data[
                             var_name.lower()] / (10 ** float(scale))
 
             fields = ['SPACECRAFT_ID', 'ORBIT_START',
@@ -108,76 +114,82 @@ class AscatL1bHdf5File:
 
                 metadata[f.lower()] = int(var)
 
-        # convert spacecraft_id to internal sat_id
-        sat_id = np.array([4, 3, 5])
-        metadata['sat_id'] = sat_id[metadata['spacecraft_id']-1]
-
-        # compute ascending/descending direction
-        raw_data['as_des_pass'] = (
-            raw_data['sat_track_azi'] < 270).astype(np.uint8)
-
         # modify longitudes [0, 360] to [-180, 180]
-        mask = raw_data['longitude_full'] > 180
-        raw_data['longitude_full'][mask] += -360.
+        mask = data['longitude_full'] > 180
+        data['longitude_full'][mask] += -360.
+
+        data['time'] = np.datetime64('2000-01-01') + data[
+            'utc_localisation-days'].astype('timedelta64[D]') + data[
+                'utc_localisation-milliseconds'].astype('timedelta64[ms]')
 
         # modify azimuth angles to [0, 360]
         if 'azi_angle_full' in var_names:
-            mask = raw_data['azi_angle_full'] < 0
-            raw_data['azi_angle_full'][mask] += 360
+            mask = data['azi_angle_full'] < 0
+            data['azi_angle_full'][mask] += 360
 
-        raw_data['time'] = np.datetime64('2000-01-01') + raw_data[
-            'utc_localisation-days'].astype('timedelta64[D]') + raw_data[
-                'utc_localisation-milliseconds'].astype('timedelta64[ms]')
+        rename_coords = {'longitude_full': 'lon',
+                         'latitude_full': 'lat'}
 
-        raw_data = set_flags(raw_data)
-        raw_data['f_usable'] = raw_data['f_usable'].reshape(-1, 192)
-        raw_data['f_land'] = raw_data['f_land'].reshape(-1, 192)
+        for k, v in rename_coords.items():
+            data[v] = data.pop(k)
 
-        skip_fields = ['utc_localisation-days',
-                       'utc_localisation-milliseconds',
-                       'degraded_inst_mdr', 'degraded_proc_mdr',
-                       'beam_number', 'sat_track_azi', 'flagfield_rf1',
-                       'flagfield_rf2', 'flagfield_pl', 'flagfield_gen1',
-                       'flagfield_gen2']
-
-        rename_fields = {'inc_angle_full': 'inc', 'azi_angle_full': 'azi',
-                         'sigma0_full': 'sig'}
+        if generic:
+            data = conv_hdf5l1b_generic(data, metadata)
 
         # 1 Left Fore Antenna, 2 Left Mid Antenna 3 Left Aft Antenna
         # 4 Right Fore Antenna, 5 Right Mid Antenna, 6 Right Aft Antenna
         antennas = ['lf', 'lm', 'la', 'rf', 'rm', 'ra']
         ds = OrderedDict()
+
         for i, antenna in enumerate(antennas):
-            data_var = {}
-            subset = ((raw_data['beam_number']) == i+1)
-            for k, v in raw_data.items():
 
-                if k in skip_fields:
-                    continue
-
-                if len(v.shape) == 1:
-                    dim = ['obs']
-                elif len(v.shape) == 2:
-                    dim = ['obs', 'echo']
-                else:
-                    raise RuntimeError('Wrong number of dimensions')
-
-                if k in rename_fields:
-                    name = rename_fields[k]
-                else:
-                    name = k
-
-                data_var[name] = (dim, v[subset])
-
-            coords = {"lon": (['obs', 'echo'],
-                              data_var.pop('longitude_full')[1]),
-                      "lat": (['obs', 'echo'],
-                              data_var.pop('latitude_full')[1]),
-                      "time": (['obs'], data_var.pop('time')[1])}
-
+            subset = data['beam_number'] == i+1
             metadata['beam_number'] = i+1
             metadata['beam_name'] = antenna
-            ds[antenna] = xr.Dataset(data_var, coords=coords, attrs=metadata)
+
+            # convert dict to xarray.Dataset or numpy.ndarray
+            if to_xarray:
+                sub_data = {}
+                for var_name in data.keys():
+
+                    if var_name == 'beam_number' and generic:
+                        continue
+
+                    if len(data[var_name].shape) == 1:
+                        dim = ['obs']
+                    elif len(data[var_name].shape) == 2:
+                        dim = ['obs', 'echo']
+
+                    sub_data[var_name] = (dim, data[var_name][subset])
+
+                coords = {}
+                coords_fields = ['lon', 'lat', 'time']
+
+                for cf in coords_fields:
+                    coords[cf] = sub_data.pop(cf)
+
+                ds[antenna] = xr.Dataset(sub_data, coords=coords,
+                                         attrs=metadata)
+            else:
+                # collect dtype info
+                dtype = []
+                for var_name in data.keys():
+
+                    if len(data[var_name][subset].shape) == 1:
+                        dtype.append(
+                            (var_name, data[var_name][subset].dtype.str))
+                    elif len(data[var_name][subset].shape) > 1:
+                        dtype.append((var_name, data[var_name][
+                            subset].dtype.str, data[var_name][
+                                subset].shape[1:]))
+
+                ds[antenna] = np.empty(
+                    data['time'][subset].size, dtype=np.dtype(dtype))
+
+                for var_name, v in data.items():
+                    if var_name == 'beam_number' and generic:
+                        continue
+                    ds[antenna][var_name] = v[subset]
 
         return ds
 
@@ -186,3 +198,53 @@ class AscatL1bHdf5File:
         Close file.
         """
         pass
+
+
+def conv_hdf5l1b_generic(data, metadata):
+    """
+    Rename and convert data types of dataset.
+
+    Parameters
+    ----------
+    data : dict of numpy.ndarray
+        Original dataset.
+    metadata : dict
+        Metadata.
+
+    Returns
+    -------
+    data : dict of numpy.ndarray
+        Converted dataset.
+    """
+    # convert spacecraft_id to internal sat_id
+    sat_id = np.array([4, 3, 5])
+    metadata['sat_id'] = sat_id[metadata['spacecraft_id']-1]
+
+    # compute ascending/descending direction
+    data['as_des_pass'] = (
+        data['sat_track_azi'] < 270).astype(np.uint8)
+
+    data = set_flags(data)
+    data['f_usable'] = data['f_usable'].reshape(-1, 192)
+    data['f_land'] = data['f_land'].reshape(-1, 192)
+
+    skip_fields = ['utc_localisation-days', 'utc_localisation-milliseconds',
+                   'degraded_inst_mdr', 'degraded_proc_mdr',
+                   'sat_track_azi', 'flagfield_rf1', 'flagfield_rf2',
+                   'flagfield_pl', 'flagfield_gen1', 'flagfield_gen2']
+
+    gen_fields_lut = {'inc_angle_full': ('inc', np.float32),
+                      'azi_angle_full': ('azi', np.float32),
+                      'sigma0_full': ('sig', np.float32)}
+
+    for var_name in skip_fields:
+        if var_name in data:
+            data.pop(var_name)
+
+    for var_name in data.keys():
+        if var_name in gen_fields_lut:
+            new_name = gen_fields_lut[var_name][0]
+            new_dtype = gen_fields_lut[var_name][1]
+            data[new_name] = data.pop(var_name).astype(new_dtype)
+
+    return data
