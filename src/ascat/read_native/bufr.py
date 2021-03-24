@@ -106,7 +106,7 @@ class AscatL1bBufrFile():
 
     def read(self, generic=False, to_xarray=False):
         """
-        Read ASCAT Level 1 data.
+        Read ASCAT Level 1b data.
 
         Parameters
         ----------
@@ -119,34 +119,17 @@ class AscatL1bBufrFile():
 
         Returns
         -------
-        ds : xarray.Dataset
-            ASCAT Level 1 data.
+        ds : xarray.Dataset, numpy.ndarray
+            ASCAT Level 1b data.
         """
-        skip_fields = ['Satellite Identifier']
-
-        gen_fields_beam = [
-            ('Radar Incidence Angle', 'inc', np.float32),
-            ('Backscatter', 'sig', np.float32),
-            ('Antenna Beam Azimuth', 'azi', np.float32),
-            ('ASCAT Sigma-0 Usability', 'f_usable', np.uint8),
-            ('Beam Identifier', 'beam_num', np.uint8),
-            ('Radiometric Resolution (Noise Value)', 'kp_noise', np.float32),
-            ('ASCAT KP Estimate Quality', 'kp', np.float32),
-            ('ASCAT Land Fraction', 'f_land', np.float32)]
-
-        gen_fields_lut = {
-            'Orbit Number': ('abs_orbit_nr', np.int32),
-            'Cross-Track Cell Number': ('ctcn', np.uint8),
-            'Direction Of Motion Of Moving Observing Platform':
-            ('sat_azi_track', np.float32)}
-
-        data_var = defaultdict(list)
+        data = defaultdict(list)
 
         with BUFRReader(self.filename) as bufr:
             for message in bufr.messages():
+
                 # read lon/lat
-                data_var['lat'].append(message[:, 12])
-                data_var['lon'].append(message[:, 13])
+                data['lat'].append(message[:, 12].astype(np.float32))
+                data['lon'].append(message[:, 13].astype(np.float32))
 
                 # read time
                 year = message[:, 6].astype(int)
@@ -158,80 +141,15 @@ class AscatL1bBufrFile():
                 milliseconds = np.zeros(seconds.size)
                 cal_dates = np.vstack((
                     year, month, day, hour, minute, seconds, milliseconds)).T
-                data_var['time'].append(cal2dt(cal_dates))
+                data['time'].append(cal2dt(cal_dates))
 
                 # read data fields
                 for num, var_name in self.msg_name_lookup.items():
-                    data_var[var_name].append(message[:, num-1])
+                    data[var_name].append(message[:, num-1])
 
         # concatenate lists to array
-        for var_name in data_var.keys():
-            data_var[var_name] = np.concatenate(data_var[var_name])
-
-        # define metadata
-        metadata = {}
-        metadata['platform_id'] = data_var[
-            'Satellite Identifier'][0].astype(int)
-        metadata['orbit_start'] = np.uint32(data_var['Orbit Number'][0])
-        metadata['filename'] = os.path.basename(self.filename)
-
-        num_records = data_var['time'].size
-
-        # add/rename/remove fields according to generic format
-        if generic:
-            for var_name in skip_fields:
-                if var_name in data_var:
-                    data_var.pop(var_name)
-
-            for var_name in data_var.keys():
-
-                if var_name in gen_fields_lut:
-                    new_name = gen_fields_lut[var_name][0]
-                    new_dtype = gen_fields_lut[var_name][1]
-                    data_var[new_name] = data_var.pop(
-                        var_name).astype(new_dtype)
-
-            for var_name, new_name, new_dtype in gen_fields_beam:
-                f = ['{}_{}'.format(b, var_name) for b in ['f', 'm', 'a']]
-                data_var[new_name] = np.vstack(
-                    (data_var.pop(f[0]), data_var.pop(f[1]),
-                     data_var.pop(f[2]))).T.astype(new_dtype)
-
-            sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
-            data_var['sat_id'] = np.zeros(
-                num_records, dtype=np.uint8) + sat_id[
-                int(metadata['platform_id'])]
-
-        # collect dtype info
-        dtype = []
-        for var_name in data_var.keys():
-            if len(data_var[var_name].shape) == 1:
-                dtype.append((var_name, data_var[var_name].dtype.str))
-            elif len(data_var[var_name].shape) > 1:
-                dtype.append((var_name, data_var[var_name].dtype.str,
-                              data_var[var_name].shape[1:]))
-
-        coords_fields = ['lon', 'lat', 'time']
-
-        # convert dict to xarray.Dataset or numpy.ndarray
-        if to_xarray:
-            for k in data_var.keys():
-                if len(data_var[k].shape) == 1:
-                    dim = ['obs']
-                elif len(data_var[k].shape) == 2:
-                    dim = ['obs', 'beam']
-
-                data_var[k] = (dim, data_var[k])
-
-            coords = {}
-            for cf in coords_fields:
-                coords[cf] = data_var.pop(cf)
-
-            ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
-        else:
-            ds = np.empty(num_records, dtype=np.dtype(dtype))
-            for k, v in data_var.items():
-                ds[k] = v
+        for var_name in data.keys():
+            data[var_name] = np.concatenate(data[var_name])
 
         # There can be suspicious values (32.32) instead of normal nan_values
         # Since some elements rly have this value we check the other triplet
@@ -240,12 +158,49 @@ class AscatL1bBufrFile():
             azi = beam + '_Antenna Beam Azimuth'
             sig = beam + '_Backscatter'
             inc = beam + '_Radar Incidence Angle'
-            if azi in ds:
-                mask_azi = ds[azi] == 32.32
-                mask_sig = ds[sig] == 1.7e+38
-                mask_inc = ds[inc] == 1.7e+38
-                mask = np.all([mask_azi, mask_sig, mask_inc], axis=0)
-                ds[azi][mask] = 1.7e+38
+
+            mask = np.where((data[azi] == 32.32) | (data[sig] == 1.7e+38) |
+                            (data[inc] == 1.7e+38))
+            data[azi][mask] = 1.7e+38
+
+        metadata = {}
+        metadata['platform_id'] = data['Satellite Identifier'][0].astype(int)
+        metadata['orbit_start'] = np.uint32(data['Orbit Number'][0])
+        metadata['filename'] = os.path.basename(self.filename)
+
+        # add/rename/remove fields according to generic format
+        if generic:
+            data = conv_bufrl1b_generic(data, metadata)
+
+        # convert dict to xarray.Dataset or numpy.ndarray
+        if to_xarray:
+            for k in data.keys():
+                if len(data[k].shape) == 1:
+                    dim = ['obs']
+                elif len(data[k].shape) == 2:
+                    dim = ['obs', 'beam']
+
+                data[k] = (dim, data[k])
+
+            coords = {}
+            coords_fields = ['lon', 'lat', 'time']
+            for cf in coords_fields:
+                coords[cf] = data.pop(cf)
+
+            ds = xr.Dataset(data, coords=coords, attrs=metadata)
+        else:
+            # collect dtype info
+            dtype = []
+            for var_name in data.keys():
+                if len(data[var_name].shape) == 1:
+                    dtype.append((var_name, data[var_name].dtype.str))
+                elif len(data[var_name].shape) > 1:
+                    dtype.append((var_name, data[var_name].dtype.str,
+                                  data[var_name].shape[1:]))
+
+            ds = np.empty(data['time'].size, dtype=np.dtype(dtype))
+            for k, v in data.items():
+                ds[k] = v
 
         return ds
 
@@ -256,7 +211,7 @@ class AscatL1bBufrFile():
         pass
 
 
-def conv_bufrl1b_generic(ds):
+def conv_bufrl1b_generic(data, metadata):
     """
     Rename and convert data types of dataset.
 
@@ -278,57 +233,55 @@ def conv_bufrl1b_generic(ds):
 
     Parameters
     ----------
-    ds : xarray.Dataset
+    data : dict of numpy.ndarray
         Original dataset.
+    metadata : dict
+        Metadata.
 
     Returns
     -------
-    ds : xarray.Dataset
+    data : dict of numpy.ndarray
         Converted dataset.
     """
-    obs_dim = ['obs']
+    skip_fields = ['Satellite Identifier']
 
-    new_names = [('Orbit Number', 'abs_orbit_nr', np.int32),
-                 ('Cross-Track Cell Number', 'ctcn', np.uint8),
-                 ('Direction Of Motion Of Moving Observing Platform',
-                  'sat_azi_track', np.float32)]
+    gen_fields_beam = [
+        ('Radar Incidence Angle', 'inc', np.float32),
+        ('Backscatter', 'sig', np.float32),
+        ('Antenna Beam Azimuth', 'azi', np.float32),
+        ('ASCAT Sigma-0 Usability', 'f_usable', np.uint8),
+        ('Beam Identifier', 'beam_num', np.uint8),
+        ('Radiometric Resolution (Noise Value)', 'kp_noise', np.float32),
+        ('ASCAT KP Estimate Quality', 'kp', np.float32),
+        ('ASCAT Land Fraction', 'f_land', np.float32)]
 
-    for old_name, new_name, dtype in new_names:
-        ds[new_name] = (['obs'], ds[old_name].astype(dtype))
-        ds = ds.drop_vars([old_name])
+    gen_fields_lut = {
+        'Orbit Number': ('abs_orbit_nr', np.int32),
+        'Cross-Track Cell Number': ('ctcn', np.uint8),
+        'Direction Of Motion Of Moving Observing Platform':
+        ('sat_azi_track', np.float32)}
 
-    fields = [('inc', 'Radar Incidence Angle', np.float32),
-              ('sig', 'Backscatter', np.float32),
-              ('azi', 'Antenna Beam Azimuth', np.float32),
-              ('f_usable', 'ASCAT Sigma-0 Usability', np.uint8),
-              ('beam_num', 'Beam Identifier', np.uint8),
-              ('kp_noise', 'Radiometric Resolution (Noise Value)', np.float32),
-              ('kp', 'ASCAT KP Estimate Quality', np.float32),
-              ('f_land', 'ASCAT Land Fraction', np.float32)]
+    for var_name in skip_fields:
+        if var_name in data:
+            data.pop(var_name)
 
-    for name, bufr_name, dtype in fields:
-        all_fields = ['{}_{}'.format(b, bufr_name) for b in ['f', 'm', 'a']]
-        ds[name] = (['obs', 'beam'], ds[
-            all_fields].to_array().data.T.astype(dtype))
-        ds = ds.drop_vars(all_fields)
+    for var_name in data.keys():
+        if var_name in gen_fields_lut:
+            new_name = gen_fields_lut[var_name][0]
+            new_dtype = gen_fields_lut[var_name][1]
+            data[new_name] = data.pop(var_name).astype(new_dtype)
 
-    ds['as_des_pass'] = (obs_dim, (ds['sat_azi_track'] < 270).astype(np.uint8))
-
-    if ds['ctcn'].max() == 82:
-        val = 41
-    elif ds['ctcn'].max() == 42:
-        val = 21
-    else:
-        raise ValueError('Unsuspected node number')
-
-    ds['swath_indicator'] = (obs_dim, (ds['ctcn'] > val).astype(np.uint8))
+    for var_name, new_name, new_dtype in gen_fields_beam:
+        f = ['{}_{}'.format(b, var_name) for b in ['f', 'm', 'a']]
+        data[new_name] = np.vstack(
+            (data.pop(f[0]), data.pop(f[1]),
+             data.pop(f[2]))).T.astype(new_dtype)
 
     sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
-    ds['sat_id'] = (
-        obs_dim, sat_id[ds['Satellite Identifier'].data.astype(int)])
-    ds = ds.drop_vars(['Satellite Identifier'])
+    data['sat_id'] = np.zeros(data['time'].size, dtype=np.uint8) + sat_id[
+        int(metadata['platform_id'])]
 
-    return ds
+    return data
 
 
 class AscatL2BufrFile():
@@ -344,7 +297,7 @@ class AscatL2BufrFile():
         Parameters
         ----------
         filename : str
-            Filename path.
+            Filename.
         msg_name_lookup: dict, optional
             Dictionary mapping bufr msg number to parameter name.
             See :ref:`ascatformattable`.
@@ -405,27 +358,32 @@ class AscatL2BufrFile():
 
         self.msg_name_lookup = msg_name_lookup
 
-    def read(self):
+    def read(self, generic=False, to_xarray=False):
         """
         Read ASCAT Level 2 data.
 
+        Parameters
+        ----------
+        generic : bool, optional
+            'True' reading and converting into generic format or
+            'False' reading original field names (default: False).
+        to_xarray : bool, optional
+            'True' return data as xarray.Dataset
+            'False' return data as numpy.ndarray (default: False).
+
         Returns
         -------
-        ds : xarray.Dataset
-            ASCAT Level 2 data.
+        ds : xarray.Dataset, numpy.ndarray
+            ASCAT Level 1b data.
         """
-        dates = []
-        latitude = []
-        longitude = []
-
-        data_var = defaultdict(list)
+        data = defaultdict(list)
 
         with BUFRReader(self.filename) as bufr:
             for message in bufr.messages():
 
                 # read lon/lat
-                latitude.append(message[:, 12])
-                longitude.append(message[:, 13])
+                data['lat'].append(message[:, 12].astype(np.float32))
+                data['lon'].append(message[:, 13].astype(np.float32))
 
                 # read time
                 year = message[:, 6].astype(int)
@@ -435,46 +393,17 @@ class AscatL2BufrFile():
                 minute = message[:, 10].astype(int)
                 seconds = message[:, 11].astype(int)
                 milliseconds = np.zeros(seconds.size)
-                cal_dates = np.vstack((year, month, day,
-                                       hour, minute, seconds, milliseconds)).T
-                dates.append(cal2dt(cal_dates))
+                cal_dates = np.vstack((
+                    year, month, day, hour, minute, seconds, milliseconds)).T
+                data['time'].append(cal2dt(cal_dates))
 
                 # read data fields
-                for num, name in self.msg_name_lookup.items():
-                    data_var[name].append(message[:, num - 1])
+                for num, var_name in self.msg_name_lookup.items():
+                    data[var_name].append(message[:, num - 1])
 
-        dates = np.concatenate(dates)
-        latitude = np.concatenate(latitude).astype(np.float32)
-        longitude = np.concatenate(longitude).astype(np.float32)
-
-        for num, name in self.msg_name_lookup.items():
-            if name not in data_var:
-                continue
-
-            arr = np.concatenate(data_var[name])
-
-            if num == 74:
-                # ssm mean is encoded differently
-                valid = arr != 1.7e+38
-                arr[valid] = arr[valid] * 100
-
-            if len(arr.shape) == 1:
-                dim = ['obs']
-            else:
-                raise RuntimeError('Unsuspected dimension shape')
-
-            data_var[name] = (dim, arr)
-
-        metadata = {}
-        metadata['spacecraft_id'] = data_var[
-            'Satellite Identifier'][1][0].astype(int)
-        metadata['orbit_start'] = np.uint32(data_var['Orbit Number'][1][0])
-        metadata['filename'] = os.path.basename(self.filename)
-
-        coords = {"lon": (['obs'], longitude), "lat": (['obs'], latitude),
-                  "time": (['obs'], dates)}
-
-        ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
+        # concatenate lists to array
+        for var_name in data.keys():
+            data[var_name] = np.concatenate(data[var_name])
 
         # There can be suspicious values (32.32) instead of normal nan_values
         # Since some elements rly have this value we check the other triplet
@@ -483,15 +412,49 @@ class AscatL2BufrFile():
             azi = beam + '_Antenna Beam Azimuth'
             sig = beam + '_Backscatter'
             inc = beam + '_Radar Incidence Angle'
-            if azi in ds:
-                mask_azi = ds[azi] == 32.32
-                mask_sig = ds[sig] == 1.7e+38
-                mask_inc = ds[inc] == 1.7e+38
-                mask = np.all([mask_azi, mask_sig, mask_inc], axis=0)
-                ds[azi][mask] = 1.7e+38
 
-        if self.generic:
-            ds = conv_bufrl2_generic(ds)
+            mask = np.where((data[azi] == 32.32) | (data[sig] == 1.7e+38) |
+                            (data[inc] == 1.7e+38))
+            data[azi][mask] = 1.7e+38
+
+        metadata = {}
+        metadata['platform_id'] = data['Satellite Identifier'][0].astype(int)
+        metadata['orbit_start'] = np.uint32(data['Orbit Number'][0])
+        metadata['filename'] = os.path.basename(self.filename)
+
+        # add/rename/remove fields according to generic format
+        if generic:
+            data = conv_bufrl2_generic(data, metadata)
+
+        # convert dict to xarray.Dataset or numpy.ndarray
+        if to_xarray:
+            for k in data.keys():
+                if len(data[k].shape) == 1:
+                    dim = ['obs']
+                elif len(data[k].shape) == 2:
+                    dim = ['obs', 'beam']
+
+                data[k] = (dim, data[k])
+
+            coords = {}
+            coords_fields = ['lon', 'lat', 'time']
+            for cf in coords_fields:
+                coords[cf] = data.pop(cf)
+
+            ds = xr.Dataset(data, coords=coords, attrs=metadata)
+        else:
+            # collect dtype info
+            dtype = []
+            for var_name in data.keys():
+                if len(data[var_name].shape) == 1:
+                    dtype.append((var_name, data[var_name].dtype.str))
+                elif len(data[var_name].shape) > 1:
+                    dtype.append((var_name, data[var_name].dtype.str,
+                                  data[var_name].shape[1:]))
+
+            ds = np.empty(data['time'].size, dtype=np.dtype(dtype))
+            for k, v in data.items():
+                ds[k] = v
 
         return ds
 
@@ -499,7 +462,7 @@ class AscatL2BufrFile():
         pass
 
 
-def conv_bufrl2_generic(ds):
+def conv_bufrl2_generic(data, metadata):
     """
     Rename and convert data types of dataset.
 
@@ -521,77 +484,72 @@ def conv_bufrl2_generic(ds):
 
     Parameters
     ----------
-    ds : xarray.Dataset
+    data : dict of numpy.ndarray
         Original dataset.
+    metadata : dict
+        Metadata.
 
     Returns
     -------
-    ds : xarray.Dataset
+    data : dict of numpy.ndarray
         Converted dataset.
     """
-    obs_dim = ['obs']
+    skip_fields = ['Satellite Identifier']
 
-    new_names = [('Orbit Number', 'abs_orbit_nr', np.int32),
-                 ('Cross-Track Cell Number', 'ctcn', np.uint8),
-                 ('Direction Of Motion Of Moving Observing Platform',
-                  'sat_azi_track', np.float32),
-                 ('Surface Soil Moisture (Ms)', 'sm', np.float32),
-                 ('Estimated Error In Surface Soil Moisture', 'sm_noise', np.float32),
-                 ('Backscatter', 'sigma40', np.float32),
-                 ('Estimated Error In Sigma0 At 40 Deg Incidence Angle',
-                  'sigma40_noise', np.float32),
-                 ('Slope At 40 Deg Incidence Angle', 'slope40', np.float32),
-                 ('Estimated Error In Slope At 40 Deg Incidence Angle',
-                  'slope40_noise', np.float32),
-                 ('Soil Moisture Sensitivity', 'sens', np.float32),
-                 ('Dry Backscatter', 'dry', np.float32),
-                 ('Wet Backscatter', 'wet', np.float32),
-                 ('Mean Surface Soil Moisture', 'sm_mean', np.float32),
-                 ('Rain Fall Detection', 'rf', np.float32),
-                 ('Soil Moisture Correction Flag', 'corr_flag', np.uint8),
-                 ('Soil Moisture Processing Flag', 'proc_flag', np.uint8),
-                 ('Soil Moisture Quality', 'quality_flag', np.uint8),
-                 ('Snow Cover', 'snow_cover', np.uint8),
-                 ('Frozen Land Surface Fraction', 'frozen_soil', np.uint8),
-                 ('Inundation And Wetland Fraction', 'wetland', np.uint8),
-                 ('Topographic Complexity', 'topo', np.uint8)]
+    gen_fields_beam = [
+        ('Radar Incidence Angle', 'inc', np.float32),
+        ('Backscatter', 'sig', np.float32),
+        ('Antenna Beam Azimuth', 'azi', np.float32),
+        ('ASCAT Sigma-0 Usability', 'f_usable', np.uint8),
+        ('Beam Identifier', 'beam_num', np.uint8),
+        ('Radiometric Resolution (Noise Value)', 'kp_noise', np.float32),
+        ('ASCAT KP Estimate Quality', 'kp', np.float32),
+        ('ASCAT Land Fraction', 'f_land', np.float32)]
 
-    for old_name, new_name, dtype in new_names:
-        ds[new_name] = (['obs'], ds[old_name].astype(dtype))
-        ds = ds.drop_vars([old_name])
+    gen_fields_lut = {
+        'Orbit Number': ('abs_orbit_nr', np.int32),
+        'Cross-Track Cell Number': ('ctcn', np.uint8),
+        'Direction Of Motion Of Moving Observing Platform': ('sat_azi_track', np.float32),
+        'Surface Soil Moisture (Ms)': ('sm', np.float32),
+        'Estimated Error In Surface Soil Moisture': ('sm_noise', np.float32),
+        'Backscatter': ('sigma40', np.float32),
+        'Estimated Error In Sigma0 At 40 Deg Incidence Angle': ('sigma40_noise', np.float32),
+        'Slope At 40 Deg Incidence Angle': ('slope40', np.float32),
+        'Estimated Error In Slope At 40 Deg Incidence Angle': ('slope40_noise', np.float32),
+        'Soil Moisture Sensitivity': ('sens', np.float32),
+        'Dry Backscatter': ('dry', np.float32),
+        'Wet Backscatter': ('wet', np.float32),
+        'Mean Surface Soil Moisture': ('sm_mean', np.float32),
+        'Rain Fall Detection': ('rf', np.float32),
+        'Soil Moisture Correction Flag': ('corr_flag', np.uint8),
+        'Soil Moisture Processing Flag': ('proc_flag', np.uint8),
+        'Soil Moisture Quality': ('quality_flag', np.uint8),
+        'Snow Cover': ('snow_cover', np.uint8),
+        'Frozen Land Surface Fraction': ('frozen_soil', np.uint8),
+        'Inundation And Wetland Fraction': ('wetland', np.uint8),
+        'Topographic Complexity': ('topo', np.uint8)}
 
-    fields = [('inc', 'Radar Incidence Angle', np.float32),
-              ('sig', 'Backscatter', np.float32),
-              ('azi', 'Antenna Beam Azimuth', np.float32),
-              ('f_usable', 'ASCAT Sigma-0 Usability', np.uint8),
-              ('beam_num', 'Beam Identifier', np.uint8),
-              ('kp_noise', 'Radiometric Resolution (Noise Value)', np.float32),
-              ('kp', 'ASCAT KP Estimate Quality', np.float32),
-              ('f_land', 'ASCAT Land Fraction', np.float32)]
+    for var_name in skip_fields:
+        if var_name in data:
+            data.pop(var_name)
 
-    for name, bufr_name, dtype in fields:
-        all_fields = ['{}_{}'.format(b, bufr_name) for b in ['f', 'm', 'a']]
-        ds[name] = (['obs', 'beam'], ds[
-            all_fields].to_array().data.T.astype(dtype))
-        ds = ds.drop_vars(all_fields)
+    for var_name in data.keys():
+        if var_name in gen_fields_lut:
+            new_name = gen_fields_lut[var_name][0]
+            new_dtype = gen_fields_lut[var_name][1]
+            data[new_name] = data.pop(var_name).astype(new_dtype)
 
-    ds['as_des_pass'] = (obs_dim, (ds['sat_azi_track'] < 270).astype(np.uint8))
-
-    if ds['ctcn'].max() == 82:
-        val = 41
-    elif ds['ctcn'].max() == 42:
-        val = 21
-    else:
-        raise ValueError('Unsuspected node number')
-
-    ds['swath_indicator'] = (obs_dim, (ds['ctcn'] > val).astype(np.uint8))
+    for var_name, new_name, new_dtype in gen_fields_beam:
+        f = ['{}_{}'.format(b, var_name) for b in ['f', 'm', 'a']]
+        data[new_name] = np.vstack(
+            (data.pop(f[0]), data.pop(f[1]),
+             data.pop(f[2]))).T.astype(new_dtype)
 
     sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
-    ds['sat_id'] = (
-        obs_dim, sat_id[ds['Satellite Identifier'].data.astype(int)])
-    ds = ds.drop_vars(['Satellite Identifier'])
+    data['sat_id'] = np.zeros(data['time'].size, dtype=np.uint8) + sat_id[
+        int(metadata['platform_id'])]
 
-    return ds
+    return data
 
 
 class BUFRReader():
@@ -645,7 +603,7 @@ class BUFRReader():
 
         Raises
         ------
-        IOError :
+        IOError : exception
             if a message cannot be unpacked after max_tries tries
 
         Returns
