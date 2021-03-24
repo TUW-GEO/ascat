@@ -259,7 +259,7 @@ def conv_bufrl1b_generic(data, metadata):
         'Orbit Number': ('abs_orbit_nr', np.int32),
         'Cross-Track Cell Number': ('ctcn', np.uint8),
         'Direction Of Motion Of Moving Observing Platform':
-        ('sat_azi_track', np.float32)}
+        ('sat_track_azi', np.float32)}
 
     for var_name in skip_fields:
         if var_name in data:
@@ -280,6 +280,10 @@ def conv_bufrl1b_generic(data, metadata):
     sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
     data['sat_id'] = np.zeros(data['time'].size, dtype=np.uint8) + sat_id[
         int(metadata['platform_id'])]
+
+    # compute ascending/descending direction
+    data['as_des_pass'] = (
+        data['sat_track_azi'] < 270).astype(np.uint8)
 
     return data
 
@@ -509,7 +513,7 @@ def conv_bufrl2_generic(data, metadata):
     gen_fields_lut = {
         'Orbit Number': ('abs_orbit_nr', np.int32),
         'Cross-Track Cell Number': ('ctcn', np.uint8),
-        'Direction Of Motion Of Moving Observing Platform': ('sat_azi_track', np.float32),
+        'Direction Of Motion Of Moving Observing Platform': ('sat_track_azi', np.float32),
         'Surface Soil Moisture (Ms)': ('sm', np.float32),
         'Estimated Error In Surface Soil Moisture': ('sm_noise', np.float32),
         'Backscatter': ('sigma40', np.float32),
@@ -548,6 +552,9 @@ def conv_bufrl2_generic(data, metadata):
     sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
     data['sat_id'] = np.zeros(data['time'].size, dtype=np.uint8) + sat_id[
         int(metadata['platform_id'])]
+
+    # compute ascending/descending direction
+    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
 
     return data
 
