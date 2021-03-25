@@ -64,7 +64,7 @@ class AscatL1bEpsFile:
     ASCAT Level 1b EPS Native reader class.
     """
 
-    def __init__(self, filename, mode='r'):
+    def __init__(self, filename):
         """
         Initialize AscatL1bEpsFile.
 
@@ -72,13 +72,10 @@ class AscatL1bEpsFile:
         ----------
         filename : str
             Filename.
-        mode : str, optional
-            File mode (default: 'r')
         """
         self.filename = filename
-        self.mode = mode
 
-    def read(self):
+    def read(self, generic=False, to_xarray=False):
         """
         Read ASCAT Level 1b data.
 
@@ -87,7 +84,13 @@ class AscatL1bEpsFile:
         ds : xarray.Dataset
             ASCAT Level 1b data.
         """
-        return read_eps_l1b(self.filename)
+        return read_eps_l1b(self.filename, generic, to_xarray)
+
+    def close(self):
+        """
+        Close file.
+        """
+        pass
 
 
 class AscatL2EpsFile:
@@ -96,7 +99,7 @@ class AscatL2EpsFile:
     ASCAT Level 2 EPS Native reader class.
     """
 
-    def __init__(self, filename, mode='r'):
+    def __init__(self, filename):
         """
         Initialize AscatL2EpsFile.
 
@@ -104,13 +107,10 @@ class AscatL2EpsFile:
         ----------
         filename : str
             Filename.
-        mode : str, optional
-            File mode (default: 'r')
         """
         self.filename = filename
-        self.mode = mode
 
-    def read(self):
+    def read(self, generic=False, to_xarray=False):
         """
         Read ASCAT Level 2 data.
 
@@ -119,7 +119,13 @@ class AscatL2EpsFile:
         ds : dict, xarray.Dataset
             ASCAT Level 1b data.
         """
-        return read_eps_l2(self.filename)
+        return read_eps_l2(self.filename, generic, to_xarray)
+
+    def close(self):
+        """
+        Close file.
+        """
+        pass
 
 
 class EPSProduct:
@@ -571,7 +577,81 @@ def ipr_record():
     return record_dtype
 
 
-def read_eps_l1b(filename):
+def conv_epsl1bszf_generic(data, metadata):
+    """
+    Rename and convert data types of dataset.
+
+    Parameters
+    ----------
+    data : dict of numpy.ndarray
+        Original dataset.
+    metadata : dict
+        Metadata.
+
+    Returns
+    -------
+    data : dict of numpy.ndarray
+        Converted dataset.
+    """
+    skip_fields = ['utc_localisation-days', 'utc_localisation-milliseconds',
+                   'degraded_inst_mdr', 'degraded_proc_mdr',
+                   'sat_track_azi', 'flagfield_rf1', 'flagfield_rf2',
+                   'flagfield_pl', 'flagfield_gen1', 'flagfield_gen2']
+
+    gen_fields_lut = {'inc_angle_full': ('inc', np.float32),
+                      'azi_angle_full': ('azi', np.float32),
+                      'sigma0_full': ('sig', np.float32)}
+
+    for var_name in skip_fields:
+        if var_name in data:
+            data.pop(var_name)
+
+    for var_name in data.keys():
+        if var_name in gen_fields_lut:
+            new_name = gen_fields_lut[var_name][0]
+            new_dtype = gen_fields_lut[var_name][1]
+            data[new_name] = data.pop(var_name).astype(new_dtype)
+
+    return data
+
+
+def conv_epsl1bszx_generic(data, metadata):
+    """
+    Rename and convert data types of dataset.
+
+    Parameters
+    ----------
+    data : dict of numpy.ndarray
+        Original dataset.
+    metadata : dict
+        Metadata.
+
+    Returns
+    -------
+    data : dict of numpy.ndarray
+        Converted dataset.
+    """
+    gen_fields_lut = {'inc_angle_trip': ('inc', np.float32),
+                      'azi_angle_trip': ('azi', np.float32),
+                      'sigma0_trip': ('sig', np.float32)}
+
+    skip_fields = ['sat_track_azi', 'flagfield_rf1',
+                   'f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel']
+
+    for var_name in skip_fields:
+        if var_name in data:
+            data.pop(var_name)
+
+    for var_name in data.keys():
+        if var_name in gen_fields_lut:
+            new_name = gen_fields_lut[var_name][0]
+            new_dtype = gen_fields_lut[var_name][1]
+            data[new_name] = data.pop(var_name).astype(new_dtype)
+
+    return data
+
+
+def read_eps_l1b(filename, generic=False, to_xarray=False):
     """
     Use of correct Level 1b reader and data preparation.
 
@@ -579,6 +659,12 @@ def read_eps_l1b(filename):
     ----------
     filename : str
         ASCAT Level 1b file name in EPS Native format.
+    generic : bool, optional
+        'True' reading and converting into generic format or
+        'False' reading original field names (default: False).
+    to_xarray : bool, optional
+        'True' return data as xarray.Dataset
+        'False' return data as numpy.ndarray (default: False).
 
     Returns
     -------
@@ -590,93 +676,135 @@ def read_eps_l1b(filename):
     fmv = int(eps_file.mphr['FORMAT_MAJOR_VERSION'])
 
     if ptype == 'SZF':
+
         if fmv == 12:
-            raw_data, metadata, orbit_grid = read_szf_fmv_12(eps_file)
+            data, metadata, orbit_grid = read_szf_fmv_12(eps_file)
         else:
             raise RuntimeError("SZF format version not supported.")
+
+        data['time'] = jd2dt(data.pop('jd'))
+
+        rename_coords = {'longitude_full': 'lon', 'latitude_full': 'lat'}
+
+        for k, v in rename_coords.items():
+            data[v] = data.pop(k)
+
+        if generic:
+            data = conv_epsl1bszf_generic(data, metadata)
 
         # 1 Left Fore Antenna, 2 Left Mid Antenna 3 Left Aft Antenna
         # 4 Right Fore Antenna, 5 Right Mid Antenna, 6 Right Aft Antenna
         antennas = ['lf', 'lm', 'la', 'rf', 'rm', 'ra']
         ds = OrderedDict()
+
         for i, antenna in enumerate(antennas):
-            beam_subset = ((raw_data['beam_number']) == i+1)
 
-            skip_fields = ['utc_localisation-days',
-                           'utc_localisation-milliseconds',
-                           'degraded_inst_mdr', 'degraded_proc_mdr',
-                           'beam_number', 'sat_track_azi', 'flagfield_rf1',
-                           'flagfield_rf2', 'flagfield_pl', 'flagfield_gen1',
-                           'flagfield_gen2']
-
-            rename_fields = {'inc_angle_full': 'inc', 'azi_angle_full': 'azi',
-                             'sigma0_full': 'sig'}
-
-            data_var = {}
-
-            for f in raw_data:
-                if f.lower() in skip_fields:
-                    continue
-
-                if f.lower() in rename_fields:
-                    name = rename_fields[f.lower()]
-                else:
-                    name = f.lower()
-
-                data_var[name] = (['obs'], raw_data[f][beam_subset])
-
-            coords = {"lon": (['obs'], data_var.pop('longitude_full')[1]),
-                      "lat": (['obs'], data_var.pop('latitude_full')[1]),
-                      "time": (['obs'], jd2dt(data_var.pop('jd')[1]))}
+            subset = data['beam_number'] == i+1
+            metadata['beam_number'] = i+1
+            metadata['beam_name'] = antenna
 
             # convert spacecraft_id to internal sat_id
             sat_id = np.array([4, 3, 5])
             metadata['sat_id'] = sat_id[metadata['spacecraft_id']-1]
 
-            ds[antenna] = xr.Dataset(data_var, coords=coords, attrs=metadata)
+            # convert dict to xarray.Dataset or numpy.ndarray
+            if to_xarray:
+                sub_data = {}
+                for var_name in data.keys():
+
+                    if var_name == 'beam_number' and generic:
+                        continue
+
+                    if len(data[var_name].shape) == 1:
+                        dim = ['obs']
+                    elif len(data[var_name].shape) == 2:
+                        dim = ['obs', 'echo']
+
+                    sub_data[var_name] = (dim, data[var_name][subset])
+
+                coords = {}
+                coords_fields = ['lon', 'lat', 'time']
+
+                for cf in coords_fields:
+                    coords[cf] = sub_data.pop(cf)
+
+                ds[antenna] = xr.Dataset(sub_data, coords=coords,
+                                         attrs=metadata)
+            else:
+                # collect dtype info
+                dtype = []
+                for var_name in data.keys():
+
+                    if len(data[var_name][subset].shape) == 1:
+                        dtype.append(
+                            (var_name, data[var_name][subset].dtype.str))
+                    elif len(data[var_name][subset].shape) > 1:
+                        dtype.append((var_name, data[var_name][
+                            subset].dtype.str, data[var_name][
+                                subset].shape[1:]))
+
+                ds[antenna] = np.empty(
+                    data['time'][subset].size, dtype=np.dtype(dtype))
+
+                for var_name, v in data.items():
+                    if var_name == 'beam_number' and generic:
+                        continue
+                    ds[antenna][var_name] = v[subset]
 
     elif ptype in ['SZR', 'SZO']:
+
         if fmv == 11:
-            raw_data, metadata = read_szx_fmv_11(eps_file)
+            data, metadata = read_szx_fmv_11(eps_file)
         elif fmv == 12:
-            raw_data, metadata = read_szx_fmv_12(eps_file)
+            data, metadata = read_szx_fmv_12(eps_file)
         else:
             raise RuntimeError("SZX format version not supported.")
 
-        coords = {"lon": (['obs'], raw_data.pop('longitude')),
-                  "lat": (['obs'], raw_data.pop('latitude')),
-                  "time": (['obs'], jd2dt(raw_data.pop('jd')))}
+        data['time'] = jd2dt(data.pop('jd'))
 
-        rename_fields = {'inc_angle_trip': 'inc', 'azi_angle_trip': 'azi',
-                         'sigma0_trip': 'sig'}
+        rename_coords = {'longitude': 'lon', 'latitude': 'lat'}
 
-        skip_fields = ['sat_track_azi', 'flagfield_rf1',
-                       'f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel']
-
-        data_var = {}
-        for k, v in raw_data.items():
-            if k.lower() in skip_fields:
-                continue
-
-            if len(v.shape) == 1:
-                dim = ['obs']
-            elif len(v.shape) == 2:
-                dim = ['obs', 'beam']
-            else:
-                raise RuntimeError('Unknown dimension')
-
-            if k.lower() in rename_fields:
-                name = rename_fields[k.lower()]
-            else:
-                name = k.lower()
-
-            data_var[name] = (dim, v)
+        for k, v in rename_coords.items():
+            data[v] = data.pop(k)
 
         # convert spacecraft_id to internal sat_id
         sat_id = np.array([4, 3, 5])
         metadata['sat_id'] = sat_id[metadata['spacecraft_id']-1]
 
-        ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
+        # add/rename/remove fields according to generic format
+        if generic:
+            data = conv_epsl1bszx_generic(data, metadata)
+
+        # convert dict to xarray.Dataset or numpy.ndarray
+        if to_xarray:
+            for k in data.keys():
+                if len(data[k].shape) == 1:
+                    dim = ['obs']
+                elif len(data[k].shape) == 2:
+                    dim = ['obs', 'beam']
+
+                data[k] = (dim, data[k])
+
+            coords = {}
+            coords_fields = ['lon', 'lat', 'time']
+            for cf in coords_fields:
+                coords[cf] = data.pop(cf)
+
+            ds = xr.Dataset(data, coords=coords, attrs=metadata)
+        else:
+            # collect dtype info
+            dtype = []
+            for var_name in data.keys():
+                if len(data[var_name].shape) == 1:
+                    dtype.append((var_name, data[var_name].dtype.str))
+                elif len(data[var_name].shape) > 1:
+                    dtype.append((var_name, data[var_name].dtype.str,
+                                  data[var_name].shape[1:]))
+
+            ds = np.empty(data['time'].size, dtype=np.dtype(dtype))
+            for k, v in data.items():
+                ds[k] = v
+
     else:
         raise RuntimeError("Format not supported. Product type {:1}"
                            " Format major version: {:2}".format(ptype, fmv))
@@ -739,6 +867,16 @@ def read_eps_l2(filename):
 def read_eps(filename):
     """
     Read EPS file.
+
+    Parameters
+    ----------
+    filename : str
+        Filename
+
+    Returns
+    -------
+    prod : EPSProduct
+        EPS data.
     """
     zipped = False
     if os.path.splitext(filename)[1] == '.gz':
@@ -1072,52 +1210,6 @@ def read_szf_fmv_12(eps_file):
     return data, metadata, orbit_grid
 
 
-def set_flags(data):
-    """
-    Compute summary flag for each measurement with a value of 0, 1 or 2
-    indicating nominal, slightly degraded or severely degraded data.
-
-    Parameters
-    ----------
-    data : numpy.ndarray
-        SZF data.
-    """
-    # category:status = 'red': 2, 'amber': 1, 'warning': 0
-    flag_status_bit = {'flagfield_rf1': {'2': [2, 4], '1': [0, 1, 3]},
-                       'flagfield_rf2': {'2': [0, 1]},
-                       'flagfield_pl': {'2': [0, 1, 2, 3], '0': [4]},
-                       'flagfield_gen1': {'2': [1], '0': [0]},
-                       'flagfield_gen2': {'2': [2], '1': [0], '0': [1]}}
-
-    for flagfield in flag_status_bit.keys():
-
-        # get flag data in binary format to get flags
-        unpacked_bits = np.unpackbits(data[flagfield])
-
-        # find indizes where a flag is set
-        set_bits = np.where(unpacked_bits == 1)[0]
-        if set_bits.size != 0:
-            pos_8 = 7 - (set_bits % 8)
-
-            for category in sorted(flag_status_bit[flagfield].keys()):
-                if (int(category) == 0) and (flagfield != 'flagfield_gen2'):
-                    continue
-
-                for bit2check in flag_status_bit[flagfield][category]:
-                    pos = np.where(pos_8 == bit2check)[0]
-                    data['f_usable'] = np.zeros(data['flagfield_gen2'].size,
-                                                dtype=np.int8)
-                    data['f_usable'][set_bits[pos] // 8] = int(category)
-
-                    # land points
-                    if (flagfield == 'flagfield_gen2') and (bit2check == 1):
-                        data['f_land'] = np.zeros(data['flagfield_gen2'].size,
-                                                  dtype=np.int8)
-                        data['f_land'][set_bits[pos] // 8] = 1
-
-    return data
-
-
 def read_smx_fmv_12(eps_file):
     """
     Read SMO/SMR format version 12.
@@ -1235,3 +1327,54 @@ def shortcdstime2jd(days, milliseconds):
     """
     offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)
     return julian_epoch + offset
+
+
+def set_flags(data):
+    """
+    Compute summary flag for each measurement with a value of 0, 1 or 2
+    indicating nominal, slightly degraded or severely degraded data.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        SZF data.
+
+    Returns
+    -------
+    data : numpy.ndarray
+        SZF data with updated flags.
+    """
+    # category:status = 'red': 2, 'amber': 1, 'warning': 0
+    flag_status_bit = {'flagfield_rf1': {'2': [2, 4], '1': [0, 1, 3]},
+                       'flagfield_rf2': {'2': [0, 1]},
+                       'flagfield_pl': {'2': [0, 1, 2, 3], '0': [4]},
+                       'flagfield_gen1': {'2': [1], '0': [0]},
+                       'flagfield_gen2': {'2': [2], '1': [0], '0': [1]}}
+
+    for flagfield in flag_status_bit.keys():
+
+        # get flag data in binary format to get flags
+        unpacked_bits = np.unpackbits(data[flagfield])
+
+        # find indizes where a flag is set
+        set_bits = np.where(unpacked_bits == 1)[0]
+        if set_bits.size != 0:
+            pos_8 = 7 - (set_bits % 8)
+
+            for category in sorted(flag_status_bit[flagfield].keys()):
+                if (int(category) == 0) and (flagfield != 'flagfield_gen2'):
+                    continue
+
+                for bit2check in flag_status_bit[flagfield][category]:
+                    pos = np.where(pos_8 == bit2check)[0]
+                    data['f_usable'] = np.zeros(data['flagfield_gen2'].size,
+                                                dtype=np.int8)
+                    data['f_usable'][set_bits[pos] // 8] = int(category)
+
+                    # land points
+                    if (flagfield == 'flagfield_gen2') and (bit2check == 1):
+                        data['f_land'] = np.zeros(data['flagfield_gen2'].size,
+                                                  dtype=np.int8)
+                        data['f_land'][set_bits[pos] // 8] = 1
+
+    return data

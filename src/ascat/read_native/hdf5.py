@@ -127,8 +127,7 @@ class AscatL1bHdf5File:
             mask = data['azi_angle_full'] < 0
             data['azi_angle_full'][mask] += 360
 
-        rename_coords = {'longitude_full': 'lon',
-                         'latitude_full': 'lat'}
+        rename_coords = {'longitude_full': 'lon', 'latitude_full': 'lat'}
 
         for k, v in rename_coords.items():
             data[v] = data.pop(k)
