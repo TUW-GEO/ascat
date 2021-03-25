@@ -63,7 +63,7 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
     ds : xarray.Dataset, numpy.ndarray
         ASCAT data.
     """
-    data_var = {}
+    data = {}
     metadata = {}
 
     coords_fields = {'utc_line_nodes': 'time',
@@ -94,7 +94,7 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
                 continue
 
             new_var_name = var_name
-            data = fid.variables[var_name][:].filled()
+            var_data = fid.variables[var_name][:].filled()
 
             if generic:
                 if var_name in skip_fields:
@@ -104,11 +104,11 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
                     new_var_name = gen_fields_lut[var_name]
 
             if len(fid.variables[var_name].shape) == 1:
-                data = data.repeat(num_cells)
+                var_data = var_data.repeat(num_cells)
             elif len(fid.variables[var_name].shape) == 2:
-                data = data.flatten()
+                var_data = var_data.flatten()
             elif len(fid.variables[var_name].shape) == 3:
-                data = data.reshape(-1, 3)
+                var_data = var_data.reshape(-1, 3)
             else:
                 raise RuntimeError('Unknown dimension')
 
@@ -116,44 +116,44 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
                 new_var_name = coords_fields[var_name]
 
             if var_name == 'utc_line_nodes':
-                data = data.astype(
+                var_data = var_data.astype(
                     'timedelta64[s]') + np.datetime64('2000-01-01')
 
-            data_var[new_var_name] = data
+            data[new_var_name] = var_data
 
-            if len(data.shape) == 1:
-                dtype.append((new_var_name, data.dtype.str))
-            elif len(data.shape) > 1:
-                dtype.append((new_var_name, data.dtype.str,
-                              data.shape[1:]))
+            if len(var_data.shape) == 1:
+                dtype.append((new_var_name, var_data.dtype.str))
+            elif len(var_data.shape) > 1:
+                dtype.append((new_var_name, var_data.dtype.str,
+                              var_data.shape[1:]))
 
     num_records = num_rows * num_cells
     coords_fields = ['lon', 'lat', 'time']
 
     if generic:
         sat_id = np.array([0, 4, 3, 5], dtype=np.uint8)
-        data_var['sat_id'] = np.zeros(
+        data['sat_id'] = np.zeros(
             num_records, dtype=np.uint8) + sat_id[
             int(metadata['platform_id'])]
         dtype.append(('sat_id', np.uint8))
 
     if to_xarray:
-        for k in data_var.keys():
-            if len(data_var[k].shape) == 1:
+        for k in data.keys():
+            if len(data[k].shape) == 1:
                 dim = ['obs']
-            elif len(data_var[k].shape) == 2:
+            elif len(data[k].shape) == 2:
                 dim = ['obs', 'beam']
 
-            data_var[k] = (dim, data_var[k])
+            data[k] = (dim, data[k])
 
         coords = {}
         for cf in coords_fields:
-            coords[cf] = data_var.pop(cf)
+            coords[cf] = data.pop(cf)
 
-        ds = xr.Dataset(data_var, coords=coords, attrs=metadata)
+        ds = xr.Dataset(data, coords=coords, attrs=metadata)
     else:
         ds = np.empty(num_records, dtype=np.dtype(dtype))
-        for k, v in data_var.items():
+        for k, v in data.items():
             ds[k] = v
 
     return ds
@@ -256,8 +256,10 @@ class AscatL2NcFile:
         """
         gen_fields_lut = {'longitude': 'lon', 'latitude': 'lat',
                           'soil_moisture': 'sm',
-                          'soil_moisture_error': 'sm_noise', 'sigma40': 'sig40',
-                          'sigma40_error': 'sig40_noise', 'slope40': 'slop40',
+                          'soil_moisture_error': 'sm_noise',
+                          'sigma40': 'sig40',
+                          'sigma40_error': 'sig40_noise',
+                          'slope40': 'slop40',
                           'slope40_error': 'slop40_noise',
                           'soil_moisture_sensitivity': 'sens',
                           'dry_backscatter': 'dry_ref',
