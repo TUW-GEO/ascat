@@ -48,6 +48,9 @@ except ImportError:
         'pybufr-ecmwf can not be imported, BUFR data cannot be read.')
 
 
+float32_nan = -999999.
+
+
 class AscatL1bBufrFile():
 
     """
@@ -159,7 +162,7 @@ class AscatL1bBufrFile():
             sig = beam + '_Backscatter'
             inc = beam + '_Radar Incidence Angle'
 
-            mask = np.where((data[azi] == 32.32) | (data[sig] == 1.7e+38) |
+            mask = np.where((data[azi] == 32.32) & (data[sig] == 1.7e+38) &
                             (data[inc] == 1.7e+38))
             data[azi][mask] = 1.7e+38
 
@@ -245,15 +248,15 @@ def conv_bufrl1b_generic(data, metadata):
     """
     skip_fields = ['Satellite Identifier']
 
-    gen_fields_beam = [
-        ('Radar Incidence Angle', 'inc', np.float32),
-        ('Backscatter', 'sig', np.float32),
-        ('Antenna Beam Azimuth', 'azi', np.float32),
-        ('ASCAT Sigma-0 Usability', 'f_usable', np.uint8),
-        ('Beam Identifier', 'beam_num', np.uint8),
-        ('Radiometric Resolution (Noise Value)', 'kp_noise', np.float32),
-        ('ASCAT KP Estimate Quality', 'kp', np.float32),
-        ('ASCAT Land Fraction', 'f_land', np.float32)]
+    gen_fields_beam = {
+        'Radar Incidence Angle': ('inc', np.float32, 1.7e+38, 1),
+        'Backscatter': ('sig', np.float32, 1.7e+38, 1),
+        'Antenna Beam Azimuth': ('azi', np.float32, 1.7e+38, 1),
+        'ASCAT Sigma-0 Usability': ('f_usable', np.uint8, None, 1),
+        'Beam Identifier': ('beam_num', np.uint8, None, 1),
+        'Radiometric Resolution (Noise Value)': ('kp', np.float32, 1.7e+38, 0.01),
+        'ASCAT KP Estimate Quality': ('kp_noise', np.float32, 1.7e+38, 1),
+        'ASCAT Land Fraction': ('f_land', np.float32, None, 1)}
 
     gen_fields_lut = {
         'Orbit Number': ('abs_orbit_nr', np.int32),
@@ -265,17 +268,18 @@ def conv_bufrl1b_generic(data, metadata):
         if var_name in data:
             data.pop(var_name)
 
-    for var_name in data.keys():
-        if var_name in gen_fields_lut:
-            new_name = gen_fields_lut[var_name][0]
-            new_dtype = gen_fields_lut[var_name][1]
-            data[new_name] = data.pop(var_name).astype(new_dtype)
+    for var_name, (new_name, new_dtype) in gen_fields_lut.items():
+        data[new_name] = data.pop(var_name).astype(new_dtype)
 
-    for var_name, new_name, new_dtype in gen_fields_beam:
+    for var_name, (new_name, new_dtype, nan_val, s) in gen_fields_beam.items():
         f = ['{}_{}'.format(b, var_name) for b in ['f', 'm', 'a']]
         data[new_name] = np.vstack(
             (data.pop(f[0]), data.pop(f[1]),
              data.pop(f[2]))).T.astype(new_dtype)
+        if nan_val is not None:
+            valid = data[new_name] != nan_val
+            data[new_name][~valid] = float32_nan
+            data[new_name][valid] *= s
 
     sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
     data['sat_id'] = np.zeros(data['time'].size, dtype=np.uint8) + sat_id[
@@ -417,7 +421,7 @@ class AscatL2BufrFile():
             sig = beam + '_Backscatter'
             inc = beam + '_Radar Incidence Angle'
 
-            mask = np.where((data[azi] == 32.32) | (data[sig] == 1.7e+38) |
+            mask = np.where((data[azi] == 32.32) & (data[sig] == 1.7e+38) &
                             (data[inc] == 1.7e+38))
             data[azi][mask] = 1.7e+38
 

@@ -50,9 +50,9 @@ ulong_nan = np.iinfo(np.uint32).max
 int_nan = np.iinfo(np.int16).min
 uint_nan = np.iinfo(np.uint16).max
 byte_nan = np.iinfo(np.byte).min
-
 int8_nan = np.iinfo(np.int8).max
 uint8_nan = np.iinfo(np.uint8).max
+float32_nan = -999999.
 
 # 1.1.2000 00:00:00 as jd
 julian_epoch = 2451544.5
@@ -631,9 +631,10 @@ def conv_epsl1bszx_generic(data, metadata):
     data : dict of numpy.ndarray
         Converted dataset.
     """
-    gen_fields_lut = {'inc_angle_trip': ('inc', np.float32),
-                      'azi_angle_trip': ('azi', np.float32),
-                      'sigma0_trip': ('sig', np.float32)}
+    gen_fields_lut = {'inc_angle_trip': ('inc', np.float32, uint_nan),
+                      'azi_angle_trip': ('azi', np.float32, int_nan),
+                      'sigma0_trip': ('sig', np.float32, -2147483600.),
+                      'kp': ('kp', np.float32, uint_nan)}
 
     skip_fields = ['sat_track_azi', 'flagfield_rf1',
                    'f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel']
@@ -642,11 +643,10 @@ def conv_epsl1bszx_generic(data, metadata):
         if var_name in data:
             data.pop(var_name)
 
-    for var_name in data.keys():
-        if var_name in gen_fields_lut:
-            new_name = gen_fields_lut[var_name][0]
-            new_dtype = gen_fields_lut[var_name][1]
-            data[new_name] = data.pop(var_name).astype(new_dtype)
+    for var_name, (new_name, new_dtype, nan_val) in gen_fields_lut.items():
+        data[new_name] = data.pop(var_name).astype(new_dtype)
+        if nan_val is not None:
+            data[new_name][data[new_name] == nan_val] = float32_nan
 
     return data
 
@@ -803,6 +803,7 @@ def read_eps_l1b(filename, generic=False, to_xarray=False):
 
             ds = np.empty(data['time'].size, dtype=np.dtype(dtype))
             for k, v in data.items():
+
                 ds[k] = v
 
     else:

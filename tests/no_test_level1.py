@@ -39,7 +39,7 @@ import numpy.testing as nptest
 
 from ascat.level1 import AscatL1bFile
 
-float32_nan = np.finfo(np.float32).min
+float32_nan = -999999.
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
@@ -50,19 +50,27 @@ class Test_AscatL1bFile(unittest.TestCase):
             os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
             'ASCAT_generic_reader_data')
 
-        name_b = os.path.join(data_path, 'bufr',
-                              'M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr')
-        name_e = os.path.join(data_path, 'eps_nat',
-                              'ASCA_SZR_1B_M02_20100609013900Z_20100609032058Z_R_O_20130824233100Z.nat')
-        name_n = os.path.join(data_path, 'nc',
-                              'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20100609013900_18872_eps_o_125_l1.nc')
+        name_b = os.path.join(
+            data_path, 'bufr',
+            'M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr')
+        name_e = os.path.join(
+            data_path, 'eps_nat',
+            'ASCA_SZR_1B_M02_20100609013900Z_20100609032058Z_R_O_20130824233100Z.nat')
+        name_n = os.path.join(
+            data_path, 'nc',
+            'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20100609013900_18872_eps_o_125_l1.nc')
 
-        name_e11 = os.path.join(data_path, 'eps_nat',
-                                'ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat')
-        name_e_szf = os.path.join(data_path, 'eps_nat',
-                                  'ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.nat')
-        name_h = os.path.join(data_path, 'hdf5',
-                              'ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.h5')
+        name_e11 = os.path.join(
+            data_path, 'eps_nat',
+            'ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat')
+
+        name_e_szf = os.path.join(
+            data_path, 'eps_nat',
+            'ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.nat')
+
+        name_h = os.path.join(
+            data_path, 'hdf5',
+            'ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.h5')
 
         self.bufr = AscatL1bFile(name_b)
         self.nc = AscatL1bFile(name_n)
@@ -79,15 +87,15 @@ class Test_AscatL1bFile(unittest.TestCase):
         """
         self.bufr_ds = self.bufr.read()
         self.eps_ds = self.eps.read()
-        self.nc_ds = self.nc.read()
+        # self.nc_ds = self.nc.read()
 
         for f in ['lat', 'lon']:
-            nptest.assert_allclose(self.bufr_ds[f].data, self.eps_ds[f].data,
-                                   atol=1e-2)
-            nptest.assert_allclose(self.eps_ds[f].data,
-                                   self.nc_ds[f].data.flatten(), atol=1e-2)
-            nptest.assert_allclose(self.nc_ds[f].data.flatten(),
-                                   self.bufr_ds[f].data, atol=1e-2)
+            nptest.assert_allclose(self.bufr_ds[f],
+                                   self.eps_ds[f], atol=1e-2)
+            # nptest.assert_allclose(self.eps_ds[f],
+            #                        self.nc_ds[f], atol=1e-2)
+            # nptest.assert_allclose(self.nc_ds[f],
+            #                        self.bufr_ds[f], atol=1e-2)
 
         # matching = ['sat_id', 'abs_line_nr', 'abs_orbit_nr', 'node_num',
         #             'line_num', 'as_des_pass', 'swath', 'azif', 'azim', 'azia',
@@ -96,36 +104,46 @@ class Test_AscatL1bFile(unittest.TestCase):
         #             'land_flagf', 'land_flagm', 'land_flaga', 'usable_flagf',
         #             'usable_flagm', 'usable_flaga']
 
-        matching = ['incf']
+        # matching = ['sig', 'inc', 'azi', 'kp']
+        matching = ['kp']
 
         # lists with no data fields or different definition
-        bufr_none = ['abs_line_nr', 'abs_orbit_nr', 'as_des_pass']
-        sig = ['sigf', 'sigm', 'siga']
+        # bufr_none = ['abs_line_nr', 'abs_orbit_nr', 'as_des_pass']
 
         # BUFR files contain less accurate data so we only compare to one 0.1
         # accuracy.
         for field in matching:
-            if field not in bufr_none:
-                # BUFR filters sigma values below -50 dB so for comparison we
-                # have to mask those values in nc and eps
-                if field in sig:
 
-                    sig_mask = (self.reader_eps.data[field] < -50)
-                    self.reader_eps.data[field][sig_mask] = float32_nan
-                    self.reader_nc.data[field][sig_mask] = float32_nan
-                    self.reader_bufr.data[field][sig_mask] = float32_nan
+            # if field not in bufr_none:
+            # BUFR filters sigma values below -50 dB so for comparison we
+            # have to mask those values in nc and eps
+            if field == 'sig':
 
-                    nan_mask = (self.reader_nc.data[field] == float32_nan)
-                    self.reader_eps.data[field][nan_mask] = float32_nan
-                    self.reader_bufr.data[field][nan_mask] = float32_nan
+                # sig_mask = (self.eps_ds[field] < -50)
+                # self.eps_ds[field][sig_mask] = float32_nan
+                # # self.nc_ds[field][sig_mask] = float32_nan
+                # self.bufr_ds[field][sig_mask] = float32_nan
 
-                nptest.assert_allclose(self.reader_bufr.data[field],
-                                       self.reader_eps.data[field], atol=0.1)
-                nptest.assert_allclose(self.reader_nc.data[field],
-                                       self.reader_bufr.data[field], atol=0.1)
+                # nan_mask = (self.nc_ds[field] == float32_nan)
+                # self.eps_ds[field][nan_mask] = float32_nan
+                # self.bufr_ds[field][nan_mask] = float32_nan
 
-            nptest.assert_allclose(self.reader_eps.data[field],
-                                   self.reader_nc.data[field], atol=0.1)
+                # valid = ((self.eps_ds[field] > -50) &
+                #          (self.nc_ds[field] != float32_nan))
+
+                valid = ((self.eps_ds[field] > -25))
+
+                nptest.assert_allclose(self.bufr_ds[field][valid],
+                                       self.eps_ds[field][valid], atol=0.1)
+            else:
+                nptest.assert_allclose(self.bufr_ds[field],
+                                       self.eps_ds[field], atol=0.1)
+
+            # nptest.assert_allclose(self.nc_ds[field],
+            #                        self.bufr_ds[field], atol=0.1)
+
+            # nptest.assert_allclose(self.eps_ds[field],
+            #                        self.nc_ds[field], atol=0.1)
 
     # def test_read_szf(self):
     #     """
@@ -284,13 +302,13 @@ class Test_AscatL1bFile(unittest.TestCase):
     #                            jd_should, atol=1e-5)
 
 
-@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_AscatL1Bufr(unittest.TestCase):
+# @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
+# class Test_AscatL1Bufr(unittest.TestCase):
 
-    def setUp(self):
-        self.data_path = os.path.join(
-            os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
-            'ASCAT_generic_reader_data', 'bufr')
+#     def setUp(self):
+#         self.data_path = os.path.join(
+#             os.path.dirname(__file__), 'ascat_test_data', 'eumetsat',
+#             'ASCAT_generic_reader_data', 'bufr')
 
         # self.image_bufr = level1.AscatL1Bufr(self.data_path, eo_portal=True)
         # sig_mask = (self.eps_ds[field] < -50)
