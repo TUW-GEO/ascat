@@ -236,14 +236,14 @@ def conv_bufrl1b_generic(data, metadata):
 
     Parameters
     ----------
-    data : dict of numpy.ndarray
+    data: dict of numpy.ndarray
         Original dataset.
-    metadata : dict
+    metadata: dict
         Metadata.
 
     Returns
     -------
-    data : dict of numpy.ndarray
+    data: dict of numpy.ndarray
         Converted dataset.
     """
     skip_fields = ['Satellite Identifier']
@@ -255,12 +255,12 @@ def conv_bufrl1b_generic(data, metadata):
         'ASCAT Sigma-0 Usability': ('f_usable', np.uint8, None, 1),
         'Beam Identifier': ('beam_num', np.uint8, None, 1),
         'Radiometric Resolution (Noise Value)': ('kp', np.float32, 1.7e+38, 0.01),
-        'ASCAT KP Estimate Quality': ('kp_noise', np.float32, 1.7e+38, 1),
+        'ASCAT KP Estimate Quality': ('kp_quality', np.uint8, 1.7e+38, 1),
         'ASCAT Land Fraction': ('f_land', np.float32, None, 1)}
 
     gen_fields_lut = {
         'Orbit Number': ('abs_orbit_nr', np.int32),
-        'Cross-Track Cell Number': ('ctcn', np.uint8),
+        'Cross-Track Cell Number': ('node_num', np.uint8),
         'Direction Of Motion Of Moving Observing Platform':
         ('sat_track_azi', np.float32)}
 
@@ -280,6 +280,16 @@ def conv_bufrl1b_generic(data, metadata):
             valid = data[new_name] != nan_val
             data[new_name][~valid] = float32_nan
             data[new_name][valid] *= s
+
+    if data['node_num'].max() == 82:
+        data['swath_indicator'] = 1 * (data['node_num'] > 41)
+    elif data['node_num'].max() == 42:
+        data['swath_indicator'] = 1 * (data['node_num'] > 21)
+    else:
+        raise ValueError('Cross-track cell number size unknown')
+
+    n_lines = data['lat'].shape[0] / data['node_num'].max()
+    data['line_num'] = np.arange(n_lines).repeat(data['node_num'].max())
 
     sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
     data['sat_id'] = np.zeros(data['time'].size, dtype=np.uint8) + sat_id[
@@ -304,11 +314,11 @@ class AscatL2BufrFile():
 
         Parameters
         ----------
-        filename : str
+        filename: str
             Filename.
         msg_name_lookup: dict, optional
             Dictionary mapping bufr msg number to parameter name.
-            See :ref:`ascatformattable`.
+            See: ref: `ascatformattable`.
         """
         if os.path.splitext(filename)[1] == '.gz':
             self.filename = tmp_unzip(filename)
@@ -372,16 +382,16 @@ class AscatL2BufrFile():
 
         Parameters
         ----------
-        generic : bool, optional
+        generic: bool, optional
             'True' reading and converting into generic format or
-            'False' reading original field names (default: False).
-        to_xarray : bool, optional
+            'False' reading original field names(default: False).
+        to_xarray: bool, optional
             'True' return data as xarray.Dataset
-            'False' return data as numpy.ndarray (default: False).
+            'False' return data as numpy.ndarray(default: False).
 
         Returns
         -------
-        ds : xarray.Dataset, numpy.ndarray
+        ds: xarray.Dataset, numpy.ndarray
             ASCAT Level 1b data.
         """
         data = defaultdict(list)
@@ -492,14 +502,14 @@ def conv_bufrl2_generic(data, metadata):
 
     Parameters
     ----------
-    data : dict of numpy.ndarray
+    data: dict of numpy.ndarray
         Original dataset.
-    metadata : dict
+    metadata: dict
         Metadata.
 
     Returns
     -------
-    data : dict of numpy.ndarray
+    data: dict of numpy.ndarray
         Converted dataset.
     """
     skip_fields = ['Satellite Identifier']
@@ -574,15 +584,15 @@ class BUFRReader():
 
         Parameters
         ----------
-        filename : string
+        filename: string
             filename of the bufr file
-        kelem_guess : int, optional
+        kelem_guess: int, optional
             if the elements per variable in as message are known
             please specify here.
             Otherwise the elements will be found out via trial and error
             This works most of the time but is not 100 percent failsafe
             Default: 500
-        max_tries : int, optional
+        max_tries: int, optional
             the Reader will try max_tries times to unpack a bufr message.
             Some messages can not be read even if the array sizes are ok.
             Most of the time these files are corrupt.
@@ -614,12 +624,12 @@ class BUFRReader():
 
         Raises
         ------
-        IOError : exception
+        IOError: exception
             if a message cannot be unpacked after max_tries tries
 
         Returns
         -------
-        data : numpy.ndarray
+        data: numpy.ndarray
             Results of messages
         """
         count = 0

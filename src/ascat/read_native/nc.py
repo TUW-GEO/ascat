@@ -38,6 +38,9 @@ import xarray as xr
 
 from ascat.utils import tmp_unzip
 
+float32_nan = -999999.
+uint8_nan = np.iinfo(np.uint8).max
+
 
 def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
     """
@@ -66,10 +69,6 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
     data = {}
     metadata = {}
 
-    coords_fields = {'utc_line_nodes': 'time',
-                     'longitude': 'lon',
-                     'latitude': 'lat'}
-
     with netCDF4.Dataset(filename) as fid:
 
         if hasattr(fid, 'platform'):
@@ -93,15 +92,20 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
             if var_name in ['sigma0']:
                 continue
 
-            new_var_name = var_name
-            var_data = fid.variables[var_name][:].filled()
+            if generic and var_name in skip_fields:
+                continue
 
-            if generic:
-                if var_name in skip_fields:
-                    continue
+            if generic and var_name in gen_fields_lut:
+                new_var_name = gen_fields_lut[var_name][0]
+                fill_value = gen_fields_lut[var_name][2]
+            else:
+                new_var_name = var_name
+                fill_value = None
 
-                if var_name in gen_fields_lut:
-                    new_var_name = gen_fields_lut[var_name]
+            var_data = fid.variables[var_name][:].filled(fill_value)
+
+            if var_name == 'azi_angle_trip':
+                var_data[(var_data < 0) & (var_data != fill_value)] += 360
 
             if len(fid.variables[var_name].shape) == 1:
                 var_data = var_data.repeat(num_cells)
@@ -111,9 +115,6 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
                 var_data = var_data.reshape(-1, 3)
             else:
                 raise RuntimeError('Unknown dimension')
-
-            if var_name in coords_fields:
-                new_var_name = coords_fields[var_name]
 
             if var_name == 'utc_line_nodes':
                 var_data = var_data.astype(
@@ -132,10 +133,18 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
 
     if generic:
         sat_id = np.array([0, 4, 3, 5], dtype=np.uint8)
-        data['sat_id'] = np.zeros(
-            num_records, dtype=np.uint8) + sat_id[
+        data['sat_id'] = np.zeros(num_records, dtype=np.uint8) + sat_id[
             int(metadata['platform_id'])]
         dtype.append(('sat_id', np.uint8))
+
+        n_records = data['lat'].shape[0]
+        n_lines = n_records // num_cells
+
+        data['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
+        dtype.append(('node_num', np.uint8))
+
+        data['line_num'] = np.arange(n_lines).repeat(num_cells)
+        dtype.append(('line_num', np.int32))
 
     if to_xarray:
         for k in data.keys():
@@ -197,12 +206,18 @@ class AscatL1bNcFile():
         ds : xarray.Dataset, numpy.ndarray
             ASCAT Level 1b data.
         """
-        gen_fields_lut = {'longitude': 'lon', 'latitude': 'lat',
-                          'inc_angle_trip': 'inc', 'azi_angle_trip': 'azi',
-                          'sigma0_trip': 'sig', 'num_val_trip': 'num_val'}
+        gen_fields_lut = {'longitude': ('lon', np.float32, None),
+                          'latitude': ('lat', np.float32, None),
+                          'utc_line_nodes': ('time', np.float32, None),
+                          'inc_angle_trip': ('inc', np.float32, float32_nan),
+                          'azi_angle_trip': ('azi', np.float32, float32_nan),
+                          'sigma0_trip': ('sig', np.float32, float32_nan),
+                          'kp': ('kp', np.float32, float32_nan),
+                          'f_kp': ('kp_quality', np.float32, uint8_nan),
+                          'num_val_trip': ('num_val', np.float32, None)}
 
-        skip_fields = ['sat_track_azi', 'f_f', 'f_v', 'f_oa', 'f_sa',
-                       'f_tel', 'f_ref', 'abs_line_number']
+        skip_fields = ['f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel',
+                       'f_ref', 'abs_line_number']
 
         ds = read_nc(self.filename, generic, to_xarray,
                      skip_fields, gen_fields_lut)
@@ -269,7 +284,7 @@ class AscatL2NcFile:
                           'frozen_soil_probability': 'frozen_prob',
                           'topography_flag': 'topo_flag'}
 
-        skip_fields = ['sat_track_azi', 'abs_line_number']
+        skip_fields = ['abs_line_number']
 
         ds = read_nc(self.filename, generic, to_xarray,
                      skip_fields, gen_fields_lut)

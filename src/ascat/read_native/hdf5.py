@@ -240,7 +240,14 @@ def conv_hdf5l1b_generic(data, metadata):
         if var_name in data:
             data.pop(var_name)
 
+    num_cells = data['lat'].shape[1]
+
     for var_name in data.keys():
+        if len(data[var_name].shape) == 1:
+            data[var_name] = np.repeat(data[var_name], num_cells)
+        elif len(data[var_name].shape) == 2:
+            data[var_name] = data[var_name].flatten()
+
         if var_name in gen_fields_lut:
             new_name = gen_fields_lut[var_name][0]
             new_dtype = gen_fields_lut[var_name][1]

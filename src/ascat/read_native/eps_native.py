@@ -634,10 +634,10 @@ def conv_epsl1bszx_generic(data, metadata):
     gen_fields_lut = {'inc_angle_trip': ('inc', np.float32, uint_nan),
                       'azi_angle_trip': ('azi', np.float32, int_nan),
                       'sigma0_trip': ('sig', np.float32, -2147483600.),
-                      'kp': ('kp', np.float32, uint_nan)}
+                      'kp': ('kp', np.float32, uint_nan),
+                      'f_kp': ('kp_quality', np.uint8, uint8_nan)}
 
-    skip_fields = ['sat_track_azi', 'flagfield_rf1',
-                   'f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel']
+    skip_fields = ['flagfield_rf1', 'f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel']
 
     for var_name in skip_fields:
         if var_name in data:
@@ -647,6 +647,8 @@ def conv_epsl1bszx_generic(data, metadata):
         data[new_name] = data.pop(var_name).astype(new_dtype)
         if nan_val is not None:
             data[new_name][data[new_name] == nan_val] = float32_nan
+
+    data['sat_id'] = np.repeat(metadata['sat_id'], data['time'].size)
 
     return data
 

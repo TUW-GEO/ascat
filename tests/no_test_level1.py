@@ -78,99 +78,72 @@ class Test_AscatL1bFile(unittest.TestCase):
         self.eps = AscatL1bFile(name_e)
         self.eps_fmv11 = AscatL1bFile(name_e11)
 
-        self.e_szf = AscatL1bFile(name_e_szf)
+        self.eps_szf = AscatL1bFile(name_e_szf)
         self.h5_szf = AscatL1bFile(name_h)
 
-    def test_read_szx(self):
-        """
-        Test SZX data in all data formats (BUFR, EPS Native, NetCDF).
-        """
-        self.bufr_ds = self.bufr.read()
-        self.eps_ds = self.eps.read()
-        # self.nc_ds = self.nc.read()
-
-        for f in ['lat', 'lon']:
-            nptest.assert_allclose(self.bufr_ds[f],
-                                   self.eps_ds[f], atol=1e-2)
-            # nptest.assert_allclose(self.eps_ds[f],
-            #                        self.nc_ds[f], atol=1e-2)
-            # nptest.assert_allclose(self.nc_ds[f],
-            #                        self.bufr_ds[f], atol=1e-2)
-
-        # matching = ['sat_id', 'abs_line_nr', 'abs_orbit_nr', 'node_num',
-        #             'line_num', 'as_des_pass', 'swath', 'azif', 'azim', 'azia',
-        #             'incf', 'incm', 'inca', 'sigf', 'sigm', 'siga', 'kpf',
-        #             'kpm', 'kpa', 'kpf_quality', 'kpm_quality', 'kpa_quality',
-        #             'land_flagf', 'land_flagm', 'land_flaga', 'usable_flagf',
-        #             'usable_flagm', 'usable_flaga']
-
-        # matching = ['sig', 'inc', 'azi', 'kp']
-        matching = ['kp']
-
-        # lists with no data fields or different definition
-        # bufr_none = ['abs_line_nr', 'abs_orbit_nr', 'as_des_pass']
-
-        # BUFR files contain less accurate data so we only compare to one 0.1
-        # accuracy.
-        for field in matching:
-
-            # if field not in bufr_none:
-            # BUFR filters sigma values below -50 dB so for comparison we
-            # have to mask those values in nc and eps
-            if field == 'sig':
-
-                # sig_mask = (self.eps_ds[field] < -50)
-                # self.eps_ds[field][sig_mask] = float32_nan
-                # # self.nc_ds[field][sig_mask] = float32_nan
-                # self.bufr_ds[field][sig_mask] = float32_nan
-
-                # nan_mask = (self.nc_ds[field] == float32_nan)
-                # self.eps_ds[field][nan_mask] = float32_nan
-                # self.bufr_ds[field][nan_mask] = float32_nan
-
-                # valid = ((self.eps_ds[field] > -50) &
-                #          (self.nc_ds[field] != float32_nan))
-
-                valid = ((self.eps_ds[field] > -25))
-
-                nptest.assert_allclose(self.bufr_ds[field][valid],
-                                       self.eps_ds[field][valid], atol=0.1)
-            else:
-                nptest.assert_allclose(self.bufr_ds[field],
-                                       self.eps_ds[field], atol=0.1)
-
-            # nptest.assert_allclose(self.nc_ds[field],
-            #                        self.bufr_ds[field], atol=0.1)
-
-            # nptest.assert_allclose(self.eps_ds[field],
-            #                        self.nc_ds[field], atol=0.1)
-
-    # def test_read_szf(self):
+    # def test_read_szx(self):
     #     """
-    #     Test
-
+    #     Test SZX data in all data formats (BUFR, EPS Native, NetCDF).
     #     """
-    #     self.reader_eps_szf = self.image_e_szf.read()
-    #     self.reader_hdf5_szf = self.image_h5_szf.read()
-    #     for szf_img in self.reader_eps_szf:
-    #         nptest.assert_allclose(self.reader_eps_szf[szf_img].lat,
-    #                                self.reader_hdf5_szf[szf_img].lat,
-    #                                atol=1e-4)
+    #     self.bufr_ds = self.bufr.read()
+    #     self.eps_ds = self.eps.read()
+    #     self.nc_ds = self.nc.read()
 
-    #         nptest.assert_allclose(self.reader_eps_szf[szf_img].lon,
-    #                                self.reader_hdf5_szf[szf_img].lon,
-    #                                atol=1e-4)
+    #     for f in ['lat', 'lon']:
+    #         nptest.assert_allclose(self.bufr_ds[f], self.eps_ds[f], atol=1e-2)
+    #         nptest.assert_allclose(self.eps_ds[f], self.nc_ds[f], atol=1e-2)
+    #         nptest.assert_allclose(self.nc_ds[f], self.bufr_ds[f], atol=1e-2)
 
-    #         matching = ['jd', 'sat_id', 'beam_number', 'abs_orbit_nr',
-    #                     'as_des_pass', 'azi', 'inc', 'sig', 'land_frac',
-    #                     'flagfield_rf1', 'flagfield_rf2', 'flagfield_pl',
-    #                     'flagfield_gen1', 'flagfield_gen2',
-    #                     'land_flag', 'usable_flag']
+    #     matching = ['sig', 'inc', 'azi', 'kp', 'kp_quality',
+    #                 'swath_indicator', 'f_usable', 'f_land', 'sat_id',
+    #                 'line_num', 'node_num']
 
-    #         for field in matching:
-    #             nptest.assert_allclose(
-    #                 self.reader_eps_szf[szf_img].data[field],
-    #                 self.reader_hdf5_szf[szf_img].data[field], atol=0.1)
+    #     # BUFR contain less accurate data so we only compare 0.1 accuracy.
+    #     for field in matching:
+
+    #         if field == 'sig':
+    #             nan_mask = (self.nc_ds[field] == float32_nan)
+    #             self.eps_ds[field][nan_mask] = float32_nan
+    #             self.bufr_ds[field][nan_mask] = float32_nan
+
+    #             valid = ((self.eps_ds[field] > -25))
+
+    #             nptest.assert_allclose(self.bufr_ds[field][valid],
+    #                                    self.eps_ds[field][valid], atol=0.1)
+    #         else:
+    #             nptest.assert_allclose(self.bufr_ds[field],
+    #                                    self.eps_ds[field], atol=0.1)
+
+    #         nptest.assert_allclose(self.nc_ds[field],
+    #                                self.bufr_ds[field], atol=0.1)
+
+    #         nptest.assert_allclose(self.eps_ds[field],
+    #                                self.nc_ds[field], atol=0.1)
+
+    def test_read_szf(self):
+        """
+        Test
+
+        """
+        self.eps_ds = self.eps_szf.read()
+        self.h5_ds = self.h5_szf.read()
+
+        for szf_eps, szf_h5 in zip(self.eps_ds.values(), self.h5_ds.values()):
+            # for coord in ['lon', 'lat']:
+            #     nptest.assert_allclose(szf_eps[coord], szf_h5[coord], atol=1e-4)
+
+            # matching = ['jd', 'sat_id', 'beam_number', 'abs_orbit_nr',
+            #             'land_frac',
+            #             'land_flag', 'usable_flag']
+            matching = ['sig', 'inc', 'azi', 'sat_id', 'as_des_pass',
+                        'land_frac', 'f_usable', 'f_lnad']
+
+            import pdb
+            pdb.set_trace()
+            pass
+
+            for field in matching:
+                nptest.assert_allclose(szf_eps[field], szf_h5[field], atol=0.1)
 
     # def test_image_reading_szx_eps(self):
     #     self.reader = self.image_eps.read(file_format='.nat')
