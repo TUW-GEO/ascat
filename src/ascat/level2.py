@@ -31,9 +31,9 @@ Readers for ASCAT Level 2 data for various file formats.
 
 import os
 
-import ascat.read_native.eps_native as eps_native
-import ascat.read_native.bufr as bufr
 import ascat.read_native.nc as nc
+import ascat.read_native.bufr as bufr
+import ascat.read_native.eps_native as eps_native
 
 from ascat.utils import get_toi_subset, get_roi_subset
 
@@ -110,9 +110,20 @@ class AscatL2File:
 def get_file_format(filename):
     """
     Try to guess the file format from the extension.
+
+    Parameters
+    ----------
+    filename : str
+        File name.
+
+    Returns
+    -------
+    file_format : str
+        File format indicator.
     """
     if os.path.splitext(filename)[1] == '.gz':
         file_format = os.path.splitext(os.path.splitext(filename)[0])[1]
     else:
         file_format = os.path.splitext(filename)[1]
+
     return file_format

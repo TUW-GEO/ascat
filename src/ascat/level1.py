@@ -31,10 +31,10 @@ Readers for ASCAT Level 1b data for various file formats.
 
 import os
 
-import ascat.read_native.eps_native as eps_native
-import ascat.read_native.bufr as bufr
 import ascat.read_native.nc as nc
 import ascat.read_native.hdf5 as hdf5
+import ascat.read_native.bufr as bufr
+import ascat.read_native.eps_native as eps_native
 
 from ascat.utils import get_toi_subset, get_roi_subset
 
