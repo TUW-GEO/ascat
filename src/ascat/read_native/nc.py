@@ -269,20 +269,26 @@ class AscatL2NcFile:
         ds : dict, xarray.Dataset
             ASCAT Level 2 data.
         """
-        gen_fields_lut = {'longitude': 'lon', 'latitude': 'lat',
-                          'soil_moisture': 'sm',
-                          'soil_moisture_error': 'sm_noise',
-                          'sigma40': 'sig40',
-                          'sigma40_error': 'sig40_noise',
-                          'slope40': 'slop40',
-                          'slope40_error': 'slop40_noise',
-                          'soil_moisture_sensitivity': 'sens',
-                          'dry_backscatter': 'dry_ref',
-                          'wet_backscatter': 'wet_ref',
-                          'mean_soil_moisture': 'sm_mean',
-                          'snow_cover_probability': 'snow_prob',
-                          'frozen_soil_probability': 'frozen_prob',
-                          'topography_flag': 'topo_flag'}
+        gen_fields_lut = {'longitude': ('lon', np.float32, None),
+                          'latitude': ('lat', np.float32, None),
+                          'utc_line_nodes': ('time', np.float32, None),
+                          'inc_angle_trip': ('inc', np.float32, float32_nan),
+                          'azi_angle_trip': ('azi', np.float32, float32_nan),
+                          'sigma0_trip': ('sig', np.float32, float32_nan),
+                          'kp': ('kp', np.float32, float32_nan),
+                          'soil_moisture': ('sm', np.float32, None),
+                          'soil_moisture_error': ('sm_noise', np.float32, None),
+                          'sigma40': ('sig40', np.float32, None),
+                          'sigma40_error': ('sig40_noise', np.float32, None),
+                          'slope40': ('slop40', np.float32, None),
+                          'slope40_error': ('slop40_noise', np.float32, None),
+                          'soil_moisture_sensitivity': ('sens', np.float32, None),
+                          'dry_backscatter': ('dry_ref', np.float32, None),
+                          'wet_backscatter': ('wet_ref', np.float32, None),
+                          'mean_soil_moisture': ('sm_mean', np.float32, None),
+                          'snow_cover_probability': ('snow_prob', np.float32, None),
+                          'frozen_soil_probability': ('frozen_prob', np.float32, None),
+                          'topography_flag': ('topo_flag', np.float32, None)}
 
         skip_fields = ['abs_line_number']
 

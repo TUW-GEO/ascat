@@ -296,8 +296,7 @@ def conv_bufrl1b_generic(data, metadata):
         int(metadata['platform_id'])]
 
     # compute ascending/descending direction
-    data['as_des_pass'] = (
-        data['sat_track_azi'] < 270).astype(np.uint8)
+    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
 
     return data
 
@@ -422,6 +421,9 @@ class AscatL2BufrFile():
         # concatenate lists to array
         for var_name in data.keys():
             data[var_name] = np.concatenate(data[var_name])
+            # fix scaling
+            if var_name == 'Mean Surface Soil Moisture':
+                data[var_name] *= 100.
 
         # There can be suspicious values (32.32) instead of normal nan_values
         # Since some elements rly have this value we check the other triplet
@@ -514,19 +516,19 @@ def conv_bufrl2_generic(data, metadata):
     """
     skip_fields = ['Satellite Identifier']
 
-    gen_fields_beam = [
-        ('Radar Incidence Angle', 'inc', np.float32),
-        ('Backscatter', 'sig', np.float32),
-        ('Antenna Beam Azimuth', 'azi', np.float32),
-        ('ASCAT Sigma-0 Usability', 'f_usable', np.uint8),
-        ('Beam Identifier', 'beam_num', np.uint8),
-        ('Radiometric Resolution (Noise Value)', 'kp_noise', np.float32),
-        ('ASCAT KP Estimate Quality', 'kp', np.float32),
-        ('ASCAT Land Fraction', 'f_land', np.float32)]
+    gen_fields_beam = {
+        'Radar Incidence Angle': ('inc', np.float32, 1.7e+38),
+        'Backscatter': ('sig', np.float32, 1.7e+38),
+        'Antenna Beam Azimuth': ('azi', np.float32, 1.7e+38),
+        'ASCAT Sigma-0 Usability': ('f_usable', np.uint8, None),
+        'Beam Identifier': ('beam_num', np.uint8, None),
+        'Radiometric Resolution (Noise Value)': ('kp_noise', np.float32, 1.7e+38),
+        'ASCAT KP Estimate Quality': ('kp', np.float32, 1.7e+38),
+        'ASCAT Land Fraction': ('f_land', np.float32, None)}
 
     gen_fields_lut = {
         'Orbit Number': ('abs_orbit_nr', np.int32),
-        'Cross-Track Cell Number': ('ctcn', np.uint8),
+        'Cross-Track Cell Number': ('node_num', np.uint8),
         'Direction Of Motion Of Moving Observing Platform': ('sat_track_azi', np.float32),
         'Surface Soil Moisture (Ms)': ('sm', np.float32),
         'Estimated Error In Surface Soil Moisture': ('sm_noise', np.float32),
@@ -551,18 +553,28 @@ def conv_bufrl2_generic(data, metadata):
         if var_name in data:
             data.pop(var_name)
 
-    for var_name in data.keys():
-        if var_name in gen_fields_lut:
-            new_name = gen_fields_lut[var_name][0]
-            new_dtype = gen_fields_lut[var_name][1]
-            data[new_name] = data.pop(var_name).astype(new_dtype)
+    for var_name, (new_name, new_dtype) in gen_fields_lut.items():
+        data[new_name] = data.pop(var_name).astype(new_dtype)
 
-    for var_name, new_name, new_dtype in gen_fields_beam:
+    for var_name, (new_name, new_dtype, nan_val) in gen_fields_beam.items():
         f = ['{}_{}'.format(b, var_name) for b in ['f', 'm', 'a']]
         data[new_name] = np.vstack(
             (data.pop(f[0]), data.pop(f[1]),
              data.pop(f[2]))).T.astype(new_dtype)
+        if nan_val is not None:
+            valid = data[new_name] != nan_val
+            data[new_name][~valid] = float32_nan
 
+    if data['node_num'].max() == 82:
+        data['swath_indicator'] = 1 * (data['node_num'] > 41)
+    elif data['node_num'].max() == 42:
+        data['swath_indicator'] = 1 * (data['node_num'] > 21)
+    else:
+        raise ValueError('Cross-track cell number size unknown')
+
+    n_lines = data['lat'].shape[0] / data['node_num'].max()
+
+    data['line_num'] = np.arange(n_lines).repeat(data['node_num'].max())
     sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
     data['sat_id'] = np.zeros(data['time'].size, dtype=np.uint8) + sat_id[
         int(metadata['platform_id'])]
