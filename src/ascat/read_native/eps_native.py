@@ -594,9 +594,9 @@ def conv_epsl1bszf_generic(data, metadata):
         Converted dataset.
     """
     skip_fields = ['utc_localisation-days', 'utc_localisation-milliseconds',
-                   'degraded_inst_mdr', 'degraded_proc_mdr',
-                   'sat_track_azi', 'flagfield_rf1', 'flagfield_rf2',
-                   'flagfield_pl', 'flagfield_gen1', 'flagfield_gen2']
+                   'degraded_inst_mdr', 'degraded_proc_mdr', 'flagfield_rf1',
+                   'flagfield_rf2', 'flagfield_pl', 'flagfield_gen1',
+                   'flagfield_gen2']
 
     gen_fields_lut = {'inc_angle_full': ('inc', np.float32),
                       'azi_angle_full': ('azi', np.float32),

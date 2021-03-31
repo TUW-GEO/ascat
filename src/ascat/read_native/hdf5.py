@@ -96,8 +96,9 @@ class AscatL1bHdf5File:
                     scale = mdr_descr['Scale Factor'][pos][0].decode()
 
                     if scale != 'n/a':
-                        data[var_name.lower()] = data[
-                            var_name.lower()] / (10 ** float(scale))
+                        data[var_name.lower()] = (data[
+                            var_name.lower()] / (10. ** float(scale))).astype(
+                                np.float32)
 
             fields = ['SPACECRAFT_ID', 'ORBIT_START',
                       'PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION',
@@ -127,10 +128,11 @@ class AscatL1bHdf5File:
             mask = data['azi_angle_full'] < 0
             data['azi_angle_full'][mask] += 360
 
-        rename_coords = {'longitude_full': 'lon', 'latitude_full': 'lat'}
+        rename_coords = {'longitude_full': ('lon', np.float32),
+                         'latitude_full': ('lat', np.float32)}
 
-        for k, v in rename_coords.items():
-            data[v] = data.pop(k)
+        for var_name, (new_name, new_dtype) in rename_coords.items():
+            data[new_name] = data.pop(var_name).astype(new_dtype)
 
         if generic:
             data = conv_hdf5l1b_generic(data, metadata)
@@ -185,10 +187,10 @@ class AscatL1bHdf5File:
                 ds[antenna] = np.empty(
                     data['time'][subset].size, dtype=np.dtype(dtype))
 
-                for var_name, v in data.items():
+                for var_name in data.keys():
                     if var_name == 'beam_number' and generic:
                         continue
-                    ds[antenna][var_name] = v[subset]
+                    ds[antenna][var_name] = data[var_name][subset]
 
         return ds
 
@@ -227,10 +229,12 @@ def conv_hdf5l1b_generic(data, metadata):
     data['f_usable'] = data['f_usable'].reshape(-1, 192)
     data['f_land'] = data['f_land'].reshape(-1, 192)
 
+    data['swath_indicator'] = np.int8(data['beam_number'].flatten() > 3)
+
     skip_fields = ['utc_localisation-days', 'utc_localisation-milliseconds',
-                   'degraded_inst_mdr', 'degraded_proc_mdr',
-                   'sat_track_azi', 'flagfield_rf1', 'flagfield_rf2',
-                   'flagfield_pl', 'flagfield_gen1', 'flagfield_gen2']
+                   'degraded_inst_mdr', 'degraded_proc_mdr', 'flagfield_rf1',
+                   'flagfield_rf2', 'flagfield_pl', 'flagfield_gen1',
+                   'flagfield_gen2']
 
     gen_fields_lut = {'inc_angle_full': ('inc', np.float32),
                       'azi_angle_full': ('azi', np.float32),
@@ -245,10 +249,10 @@ def conv_hdf5l1b_generic(data, metadata):
     for var_name in data.keys():
         if len(data[var_name].shape) == 1:
             data[var_name] = np.repeat(data[var_name], num_cells)
-        elif len(data[var_name].shape) == 2:
+        if len(data[var_name].shape) == 2:
             data[var_name] = data[var_name].flatten()
 
-        if var_name in gen_fields_lut:
+        if var_name in gen_fields_lut.items():
             new_name = gen_fields_lut[var_name][0]
             new_dtype = gen_fields_lut[var_name][1]
             data[new_name] = data.pop(var_name).astype(new_dtype)
