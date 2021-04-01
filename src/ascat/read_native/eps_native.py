@@ -676,8 +676,21 @@ def conv_epsl2szx_generic(data, metadata):
         'soil_moisture': ('sm', np.float32, uint_nan),
         'soil_moisture_error': ('sm_noise', np.float32, uint_nan),
         'mean_surf_soil_moisture': ('sm_mean', np.float32, uint_nan),
+        'soil_moisture_sensetivity': ('sm_sens', np.float32, ulong_nan),
         'sigma40': ('sig40', np.float32, long_nan),
         'sigma40_error': ('sig40_noise', np.float32, long_nan),
+        'slope40': ('slope40', np.float32, long_nan),
+        'slope40_error': ('slope40_noise', np.float32, long_nan),
+        'dry_backscatter': ('dry_sig40', np.float32, long_nan),
+        'wet_backscatter': ('wet_sig40', np.float32, long_nan),
+        'as_des_pass': ('as_des_pass', np.uint8, None),
+        'aggregated_quality_flag': ('agg_flag', np.uint8, None),
+        'processing_flags': ('proc_flag', np.uint8, None),
+        'correction_flags': ('corr_flag', np.uint8, None),
+        'snow_cover_probability': ('snow_prob', np.uint8, None),
+        'frozen_soil_probability': ('frozen_prob', np.uint8, None),
+        'innudation_or_wetland': ('wetland', np.uint8, None),
+        'topographical_complexity': ('topo', np.uint8, None),
         'kp': ('kp', np.float32, uint_nan)}
 
     skip_fields = ['flagfield_rf1', 'f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel']
@@ -1333,31 +1346,31 @@ def read_smx_fmv_12(eps_file):
     for f in fields:
         data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
-    fields = [('longitude', long_nan),
-              ('latitude', long_nan),
-              ('soil_moisture', uint_nan),
-              ('swath_indicator', byte_nan),
-              ('soil_moisture_error', uint_nan),
-              ('sigma40', long_nan),
-              ('sigma40_error', long_nan),
-              ('slope40', long_nan),
-              ('slope40_error', long_nan),
-              ('dry_backscatter', long_nan),
-              ('wet_backscatter', long_nan),
-              ('mean_surf_soil_moisture', uint_nan),
-              ('soil_moisture_sensetivity', ulong_nan),
-              ('correction_flags', uint8_nan),
-              ('processing_flags', uint8_nan),
-              ('aggregated_quality_flag', uint8_nan),
-              ('snow_cover_probability', uint8_nan),
-              ('frozen_soil_probability', uint8_nan),
-              ('innudation_or_wetland', uint8_nan),
-              ('topographical_complexity', uint8_nan)]
+    fields = [('longitude', long_nan, long_nan),
+              ('latitude', long_nan, long_nan),
+              ('swath_indicator', byte_nan, byte_nan),
+              ('soil_moisture', uint_nan, uint_nan),
+              ('soil_moisture_error', uint_nan, uint_nan),
+              ('sigma40', long_nan, long_nan),
+              ('sigma40_error', long_nan, long_nan),
+              ('slope40', long_nan, long_nan),
+              ('slope40_error', long_nan, long_nan),
+              ('dry_backscatter', long_nan, long_nan),
+              ('wet_backscatter', long_nan, long_nan),
+              ('mean_surf_soil_moisture', uint_nan, uint_nan),
+              ('soil_moisture_sensetivity', ulong_nan, float32_nan),
+              ('correction_flags', uint8_nan, uint8_nan),
+              ('processing_flags', uint8_nan, uint8_nan),
+              ('aggregated_quality_flag', uint8_nan, uint8_nan),
+              ('snow_cover_probability', uint8_nan, uint8_nan),
+              ('frozen_soil_probability', uint8_nan, uint8_nan),
+              ('innudation_or_wetland', uint8_nan, uint8_nan),
+              ('topographical_complexity', uint8_nan, uint8_nan)]
 
-    for f, nan_val in fields:
+    for f, nan_val, new_nan_val in fields:
         data[f] = raw_data[f.upper()].flatten()
         valid = raw_unscaled[f.upper()].flatten() != nan_val
-        data[f][~valid] = nan_val
+        data[f][~valid] = new_nan_val
 
     # sat_track_azi (uint)
     data['as_des_pass'] = \

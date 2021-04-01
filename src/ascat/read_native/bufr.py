@@ -48,7 +48,9 @@ except ImportError:
         'pybufr-ecmwf can not be imported, BUFR data cannot be read.')
 
 
+bufr_nan = 1.7e+38
 float32_nan = -999999.
+uint8_nan = np.iinfo(np.uint8).max
 
 
 class AscatL1bBufrFile():
@@ -162,9 +164,9 @@ class AscatL1bBufrFile():
             sig = beam + '_Backscatter'
             inc = beam + '_Radar Incidence Angle'
 
-            mask = np.where((data[azi] == 32.32) & (data[sig] == 1.7e+38) &
-                            (data[inc] == 1.7e+38))
-            data[azi][mask] = 1.7e+38
+            mask = np.where((data[azi] == 32.32) & (data[sig] == bufr_nan) &
+                            (data[inc] == bufr_nan))
+            data[azi][mask] = bufr_nan
 
         metadata = {}
         metadata['platform_id'] = data['Satellite Identifier'][0].astype(int)
@@ -249,13 +251,13 @@ def conv_bufrl1b_generic(data, metadata):
     skip_fields = ['Satellite Identifier']
 
     gen_fields_beam = {
-        'Radar Incidence Angle': ('inc', np.float32, 1.7e+38, 1),
-        'Backscatter': ('sig', np.float32, 1.7e+38, 1),
-        'Antenna Beam Azimuth': ('azi', np.float32, 1.7e+38, 1),
+        'Radar Incidence Angle': ('inc', np.float32, bufr_nan, 1),
+        'Backscatter': ('sig', np.float32, bufr_nan, 1),
+        'Antenna Beam Azimuth': ('azi', np.float32, bufr_nan, 1),
         'ASCAT Sigma-0 Usability': ('f_usable', np.uint8, None, 1),
         'Beam Identifier': ('beam_num', np.uint8, None, 1),
-        'Radiometric Resolution (Noise Value)': ('kp', np.float32, 1.7e+38, 0.01),
-        'ASCAT KP Estimate Quality': ('kp_quality', np.uint8, 1.7e+38, 1),
+        'Radiometric Resolution (Noise Value)': ('kp', np.float32, bufr_nan, 0.01),
+        'ASCAT KP Estimate Quality': ('kp_quality', np.uint8, bufr_nan, 1),
         'ASCAT Land Fraction': ('f_land', np.float32, None, 1)}
 
     gen_fields_lut = {
@@ -423,7 +425,7 @@ class AscatL2BufrFile():
             data[var_name] = np.concatenate(data[var_name])
             # fix scaling
             if var_name == 'Mean Surface Soil Moisture':
-                data[var_name] *= 100.
+                data[var_name][data[var_name] != bufr_nan] *= 100.
 
         # There can be suspicious values (32.32) instead of normal nan_values
         # Since some elements rly have this value we check the other triplet
@@ -433,9 +435,9 @@ class AscatL2BufrFile():
             sig = beam + '_Backscatter'
             inc = beam + '_Radar Incidence Angle'
 
-            mask = np.where((data[azi] == 32.32) & (data[sig] == 1.7e+38) &
-                            (data[inc] == 1.7e+38))
-            data[azi][mask] = 1.7e+38
+            mask = np.where((data[azi] == 32.32) & (data[sig] == bufr_nan) &
+                            (data[inc] == bufr_nan))
+            data[azi][mask] = bufr_nan
 
         metadata = {}
         metadata['platform_id'] = data['Satellite Identifier'][0].astype(int)
@@ -517,43 +519,46 @@ def conv_bufrl2_generic(data, metadata):
     skip_fields = ['Satellite Identifier']
 
     gen_fields_beam = {
-        'Radar Incidence Angle': ('inc', np.float32, 1.7e+38),
-        'Backscatter': ('sig', np.float32, 1.7e+38),
-        'Antenna Beam Azimuth': ('azi', np.float32, 1.7e+38),
+        'Radar Incidence Angle': ('inc', np.float32, bufr_nan),
+        'Backscatter': ('sig', np.float32, bufr_nan),
+        'Antenna Beam Azimuth': ('azi', np.float32, bufr_nan),
         'ASCAT Sigma-0 Usability': ('f_usable', np.uint8, None),
         'Beam Identifier': ('beam_num', np.uint8, None),
-        'Radiometric Resolution (Noise Value)': ('kp_noise', np.float32, 1.7e+38),
-        'ASCAT KP Estimate Quality': ('kp', np.float32, 1.7e+38),
+        'Radiometric Resolution (Noise Value)': ('kp_noise', np.float32, bufr_nan),
+        'ASCAT KP Estimate Quality': ('kp', np.float32, bufr_nan),
         'ASCAT Land Fraction': ('f_land', np.float32, None)}
 
     gen_fields_lut = {
-        'Orbit Number': ('abs_orbit_nr', np.int32),
-        'Cross-Track Cell Number': ('node_num', np.uint8),
-        'Direction Of Motion Of Moving Observing Platform': ('sat_track_azi', np.float32),
-        'Surface Soil Moisture (Ms)': ('sm', np.float32),
-        'Estimated Error In Surface Soil Moisture': ('sm_noise', np.float32),
-        'Backscatter': ('sigma40', np.float32),
-        'Estimated Error In Sigma0 At 40 Deg Incidence Angle': ('sigma40_noise', np.float32),
-        'Slope At 40 Deg Incidence Angle': ('slope40', np.float32),
-        'Estimated Error In Slope At 40 Deg Incidence Angle': ('slope40_noise', np.float32),
-        'Soil Moisture Sensitivity': ('sens', np.float32),
-        'Dry Backscatter': ('dry', np.float32),
-        'Wet Backscatter': ('wet', np.float32),
-        'Mean Surface Soil Moisture': ('sm_mean', np.float32),
-        'Rain Fall Detection': ('rf', np.float32),
-        'Soil Moisture Correction Flag': ('corr_flag', np.uint8),
-        'Soil Moisture Processing Flag': ('proc_flag', np.uint8),
-        'Soil Moisture Quality': ('quality_flag', np.uint8),
-        'Snow Cover': ('snow_cover', np.uint8),
-        'Frozen Land Surface Fraction': ('frozen_soil', np.uint8),
-        'Inundation And Wetland Fraction': ('wetland', np.uint8),
-        'Topographic Complexity': ('topo', np.uint8)}
+        'Orbit Number': ('abs_orbit_nr', np.int32, None, None),
+        'Cross-Track Cell Number': ('node_num', np.uint8, None, None),
+        'Direction Of Motion Of Moving Observing Platform': ('sat_track_azi', np.float32, None, None),
+        'Surface Soil Moisture (Ms)': ('sm', np.float32, bufr_nan, float32_nan),
+        'Estimated Error In Surface Soil Moisture': ('sm_noise', np.float32, bufr_nan, float32_nan),
+        'Backscatter': ('sig40', np.float32, bufr_nan, float32_nan),
+        'Estimated Error In Sigma0 At 40 Deg Incidence Angle': ('sig40_noise', np.float32, bufr_nan, float32_nan),
+        'Slope At 40 Deg Incidence Angle': ('slope40', np.float32, bufr_nan, float32_nan),
+        'Estimated Error In Slope At 40 Deg Incidence Angle': ('slope40_noise', np.float32, bufr_nan, float32_nan),
+        'Soil Moisture Sensitivity': ('sm_sens', np.float32, bufr_nan, float32_nan),
+        'Dry Backscatter': ('dry_sig40', np.float32, bufr_nan, float32_nan),
+        'Wet Backscatter': ('wet_sig40', np.float32, bufr_nan, float32_nan),
+        'Mean Surface Soil Moisture': ('sm_mean', np.float32, bufr_nan, float32_nan),
+        'Rain Fall Detection': ('rf', np.float32, None, None),
+        'Soil Moisture Correction Flag': ('corr_flag', np.uint8, bufr_nan, uint8_nan),
+        'Soil Moisture Processing Flag': ('proc_flag', np.uint8, bufr_nan, uint8_nan),
+        'Soil Moisture Quality': ('agg_flag', np.uint8, bufr_nan, uint8_nan),
+        'Snow Cover': ('snow_prob', np.uint8, bufr_nan, uint8_nan),
+        'Frozen Land Surface Fraction': ('frozen_prob', np.uint8, bufr_nan, uint8_nan),
+        'Inundation And Wetland Fraction': ('wetland', np.uint8, bufr_nan, uint8_nan),
+        'Topographic Complexity': ('topo', np.uint8, bufr_nan, uint8_nan)}
 
     for var_name in skip_fields:
         if var_name in data:
             data.pop(var_name)
 
-    for var_name, (new_name, new_dtype) in gen_fields_lut.items():
+    for var_name, (new_name, new_dtype,
+                   nan_val, new_nan_val) in gen_fields_lut.items():
+        if nan_val is not None:
+            data[var_name][data[var_name] == nan_val] = new_nan_val
         data[new_name] = data.pop(var_name).astype(new_dtype)
 
     for var_name, (new_name, new_dtype, nan_val) in gen_fields_beam.items():
@@ -562,8 +567,7 @@ def conv_bufrl2_generic(data, metadata):
             (data.pop(f[0]), data.pop(f[1]),
              data.pop(f[2]))).T.astype(new_dtype)
         if nan_val is not None:
-            valid = data[new_name] != nan_val
-            data[new_name][~valid] = float32_nan
+            data[new_name][data[new_name] == nan_val] = float32_nan
 
     if data['node_num'].max() == 82:
         data['swath_indicator'] = 1 * (data['node_num'] > 41)
@@ -573,8 +577,8 @@ def conv_bufrl2_generic(data, metadata):
         raise ValueError('Cross-track cell number size unknown')
 
     n_lines = data['lat'].shape[0] / data['node_num'].max()
-
     data['line_num'] = np.arange(n_lines).repeat(data['node_num'].max())
+
     sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
     data['sat_id'] = np.zeros(data['time'].size, dtype=np.uint8) + sat_id[
         int(metadata['platform_id'])]
