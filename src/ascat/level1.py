@@ -45,7 +45,7 @@ class AscatL1bFile:
     ASCAT Level 1b reader class.
     """
 
-    def __init__(self, filename, file_format=None):
+    def __init__(self, filename, file_format=None, mode='r'):
         """
         Initialize AscatL1File.
 
@@ -59,6 +59,7 @@ class AscatL1bFile:
         """
         self.filename = filename
         self.fid = None
+        self.mode = mode
 
         if file_format is None:
             file_format = get_file_format(self.filename)
@@ -103,6 +104,12 @@ class AscatL1bFile:
             ds = get_roi_subset(ds, roi)
 
         return ds
+
+    def read_interval(self, interval, **kwargs):
+        """
+        Read interval.
+        """
+        return self.read(toi=interval, **kwargs)
 
     def close(self):
         """
