@@ -303,7 +303,8 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
     MultiFileHandler class.
     """
 
-    def __init__(self, root_path, cls, fn_templ, sf_templ=None, mode='r',
+    def __init__(self, root_path, cls, fn_templ, fn_search_pattern,
+                 sf_templ=None, sf_search_pattern=None, mode='r',
                  cls_kwargs=None, err=False):
         """
         Initialize MultiFileHandler.
@@ -316,8 +317,14 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
             Class reading/writing files.
         fn_templ : str
             Filename template (e.g. '{date}_ascat.nc').
+        fn_search_pattern : str
+            Filename pattern (e.g. 'prefix_{date}*_postfix.nc').
         sf_templ : dict, optional
             Subfolder template defined as dictionary (default: None).
+        sf_search_pattern : dict, optional
+            Subfolder pattern defined as dictionary (default: None).
+        mode : str, optional
+            Opening mode.
         cls_kwargs : dict, optional
             Class keyword arguments (default: None).
         err : bool, optional
@@ -328,6 +335,7 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
         self.root_path = root_path
         self.cls = cls
         self.ft = FilenameTemplate(root_path, fn_templ, sf_templ)
+        self.fs = FileSearch(root_path, fn_search_pattern, sf_search_pattern)
         self.mode = mode
         self.fid = None
         self.err = err
@@ -400,6 +408,20 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
         """
         return
 
+    @abc.abstractmethod
+    def _search_fmt(*args, **kwargs):
+        """
+        Filename format and subfolder format used for searching.
+
+        Returns
+        -------
+        fn_fmt : dict
+            Filename format.
+        sf_fmt : dict
+            Subfolder format.
+        """
+        return
+
     def build_filename(self, *args, **kwargs):
         """
         Build filename based on timestamp and filename/folder format
@@ -414,6 +436,20 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
         filename = self.ft.build_filename(fn_fmt, sf_fmt)
 
         return filename
+
+    def search_files(self, *args, **kwargs):
+        """
+        Search files for given path and custom filename/folder pattern.
+
+        Returns
+        -------
+        filenames : list of str
+            Filenames.
+        """
+        fn_fmt, sf_fmt = self._search_fmt(*args, **kwargs)
+        filenames = self.fs.search(fn_fmt, sf_fmt)
+
+        return sorted(filenames)
 
     def read(self, *fmt_args, fmt_kwargs=None, cls_kwargs=None):
         """
@@ -481,46 +517,22 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
         self.fid.write(data, **cls_kwargs)
 
 
-class MultiFileSearch:
+class ChronFileHandler(MultiFileHandler):
 
-    """
-    MultiFileSearch class.
-    """
-
-    def __init__(self, root_path, cls, fn_templ, fn_search_pattern,
-                 sf_templ=None, sf_search_pattern=None, mode='r',
-                 cls_kwargs=None, err=False):
+    def _fmt(timestamp):
         """
-        Initialize MultiFileSearch.
+        Filename format and subfolder format used to create distinct filenames.
 
-        Parameters
-        ----------
-        root_path : str
-            Root path.
-        cls : class
-            Class reading/writing files.
-        fn_templ : str
-            Filename template (e.g. 'prefix_{date}_postfix.nc').
-        fn_search_pattern : str
-            Filename pattern (e.g. 'prefix_{date}*_postfix.nc').
-        sf_templ : dict, optional
-            Subfolder template defined as dictionary (default: None).
-        sf_search_pattern : dict, optional
-            Subfolder pattern defined as dictionary (default: None).
-        cls_kwargs : dict, optional
-            Class keyword arguments (default: None).
-        err : bool, optional
-            Set true if error should be re-raised instead of
-            reporting a warning.
-            Default: False
+        Returns
+        -------
+        fn_fmt : dict
+            Filename format.
+        sf_fmt : dict
+            Subfolder format.
         """
-        super().__init__(root_path, cls, fn_templ, sf_templ,
-                         mode, cls_kwargs, err)
+        raise NotImplementedError("Should be implemented.")
 
-        self.fs = FileSearch(root_path, fn_search_pattern, sf_search_pattern)
-
-    @abc.abstractmethod
-    def _search_fmt(*args, **kwargs):
+    def _search_fmt(timtestamp):
         """
         Filename format and subfolder format used for searching.
 
@@ -531,9 +543,9 @@ class MultiFileSearch:
         sf_fmt : dict
             Subfolder format.
         """
-        return
+        raise NotImplementedError("Should be implemented.")
 
-    def search_files(self, *args, **kwargs):
+    def search_files(self, timestamp):
         """
         Search files for given path and custom filename/folder pattern.
 
@@ -542,43 +554,39 @@ class MultiFileSearch:
         filenames : list of str
             Filenames.
         """
-        fn_fmt, sf_fmt = self._search_fmt(*args, **kwargs)
+        fn_fmt, sf_fmt = self._search_fmt(timestamp)
         filenames = self.fs.search(fn_fmt, sf_fmt)
 
         return sorted(filenames)
 
+    def search_period(self, dt_start, dt_end, delta):
+        """
+        Search files for time period.
 
-# class ChronFileCollection(FileCollection):
+        Parameters
+        ----------
+        start : datetime
+            Start datetime.
+        end : datetime
+            End datetime.
+        delta : timedelta
+            Delta.
 
-#     def search_period(self, dt_start, dt_end, delta):
-#         """
-#         Search files for time period.
+        Returns
+        -------
+        filenames : list of str
+            Filenames.
+        """
+        filenames = []
 
-#         Parameters
-#         ----------
-#         start : datetime
-#             Start datetime.
-#         end : datetime
-#             End datetime.
-#         delta : timedelta
-#             Delta.
+        for dt_cur in np.arange(dt_start, dt_end, delta).astype(datetime):
+            file_list = self.search_files(dt_cur)
+            if file_list:
+                filenames.extend(file_list)
 
-#         Returns
-#         -------
-#         filenames : list of str
-#             Filenames.
-#         """
-#         filenames = []
+        filenames = sorted(list(dict.fromkeys(filenames)))
 
-#         for dt_cur in np.arange(dt_start, dt_end, delta).astype(datetime):
-#             file_list = self.search_files(dt_cur)
-#             if file_list:
-#                 # remove duplicates
-#                 # filenames.extend(f for f in sorted(file_list, reverse=True)
-#                 #                  if f not in filenames)
-#                 filenames.extend(file_list)
-
-#         return sorted(filenames)
+        return filenames
 
     # def read_period(self, period, buf_len=timedelta(hours=3), **kwargs):
     #     """
@@ -736,7 +744,7 @@ class CsvFile:
         np.savetxt(self.filename, data, fmt='%s', header=header)
 
 
-class CsvFiles(MultiFileHandler):
+class CsvFiles(ChronFileHandler):
 
     """
     CSV Files.
@@ -754,7 +762,11 @@ class CsvFiles(MultiFileHandler):
         fn_templ = 'prefix_{date}_postfix.csv'
         sf_templ = {'Y': '{year}', 'M': '{month}'}
 
-        super().__init__(root_path, CsvFile, fn_templ, sf_templ=sf_templ,
+        fn_search_pattern = 'prefix_{date}*_postfix.csv'
+        sf_search_pattern = {'Y': '{year}', 'M': '{month}'}
+
+        super().__init__(root_path, CsvFile, fn_templ, fn_search_pattern,
+                         sf_templ=sf_templ, sf_search_pattern=sf_search_pattern,
                          mode=mode)
 
     def _fmt(self, timestamp):
@@ -778,13 +790,6 @@ class CsvFiles(MultiFileHandler):
                   'M': {'month': timestamp.strftime('%m')}}
 
         return fn_fmt, sf_fmt
-
-
-class CsvFilesSearch():
-
-    def __init__(self):
-        fn_search_pattern = 'prefix_{date}*_postfix.csv'
-        sf_search_pattern = {'Y': '{year}', 'M': '{month}'}
 
     def _search_fmt(self, timestamp):
         """
@@ -841,13 +846,22 @@ def test_csv():
     csv = CsvFiles(tmp_dir.name)
 
     data = csv.read(datetime(2000, 1, 1))
-    print(data)
+    # print(data)
 
     data = csv.read(datetime(2000, 1, 1, 3))
-    print(data)
+    # print(data)
 
-    # files = csv_files.search_files(datetime(2000, 1, 1))
-    # print(files)
+    first_list = csv.search_files(datetime(2000, 1, 1))
+    print(len(first_list))
+
+    sec_list = csv.search_period(datetime(2000, 1, 1), datetime(2000, 1, 1, 12),
+                                 timedelta(hours=1))
+    print(len(sec_list))
+
+    if first_list == sec_list:
+        print('Lists are exactly equal')
+    else:
+        print('Lists are not equal')
 
     # period = (datetime(2000, 1, 1), datetime(2000, 1, 1, 10, 0, 0))
     # files = csv_files.search_period(*period)
