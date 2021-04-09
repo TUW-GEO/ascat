@@ -70,7 +70,7 @@ class FilenameTemplate:
         self.sf_templ = sf_templ
 
     @property
-    def name(self):
+    def template(self):
         """
         Name property.
         """
@@ -297,32 +297,27 @@ class FileSearch:
         return custom_search
 
 
-class FileCollection(metaclass=abc.ABCMeta):
+class MultiFileHandler(metaclass=abc.ABCMeta):
 
     """
-    FileCollection class.
+    MultiFileHandler class.
     """
 
-    def __init__(self, root_path, cls, fn_templ, fn_search_pattern,
-                 sf_templ=None, sf_search_pattern=None, cls_kwargs=None,
-                 err=False):
+    def __init__(self, root_path, cls, fn_templ, sf_templ=None, mode='r',
+                 cls_kwargs=None, err=False):
         """
-        Initialize MultiTempFiles
+        Initialize MultiFileHandler.
 
         Parameters
         ----------
         root_path : str
             Root path.
         cls : class
-            Class reading data.
+            Class reading/writing files.
         fn_templ : str
             Filename template (e.g. '{date}_ascat.nc').
-        fn_search_pattern : str
-            Filename search pattern (e.g. '{date}*.nc').
         sf_templ : dict, optional
             Subfolder template defined as dictionary (default: None).
-        sf_search_pattern : dict, optional
-            Subfolder search pattern (default: None).
         cls_kwargs : dict, optional
             Class keyword arguments (default: None).
         err : bool, optional
@@ -332,18 +327,15 @@ class FileCollection(metaclass=abc.ABCMeta):
         """
         self.root_path = root_path
         self.cls = cls
-
         self.ft = FilenameTemplate(root_path, fn_templ, sf_templ)
-        self.fs = FileSearch(root_path, fn_search_pattern, sf_search_pattern)
-
+        self.mode = mode
         self.fid = None
+        self.err = err
 
         if cls_kwargs is None:
             self.cls_kwargs = {}
         else:
             self.cls_kwargs = cls_kwargs
-
-        self.err = err
 
     def __enter__(self):
         """
@@ -370,7 +362,7 @@ class FileCollection(metaclass=abc.ABCMeta):
         """
         self._close()
 
-        if not os.path.isfile(filename):
+        if self.mode == 'r' and not os.path.isfile(filename):
             msg = 'File not found: {}'.format(filename)
             if self.err:
                 raise IOError(msg)
@@ -384,7 +376,7 @@ class FileCollection(metaclass=abc.ABCMeta):
             if self.err:
                 raise
             else:
-                warnings.warn("IOError opening file: {}".format(filename))
+                warnings.warn("IOError: {}".format(filename))
 
     def _close(self):
         """
@@ -398,20 +390,6 @@ class FileCollection(metaclass=abc.ABCMeta):
     def _fmt(*args, **kwargs):
         """
         Filename format and subfolder format used to create distinct filenames.
-
-        Returns
-        -------
-        fn_fmt : dict
-            Filename format.
-        sf_fmt : dict
-            Subfolder format.
-        """
-        return
-
-    @abc.abstractmethod
-    def _search_fmt(*args, **kwargs):
-        """
-        Filename format and subfolder format used for searching.
 
         Returns
         -------
@@ -437,6 +415,124 @@ class FileCollection(metaclass=abc.ABCMeta):
 
         return filename
 
+    def read(self, *fmt_args, fmt_kwargs=None, cls_kwargs=None):
+        """
+        Read data.
+
+        Parameters
+        ----------
+        fmt_args : tuple
+            Format arguments.
+        fmt_kwargs : dict, optional
+            Format keywords (Default: None).
+        cls_kwargs : dict, optional
+            Class keywords (Default: None).
+
+        Returns
+        -------
+        data : dict, numpy.ndarray
+            Data stored in file.
+        """
+        if self.mode != 'r':
+            raise RuntimeError('Opening mode not read.')
+
+        if fmt_kwargs is None:
+            fmt_kwargs = {}
+
+        if cls_kwargs is None:
+            cls_kwargs = {}
+
+        filename = self.build_filename(*fmt_args, **fmt_kwargs)
+        self._open(filename)
+        data = self.fid.read(**cls_kwargs)
+
+        return data
+
+    def write(self, data, *fmt_args, fmt_kwargs=None, cls_kwargs=None):
+        """
+        Write data.
+
+        Parameters
+        ----------
+        data : dict, numpy.ndarray
+            Data to write.
+        fmt_args : tuple
+            Format arguments.
+        fmt_kwargs : dict, optional
+            Format keywords (Default: None).
+        cls_kwargs : dict, optional
+            Class keywords (Default: None).
+        """
+        if self.mode != 'w':
+            raise RuntimeError('Opening mode not write.')
+
+        if fmt_kwargs is None:
+            fmt_kwargs = {}
+
+        if cls_kwargs is None:
+            cls_kwargs = {}
+
+        filename = self.build_filename(*fmt_args, **fmt_kwargs)
+
+        if not os.path.exists(os.path.dirname(filename)):
+            os.makedirs(os.path.dirname(filename))
+
+        self._open(filename)
+        self.fid.write(data, **cls_kwargs)
+
+
+class MultiFileSearch:
+
+    """
+    MultiFileSearch class.
+    """
+
+    def __init__(self, root_path, cls, fn_templ, fn_search_pattern,
+                 sf_templ=None, sf_search_pattern=None, mode='r',
+                 cls_kwargs=None, err=False):
+        """
+        Initialize MultiFileSearch.
+
+        Parameters
+        ----------
+        root_path : str
+            Root path.
+        cls : class
+            Class reading/writing files.
+        fn_templ : str
+            Filename template (e.g. 'prefix_{date}_postfix.nc').
+        fn_search_pattern : str
+            Filename pattern (e.g. 'prefix_{date}*_postfix.nc').
+        sf_templ : dict, optional
+            Subfolder template defined as dictionary (default: None).
+        sf_search_pattern : dict, optional
+            Subfolder pattern defined as dictionary (default: None).
+        cls_kwargs : dict, optional
+            Class keyword arguments (default: None).
+        err : bool, optional
+            Set true if error should be re-raised instead of
+            reporting a warning.
+            Default: False
+        """
+        super().__init__(root_path, cls, fn_templ, sf_templ,
+                         mode, cls_kwargs, err)
+
+        self.fs = FileSearch(root_path, fn_search_pattern, sf_search_pattern)
+
+    @abc.abstractmethod
+    def _search_fmt(*args, **kwargs):
+        """
+        Filename format and subfolder format used for searching.
+
+        Returns
+        -------
+        fn_fmt : dict
+            Filename format.
+        sf_fmt : dict
+            Subfolder format.
+        """
+        return
+
     def search_files(self, *args, **kwargs):
         """
         Search files for given path and custom filename/folder pattern.
@@ -451,60 +547,38 @@ class FileCollection(metaclass=abc.ABCMeta):
 
         return sorted(filenames)
 
-    def read(self, *fmt_args, fmt_kwargs=None, cls_kwargs=None):
-        """
-        Read data for given timestamp.
 
-        Returns
-        -------
-        data : dict, numpy.ndarray
-            Data stored in file.
-        """
-        if fmt_kwargs is None:
-            fmt_kwargs = {}
+# class ChronFileCollection(FileCollection):
 
-        if cls_kwargs is None:
-            cls_kwargs = {}
+#     def search_period(self, dt_start, dt_end, delta):
+#         """
+#         Search files for time period.
 
-        filename = self.build_filename(*fmt_args, **fmt_kwargs)
-        self._open(filename)
-        data = self.fid.read(**cls_kwargs)
+#         Parameters
+#         ----------
+#         start : datetime
+#             Start datetime.
+#         end : datetime
+#             End datetime.
+#         delta : timedelta
+#             Delta.
 
-        return data
+#         Returns
+#         -------
+#         filenames : list of str
+#             Filenames.
+#         """
+#         filenames = []
 
+#         for dt_cur in np.arange(dt_start, dt_end, delta).astype(datetime):
+#             file_list = self.search_files(dt_cur)
+#             if file_list:
+#                 # remove duplicates
+#                 # filenames.extend(f for f in sorted(file_list, reverse=True)
+#                 #                  if f not in filenames)
+#                 filenames.extend(file_list)
 
-class ChronFileCollection(FileCollection):
-
-    def search_period(self, dt_start, dt_end, delta):
-        """
-        Search files for time period.
-
-        Parameters
-        ----------
-        start : datetime
-            Start datetime.
-        end : datetime
-            End datetime.
-        delta : timedelta
-            Delta.
-
-        Returns
-        -------
-        filenames : list of str
-            Filenames.
-        """
-        filenames = []
-
-        for dt_cur in np.arange(dt_start, dt_end, delta).astype(datetime):
-            file_list = self.search_files(dt_cur)
-            if file_list:
-                # remove duplicates
-                # filenames.extend(f for f in sorted(file_list, reverse=True)
-                #                  if f not in filenames)
-                filenames.extend(file_list)
-
-        return sorted(filenames)
-
+#         return sorted(filenames)
 
     # def read_period(self, period, buf_len=timedelta(hours=3), **kwargs):
     #     """
@@ -662,13 +736,13 @@ class CsvFile:
         np.savetxt(self.filename, data, fmt='%s', header=header)
 
 
-class CsvFilesReader(ChronFileCollection):
+class CsvFiles(MultiFileHandler):
 
     """
     CSV Files.
     """
 
-    def __init__(self, root_path):
+    def __init__(self, root_path, mode='r'):
         """
         Initialize CsvMultiFileHandler.
 
@@ -678,14 +752,10 @@ class CsvFilesReader(ChronFileCollection):
             Root path.
         """
         fn_templ = 'prefix_{date}_postfix.csv'
-        fn_search_pattern = 'prefix_{date}*_postfix.csv'
-
         sf_templ = {'Y': '{year}', 'M': '{month}'}
-        sf_search_pattern = {'Y': '{year}', 'M': '{month}'}
 
-        super().__init__(root_path, CsvFile, fn_templ, fn_search_pattern,
-                         sf_templ=sf_templ, sf_search_pattern=sf_search_pattern,
-                         cls_kwargs={'mode': 'r'})
+        super().__init__(root_path, CsvFile, fn_templ, sf_templ=sf_templ,
+                         mode=mode)
 
     def _fmt(self, timestamp):
         """
@@ -708,6 +778,13 @@ class CsvFilesReader(ChronFileCollection):
                   'M': {'month': timestamp.strftime('%m')}}
 
         return fn_fmt, sf_fmt
+
+
+class CsvFilesSearch():
+
+    def __init__(self):
+        fn_search_pattern = 'prefix_{date}*_postfix.csv'
+        sf_search_pattern = {'Y': '{year}', 'M': '{month}'}
 
     def _search_fmt(self, timestamp):
         """
@@ -732,17 +809,16 @@ class CsvFilesReader(ChronFileCollection):
         return fn_fmt, sf_fmt
 
 
-
 def test_csv():
-
+    """
+    Testing writing and reading CSV files.
+    """
     tmp_dir = tempfile.TemporaryDirectory()
     dtype = np.dtype([('date', 'datetime64[s]'), ('num', np.int32)])
     dates = np.datetime64('2000-01-01') + np.arange(3)
     file_length = np.array([3, 5, 2, 7, 1]) * 60
 
-    fn_templ = 'prefix_{date}_postfix.csv'
-    sf_templ = {'Y': '{year}', 'M': '{month}'}
-    csv_file_templ = FileTemplate(tmp_dir.name, fn_templ, sf_templ)
+    csv = CsvFiles(tmp_dir.name, mode='w')
 
     j = 0
     k = 0
@@ -755,43 +831,32 @@ def test_csv():
             if k == file_length[j]:
                 arr = np.array(arr, dtype=dtype)
                 timestamp = arr[0]['date'].astype(datetime)
-
-                fn_fmt = {'date': timestamp.strftime('%Y%m%d_%H%M%S')}
-                sf_fmt = {'Y': {'year': timestamp.strftime('%Y')},
-                          'M': {'month': timestamp.strftime('%m')}}
-
-                filename = csv_file_templ.build_filename(fn_fmt, sf_fmt)
-                if not os.path.exists(os.path.dirname(filename)):
-                    os.makedirs(os.path.dirname(filename))
-
-                CsvFile(filename, mode='w').write(arr)
+                csv.write(arr, timestamp)
                 k = 0
                 arr = []
                 j = j + 1
                 if np.mod(j, len(file_length)) == 0:
                     j = 0
 
+    csv = CsvFiles(tmp_dir.name)
 
-    csv_files = CsvFilesReader(tmp_dir.name)
-    # rdata = multi_csv.read(datetime(2000, 1, 1))
-    # print(rdata)
+    data = csv.read(datetime(2000, 1, 1))
+    print(data)
 
-    # rdata = csv_files.read(datetime(2000, 1, 1, 3))
-    # print(rdata)
+    data = csv.read(datetime(2000, 1, 1, 3))
+    print(data)
 
-    files = csv_files.search_files(datetime(2000, 1, 1))
-    print(files)
+    # files = csv_files.search_files(datetime(2000, 1, 1))
+    # print(files)
 
     # period = (datetime(2000, 1, 1), datetime(2000, 1, 1, 10, 0, 0))
     # files = csv_files.search_period(*period)
     # print(files)
 
-
     tmp_dir.cleanup()
 
 
-
-class AscatL1bNc(ChronFileCollection):
+class AscatL1bNc(MultiFileHandler):
 
     def __init__(self, path, sat='A'):
         """
