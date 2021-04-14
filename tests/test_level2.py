@@ -33,6 +33,7 @@ import os
 import sys
 import pytest
 import unittest
+from datetime import datetime
 
 import numpy as np
 import numpy.testing as nptest
@@ -40,6 +41,9 @@ import numpy.testing as nptest
 from ascat.read_native.bufr import AscatL2BufrFile
 from ascat.read_native.nc import AscatL2NcFile
 from ascat.level2 import AscatL2File
+from ascat.level2 import AscatL2NcFileList
+from ascat.level2 import AscatL2BufrFileList
+from ascat.level2 import AscatL2EpsFileList
 
 eps_float_nan = -2147483648.
 bufr_float_nan = 1.7e+38
@@ -284,12 +288,7 @@ class Test_AscatL2File(unittest.TestCase):
                 bufr_ds[field][mask] = float32_nan
                 eps_ds[field][mask] = float32_nan
 
-            try:
                 nptest.assert_allclose(bufr_ds[field], eps_ds[field], atol=0.1)
-            except:
-                import pdb
-                pdb.set_trace()
-                pass
 
             if field not in nc_none:
                 nptest.assert_allclose(eps_ds[field], nc_ds[field], atol=0.1)
@@ -339,6 +338,65 @@ class Test_AscatL2File(unittest.TestCase):
         nptest.assert_allclose(eps_ds['sm_mean'][:25],
                                sm_mean_should, atol=1e-5)
         nptest.assert_equal(eps_ds['time'][35:45], t_should)
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
+class Test_AscatL2FileList(unittest.TestCase):
+
+    """
+    Test read AscatL2FileList in various formats.
+    """
+
+    def setUp(self):
+        """
+        Setup test data.
+        """
+        root_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
+                                 'eumetsat', 'ASCAT_generic_reader_data')
+
+        self.bufr_smo = AscatL2BufrFileList(
+            os.path.join(root_path, 'bufr'), sat='B', res='SMO')
+        self.nc_smo = AscatL2NcFileList(
+            os.path.join(root_path, 'nc'), sat='B', res='SMO')
+        self.eps_smo = AscatL2EpsFileList(
+            os.path.join(root_path, 'eps_nat'), sat='B', res='SMO')
+
+    def test_smo_read_date(self):
+        """
+        Test read date for SMO formats.
+        """
+        dt = datetime(2018, 6, 12, 3, 57, 0)
+
+        bufr_data = self.bufr_smo.read(dt)
+        nc_data = self.nc_smo.read(dt)
+        eps_data = self.eps_smo.read(dt)
+
+        for coord in ['lon', 'lat']:
+            nptest.assert_allclose(
+                bufr_data[coord], eps_data[coord], atol=1e-4)
+            nptest.assert_allclose(
+                eps_data[coord], nc_data[coord], atol=1e-4)
+            nptest.assert_allclose(
+                nc_data[coord], bufr_data[coord], atol=1e-4)
+
+    def test_smo_read_period(self):
+        """
+        Test read period for SMO formats.
+        """
+        dt_start = datetime(2018, 6, 12, 4, 0, 0)
+        dt_end = datetime(2018, 6, 12, 4, 13, 0)
+
+        bufr_data = self.bufr_smo.read_period(dt_start, dt_end)
+        nc_data = self.nc_smo.read_period(dt_start, dt_end)
+        eps_data = self.eps_smo.read_period(dt_start, dt_end)
+
+        for coord in ['lon', 'lat']:
+            nptest.assert_allclose(
+                bufr_data[coord], eps_data[coord], atol=1e-4)
+            nptest.assert_allclose(
+                eps_data[coord], nc_data[coord], atol=1e-4)
+            nptest.assert_allclose(
+                nc_data[coord], bufr_data[coord], atol=1e-4)
 
 
 if __name__ == '__main__':

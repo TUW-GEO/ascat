@@ -33,11 +33,16 @@ import os
 import sys
 import pytest
 import unittest
+from datetime import datetime
 
 import numpy as np
 import numpy.testing as nptest
 
 from ascat.level1 import AscatL1bFile
+from ascat.level1 import AscatL1bNcFileList
+from ascat.level1 import AscatL1bBufrFileList
+from ascat.level1 import AscatL1bEpsFileList
+from ascat.level1 import AscatL1bHdf5FileList
 
 float32_nan = -999999.
 
@@ -183,7 +188,8 @@ class Test_AscatL1bFile(unittest.TestCase):
 
         nptest.assert_allclose(self.reader['lat'][:25], lat_should, atol=1e-5)
         nptest.assert_allclose(self.reader['lon'][:25], lon_should, atol=1e-5)
-        nptest.assert_allclose(self.reader['sig'][:25, 0], sig_should, atol=1e-5)
+        nptest.assert_allclose(
+            self.reader['sig'][:25, 0], sig_should, atol=1e-5)
         nptest.assert_allclose(self.reader['kp'][:25, 0], kp_should, atol=1e-5)
         nptest.assert_equal(self.reader['time'][75:85], t_should)
 
@@ -230,8 +236,9 @@ class Test_AscatL1bFile(unittest.TestCase):
 
         nptest.assert_allclose(self.reader['lat'][:25], lat_should, atol=1e-5)
         nptest.assert_allclose(self.reader['lon'][:25], lon_should, atol=1e-5)
-        nptest.assert_allclose(self.reader['sig'][:25,0], sig_should, atol=1e-5)
-        nptest.assert_allclose(self.reader['kp'][:25,0], kp_should, atol=1e-5)
+        nptest.assert_allclose(
+            self.reader['sig'][:25, 0], sig_should, atol=1e-5)
+        nptest.assert_allclose(self.reader['kp'][:25, 0], kp_should, atol=1e-5)
         nptest.assert_equal(self.reader['time'][75:85], t_should)
 
     def test_szf_eps(self):
@@ -276,6 +283,149 @@ class Test_AscatL1bFile(unittest.TestCase):
         nptest.assert_allclose(self.reader['lf']['sig'][:25],
                                sig_should, atol=1e-5)
         nptest.assert_equal(self.reader['lf']['time'][190:200], t_should)
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
+class Test_AscatL1bFileList(unittest.TestCase):
+
+    """
+    Test read AscatL1bFileList in various formats.
+    """
+
+    def setUp(self):
+        """
+        Setup test data.
+        """
+        root_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
+                                 'eumetsat', 'ASCAT_generic_reader_data')
+
+        self.bufr_szr = AscatL1bBufrFileList(
+            os.path.join(root_path, 'bufr'), sat='A')
+        self.nc_szr = AscatL1bNcFileList(os.path.join(root_path, 'nc'))
+        self.eps_szr = AscatL1bEpsFileList(os.path.join(root_path, 'eps_nat'))
+
+        self.eps_szf = AscatL1bEpsFileList(
+            os.path.join(root_path, 'eps_nat'), sat='B', res='SZF')
+        self.hdf5_szf = AscatL1bHdf5FileList(
+            os.path.join(root_path, 'hdf5'), sat='B')
+
+    def test_szr_read_date(self):
+        """
+        Test read date for SZR formats.
+        """
+        dt = datetime(2010, 6, 9, 1, 39, 0)
+
+        bufr_data = self.bufr_szr.read(dt)
+        nc_data = self.nc_szr.read(dt)
+        eps_data = self.eps_szr.read(dt)
+
+        for f in ['lat', 'lon']:
+            nptest.assert_allclose(bufr_data[f], eps_data[f], atol=1e-2)
+            nptest.assert_allclose(eps_data[f], nc_data[f], atol=1e-2)
+            nptest.assert_allclose(nc_data[f], bufr_data[f], atol=1e-2)
+
+        matching = ['sig', 'inc', 'azi', 'kp', 'kp_quality',
+                    'swath_indicator', 'f_usable', 'f_land', 'sat_id',
+                    'line_num', 'node_num']
+
+        # BUFR contain less accurate data so we only compare 0.1 accuracy.
+        for field in matching:
+            if field == 'sig':
+                nan_mask = (nc_data[field] == float32_nan)
+                eps_data[field][nan_mask] = float32_nan
+                bufr_data[field][nan_mask] = float32_nan
+                valid = ((eps_data[field] > -25))
+
+                nptest.assert_allclose(bufr_data[field][valid],
+                                       eps_data[field][valid], atol=0.1)
+            else:
+                nptest.assert_allclose(bufr_data[field],
+                                       eps_data[field], atol=0.1)
+
+            nptest.assert_allclose(nc_data[field], bufr_data[field], atol=0.1)
+            nptest.assert_allclose(eps_data[field], nc_data[field], atol=0.1)
+
+    def test_szr_read_period(self):
+        """
+        Test read period for SZR formats.
+        """
+        dt_start = datetime(2010, 6, 9, 1, 39, 0)
+        dt_end = datetime(2010, 6, 9, 2, 0, 0)
+
+        bufr_data = self.bufr_szr.read_period(dt_start, dt_end)
+        nc_data = self.nc_szr.read_period(dt_start, dt_end)
+        eps_data = self.eps_szr.read_period(dt_start, dt_end)
+
+        for f in ['lat', 'lon']:
+            nptest.assert_allclose(bufr_data[f], eps_data[f], atol=1e-2)
+            nptest.assert_allclose(eps_data[f], nc_data[f], atol=1e-2)
+            nptest.assert_allclose(nc_data[f], bufr_data[f], atol=1e-2)
+
+        matching = ['sig', 'inc', 'azi', 'kp', 'kp_quality',
+                    'swath_indicator', 'f_usable', 'f_land', 'sat_id',
+                    'line_num', 'node_num']
+
+        # BUFR contain less accurate data so we only compare 0.1 accuracy.
+        for field in matching:
+            if field == 'sig':
+                nan_mask = (nc_data[field] == float32_nan)
+                eps_data[field][nan_mask] = float32_nan
+                bufr_data[field][nan_mask] = float32_nan
+                valid = ((eps_data[field] > -25))
+
+                nptest.assert_allclose(bufr_data[field][valid],
+                                       eps_data[field][valid], atol=0.1)
+            else:
+                nptest.assert_allclose(bufr_data[field],
+                                       eps_data[field], atol=0.1)
+
+            nptest.assert_allclose(nc_data[field], bufr_data[field], atol=0.1)
+            nptest.assert_allclose(eps_data[field], nc_data[field], atol=0.1)
+
+    def test_szf_read_date(self):
+        """
+        Test read date for SZF formats.
+        """
+        dt = datetime(2018, 6, 11, 4, 18, 0)
+
+        eps_data = self.eps_szf.read(dt)
+        hdf5_data = self.hdf5_szf.read(dt)
+
+        for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
+            for coord in ['lon', 'lat']:
+                nptest.assert_allclose(eps_data[antenna][coord],
+                                       hdf5_data[antenna][coord], atol=1e-4)
+
+            matching = ['sig', 'inc', 'azi', 'sat_id', 'as_des_pass',
+                        'land_frac', 'f_usable', 'f_land', 'beam_number',
+                        'swath_indicator']
+
+            for field in matching:
+                nptest.assert_allclose(eps_data[antenna][coord],
+                                       hdf5_data[antenna][coord], atol=0.1)
+
+    def test_szf_read_period(self):
+        """
+        Test read period for SZF formats.
+        """
+        dt_start = datetime(2018, 6, 11, 4, 18, 0)
+        dt_end = datetime(2018, 6, 11, 4, 19, 0)
+
+        eps_data = self.eps_szf.read_period(dt_start, dt_end)
+        hdf5_data = self.hdf5_szf.read_period(dt_start, dt_end)
+
+        for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
+            for coord in ['lon', 'lat']:
+                nptest.assert_allclose(eps_data[antenna][coord],
+                                       hdf5_data[antenna][coord], atol=1e-4)
+
+            matching = ['sig', 'inc', 'azi', 'sat_id', 'as_des_pass',
+                        'land_frac', 'f_usable', 'f_land', 'beam_number',
+                        'swath_indicator']
+
+            for field in matching:
+                nptest.assert_allclose(eps_data[antenna][coord],
+                                       hdf5_data[antenna][coord], atol=0.1)
 
 
 if __name__ == '__main__':
