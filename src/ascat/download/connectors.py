@@ -31,7 +31,8 @@ import urllib
 import requests
 import logging
 from ftplib import FTP
-from datetime import datetime, timedelta
+from datetime import datetime
+from datetime import timedelta
 
 from tqdm import tqdm
 

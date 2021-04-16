@@ -347,8 +347,7 @@ class EPSProduct:
         """
         Find the corresponding eps xml file.
         """
-        format_path = os.path.join(os.path.dirname(__file__), '..',
-                                   'formats')
+        format_path = os.path.join(os.path.dirname(__file__), 'formats')
 
         # loop through files where filename starts with 'eps_ascat'.
         for filename in fnmatch.filter(os.listdir(format_path), 'eps_ascat*'):

@@ -53,7 +53,7 @@ float32_nan = -999999.
 uint8_nan = np.iinfo(np.uint8).max
 
 
-class AscatL1bBufrFile():
+class AscatL1bBufrFile:
 
     """
     Read ASCAT Level 1b file in BUFR format.

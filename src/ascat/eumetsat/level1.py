@@ -26,29 +26,32 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-Readers for ASCAT Level 2 data for various file formats.
+Readers for ASCAT Level 1b data for various file formats.
 """
 
 import os
-import numpy as np
 from datetime import datetime
+from collections import defaultdict
 
-import ascat.read_native.nc as nc
-import ascat.read_native.bufr as bufr
-import ascat.read_native.eps_native as eps_native
+import numpy as np
+
+from ascat.read_native.nc import AscatL1bNcFile
+from ascat.read_native.hdf5 import AscatL1bHdf5File
+from ascat.read_native.bufr import AscatL1bBufrFile
+from ascat.read_native.eps_native import AscatL1bEpsFile
 from ascat.utils import get_toi_subset, get_roi_subset
 from ascat.file_search import ChronFiles
 
 
-class AscatL2File:
+class AscatL1bFile:
 
     """
-    ASCAT Level 2 reader class.
+    ASCAT Level 1b reader class.
     """
 
-    def __init__(self, filename, file_format=None):
+    def __init__(self, filename, file_format=None, mode='r'):
         """
-        Initialize AscatL2File.
+        Initialize AscatL1File.
 
         Parameters
         ----------
@@ -60,6 +63,7 @@ class AscatL2File:
         """
         self.filename = filename
         self.fid = None
+        self.mode = mode
 
         if file_format is None:
             file_format = get_file_format(self.filename)
@@ -67,22 +71,25 @@ class AscatL2File:
         self.file_format = file_format
 
         if self.file_format in ['.nat', '.nat.gz']:
-            self.fid = eps_native.AscatL2EpsFile(self.filename)
+            self.fid = AscatL1bEpsFile(self.filename)
         elif self.file_format in ['.nc', '.nc.gz']:
-            self.fid = nc.AscatL2NcFile(self.filename)
+            self.fid = AscatL1bNcFile(self.filename)
         elif self.file_format in ['.bfr', '.bfr.gz', '.buf', 'buf.gz']:
-            self.fid = bufr.AscatL2BufrFile(self.filename)
+            self.fid = AscatL1bBufrFile(self.filename)
+        elif self.file_format in ['.h5', '.h5.gz']:
+            self.fid = AscatL1bHdf5File(self.filename)
         else:
-            raise RuntimeError("ASCAT Level 2 file format unknown")
+            raise RuntimeError("ASCAT Level 1b file format unknown")
 
     def read(self, toi=None, roi=None, generic=True, to_xarray=False):
         """
-        Read ASCAT Level 2 data.
+        Read ASCAT Level 1b data.
 
         Parameters
         ----------
         toi : tuple of datetime, optional
             Filter data for given time of interest (default: None).
+            e.g. (datetime(2020, 1, 1, 12), datetime(2020, 1, 2))
         roi : tuple of 4 float, optional
             Filter data for region of interest (default: None).
             e.g. latmin, lonmin, latmax, lonmax
@@ -137,18 +144,18 @@ def get_file_format(filename):
     return file_format
 
 
-class AscatL2BufrFileList(ChronFiles):
+class AscatL1bBufrFileList(ChronFiles):
 
-    def __init__(self, path, sat='A', res='SMR'):
+    def __init__(self, path, sat='A', res='SZR'):
         """
         Initialize.
         """
         sat_lut = {'A': 2, 'B': 1, 'C': 3}
         self.sat = sat_lut[sat]
         self.res = res
-        fn_templ = 'M0{sat}-ASCA-ASC{res}*-*-*-{date}.000000000Z-*-*.bfr'
+        fn_templ = 'M0{sat}-ASCA-ASC{res}1B0200-NA-9.1-{date}.000000000Z-*-*.bfr'
 
-        super().__init__(path, AscatL2File, fn_templ)
+        super().__init__(path, AscatL1bFile, fn_templ)
 
     def _fmt(self, timestamp):
         """
@@ -188,7 +195,7 @@ class AscatL2BufrFileList(ChronFiles):
         date : datetime
             Parsed date.
         """
-        return datetime.strptime(os.path.basename(filename)[25:39],
+        return datetime.strptime(os.path.basename(filename)[29:43],
                                  '%Y%m%d%H%M%S')
 
     def _merge_data(self, data):
@@ -208,18 +215,18 @@ class AscatL2BufrFileList(ChronFiles):
         return np.hstack(data)
 
 
-class AscatL2NcFileList(ChronFiles):
+class AscatL1bNcFileList(ChronFiles):
 
-    def __init__(self, path, sat='A', res='SMR'):
+    def __init__(self, path, sat='A', res='SZR'):
         """
         Initialize.
         """
         self.sat = sat
-        res_lut = {'SMR': '125', 'SMO': '250'}
+        res_lut = {'SZR': '125', 'SZO': '250'}
         self.sampling = res_lut[res]
-        fn_templ = 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOP{sat}+ASCAT_C_EUMP_{date}_*_eps_o_{sampling}_ssm_l2.nc'
+        fn_templ = 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOP{sat}+ASCAT_C_EUMP_{date}_*_eps_o_{sampling}_l1.nc'
 
-        super().__init__(path, AscatL2File, fn_templ)
+        super().__init__(path, AscatL1bFile, fn_templ)
 
     def _fmt(self, timestamp):
         """
@@ -279,18 +286,20 @@ class AscatL2NcFileList(ChronFiles):
         return np.hstack(data)
 
 
-class AscatL2EpsFileList(ChronFiles):
+class AscatL1bEpsFileList(ChronFiles):
 
-    def __init__(self, path, sat='A', res='SMR'):
+    def __init__(self, path, sat='A', res='SZR'):
         """
         Initialize.
         """
         sat_lut = {'A': 2, 'B': 1, 'C': 3}
         self.sat = sat_lut[sat]
-        self.res = res
-        fn_templ = 'ASCA_{res}_02_M0{sat}_{date}Z_*_*_*_*.nat'
 
-        super().__init__(path, AscatL2File, fn_templ)
+        self.res = res
+
+        fn_templ = 'ASCA_{res}_1B_M0{sat}_{date}Z_*_*_*_*.nat'
+
+        super().__init__(path, AscatL1bFile, fn_templ)
 
     def _fmt(self, timestamp):
         """
@@ -347,4 +356,91 @@ class AscatL2EpsFileList(ChronFiles):
         data : numpy.ndarray
             Data.
         """
-        return np.hstack(data)
+        if self.res == 'SZF':
+            merged_data = defaultdict(list)
+            for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
+                for d in data:
+                    merged_data[antenna].append(d.pop(antenna))
+                merged_data[antenna] = np.hstack(merged_data[antenna])
+        else:
+            merged_data = np.hstack(data)
+
+        return merged_data
+
+
+class AscatL1bHdf5FileList(ChronFiles):
+
+    def __init__(self, path, sat='A'):
+        """
+        Initialize.
+        """
+        sat_lut = {'A': 2, 'B': 1, 'C': 3}
+        self.sat = sat_lut[sat]
+
+        fn_templ = 'ASCA_SZF_1B_M0{sat}_{date}Z_*_*_*_*.h5'
+
+        super().__init__(path, AscatL1bFile, fn_templ)
+
+    def _fmt(self, timestamp):
+        """
+        Definition of filename and subfolder format.
+
+        Parameters
+        ----------
+        timestamp : datetime
+            Time stamp.
+
+        Returns
+        -------
+        fn_fmt : dict
+            Filename format.
+        sf_fmt : dict
+            Subfolder format.
+        """
+        fn_read_fmt = {'date': timestamp.strftime('%Y%m%d%H%M%S'),
+                       'sat': self.sat}
+        fn_write_fmt = None
+        sf_read_fmt = None
+        sf_write_fmt = sf_read_fmt
+
+        return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
+
+    def _parse_date(self, filename):
+        """
+        Parse date from filename.
+
+        Parameters
+        ----------
+        filename : str
+            Filename.
+
+        Returns
+        -------
+        date : datetime
+            Parsed date.
+        """
+        return datetime.strptime(os.path.basename(filename)[16:30],
+                                 '%Y%m%d%H%M%S')
+
+    def _merge_data(self, data):
+        """
+        Merge data.
+
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            Data.
+        """
+        merged_data = defaultdict(list)
+
+        for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
+            for d in data:
+                merged_data[antenna].append(d.pop(antenna))
+            merged_data[antenna] = np.hstack(merged_data[antenna])
+
+        return merged_data

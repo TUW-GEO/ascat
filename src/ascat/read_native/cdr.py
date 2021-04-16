@@ -26,24 +26,20 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-import glob
 import warnings
 
-import numpy as np
 import netCDF4
-
-from pygeobase.object_base import TS
+import numpy as np
 import pygeogrids.grids as grids
-
 from pynetcf.time_series import GriddedNcContiguousRaggedTs
 
 float32_nan = -999999.0
 
 
-class AscatTimeSeries(TS):
+class TimeSeries:
 
     """
-    Container class for ASCAT time series.
+    Container class for a time series.
 
     Parameters
     ----------
@@ -92,33 +88,30 @@ class AscatTimeSeries(TS):
                  topo_complex=None, wetland_frac=None,
                  porosity_gldas=None, porosity_hwsd=None):
 
-        super(AscatTimeSeries, self).__init__(gpi, lon, lat, data, {})
-
+        self.gpi = gpi
+        self.lon = lon
+        self.lat = lat
+        self.data = data
         self.cell = cell
         self.topo_complex = topo_complex
         self.wetland_frac = wetland_frac
         self.porosity_gldas = porosity_gldas
         self.porosity_hwsd = porosity_hwsd
 
-        # kept for backwards compatibility
-        self.longitude = self.lon
-        self.latitude = self.lat
-
     def __repr__(self):
-
-        msg = "GPI: {:d} Lon: {:2.3f} Lat: {:3.3f}".format(self.gpi, self.lon,
-                                                           self.lat)
+        msg = "GPI: {:d} Lon: {:2.3f} Lat: {:3.3f}".format(
+            self.gpi, self.lon, self.lat)
 
         return msg
 
 
-def load_grid(grid_filename):
+def load_grid(filename):
     """
     Load grid file.
 
     Parameters
     ----------
-    grid_filename : str
+    filename : str
         Grid filename.
 
     Returns
@@ -126,7 +119,7 @@ def load_grid(grid_filename):
     grid : pygeogrids.CellGrid
         Grid.
     """
-    with netCDF4.Dataset(grid_filename) as grid_nc:
+    with netCDF4.Dataset(filename) as grid_nc:
         land_gp = np.where(grid_nc.variables['land_flag'][:] == 1)[0]
         lons = grid_nc.variables['lon'][:]
         lats = grid_nc.variables['lat'][:]
@@ -194,10 +187,10 @@ class StaticLayers():
                                    cache=cache)
 
 
-class StaticFile(object):
+class StaticFile:
 
     """
-    Class 
+    StaticFile class.
 
     Parameters
     ----------
@@ -252,7 +245,7 @@ class StaticFile(object):
         return data
 
 
-class AscatNc(GriddedNcContiguousRaggedTs):
+class AscatGriddedNcTs(GriddedNcContiguousRaggedTs):
 
     """
     Class reading Metop ASCAT soil moisture Climate Data Record (CDR).
@@ -298,8 +291,8 @@ class AscatNc(GriddedNcContiguousRaggedTs):
             self.slayer = StaticLayers(static_layer_path,
                                        cache=cache_static_layer)
 
-        super(AscatNc, self).__init__(path, grid, fn_format=fn_format,
-                                      **kwargs)
+        super().__init__(path, grid, fn_format=fn_format,
+                         **kwargs)
 
     def _read_gp(self, gpi, **kwargs):
         """
@@ -330,32 +323,34 @@ class AscatNc(GriddedNcContiguousRaggedTs):
         mask_snow_prob = kwargs.pop('mask_snow_prob', None)
         mask_ssf = kwargs.pop('mask_ssf', None)
 
-        data = super(AscatNc, self)._read_gp(gpi, **kwargs)
-        lon, lat = self.grid.gpi2lonlat(gpi)
-        cell = self.grid.gpi2cell(gpi)
+        data = super()._read_gp(gpi, **kwargs)
+        data.attrs = {}
+        data.attrs['gpi'] = gpi
+        data.attrs['lon'], data.attrs['lat'] = self.grid.gpi2lonlat(gpi)
+        data.attrs['cell'] = self.grid.gpi2cell(gpi)
 
         if self.slayer is not None:
-            topo_complex = self.slayer.topo_wetland[gpi]['topo']
-            wetland_frac = self.slayer.topo_wetland[gpi]['wetland']
+            data.attrs['topo_complex'] = self.slayer.topo_wetland[gpi]['topo']
+            data.attrs['wetland_frac'] = self.slayer.topo_wetland[gpi]['wetland']
             snow_prob = self.slayer.frozen_snow_prob[gpi]['snow_prob']
             frozen_prob = self.slayer.frozen_snow_prob[gpi]['frozen_prob']
-            porosity_gldas = self.slayer.porosity[gpi]['por_gldas']
-            porosity_hwsd = self.slayer.porosity[gpi]['por_hwsd']
+            data.attrs['porosity_gldas'] = self.slayer.porosity[gpi]['por_gldas']
+            data.attrs['porosity_hwsd'] = self.slayer.porosity[gpi]['por_hwsd']
 
-            if porosity_gldas == float32_nan:
-                porosity_gldas = np.nan
+            if data.attrs['porosity_gldas'] == float32_nan:
+                data.attrs['porosity_gldas'] = np.nan
 
-            if porosity_hwsd == float32_nan:
-                porosity_hwsd = np.nan
+            if data.attrs['porosity_hwsd'] == float32_nan:
+                data.attrs['porosity_hwsd'] = np.nan
 
             if data is not None:
                 data['snow_prob'] = snow_prob[data.index.dayofyear - 1]
                 data['frozen_prob'] = frozen_prob[data.index.dayofyear - 1]
         else:
-            topo_complex = np.nan
-            wetland_frac = np.nan
-            porosity_gldas = np.nan
-            porosity_hwsd = np.nan
+            data.attrs['topo_complex'] = np.nan
+            data.attrs['wetland_frac'] = np.nan
+            data.attrs['porosity_gldas'] = np.nan
+            data.attrs['porosity_hwsd'] = np.nan
             data['snow_prob'] = np.nan
             data['frozen_prob'] = np.nan
 
@@ -363,15 +358,17 @@ class AscatNc(GriddedNcContiguousRaggedTs):
             # no error assumed for porosity values, i.e. variance = 0
             por_var = 0.
 
-            data['abs_sm_gldas'] = data['sm'] / 100.0 * porosity_gldas
+            data['abs_sm_gldas'] = data['sm'] / \
+                100.0 * data.attrs['porosity_gldas']
             data['abs_sm_noise_gldas'] = np.sqrt(
                 por_var * (data['sm'] / 100.0)**2 + data['sm_noise']**2 *
-                (porosity_gldas / 100.0)**2)
+                (data.attrs['porosity_gldas'] / 100.0)**2)
 
-            data['abs_sm_hwsd'] = data['sm'] / 100.0 * porosity_hwsd
+            data['abs_sm_hwsd'] = data['sm'] / \
+                100.0 * data.attrs['porosity_hwsd']
             data['abs_sm_noise_hwsd'] = np.sqrt(
                 por_var * (data['sm'] / 100.0)**2 + data['sm_noise']**2 *
-                (porosity_hwsd / 100.0)**2)
+                (data.attrs['porosity_hwsd'] / 100.0)**2)
         else:
             data['abs_sm_gldas'] = np.nan
             data['abs_sm_noise_gldas'] = np.nan
@@ -387,54 +384,16 @@ class AscatNc(GriddedNcContiguousRaggedTs):
         if mask_snow_prob is not None:
             data = data[data['snow_prob'] < mask_snow_prob]
 
-        if (topo_complex is not None and
-                topo_complex >= self.thresholds['topo_complex']):
+        if (data.attrs['topo_complex'] is not None and
+                data.attrs['topo_complex'] >= self.thresholds['topo_complex']):
             msg = "Topographic complexity >{:2d} ({:2d})".format(
-                self.thresholds['topo_complex'], topo_complex)
+                self.thresholds['topo_complex'], data.attrs['topo_complex'])
             warnings.warn(msg)
 
-        if (wetland_frac is not None and
-                wetland_frac >= self.thresholds['wetland_frac']):
+        if (data.attrs['wetland_frac'] is not None and
+                data.attrs['wetland_frac'] >= self.thresholds['wetland_frac']):
             msg = "Wetland fraction >{:2d} ({:2d})".format(
-                self.thresholds['wetland_frac'], wetland_frac)
+                self.thresholds['wetland_frac'], data.attrs['wetland_frac'])
             warnings.warn(msg)
 
-        ts = AscatTimeSeries(gpi, lon, lat, cell, data, topo_complex,
-                             wetland_frac, porosity_gldas, porosity_hwsd)
-
-        return ts
-
-
-class AscatSsmCdr(AscatNc):
-
-    """
-    Class reading Metop ASCAT soil moisture Climate Data Record (CDR).
-
-    Parameters
-    ----------
-    cdr_path : str
-        Path to Climate Data Record (CDR) data set.
-    grid_path : str
-        Path to grid file.
-    grid_filename : str
-        Name of grid file.
-    static_layer_path : str
-        Path to static layer files.
-
-    Attributes
-    ----------
-    grid : pygeogrids.CellGrid
-        Cell grid.
-    """
-
-    def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
-                 static_layer_path=None, **kwargs):
-
-        first_file = glob.glob(os.path.join(cdr_path, '*.nc'))[0]
-        version = os.path.basename(first_file).rsplit('_', 1)[0]
-        fn_format = '{:}_{{:04d}}'.format(version)
-        grid_filename = os.path.join(grid_path, grid_filename)
-
-        super(AscatSsmCdr, self).__init__(cdr_path, fn_format, grid_filename,
-                                          static_layer_path, **kwargs)
+        return data

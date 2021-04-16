@@ -40,10 +40,10 @@ import numpy.testing as nptest
 
 from ascat.read_native.bufr import AscatL2BufrFile
 from ascat.read_native.nc import AscatL2NcFile
-from ascat.level2 import AscatL2File
-from ascat.level2 import AscatL2NcFileList
-from ascat.level2 import AscatL2BufrFileList
-from ascat.level2 import AscatL2EpsFileList
+from ascat.eumetsat.level2 import AscatL2File
+from ascat.eumetsat.level2 import AscatL2NcFileList
+from ascat.eumetsat.level2 import AscatL2BufrFileList
+from ascat.eumetsat.level2 import AscatL2EpsFileList
 
 eps_float_nan = -2147483648.
 bufr_float_nan = 1.7e+38

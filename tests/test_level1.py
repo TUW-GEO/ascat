@@ -38,11 +38,11 @@ from datetime import datetime
 import numpy as np
 import numpy.testing as nptest
 
-from ascat.level1 import AscatL1bFile
-from ascat.level1 import AscatL1bNcFileList
-from ascat.level1 import AscatL1bBufrFileList
-from ascat.level1 import AscatL1bEpsFileList
-from ascat.level1 import AscatL1bHdf5FileList
+from ascat.eumetsat.level1 import AscatL1bFile
+from ascat.eumetsat.level1 import AscatL1bNcFileList
+from ascat.eumetsat.level1 import AscatL1bEpsFileList
+from ascat.eumetsat.level1 import AscatL1bBufrFileList
+from ascat.eumetsat.level1 import AscatL1bHdf5FileList
 
 float32_nan = -999999.
 
@@ -195,7 +195,7 @@ class Test_AscatL1bFile(unittest.TestCase):
 
     def test_szx_eps_fmv11(self):
         """
-        Test read SZX EPS Format Version 11.
+        Test read SZX EPS format version 11.
         """
         self.reader = self.eps_fmv11.read()
 
@@ -243,7 +243,7 @@ class Test_AscatL1bFile(unittest.TestCase):
 
     def test_szf_eps(self):
         """
-        Test read SZF EPS Format.
+        Test read SZF EPS format.
         """
         self.reader = self.eps_szf.read()
 

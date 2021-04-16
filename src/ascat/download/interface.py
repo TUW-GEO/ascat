@@ -25,6 +25,9 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+"""
+Download interface.
+"""
 
 import sys
 import datetime
@@ -36,6 +39,19 @@ from ascat.download.connectors import EumConnector
 
 
 def parse_date(s):
+    """
+    Convert date string into datetime timestamp.
+
+    Parameters
+    ----------
+    s : str
+        Date string.
+
+    Returns
+    -------
+    data : datetime
+        Timestamp.
+    """
     return datetime.datetime.strptime(s, '%Y%m%d')
 
 

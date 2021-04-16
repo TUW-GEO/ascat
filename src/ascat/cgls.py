@@ -25,12 +25,16 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import pynetcf.time_series as netcdf_dataset
-import pygeogrids.netcdf as netcdf
+"""
+CGLS SWI interface.
+"""
 
 import os
 import glob
 import numpy as np
+
+import pynetcf.time_series as netcdf_dataset
+import pygeogrids.netcdf as netcdf
 
 
 class SWI_TS(netcdf_dataset.GriddedNcOrthoMultiTs):
