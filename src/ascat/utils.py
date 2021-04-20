@@ -203,6 +203,7 @@ def get_window_weights(window, radius, distance, norm=False):
 
     return weights
 
+
 def get_toi_subset(ds, toi):
     """
     Filter dataset for given time of interest.
@@ -258,9 +259,9 @@ def get_roi_subset(ds, roi):
         for key in ds.keys():
             subset = ((ds[key]['lat'] > roi[0]) & (ds[key]['lat'] < roi[2]) &
                       (ds[key]['lon'] > roi[1]) & (ds[key]['lon'] < roi[3]))
-            if isinstance(ds, xr.Dataset):
+            if isinstance(ds[key], xr.Dataset):
                 ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
-            elif isinstance(ds, np.ndarray):
+            elif isinstance(ds[key], np.ndarray):
                 ds[key] = ds[key][subset]
     else:
         subset = ((ds['lat'] > roi[0]) & (ds['lat'] < roi[2]) &
