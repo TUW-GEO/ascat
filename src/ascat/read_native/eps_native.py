@@ -1229,7 +1229,7 @@ def read_szf_fmv_12(eps_file):
     for f in fields:
         data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
-    data['swath_indicator'] = np.int8(data['beam_number'].flatten() > 3)
+    data['swath_indicator'] = np.uint8(data['beam_number'].flatten() > 3)
 
     fields = [('longitude_full', long_nan),
               ('latitude_full', long_nan),
