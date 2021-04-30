@@ -40,7 +40,7 @@ from ascat.read_native.hdf5 import AscatL1bHdf5File
 from ascat.read_native.bufr import AscatL1bBufrFile
 from ascat.read_native.eps_native import AscatL1bEpsFile
 from ascat.utils import get_toi_subset, get_roi_subset
-from ascat.file_search import ChronFiles
+from ascat.file_handling import ChronFiles
 
 
 class AscatL1bFile:

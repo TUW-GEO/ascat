@@ -37,7 +37,7 @@ from ascat.read_native.nc import AscatL2NcFile
 from ascat.read_native.bufr import AscatL2BufrFile
 from ascat.read_native.eps_native import AscatL2EpsFile
 from ascat.utils import get_toi_subset, get_roi_subset
-from ascat.file_search import ChronFiles
+from ascat.file_handling import ChronFiles
 
 
 class AscatL2File:

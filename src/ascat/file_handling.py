@@ -662,7 +662,7 @@ class ChronFiles(MultiFileHandler):
         return data
 
 
-class CsvFile:
+class Csv:
 
     """
     Read and write CSV file.
@@ -670,7 +670,7 @@ class CsvFile:
 
     def __init__(self, filename, mode='r'):
         """
-        Initialize CsvFile.
+        Initialize Csv
 
         Parameters
         ----------
@@ -768,7 +768,7 @@ class CsvFile:
         np.savetxt(self.filename, data, fmt='%s', header=header)
 
 
-class CsvFileRW(ChronFiles):
+class CsvFiles(ChronFiles):
 
     """
     Write CSV files.
@@ -786,7 +786,7 @@ class CsvFileRW(ChronFiles):
         fn_templ = 'prefix_{date}_{now}_postfix.csv'
         sf_templ = {'Y': '{year}', 'M': '{month}'}
 
-        super().__init__(root_path, CsvFile, fn_templ, sf_templ=sf_templ)
+        super().__init__(root_path, Csv, fn_templ, sf_templ=sf_templ)
 
     def _fmt(self, timestamp):
         """

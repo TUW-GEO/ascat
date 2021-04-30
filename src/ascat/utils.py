@@ -272,35 +272,3 @@ def get_roi_subset(ds, roi):
             ds = ds[subset]
 
     return ds
-
-
-def dataset_to_array(ds, dim='obs'):
-    """
-    Convert xarray.Dataset to numpy.array.
-
-    Parameters
-    ----------
-    ds : xarray.Dataset
-        Dataset to be converted.
-    dim : str
-        Reference dimension.
-
-    Returns
-    -------
-    arr : numpy.ndarray
-        Numpy array.
-    """
-    dtype = []
-    for var in ds.variables:
-        if len(ds.variables[var].shape) == 1:
-            dtype.append((var, ds.variables[var].dtype.str))
-        elif len(ds.variables[var].shape) > 1:
-            shape = ds.variables[var].shape[1:]
-            dtype.append((var, ds.variables[var].dtype.str, shape))
-
-    arr = np.empty(ds.dims[dim], dtype=np.dtype(dtype))
-
-    for var in ds.variables:
-        arr[var] = ds.variables[var].values
-
-    return arr

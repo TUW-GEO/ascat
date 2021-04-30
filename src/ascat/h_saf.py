@@ -44,7 +44,7 @@ except ImportError:
         'pygrib can not be imported GRIB files (H14) can not be read.')
 
 from ascat.utils import tmp_unzip
-from ascat.file_search import ChronFiles
+from ascat.file_handling import ChronFiles
 from ascat.read_native.bufr import BUFRReader
 from ascat.eumetsat.level2 import AscatL2File
 from ascat.read_native.cdr import AscatGriddedNcTs
