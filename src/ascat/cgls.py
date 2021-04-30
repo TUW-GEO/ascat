@@ -44,30 +44,33 @@ class SWI_TS(netcdf_dataset.GriddedNcOrthoMultiTs):
 
     Parameters
     ----------
-    data_path: string
+    data_path : string
         path to the netCDF files
-    parameters: list
+    parameters : list
         list of parameters to read from netCDF file
-    dt: string, optional
+    dt : string, optional
         datetime in the filenames of the cells.
         If not given it is detected from the files in the data_path.
-        Automatic detection only works if the files follow the CGLS naming convention.
-    version: string, optional
+        Automatic detection only works if the files follow the CGLS
+        naming convention.
+    version : string, optional
         version number of the files
         If not given it is detected from the files in the data_path.
-        Automatic detection only works if the files follow the CGLS naming convention.
-    grid_fname: string, optional
+        Automatic detection only works if the files follow the CGLS
+        naming convention.
+    grid_fname : string, optional
         filename + path of the grid netCDF file,
-        default is the standard grid file (c_gls_SWI-STATIC-DGG_201501010000_GLOBE_ASCAT_V3.0.1.nc)
+        default is the standard grid file
+        (c_gls_SWI-STATIC-DGG_201501010000_GLOBE_ASCAT_V3.0.1.nc)
         in the same folder as the data
-    read_bulk: boolean, optional
+    read_bulk : boolean, optional
         if set to true then a complete 5x5 degree cell will be read at once
         providing speedup if the complete data is needed.
-    fname_template: string, optional
+    fname_template : string, optional
         Filename template. Has to have three slots for {dt}, {version} and a
         slot for the {cell} number that is available for further formatting.
         The has to be without the .nc ending since this is added during reading.
-    cell_fn: string, optional
+    cell_fn : string, optional
         cell number in the fname_template.
     """
 
