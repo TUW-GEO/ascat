@@ -2,6 +2,14 @@
 Changelog
 =========
 
+Version 2.0.0
+=============
+
+- New interface reading ASCAT Level 1b and Level 2 data
+- Removing old interfaces to TU Wien data
+- Restructure package and harmonize interface class names
+- Update documentation
+
 Version 1.2.0
 =============
 

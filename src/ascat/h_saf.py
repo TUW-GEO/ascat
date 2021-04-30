@@ -1,4 +1,4 @@
-# Copyright (c) 2020, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -25,99 +25,73 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
+"""
+Readers for H SAF soil moisture products.
+"""
+
 import os
+import glob
 import warnings
-from gzip import GzipFile
-from tempfile import NamedTemporaryFile
-from datetime import datetime, timedelta
+from datetime import datetime
+from collections import defaultdict
 
 import numpy as np
+
 try:
     import pygrib
 except ImportError:
     warnings.warn(
         'pygrib can not be imported GRIB files (H14) can not be read.')
 
-from pygeobase.io_base import ImageBase
-from pygeobase.io_base import MultiTemporalImageBase
-from pygeobase.object_base import Image
-
-import ascat.read_native.bufr as bufr_reader
-from ascat.read_native.bufr import AscatL2SsmBufr
-from ascat.read_native.cdr import AscatNc
+from ascat.utils import tmp_unzip
+from ascat.file_handling import ChronFiles
+from ascat.read_native.bufr import BUFRReader
+from ascat.eumetsat.level2 import AscatL2File
+from ascat.read_native.cdr import AscatGriddedNcTs
 
 
-class H08Single(ImageBase):
+class H08Bufr:
 
-    def read(self, timestamp=None, lat_lon_bbox=None):
+    def __init__(self, filename):
         """
-        Read specific image for given datetime timestamp.
+        Initialize H08Bufr.
 
         Parameters
         ----------
-        filename : string
-            filename
-        timestamp : datetime.datetime
-            exact observation timestamp of the image that should be read
-        lat_lon_bbox : list, optional
-            list of lat,lon cooridnates of bounding box
-            [lat_min, lat_max, lon_min, lon_max]
+        filename : str
+            Filename.
+        """
+        if os.path.splitext(filename)[1] == '.gz':
+            self.filename = tmp_unzip(filename)
+        else:
+            self.filename = filename
+
+    def read(self):
+        """
+        Read file.
 
         Returns
         -------
-        data : dict or None
-            dictionary of numpy arrays that hold the image data for each
-            variable of the dataset, if no data was found None is returned
-        metadata : dict
-            dictionary of numpy arrays that hold the metadata
-        timestamp : datetime.datetime
-            exact timestamp of the image
-        lon : numpy.array or None
-            array of longitudes, if None self.grid will be assumed
-        lat : numpy.array or None
-            array of latitudes, if None self.grid will be assumed
-        time_var : string or None
-            variable name of observation times in the data dict, if None all
-            observations have the same timestamp
+        data : numpy.ndarray
+            H08 data.
         """
-        zipped = False
-        if os.path.splitext(self.filename)[1] == '.gz':
-            zipped = True
+        data = defaultdict(list)
 
-        # for zipped files use an unzipped temporary copy
-        if zipped:
-            with NamedTemporaryFile(delete=False) as tmp_fid:
-                with GzipFile(self.filename) as gz_fid:
-                    tmp_fid.write(gz_fid.read())
-                filename = tmp_fid.name
-        else:
-            filename = self.filename
-
-        with bufr_reader.BUFRReader(filename) as bufr:
+        with BUFRReader(self.filename) as bufr:
 
             lons = []
             ssm = []
             ssm_noise = []
             ssm_corr_flag = []
             ssm_proc_flag = []
-            data_in_bbox = True
 
             for i, message in enumerate(bufr.messages()):
                 if i == 0:
                     # first message is just lat, lon extent
                     # check if any data in bbox
-                    if lat_lon_bbox is not None:
-                        lon_min, lon_max = message[0, 2], message[0, 3]
-                        lat_min, lat_max = message[0, 4], message[0, 5]
-                        if (lat_lon_bbox[0] > lat_max or
-                            lat_lon_bbox[1] < lat_min or
-                            lat_lon_bbox[2] > lon_max or
-                                lat_lon_bbox[3] < lon_min):
-                            data_in_bbox = False
-                            break
-
-                elif data_in_bbox:
+                    # lon_min, lon_max = message[0, 2], message[0, 3]
+                    lat_min, lat_max = message[0, 4], message[0, 5]
+                else:
                     # first 5 elements are there only once, after that,
                     # 4 elements are repeated till the end of the array
                     # these 4 are ssm, ssm_noise, ssm_corr_flag and
@@ -132,363 +106,248 @@ class H08Single(ImageBase):
                     ssm_corr_flag.append(message[:, 6::4])
                     ssm_proc_flag.append(message[:, 7::4])
 
-        if zipped:
-            os.remove(filename)
+        ssm = np.rot90(np.vstack(ssm)).astype(np.float32)
+        ssm_noise = np.rot90(np.vstack(ssm_noise)).astype(np.float32)
+        ssm_corr_flag = np.rot90(
+            np.vstack(ssm_corr_flag)).astype(np.float32)
+        ssm_proc_flag = np.rot90(
+            np.vstack(ssm_proc_flag)).astype(np.float32)
+        lats_dim = np.linspace(lat_max, lat_min, ssm.shape[0])
+        lons_dim = np.concatenate(lons)
 
-        if data_in_bbox:
+        data = {'ssm': ssm, 'ssm_noise': ssm_noise,
+                'proc_flag': ssm_proc_flag, 'corr_flag': ssm_corr_flag}
 
-            ssm = np.rot90(np.vstack(ssm)).astype(np.float32)
-            ssm_noise = np.rot90(np.vstack(ssm_noise)).astype(np.float32)
-            ssm_corr_flag = np.rot90(
-                np.vstack(ssm_corr_flag)).astype(np.float32)
-            ssm_proc_flag = np.rot90(
-                np.vstack(ssm_proc_flag)).astype(np.float32)
-            lats_dim = np.linspace(lat_max, lat_min, ssm.shape[0])
-            lons_dim = np.concatenate(lons)
+        # if there are is a gap in the image it is not a 2D array in
+        # lon, lat space but has a jump in latitude or longitude
+        # detect a jump in lon or lat spacing
 
-            data = {'ssm': ssm,
-                    'ssm_noise': ssm_noise,
-                    'proc_flag': ssm_proc_flag,
-                    'corr_flag': ssm_corr_flag
-                    }
+        lon_jump_ind = np.where(np.diff(lons_dim) > 0.00418)[0]
 
-            # if there are is a gap in the image it is not a 2D array in
-            # lon, lat space but has a jump in latitude or longitude
-            # detect a jump in lon or lat spacing
+        if lon_jump_ind.size > 1:
+            print("More than one jump in longitude")
 
-            lon_jump_ind = np.where(np.diff(lons_dim) > 0.00418)[0]
+        if lon_jump_ind.size == 1:
+            lon_jump_ind = lon_jump_ind[0]
+            diff_lon_jump = np.abs(
+                lons_dim[lon_jump_ind] - lons_dim[lon_jump_ind + 1])
+            missing_elements = int(np.round(diff_lon_jump / 0.00416666))
+            missing_lons = np.linspace(lons_dim[lon_jump_ind],
+                                       lons_dim[lon_jump_ind + 1],
+                                       missing_elements,
+                                       endpoint=False)
 
-            if lon_jump_ind.size > 1:
-                print("More than one jump in longitude")
+            # fill up longitude dimension to full grid
+            lons_dim = np.concatenate([lons_dim[:lon_jump_ind],
+                                       missing_lons,
+                                       lons_dim[lon_jump_ind + 1:]])
 
-            if lon_jump_ind.size == 1:
-                lon_jump_ind = lon_jump_ind[0]
-                diff_lon_jump = np.abs(
-                    lons_dim[lon_jump_ind] - lons_dim[lon_jump_ind + 1])
-                missing_elements = int(np.round(diff_lon_jump / 0.00416666))
-                missing_lons = np.linspace(lons_dim[lon_jump_ind],
-                                           lons_dim[lon_jump_ind + 1],
-                                           missing_elements,
-                                           endpoint=False)
+            # fill data with NaN values
+            empty = np.empty((lats_dim.shape[0], missing_elements))
+            empty.fill(1e38)
+            for key in data:
+                data[key] = np.concatenate(
+                    [data[key][:, :lon_jump_ind],
+                        empty, data[key][:, lon_jump_ind + 1:]], axis=1)
 
-                # fill up longitude dimension to full grid
-                lons_dim = np.concatenate([lons_dim[:lon_jump_ind],
-                                           missing_lons,
-                                           lons_dim[lon_jump_ind + 1:]])
+        lat_jump_ind = np.where(np.diff(lats_dim) > 0.00418)[0]
 
-                # fill data with NaN values
-                empty = np.empty((lats_dim.shape[0], missing_elements))
-                empty.fill(1e38)
-                for key in data:
-                    data[key] = np.concatenate(
-                        [data[key][:, :lon_jump_ind],
-                         empty, data[key][:, lon_jump_ind + 1:]], axis=1)
+        if lat_jump_ind.size > 1:
+            print("More than one jump in latitude")
 
-            lat_jump_ind = np.where(np.diff(lats_dim) > 0.00418)[0]
+        if lat_jump_ind.size == 1:
+            diff_lat_jump = np.abs(
+                lats_dim[lat_jump_ind] - lats_dim[lat_jump_ind + 1])
+            missing_elements = np.round(diff_lat_jump / 0.00416666)
+            missing_lats = np.linspace(lats_dim[lat_jump_ind],
+                                       lats_dim[lat_jump_ind + 1],
+                                       missing_elements,
+                                       endpoint=False)
 
-            if lat_jump_ind.size > 1:
-                print("More than one jump in latitude")
+            # fill up longitude dimension to full grid
+            lats_dim = np.concatenate(
+                [lats_dim[:lat_jump_ind], missing_lats,
+                    lats_dim[lat_jump_ind + 1:]])
+            # fill data with NaN values
+            empty = np.empty((missing_elements, lons_dim.shape[0]))
+            empty.fill(1e38)
+            for key in data:
+                data[key] = np.concatenate(
+                    [data[key][:lat_jump_ind, :], empty,
+                        data[key][lat_jump_ind + 1:, :]], axis=0)
 
-            if lat_jump_ind.size == 1:
-                diff_lat_jump = np.abs(
-                    lats_dim[lat_jump_ind] - lats_dim[lat_jump_ind + 1])
-                missing_elements = np.round(diff_lat_jump / 0.00416666)
-                missing_lats = np.linspace(lats_dim[lat_jump_ind],
-                                           lats_dim[lat_jump_ind + 1],
-                                           missing_elements,
-                                           endpoint=False)
+        data['lon'], data['lat'] = np.meshgrid(lons_dim, lats_dim)
 
-                # fill up longitude dimension to full grid
-                lats_dim = np.concatenate(
-                    [lats_dim[:lat_jump_ind], missing_lats,
-                     lats_dim[lat_jump_ind + 1:]])
-                # fill data with NaN values
-                empty = np.empty((missing_elements, lons_dim.shape[0]))
-                empty.fill(1e38)
-                for key in data:
-                    data[key] = np.concatenate(
-                        [data[key][:lat_jump_ind, :], empty,
-                         data[key][lat_jump_ind + 1:, :]], axis=0)
-
-            lons, lats = np.meshgrid(lons_dim, lats_dim)
-            # only return data in bbox
-            if lat_lon_bbox is not None:
-                data_ind = np.where((lats >= lat_lon_bbox[0]) &
-                                    (lats <= lat_lon_bbox[1]) &
-                                    (lons >= lat_lon_bbox[2]) &
-                                    (lons <= lat_lon_bbox[3]))
-                # indexing returns 1d array
-                # get shape of lats_dim and lons_dim to be able to reshape
-                # the 1d arrays to the correct 2d shapes
-                lats_dim_shape = \
-                    np.where((lats_dim >= lat_lon_bbox[0]) &
-                             (lats_dim <= lat_lon_bbox[1]))[0].shape[0]
-
-                lons_dim_shape = \
-                    np.where((lons_dim >= lat_lon_bbox[2]) &
-                             (lons_dim <= lat_lon_bbox[3]))[0].shape[0]
-
-                lons = lons[data_ind].reshape(lats_dim_shape, lons_dim_shape)
-                lats = lats[data_ind].reshape(lats_dim_shape, lons_dim_shape)
-                for key in data:
-                    data[key] = data[key][data_ind].reshape(
-                        lats_dim_shape, lons_dim_shape)
-
-        else:
-            lons = None
-            lats = None
-            data = None
-
-        return Image(lons, lats, data, {}, timestamp)
-
-    def write(self, data):
-        raise NotImplementedError()
-
-    def flush(self):
-        pass
+        return data
 
     def close(self):
+        """
+        Close file.
+        """
         pass
 
 
-class H08img(MultiTemporalImageBase):
+class H08BufrFileList(ChronFiles):
 
     """
-    Reads H SAF H08 images. The images have to be uncompressed in the
-    following folder structure path - month_path_str (default 'h08_%Y%m_buf')
-
-    For example if path is set to /home/user/hsaf08 and month_path_str
-    is left to the default 'h08_%Y%m_buf' then the images for March 2012
-    have to be in the folder /home/user/hsaf08/h08_201203_buf/
-
-    Parameters
-    ----------
-    path: string
-        path where the data is stored
-    month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on
-        the H SAF FTP Server then please specify the string that should be
-        used in datetime.datetime.strftime
-        Default: 'h08_%Y%m_buf'
-    day_search_str: string, optional
-        to provide an iterator over all images of a day the method
-        _get_possible_timestamps looks for all available images on a day on
-        the harddisk. This string is used in datetime.datetime.strftime and
-        in glob.glob to search for all files on a day.
-        Default : 'h08_%Y%m%d_*.buf'
-    file_search_str: string, optional
-        this string is used in datetime.datetime.strftime and glob.glob to find
-        a 3 minute bufr file by the exact date.
-        Default: 'h08_{datetime}*.buf'
-    datetime_format: string, optional
-        datetime format by which {datetime} will be replaced in file_search_str
-        Default: %Y%m%d_%H%M%S
+    Reads H SAF H08 data.
     """
 
-    def __init__(self, path, month_path_str='h08_%Y%m_buf',
-                 day_search_str='h08_%Y%m%d_*.buf',
-                 file_search_str='h08_{datetime}*.buf',
-                 datetime_format='%Y%m%d_%H%M%S',
-                 filename_datetime_format=(4, 19, '%Y%m%d_%H%M%S')):
-
-        self.path = path
-        self.month_path_str = month_path_str
-        self.day_search_str = day_search_str
-        self.file_search_str = file_search_str
-        self.filename_datetime_format = filename_datetime_format
-
-        super(H08img, self).__init__(path, H08Single,
-                                     subpath_templ=[month_path_str],
-                                     fname_templ=file_search_str,
-                                     datetime_format=datetime_format,
-                                     exact_templ=False)
-
-    def _get_orbit_start_date(self, filename):
-
-        orbit_start_str = \
-            os.path.basename(filename)[self.filename_datetime_format[0]:
-                                       self.filename_datetime_format[1]]
-
-        return datetime.strptime(orbit_start_str,
-                                 self.filename_datetime_format[2])
-
-    def tstamps_for_daterange(self, startdate, enddate):
+    def __init__(self, path):
         """
-        Get the timestamps as datetime array that are possible for the
-        given day, if the timestamps are
+        Initialize.
+        """
+        fn_templ = 'h08_{date}*.buf'
+        sf_templ = {'month': 'h08_{date}_buf'}
 
-        For this product it is not fixed but has to be looked up from
-        the hard disk since bufr files are not regular spaced and only
-        europe is in this product. For a global product a 3 minute
-        spacing could be used as a fist approximation
+        super().__init__(path, H08Bufr, fn_templ, sf_templ=sf_templ)
+
+    def _fmt(self, timestamp):
+        """
+        Definition of filename and subfolder format.
 
         Parameters
         ----------
-        start_date : datetime.date or datetime.datetime
-            start date
-        end_date : datetime.date or datetime.datetime
-            end date
+        timestamp : datetime
+            Time stamp.
 
         Returns
         -------
-        dates : list
-            list of datetimes
+        fn_fmt : dict
+            Filename format.
+        sf_fmt : dict
+            Subfolder format.
         """
-        file_list = []
-        delta_all = enddate - startdate
-        timestamps = []
+        fn_read_fmt = {'date': timestamp.strftime('%Y%m%d_%H%M%S')}
+        sf_read_fmt = {'month': {'date': timestamp.strftime('%Y%m')}}
 
-        for i in range(delta_all.days + 1):
-            timestamp = startdate + timedelta(days=i)
+        fn_write_fmt = None
+        sf_write_fmt = None
 
-            files = self._search_files(
-                timestamp, custom_templ=self.day_search_str)
+        return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-            file_list.extend(sorted(files))
+    def _parse_date(self, filename):
+        """
+        Parse date from filename.
 
-        for filename in file_list:
-            timestamps.append(self._get_orbit_start_date(filename))
+        Parameters
+        ----------
+        filename : str
+            Filename.
 
-        timestamps = [dt for dt in timestamps if dt >=
-                      startdate and dt <= enddate]
-        return timestamps
+        Returns
+        -------
+        date : datetime
+            Parsed date.
+        """
+        return datetime.strptime(os.path.basename(filename)[4:19],
+                                 '%Y%m%d_%H%M%S')
 
-
-class H07img(AscatL2SsmBufr):
-    pass
-
-
-class H16img(AscatL2SsmBufr):
-
-    """
-    Parameters
-    ----------
-    path: string
-        path where the data is stored
-    month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on
-        the H SAF FTP Server then please specify the string that should be
-        used in datetime.datetime.strftime
-        Default: 'h16_%Y%m_buf'
-    """
-
-    def __init__(self, path, month_path_str='h16_%Y%m_buf'):
-
-        day_search_str = 'h16_%Y%m%d_*.buf'
-        file_search_str = 'h16_{datetime}*.buf'
-
-        super(H16img, self).__init__(path, month_path_str=month_path_str,
-                                     day_search_str=day_search_str,
-                                     file_search_str=file_search_str)
+    def read_period(dt_start, dt_end, delta):
+        """
+        Read period not implemented.
+        """
+        raise NotImplementedError
 
 
-class H101img(AscatL2SsmBufr):
+class AscatNrtBufrFileList(ChronFiles):
 
-    """
-    Parameters
-    ----------
-    path: string
-        path where the data is stored
-    month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on
-        the H SAF FTP Server then please specify the string that should
-        be used in datetime.datetime.strftime
-        Default: 'h101_%Y%m_buf'
-    """
+    def __init__(self, root_path, product_id='*'):
+        """
+        Initialize.
+        """
+        fn_templ = '{product_id}_{date}*.buf'
+        sf_templ = None
 
-    def __init__(self, path, month_path_str='h101_%Y%m_buf'):
+        self.product_id = product_id
 
-        day_search_str = 'h101_%Y%m%d_*.buf'
-        file_search_str = 'h101_{datetime}*.buf'
-        fn_datetime_fmt = (5, 20, '%Y%m%d_%H%M%S')
+        super().__init__(root_path, AscatL2File, fn_templ, sf_templ=sf_templ)
 
-        super(H101img, self).__init__(path, month_path_str=month_path_str,
-                                      day_search_str=day_search_str,
-                                      file_search_str=file_search_str,
-                                      filename_datetime_format=fn_datetime_fmt)
+    def _fmt(self, timestamp):
+        """
+        Definition of filename and subfolder format.
 
+        Parameters
+        ----------
+        timestamp : datetime
+            Time stamp.
 
-class H102img(AscatL2SsmBufr):
+        Returns
+        -------
+        fn_fmt : dict
+            Filename format.
+        sf_fmt : dict
+            Subfolder format.
+        """
+        fn_read_fmt = {'date': timestamp.strftime('%Y%m%d_%H%M%S'),
+                       'product_id': self.product_id}
+        sf_read_fmt = None
+        fn_write_fmt = None
+        sf_write_fmt = None
 
-    """
-    Parameters
-    ----------
-    path: string
-        path where the data is stored
-    month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on
-        the H SAF FTP Server then please specify the string that should be
-        used in datetime.datetime.strftime
-        Default: 'h102_%Y%m_buf'
-    """
+        return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def __init__(self, path, month_path_str='h102_%Y%m_buf'):
+    def _parse_date(self, filename):
+        """
+        Parse date from filename.
 
-        day_search_str = 'h102_%Y%m%d_*.buf'
-        file_search_str = 'h102_{datetime}*.buf'
-        fn_datetime_fmt = (5, 20, '%Y%m%d_%H%M%S')
+        Parameters
+        ----------
+        filename : str
+            Filename.
 
-        super(H102img, self).__init__(path, month_path_str=month_path_str,
-                                      day_search_str=day_search_str,
-                                      file_search_str=file_search_str,
-                                      filename_datetime_format=fn_datetime_fmt)
+        Returns
+        -------
+        date : datetime
+            Parsed date.
+        """
+        return datetime.strptime(os.path.basename(filename)[4:19],
+                                 '%Y%m%d%_H%M%S')
 
+    def _merge_data(self, data):
+        """
+        Merge data.
 
-class H103img(AscatL2SsmBufr):
+        Parameters
+        ----------
+        data : list
+            List of array.
 
-    """
-    Class reading H103 Metop-A ASCAT soil moisture in BUFR format.
-
-    Parameters
-    ----------
-    path: string
-        path where the data is stored
-    month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on
-        the H SAF FTP Server then please specify the string that should be
-        used in datetime.datetime.strftime
-        Default: 'h103_%Y%m_buf'
-    """
-
-    def __init__(self, path, month_path_str='h103_%Y%m_buf'):
-
-        day_search_str = 'h103_%Y%m%d_*.buf'
-        file_search_str = 'h103_{datetime}*.buf'
-        fn_datetime_fmt = (5, 20, '%Y%m%d_%H%M%S')
-
-        super(H103img, self).__init__(path, month_path_str=month_path_str,
-                                      day_search_str=day_search_str,
-                                      file_search_str=file_search_str,
-                                      filename_datetime_format=fn_datetime_fmt)
+        Returns
+        -------
+        data : numpy.ndarray
+            Data.
+        """
+        return np.hstack(data)
 
 
-class H14Single(ImageBase):
+class H14Grib:
 
     """
     Class reading H14 soil moisture in GRIB format.
-
-    Parameters
-    ----------
-    expand_grid : boolean, optional
-        if set the images will be expanded to a 2D image during reading
-        if false the images will be returned as 1D arrays on the
-        reduced gaussian grid
-        Default: True
-    metadata_fields: list, optional
-        fields of the message to put into the metadata dictionary.
     """
 
-    def __init__(self, filename, mode='r', expand_grid=True,
+    def __init__(self, filename, expand_grid=True,
                  metadata_fields=['units', 'name']):
+        """
 
+        Parameters
+        ----------
+        expand_grid : boolean, optional
+            if set the images will be expanded to a 2D image during reading
+            if false the images will be returned as 1D arrays on the
+            reduced gaussian grid
+            Default: True
+        metadata_fields: list, optional
+            fields of the message to put into the metadata dictionary.
+        """
+        self.filename = filename
         self.expand_grid = expand_grid
         self.metadata_fields = metadata_fields
         self.pygrib1 = True
 
         if int(pygrib.__version__[0]) > 1:
             self.pygrib1 = False
-
-        super(H14Single, self).__init__(filename, mode=mode)
 
     def read(self, timestamp=None):
         """
@@ -504,25 +363,12 @@ class H14Single(ImageBase):
         data : dict
             dictionary of numpy arrays that hold the image data for each
             variable of the dataset
-        metadata : dict
-            dictionary of numpy arrays that hold the metadata
-        timestamp : datetime.datetime
-            exact timestamp of the image
-        lon : numpy.array or None
-            array of longitudes, if None self.grid will be assumed
-        lat : numpy.array or None
-            array of latitudes, if None self.grid will be assumed
-        time_var : string or None
-            variable name of observation times in the data dict, if None all
-            observations have the same timestamp
         """
-
         if self.pygrib1:
             param_names = {'40': 'SM_layer1_0-7cm',
                            '41': 'SM_layer2_7-28cm',
                            '42': 'SM_layer3_28-100cm',
                            '43': 'SM_layer4_100-289cm'}
-
         else:
             param_names = {
                 'SWI1 Soil wetness index in layer 1': 'SM_layer1_0-7cm',
@@ -536,7 +382,7 @@ class H14Single(ImageBase):
             for i, message in enumerate(grb):
                 message.expand_grid(self.expand_grid)
                 if i == 1:
-                    lats, lons = message.latlons()
+                    data['lat'], data['lon'] = message.latlons()
                 data[param_names[message['parameterName']]] = message.values
 
                 # read and store metadata
@@ -546,211 +392,110 @@ class H14Single(ImageBase):
                         md[k] = message[k]
                 metadata[param_names[message['parameterName']]] = md
 
-        return Image(lons, lats, data, metadata, timestamp)
-
-    def write(self, data):
-        raise NotImplementedError()
-
-    def flush(self):
-        pass
+        return data
 
     def close(self):
         pass
 
 
-class H14img(MultiTemporalImageBase):
+class H14GribFileList(ChronFiles):
 
     """
-    Class for reading H SAF H14 SM DAS 2 products in grib format.
-
-    The images have to be uncompressed in the following folder structure
-    path - month_path_str (default 'h14_%Y%m_grib')
-
-    For example if path is set to /home/user/hsaf14 and month_path_str is
-    left to the default 'h14_%Y%m_grib' then the images for March 2012 have
-    to be in the folder /home/user/hsaf14/h14_201203_grib/
-
-    Parameters
-    ----------
-    path: string
-        path where the data is stored
-    month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on
-        the H SAF FTP Server then please specify the string that should be
-        used in datetime.datetime.strftime
-        Default: 'h14_%Y%m_grib'
-    file_str: string, optional
-        this string is used in datetime.datetime.strftime to get the
-        filename of a H14 daily grib file
-        Default: 'H14_%Y%m%d00.grib'
-    datetime_format: string, optional
-        datetime format by which {datetime} will be replaced in file_str
-        Default: %Y%m%d
+    Reads H SAF H08 data.
     """
 
-    def __init__(self, path, month_path_str='h14_%Y%m_grib',
-                 file_str='H14_{datetime}00.grib', datetime_format='%Y%m%d',
-                 expand_grid=True):
+    def __init__(self, path):
+        """
+        Initialize.
+        """
+        fn_templ = 'H14_{date}.grib'
+        sf_templ = {'month': 'h14_{date}_grib'}
 
-        self.path = path
-        self.month_path_str = month_path_str
-        self.file_search_str = file_str
+        super().__init__(path, H14Grib, fn_templ, sf_templ=sf_templ)
 
-        super(H14img, self).__init__(path, H14Single,
-                                     subpath_templ=[month_path_str],
-                                     fname_templ=file_str,
-                                     datetime_format=datetime_format,
-                                     ioclass_kws={'expand_grid': expand_grid})
+    def _fmt(self, timestamp):
+        """
+        Definition of filename and subfolder format.
+
+        Parameters
+        ----------
+        timestamp : datetime
+            Time stamp.
+
+        Returns
+        -------
+        fn_fmt : dict
+            Filename format.
+        sf_fmt : dict
+            Subfolder format.
+        """
+        fn_read_fmt = {'date': timestamp.strftime('%Y%m%d%H')}
+        sf_read_fmt = {'month': {'date': timestamp.strftime('%Y%m')}}
+        fn_write_fmt = None
+        sf_write_fmt = None
+
+        return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
+
+    def _parse_date(self, filename):
+        """
+        Parse date from filename.
+
+        Parameters
+        ----------
+        filename : str
+            Filename.
+
+        Returns
+        -------
+        date : datetime
+            Parsed date.
+        """
+        return datetime.strptime(os.path.basename(filename)[4:15], '%Y%m%d%H')
+
+    def read_period(dt_start, dt_end, delta):
+        """
+        Read period not implemented.
+        """
+        raise NotImplementedError()
 
 
-class H25Ts(AscatNc):
+class AscatSsmDataRecord(AscatGriddedNcTs):
 
     """
-    Class reading H25 soil moisture climate data record (CDR).
+    Class reading Metop ASCAT soil moisture data record.
     """
 
-    def __init__(self, cdr_path, grid_path,
+    def __init__(self, cdr_path, grid_path, fn_format=None,
                  grid_filename='TUW_WARP5_grid_info_2_2.nc',
                  static_layer_path=None, **kwargs):
+        """
 
-        fn_format = 'H25_{:04d}'
+        Parameters
+        ----------
+        cdr_path : str
+            Path to Climate Data Record (CDR) data set.
+        grid_path : str
+            Path to grid file.
+        grid_filename : str
+            Name of grid file.
+        static_layer_path : str
+            Path to static layer files.
+
+        Attributes
+        ----------
+        grid : pygeogrids.CellGrid
+            Cell grid.
+        """
+        if fn_format is None:
+            first_file = glob.glob(os.path.join(cdr_path, '*.nc'))
+
+            if len(first_file) == 0:
+                raise RuntimeError('No files found')
+
+            version = os.path.basename(first_file[0]).rsplit('_', 1)[0]
+            fn_format = '{:}_{{:04d}}'.format(version)
+
         grid_filename = os.path.join(grid_path, grid_filename)
 
-        super(H25Ts, self).__init__(cdr_path, fn_format, grid_filename,
-                                    static_layer_path, **kwargs)
-
-
-class H108Ts(AscatNc):
-
-    """
-    Class reading H108 soil moisture climate data record (CDR) extension.
-    """
-
-    def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
-                 static_layer_path=None, **kwargs):
-
-        fn_format = 'H108_{:04d}'
-        grid_filename = os.path.join(grid_path, grid_filename)
-
-        super(H108Ts, self).__init__(cdr_path, fn_format, grid_filename,
-                                     static_layer_path, **kwargs)
-
-
-class H109Ts(AscatNc):
-
-    """
-    Class reading H109 soil moisture climate data record (CDR).
-    """
-
-    def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
-                 static_layer_path=None, **kwargs):
-
-        fn_format = 'H109_{:04d}'
-        grid_filename = os.path.join(grid_path, grid_filename)
-
-        super(H109Ts, self).__init__(cdr_path, fn_format, grid_filename,
-                                     static_layer_path, **kwargs)
-
-
-class H110Ts(AscatNc):
-
-    """
-    Class reading H110 soil moisture climate data record (CDR) extension.
-    """
-
-    def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
-                 static_layer_path=None, **kwargs):
-
-        fn_format = 'H110_{:04d}'
-        grid_filename = os.path.join(grid_path, grid_filename)
-
-        super(H110Ts, self).__init__(cdr_path, fn_format, grid_filename,
-                                     static_layer_path, **kwargs)
-
-
-class H111Ts(AscatNc):
-
-    """
-    Class reading H111 soil moisture climate data record (CDR).
-    """
-
-    def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
-                 static_layer_path=None, **kwargs):
-
-        fn_format = 'H111_{:04d}'
-        grid_filename = os.path.join(grid_path, grid_filename)
-
-        super(H111Ts, self).__init__(cdr_path, fn_format, grid_filename,
-                                     static_layer_path, **kwargs)
-
-
-class H112Ts(AscatNc):
-
-    """
-    Class reading H112 soil moisture climate data record (CDR).
-    """
-
-    def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
-                 static_layer_path=None, **kwargs):
-
-        fn_format = 'H112_{:04d}'
-        grid_filename = os.path.join(grid_path, grid_filename)
-
-        super(H112Ts, self).__init__(cdr_path, fn_format, grid_filename,
-                                     static_layer_path, **kwargs)
-
-
-class H113Ts(AscatNc):
-
-    """
-    Class reading H113 soil moisture climate data record (CDR).
-    """
-
-    def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
-                 static_layer_path=None, **kwargs):
-
-        fn_format = 'H113_{:04d}'
-        grid_filename = os.path.join(grid_path, grid_filename)
-
-        super(H113Ts, self).__init__(cdr_path, fn_format, grid_filename,
-                                     static_layer_path, **kwargs)
-
-
-class H114Ts(AscatNc):
-
-    """
-    Class reading H114 soil moisture climate data record (CDR).
-    """
-
-    def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
-                 static_layer_path=None, **kwargs):
-
-        fn_format = 'H114_{:04d}'
-        grid_filename = os.path.join(grid_path, grid_filename)
-
-        super(H114Ts, self).__init__(cdr_path, fn_format, grid_filename,
-                                     static_layer_path, **kwargs)
-
-
-class H115Ts(AscatNc):
-
-    """
-    Class reading H115 soil moisture climate data record (CDR).
-    """
-
-    def __init__(self, cdr_path, grid_path,
-                 grid_filename='TUW_WARP5_grid_info_2_2.nc',
-                 static_layer_path=None, **kwargs):
-
-        fn_format = 'H115_{:04d}'
-        grid_filename = os.path.join(grid_path, grid_filename)
-
-        super(H115Ts, self).__init__(cdr_path, fn_format, grid_filename,
-                                     static_layer_path, **kwargs)
+        super().__init__(cdr_path, fn_format, grid_filename,
+                         static_layer_path, **kwargs)

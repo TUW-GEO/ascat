@@ -1,4 +1,4 @@
-# Copyright (c) 2020, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -25,100 +25,57 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 """
-Readers for lvl1b and lvl2 data in bufr format.
+Readers for ASCAT Level 1b and Level 2 data in BUFR format.
 """
 
 import os
-from datetime import datetime, timedelta
 import warnings
-from tempfile import NamedTemporaryFile
-from gzip import GzipFile
+from collections import defaultdict
 
 import numpy as np
+import xarray as xr
+from cadati.cal_date import cal2dt
 
-from pygeobase.io_base import ImageBase
-from pygeobase.io_base import MultiTemporalImageBase
-from pygeobase.io_base import IntervalReadingMixin
-from pygeobase.object_base import Image
+from ascat.utils import tmp_unzip
 
 try:
     from pybufr_ecmwf import raw_bufr_file
     from pybufr_ecmwf import ecmwfbufr
     from pybufr_ecmwf import ecmwfbufr_parameters
 except ImportError:
-    warnings.warn('pybufr-ecmwf not imported, BUFR format cannot be read')
+    warnings.warn(
+        'pybufr-ecmwf can not be imported, BUFR data cannot be read.')
 
 
-class AscatL1BufrFile(ImageBase):
+bufr_nan = 1.7e+38
+float32_nan = -999999.
+uint8_nan = np.iinfo(np.uint8).max
+
+
+class AscatL1bBufrFile:
+
     """
-    Reads ASCAT L1b data in BUFR format.
-
-    Parameters
-    ----------
-    filename : str
-        Filename path.
-    mode : str, optional
-        Opening mode. Default: r
-    msg_name_lookup: dict, optional
-        Dictionary mapping bufr msg number to parameter name.
-        See :ref:`ascatformattable`.
-
-        Default:
-
-             === =====================================================
-             Key Value
-             === =====================================================
-             4: "Satellite Identifier",
-             6: "Direction Of Motion Of Moving Observing Platform",
-             16: "Orbit Number",
-             17: "Cross-Track Cell Number",
-             21: "f_Beam Identifier",
-             22: "f_Radar Incidence Angle",
-             23: "f_Antenna Beam Azimuth",
-             24: "f_Backscatter",
-             25: "f_Radiometric Resolution (Noise Value)",
-             26: "f_ASCAT KP Estimate Quality",
-             27: "f_ASCAT Sigma-0 Usability",
-             34: "f_ASCAT Land Fraction",
-             35: "m_Beam Identifier",
-             36: "m_Radar Incidence Angle",
-             37: "m_Antenna Beam Azimuth",
-             38: "m_Backscatter",
-             39: "m_Radiometric Resolution (Noise Value)",
-             40: "m_ASCAT KP Estimate Quality",
-             41: "m_ASCAT Sigma-0 Usability",
-             48: "m_ASCAT Land Fraction",
-             49: "a_Beam Identifier",
-             50: "a_Radar Incidence Angle",
-             51: "a_Antenna Beam Azimuth",
-             52: "a_Backscatter",
-             53: "a_Radiometric Resolution (Noise Value)",
-             54: "a_ASCAT KP Estimate Quality",
-             55: "a_ASCAT Sigma-0 Usability",
-             62: "a_ASCAT Land Fraction"
-             === =====================================================
+    Read ASCAT Level 1b file in BUFR format.
     """
 
-    def __init__(self, filename, mode='r', msg_name_lookup=None, **kwargs):
+    def __init__(self, filename, msg_name_lookup=None):
         """
-        Initialization of i/o object.
+        Initialize AscatL1bBufrFile.
 
+        Parameters
+        ----------
+        filename : str
+            Filename.
+        msg_name_lookup: dict, optional
+            Dictionary mapping bufr msg number to parameter name.
+            See :ref:`ascatformattable`.
         """
-        zipped = False
         if os.path.splitext(filename)[1] == '.gz':
-            zipped = True
+            self.filename = tmp_unzip(filename)
+        else:
+            self.filename = filename
 
-        # for zipped files use an unzipped temporary copy
-        if zipped:
-            with NamedTemporaryFile(delete=False) as tmp_fid:
-                with GzipFile(filename) as gz_fid:
-                    tmp_fid.write(gz_fid.read())
-                filename = tmp_fid.name
-
-        super(AscatL1BufrFile, self).__init__(filename, mode=mode,
-                                              **kwargs)
         if msg_name_lookup is None:
             msg_name_lookup = {
                 4: "Satellite Identifier",
@@ -149,227 +106,226 @@ class AscatL1BufrFile(ImageBase):
                 54: "a_ASCAT KP Estimate Quality",
                 55: "a_ASCAT Sigma-0 Usability",
                 62: "a_ASCAT Land Fraction"}
+
         self.msg_name_lookup = msg_name_lookup
 
-    def read(self, timestamp=None):
+    def read(self, generic=False, to_xarray=False):
         """
-        Read specific image for given datetime timestamp.
+        Read ASCAT Level 1b data.
 
         Parameters
         ----------
-        timestamp : datetime.datetime
-            exact observation timestamp of the image that should be read
+        generic : bool, optional
+            'True' reading and converting into generic format or
+            'False' reading original field names (default: False).
+        to_xarray : bool, optional
+            'True' return data as xarray.Dataset
+            'False' return data as numpy.ndarray (default: False).
 
         Returns
         -------
-        data : dict
-            dictionary of numpy arrays that hold the image data for each
-            variable of the dataset
-        metadata : dict
-            dictionary of numpy arrays that hold the metadata
-        timestamp : datetime.datetime
-            exact timestamp of the image
-        lon : numpy.array or None
-            array of longitudes, if None self.grid will be assumed
-        lat : numpy.array or None
-            array of latitudes, if None self.grid will be assumed
-        time_var : string or None
-            variable name of observation times in the data dict, if None all
-            observations have the same timestamp
+        ds : xarray.Dataset, numpy.ndarray
+            ASCAT Level 1b data.
         """
-        # lookup table between names and message number in the BUFR file
-
-        data = {}
-        dates = []
-        # 13: Latitude (High Accuracy)
-        latitude = []
-        # 14: Longitude (High Accuracy)
-        longitude = []
+        data = defaultdict(list)
 
         with BUFRReader(self.filename) as bufr:
             for message in bufr.messages():
-                # read fixed fields
-                latitude.append(message[:, 12])
-                longitude.append(message[:, 13])
-                years = message[:, 6].astype(int)
-                months = message[:, 7].astype(int)
-                days = message[:, 8].astype(int)
-                hours = message[:, 9].astype(int)
-                minutes = message[:, 10].astype(int)
+
+                # read lon/lat
+                data['lat'].append(message[:, 12].astype(np.float32))
+                data['lon'].append(message[:, 13].astype(np.float32))
+
+                # read time
+                year = message[:, 6].astype(int)
+                month = message[:, 7].astype(int)
+                day = message[:, 8].astype(int)
+                hour = message[:, 9].astype(int)
+                minute = message[:, 10].astype(int)
                 seconds = message[:, 11].astype(int)
+                milliseconds = np.zeros(seconds.size)
+                cal_dates = np.vstack((
+                    year, month, day, hour, minute, seconds, milliseconds)).T
+                data['time'].append(cal2dt(cal_dates))
 
-                dates.append(
-                    julday(months, days, years, hours, minutes, seconds))
+                # read data fields
+                for num, var_name in self.msg_name_lookup.items():
+                    data[var_name].append(message[:, num-1])
 
-                # read optional data fields
-                for mid in self.msg_name_lookup:
-                    name = self.msg_name_lookup[mid]
+        # concatenate lists to array
+        for var_name in data.keys():
+            data[var_name] = np.concatenate(data[var_name])
 
-                    if name not in data:
-                        data[name] = []
-
-                    data[name].append(message[:, mid - 1])
-
-        dates = np.concatenate(dates)
-        longitude = np.concatenate(longitude)
-        latitude = np.concatenate(latitude)
-        n_records = latitude.shape[0]
-
-        for mid in self.msg_name_lookup:
-            name = self.msg_name_lookup[mid]
-            data[name] = np.concatenate(data[name])
-
-        data['jd'] = dates
-        if 'Direction Of Motion Of Moving Observing Platform' in data:
-            data['as_des_pass'] = (data[
-                "Direction Of Motion Of Moving Observing Platform"
-            ] < 270).astype(np.uint8)
-
-        if 'Cross-Track Cell Number' in data:
-            if data['Cross-Track Cell Number'].max() == 82:
-                data['swath_indicator'] = 1 * (
-                    data['Cross-Track Cell Number'] > 41)
-            elif data['Cross-Track Cell Number'].max() == 42:
-                data['swath_indicator'] = 1 * (
-                    data['Cross-Track Cell Number'] > 21)
-            else:
-                raise ValueError("Unsuspected node number.")
-            n_lines = n_records / max(data['Cross-Track Cell Number'])
-            data['line_num'] = np.arange(n_lines).repeat(
-                max(data['Cross-Track Cell Number']))
-
-        # There are strange elements with a value of 32.32 instead of the
-        # typical nan_values
+        # There can be suspicious values (32.32) instead of normal nan_values
         # Since some elements rly have this value we check the other triplet
         # data of that beam to filter the nan_values out
-        beams = ['f', 'm', 'a']
-        for beam in beams:
+        for beam in ['f', 'm', 'a']:
             azi = beam + '_Antenna Beam Azimuth'
             sig = beam + '_Backscatter'
             inc = beam + '_Radar Incidence Angle'
-            if azi in data:
-                mask_azi = data[azi] == 32.32
-                mask_sig = data[sig] == 1.7e+38
-                mask_inc = data[inc] == 1.7e+38
-                mask = np.all([mask_azi, mask_sig, mask_inc], axis=0)
-                data[azi][mask] = 1.7e+38
 
-        # 1 ERS 1
-        # 2 ERS 2
-        # 3 METOP-1 (Metop-B)
-        # 4 METOP-2 (Metop-A)
-        # 5 METOP-3 (Metop-C)
-        sat_id = {3: 1, 4: 2, 5: 3}
+            mask = np.where((data[azi] == 32.32) & (data[sig] == bufr_nan) &
+                            (data[inc] == bufr_nan))
+            data[azi][mask] = bufr_nan
 
         metadata = {}
-        metadata['SPACECRAFT_ID'] = np.int8(
-            sat_id[data['Satellite Identifier'][0]])
-        metadata['ORBIT_START'] = np.uint32(data['Orbit Number'][0])
+        metadata['platform_id'] = data['Satellite Identifier'][0].astype(int)
+        metadata['orbit_start'] = np.uint32(data['Orbit Number'][0])
+        metadata['filename'] = os.path.basename(self.filename)
 
-        return Image(longitude, latitude, data, metadata,
-                     timestamp, timekey='jd')
+        # add/rename/remove fields according to generic format
+        if generic:
+            data = conv_bufrl1b_generic(data, metadata)
 
-    def write(self, data):
-        raise NotImplementedError()
+        # convert dict to xarray.Dataset or numpy.ndarray
+        if to_xarray:
+            for k in data.keys():
+                if len(data[k].shape) == 1:
+                    dim = ['obs']
+                elif len(data[k].shape) == 2:
+                    dim = ['obs', 'beam']
 
-    def flush(self):
-        pass
+                data[k] = (dim, data[k])
+
+            coords = {}
+            coords_fields = ['lon', 'lat', 'time']
+            for cf in coords_fields:
+                coords[cf] = data.pop(cf)
+
+            ds = xr.Dataset(data, coords=coords, attrs=metadata)
+        else:
+            # collect dtype info
+            dtype = []
+            for var_name in data.keys():
+                if len(data[var_name].shape) == 1:
+                    dtype.append((var_name, data[var_name].dtype.str))
+                elif len(data[var_name].shape) > 1:
+                    dtype.append((var_name, data[var_name].dtype.str,
+                                  data[var_name].shape[1:]))
+
+            ds = np.empty(data['time'].size, dtype=np.dtype(dtype))
+            for k, v in data.items():
+                ds[k] = v
+
+        return ds
 
     def close(self):
+        """
+        Close file.
+        """
         pass
 
 
-class AscatL2SsmBufrFile(ImageBase):
+def conv_bufrl1b_generic(data, metadata):
     """
-    Reads ASCAT SSM swath files in BUFR format. There are the
-    following products:
+    Rename and convert data types of dataset.
 
-    - H101 SSM ASCAT-A NRT O 12.5 Metop-A ASCAT NRT SSM orbit geometry
-    12.5 km sampling
-    - H102 SSM ASCAT-A NRT O 25.0 Metop-A ASCAT NRT SSM orbit geometry
-    25 km sampling
-    - H16  SSM ASCAT-B NRT O 12.5 Metop-B ASCAT NRT SSM orbit geometry
-    12.5 km sampling
-    - H103 SSM ASCAT-B NRT O 25.0 Metop-B ASCAT NRT SSM orbit geometry
-    25 km sampling
-    - H104 SSM ASCAT-C NRT O 12.5 Metop-C ASCAT NRT SSM orbit geometry
-    12.5 km sampling
-    - H105 SSM ASCAT-C NRT O 25.0 Metop-C ASCAT NRT SSM orbit geometry
-    25 km sampling
-    - EUMETSAT ASCAT Soil Moisture at 12.5 km Swath Grid - Metop in BUFR format
-    - EUMETSAT ASCAT Soil Moisture at 25.0 km Swath Grid - Metop in BUFR format
+    Spacecraft_id vs sat_id encoding
+
+    BUFR encoding - Spacecraft_id
+    - 1 ERS 1
+    - 2 ERS 2
+    - 3 METOP-1 (Metop-B)
+    - 4 METOP-2 (Metop-A)
+    - 5 METOP-3 (Metop-C)
+
+    Internal encoding - sat_id
+    - 1 ERS 1
+    - 2 ERS 2
+    - 3 METOP-2 (Metop-A)
+    - 4 METOP-1 (Metop-B)
+    - 5 METOP-3 (Metop-C)
 
     Parameters
     ----------
-    filename : str
-        Filename path.
-    mode : str, optional
-        Opening mode. Default: r
-    msg_name_lookup: dict, optional
-        Dictionary mapping bufr msg number to parameter name.
-        See :ref:`ascatformattable`.
+    data: dict of numpy.ndarray
+        Original dataset.
+    metadata: dict
+        Metadata.
 
-        Default:
+    Returns
+    -------
+    data: dict of numpy.ndarray
+        Converted dataset.
+    """
+    skip_fields = ['Satellite Identifier']
 
-             === =====================================================
-             Key Value
-             === =====================================================
-             4: "Satellite Identifier",
-             6: "Direction Of Motion Of Moving Observing Platform",
-             16: "Orbit Number",
-             17: "Cross-Track Cell Number",
-             21: "f_Beam Identifier",
-             22: "f_Radar Incidence Angle",
-             23: "f_Antenna Beam Azimuth",
-             24: "f_Backscatter",
-             25: "f_Radiometric Resolution (Noise Value)",
-             26: "f_ASCAT KP Estimate Quality",
-             27: "f_ASCAT Sigma-0 Usability",
-             34: "f_ASCAT Land Fraction",
-             35: "m_Beam Identifier",
-             36: "m_Radar Incidence Angle",
-             37: "m_Antenna Beam Azimuth",
-             38: "m_Backscatter",
-             39: "m_Radiometric Resolution (Noise Value)",
-             40: "m_ASCAT KP Estimate Quality",
-             41: "m_ASCAT Sigma-0 Usability",
-             48: "m_ASCAT Land Fraction",
-             49: "a_Beam Identifier",
-             50: "a_Radar Incidence Angle",
-             51: "a_Antenna Beam Azimuth",
-             52: "a_Backscatter",
-             53: "a_Radiometric Resolution (Noise Value)",
-             54: "a_ASCAT KP Estimate Quality",
-             55: "a_ASCAT Sigma-0 Usability",
-             62: "a_ASCAT Land Fraction",
-             65: "Surface Soil Moisture (Ms)",
-             66: "Estimated Error In Surface Soil Moisture",
-             67: "Backscatter",
-             68: "Estimated Error In Sigma0 At 40 Deg Incidence Angle",
-             69: "Slope At 40 Deg Incidence Angle",
-             70: "Estimated Error In Slope At 40 Deg Incidence Angle",
-             71: "Soil Moisture Sensitivity",
-             72: "Dry Backscatter",
-             73: "Wet Backscatter",
-             74: "Mean Surface Soil Moisture",
-             75: "Rain Fall Detection",
-             76: "Soil Moisture Correction Flag",
-             77: "Soil Moisture Processing Flag",
-             78: "Soil Moisture Quality",
-             79: "Snow Cover",
-             80: "Frozen Land Surface Fraction",
-             81: "Inundation And Wetland Fraction",
-             82: "Topographic Complexity"
-             === =====================================================
+    gen_fields_beam = {
+        'Radar Incidence Angle': ('inc', np.float32, bufr_nan, 1),
+        'Backscatter': ('sig', np.float32, bufr_nan, 1),
+        'Antenna Beam Azimuth': ('azi', np.float32, bufr_nan, 1),
+        'ASCAT Sigma-0 Usability': ('f_usable', np.uint8, None, 1),
+        'Beam Identifier': ('beam_num', np.uint8, None, 1),
+        'Radiometric Resolution (Noise Value)': ('kp', np.float32, bufr_nan, 0.01),
+        'ASCAT KP Estimate Quality': ('kp_quality', np.uint8, bufr_nan, 1),
+        'ASCAT Land Fraction': ('f_land', np.float32, None, 1)}
+
+    gen_fields_lut = {
+        'Orbit Number': ('abs_orbit_nr', np.int32),
+        'Cross-Track Cell Number': ('node_num', np.uint8),
+        'Direction Of Motion Of Moving Observing Platform':
+        ('sat_track_azi', np.float32)}
+
+    for var_name in skip_fields:
+        if var_name in data:
+            data.pop(var_name)
+
+    for var_name, (new_name, new_dtype) in gen_fields_lut.items():
+        data[new_name] = data.pop(var_name).astype(new_dtype)
+
+    for var_name, (new_name, new_dtype, nan_val, s) in gen_fields_beam.items():
+        f = ['{}_{}'.format(b, var_name) for b in ['f', 'm', 'a']]
+        data[new_name] = np.vstack(
+            (data.pop(f[0]), data.pop(f[1]),
+             data.pop(f[2]))).T.astype(new_dtype)
+        if nan_val is not None:
+            valid = data[new_name] != nan_val
+            data[new_name][~valid] = float32_nan
+            data[new_name][valid] *= s
+
+    if data['node_num'].max() == 82:
+        data['swath_indicator'] = 1 * (data['node_num'] > 41)
+    elif data['node_num'].max() == 42:
+        data['swath_indicator'] = 1 * (data['node_num'] > 21)
+    else:
+        raise ValueError('Cross-track cell number size unknown')
+
+    n_lines = data['lat'].shape[0] / data['node_num'].max()
+    data['line_num'] = np.arange(n_lines).repeat(data['node_num'].max())
+
+    sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
+    data['sat_id'] = np.zeros(data['time'].size, dtype=np.uint8) + sat_id[
+        int(metadata['platform_id'])]
+
+    # compute ascending/descending direction
+    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
+
+    return data
+
+
+class AscatL2BufrFile():
+
+    """
+    Read ASCAT Level 2 file in BUFR format.
     """
 
-    def __init__(self, filename, mode='r', msg_name_lookup=None, **kwargs):
+    def __init__(self, filename, msg_name_lookup=None):
         """
-        Initialization of i/o object.
+        Initialize AscatL2BufrFile.
 
+        Parameters
+        ----------
+        filename: str
+            Filename.
+        msg_name_lookup: dict, optional
+            Dictionary mapping bufr msg number to parameter name.
+            See: ref: `ascatformattable`.
         """
-        super(AscatL2SsmBufrFile, self).__init__(filename, mode=mode,
-                                                 **kwargs)
+        if os.path.splitext(filename)[1] == '.gz':
+            self.filename = tmp_unzip(filename)
+        else:
+            self.filename = filename
+
         if msg_name_lookup is None:
             msg_name_lookup = {
                 4: "Satellite Identifier",
@@ -418,424 +374,245 @@ class AscatL2SsmBufrFile(ImageBase):
                 80: "Frozen Land Surface Fraction",
                 81: "Inundation And Wetland Fraction",
                 82: "Topographic Complexity"}
+
         self.msg_name_lookup = msg_name_lookup
 
-    def read(self, timestamp=None, ssm_masked=False):
+    def read(self, generic=False, to_xarray=False):
         """
-        Read specific image for given datetime timestamp.
+        Read ASCAT Level 2 data.
 
         Parameters
         ----------
-        timestamp : datetime.datetime (optional)
-            exact observation timestamp of the image that should be read
-        ssm_masked : flag (optional)
-            set to True to filter data by ssm values
-
+        generic: bool, optional
+            'True' reading and converting into generic format or
+            'False' reading original field names(default: False).
+        to_xarray: bool, optional
+            'True' return data as xarray.Dataset
+            'False' return data as numpy.ndarray(default: False).
 
         Returns
         -------
-        data : dict
-            dictionary of numpy arrays that hold the image data for each
-            variable of the dataset
-        metadata : dict
-            dictionary of numpy arrays that hold the metadata
-        timestamp : datetime.datetime
-            exact timestamp of the image
-        lon : numpy.array or None
-            array of longitudes, if None self.grid will be assumed
-        lat : numpy.array or None
-            array of latitudes, if None self.grid will be assumed
-        time_var : string or None
-            variable name of observation times in the data dict, if None all
-            observations have the same timestamp
+        ds: xarray.Dataset, numpy.ndarray
+            ASCAT Level 1b data.
         """
-        # lookup table between names and message number in the BUFR file
-
-        data = {}
-        dates = []
-        # 13: Latitude (High Accuracy)
-        latitude = []
-        # 14: Longitude (High Accuracy)
-        longitude = []
+        data = defaultdict(list)
 
         with BUFRReader(self.filename) as bufr:
             for message in bufr.messages():
-                # read fixed fields
-                latitude.append(message[:, 12])
-                longitude.append(message[:, 13])
-                years = message[:, 6].astype(int)
-                months = message[:, 7].astype(int)
-                days = message[:, 8].astype(int)
-                hours = message[:, 9].astype(int)
-                minutes = message[:, 10].astype(int)
+
+                # read lon/lat
+                data['lat'].append(message[:, 12].astype(np.float32))
+                data['lon'].append(message[:, 13].astype(np.float32))
+
+                # read time
+                year = message[:, 6].astype(int)
+                month = message[:, 7].astype(int)
+                day = message[:, 8].astype(int)
+                hour = message[:, 9].astype(int)
+                minute = message[:, 10].astype(int)
                 seconds = message[:, 11].astype(int)
+                milliseconds = np.zeros(seconds.size)
+                cal_dates = np.vstack((
+                    year, month, day, hour, minute, seconds, milliseconds)).T
+                data['time'].append(cal2dt(cal_dates))
 
-                dates.append(
-                    julday(months, days, years, hours, minutes, seconds))
+                # read data fields
+                for num, var_name in self.msg_name_lookup.items():
+                    data[var_name].append(message[:, num - 1])
 
-                # read optional data fields
-                for mid in self.msg_name_lookup:
-                    name = self.msg_name_lookup[mid]
+        # concatenate lists to array
+        for var_name in data.keys():
+            data[var_name] = np.concatenate(data[var_name])
+            # fix scaling
+            if var_name == 'Mean Surface Soil Moisture':
+                data[var_name][data[var_name] != bufr_nan] *= 100.
 
-                    if name not in data:
-                        data[name] = []
-
-                    data[name].append(message[:, mid - 1])
-
-        dates = np.concatenate(dates)
-        longitude = np.concatenate(longitude)
-        latitude = np.concatenate(latitude)
-        n_records = latitude.shape[0]
-
-        for mid in self.msg_name_lookup:
-            name = self.msg_name_lookup[mid]
-            data[name] = np.concatenate(data[name])
-            if mid == 74:
-                # ssm mean is encoded differently
-                data[name] = data[name] * 100
-
-        data['jd'] = dates
-
-        if 'Direction Of Motion Of Moving Observing Platform' in data:
-            data['as_des_pass'] = (data[
-                "Direction Of Motion Of Moving Observing Platform"]
-                <= 270).astype(np.uint8)
-
-        if 'Cross-Track Cell Number' in data:
-            if data['Cross-Track Cell Number'].max() == 82:
-                data['swath_indicator'] = 1 * (
-                    data['Cross-Track Cell Number'] > 41)
-            elif data['Cross-Track Cell Number'].max() == 42:
-                data['swath_indicator'] = 1 * (
-                    data['Cross-Track Cell Number'] > 21)
-            else:
-                raise ValueError("Unsuspected node number.")
-            n_lines = n_records / max(data['Cross-Track Cell Number'])
-            data['line_num'] = np.arange(n_lines).repeat(
-                max(data['Cross-Track Cell Number']))
-
-        # There are strange elements with a value of 32.32 instead of the
-        # typical nan_values
+        # There can be suspicious values (32.32) instead of normal nan_values
         # Since some elements rly have this value we check the other triplet
         # data of that beam to filter the nan_values out
-        beams = ['f', 'm', 'a']
-        for beam in beams:
+        for beam in ['f', 'm', 'a']:
             azi = beam + '_Antenna Beam Azimuth'
             sig = beam + '_Backscatter'
             inc = beam + '_Radar Incidence Angle'
-            if azi in data:
-                mask_azi = data[azi] == 32.32
-                mask_sig = data[sig] == 1.7e+38
-                mask_inc = data[inc] == 1.7e+38
-                mask = np.all([mask_azi, mask_sig, mask_inc], axis=0)
-                data[azi][mask] = 1.7e+38
 
-        # if the ssm_masked is True we mask out data with missing ssm value
-        if 65 in self.msg_name_lookup and ssm_masked is True:
-            # mask all the arrays based on fill_value of soil moisture
-            valid_data = np.where(data[self.msg_name_lookup[65]] != 1.7e+38)
-            latitude = latitude[valid_data]
-            longitude = longitude[valid_data]
-            for name in data:
-                data[name] = data[name][valid_data]
-
-        # 1 ERS 1
-        # 2 ERS 2
-        # 3 METOP-1 (Metop-B)
-        # 4 METOP-2 (Metop-A)
-        # 5 METOP-3 (Metop-C)
-        sat_id = {3: 1, 4: 2, 5: 3}
+            mask = np.where((data[azi] == 32.32) & (data[sig] == bufr_nan) &
+                            (data[inc] == bufr_nan))
+            data[azi][mask] = bufr_nan
 
         metadata = {}
+        metadata['platform_id'] = data['Satellite Identifier'][0].astype(int)
+        metadata['orbit_start'] = np.uint32(data['Orbit Number'][0])
+        metadata['filename'] = os.path.basename(self.filename)
 
-        try:
-            metadata['SPACECRAFT_ID'] = np.int8(
-                sat_id[data['Satellite Identifier'][0]])
-        except KeyError:
-            metadata['SPACECRAFT_ID'] = 0
+        # add/rename/remove fields according to generic format
+        if generic:
+            data = conv_bufrl2_generic(data, metadata)
 
-        try:
-            metadata['ORBIT_START'] = np.uint32(data['Orbit Number'][0])
-        except KeyError:
-            metadata['ORBIT_START'] = 0
+        # convert dict to xarray.Dataset or numpy.ndarray
+        if to_xarray:
+            for k in data.keys():
+                if len(data[k].shape) == 1:
+                    dim = ['obs']
+                elif len(data[k].shape) == 2:
+                    dim = ['obs', 'beam']
 
-        return Image(longitude, latitude, data, metadata,
-                     timestamp, timekey='jd')
+                data[k] = (dim, data[k])
 
-    def resample_data(self, image, index, distance, weights, **kwargs):
-        """
-        Takes an image and resample (interpolate) the image data to
-        arbitrary defined locations given by index and distance.
+            coords = {}
+            coords_fields = ['lon', 'lat', 'time']
+            for cf in coords_fields:
+                coords[cf] = data.pop(cf)
 
-        Parameters
-        ----------
-        image : object
-            pygeobase.object_base.Image object
-        index : np.array
-            Index into image data defining a look-up table for data elements
-            used in the interpolation process for each defined target
-            location.
-        distance : np.array
-            Array representing the distances of the image data to the
-            arbitrary defined locations.
-        weights : np.array
-            Array representing the weights of the image data that should be
-            used during resampling.
-            The weights of points not to use are set to np.nan
-            This array is of shape (x, max_neighbors)
+            ds = xr.Dataset(data, coords=coords, attrs=metadata)
+        else:
+            # collect dtype info
+            dtype = []
+            for var_name in data.keys():
+                if len(data[var_name].shape) == 1:
+                    dtype.append((var_name, data[var_name].dtype.str))
+                elif len(data[var_name].shape) > 1:
+                    dtype.append((var_name, data[var_name].dtype.str,
+                                  data[var_name].shape[1:]))
 
-        Returns
-        -------
-        image : object
-            pygeobase.object_base.Image object
-        """
-        total_weights = np.nansum(weights, axis=1)
+            ds = np.empty(data['time'].size, dtype=np.dtype(dtype))
+            for k, v in data.items():
+                ds[k] = v
 
-        resOrbit = {}
-        # resample backscatter
-        for name in image.dtype.names:
-            if name in ['Soil Moisture Correction Flag',
-                        'Soil Moisture Processing Flag']:
-                # The flags are resampled by taking the minimum flag This works
-                # since any totally valid observation has the flag 0 and
-                # overrides the flagged observations. This is true in cases
-                # where the data was set to NaN by the flag as well as when the
-                # data was set to 0 or 100. The last image element is the one
-                # standing for NaN so we fill it with all flags filled to not
-                # interfere with the minimum.
-                image[name][-1] = 255
-                bits = np.unpackbits(image[name].reshape(
-                    (-1, 1)).astype(np.uint8), axis=1)
-                resampled_bits = np.min(bits[index, :], axis=1)
-                resOrbit[name] = np.packbits(resampled_bits)
-            else:
-                resOrbit[name] = np.nansum(
-                    image[name][index] * weights, axis=1) / total_weights
-
-        return resOrbit
-
-    def write(self, data):
-        raise NotImplementedError()
-
-    def flush(self):
-        pass
+        return ds
 
     def close(self):
         pass
 
 
-class AscatL2SsmBufr(MultiTemporalImageBase):
+def conv_bufrl2_generic(data, metadata):
     """
-    Class for reading HSAF ASCAT SSM images in bufr format.
-    The images have the same structure as the ASCAT 3 minute pdu files
-    and these 2 readers could be merged in the future
-    The images have to be uncompressed in the following folder structure
-    path - month_path_str (default 'h07_%Y%m_buf')
+    Rename and convert data types of dataset.
 
-    For example if path is set to /home/user/hsaf07 and month_path_str is left
-    to the default 'h07_%Y%m_buf' then the images for March 2012 have to be in
-    the folder /home/user/hsaf07/h07_201203_buf/
+    Spacecraft_id vs sat_id encoding
+
+    BUFR encoding - Spacecraft_id
+    - 1 ERS 1
+    - 2 ERS 2
+    - 3 METOP-1 (Metop-B)
+    - 4 METOP-2 (Metop-A)
+    - 5 METOP-3 (Metop-C)
+
+    Internal encoding - sat_id
+    - 1 ERS 1
+    - 2 ERS 2
+    - 3 METOP-2 (Metop-A)
+    - 4 METOP-1 (Metop-B)
+    - 5 METOP-3 (Metop-C)
 
     Parameters
     ----------
-    path: string
-        path where the data is stored
-    month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on the
-        HSAF FTP Server then please specify the string that should be used in
-        datetime.datetime.strftime Default: 'h07_%Y%m_buf'
-    day_search_str: string, optional
-        to provide an iterator over all images of a day the
-        method _get_possible_timestamps looks for all available images on a day
-        on the harddisk. This string is used in datetime.datetime.strftime and
-        in glob.glob to search for all files on a day.
-        Default : 'h07_%Y%m%d_*.buf'
-    file_search_str: string, optional
-        this string is used in datetime.datetime.strftime and glob.glob to find
-        a 3 minute bufr file by the exact date.
-        Default: 'h07_{datetime}*.buf'
-    datetime_format: string, optional
-        datetime format by which {datetime} will be replaced in file_search_str
-        Default: %Y%m%d_%H%M%S
-    msg_name_lookup: dict, optional
-        Dictionary mapping bufr msg number to parameter name.
-        See :ref:`ascatformattable`.
+    data: dict of numpy.ndarray
+        Original dataset.
+    metadata: dict
+        Metadata.
 
-        Default:
-
-             === =====================================================
-             Key Value
-             === =====================================================
-             4:  "Satellite Identifier",
-             6:  "Direction Of Motion Of Moving Observing Platform",
-             16: "Orbit Number",
-             17: "Cross-Track Cell Number",
-             21: "f_Beam Identifier",
-             22: "f_Radar Incidence Angle",
-             23: "f_Antenna Beam Azimuth",
-             24: "f_Backscatter",
-             25: "f_Radiometric Resolution (Noise Value)",
-             26: "f_ASCAT KP Estimate Quality",
-             27: "f_ASCAT Sigma-0 Usability",
-             34: "f_ASCAT Land Fraction",
-             35: "m_Beam Identifier",
-             36: "m_Radar Incidence Angle",
-             37: "m_Antenna Beam Azimuth",
-             38: "m_Backscatter",
-             39: "m_Radiometric Resolution (Noise Value)",
-             40: "m_ASCAT KP Estimate Quality",
-             41: "m_ASCAT Sigma-0 Usability",
-             48: "m_ASCAT Land Fraction",
-             49: "a_Beam Identifier",
-             50: "a_Radar Incidence Angle",
-             51: "a_Antenna Beam Azimuth",
-             52: "a_Backscatter",
-             53: "a_Radiometric Resolution (Noise Value)",
-             54: "a_ASCAT KP Estimate Quality",
-             55: "a_ASCAT Sigma-0 Usability",
-             62: "a_ASCAT Land Fraction",
-             65: "Surface Soil Moisture (Ms)",
-             66: "Estimated Error In Surface Soil Moisture",
-             67: "Backscatter",
-             68: "Estimated Error In Sigma0 At 40 Deg Incidence Angle",
-             69: "Slope At 40 Deg Incidence Angle",
-             70: "Estimated Error In Slope At 40 Deg Incidence Angle",
-             71: "Soil Moisture Sensitivity",
-             72: "Dry Backscatter",
-             73: "Wet Backscatter",
-             74: "Mean Surface Soil Moisture",
-             75: "Rain Fall Detection",
-             76: "Soil Moisture Correction Flag",
-             77: "Soil Moisture Processing Flag",
-             78: "Soil Moisture Quality",
-             79: "Snow Cover",
-             80: "Frozen Land Surface Fraction",
-             81: "Inundation And Wetland Fraction",
-             82: "Topographic Complexity"
-             === =====================================================
+    Returns
+    -------
+    data: dict of numpy.ndarray
+        Converted dataset.
     """
+    skip_fields = ['Satellite Identifier']
 
-    def __init__(self, path, month_path_str='h07_%Y%m_buf',
-                 day_search_str='h07_%Y%m%d_*.buf',
-                 file_search_str='h07_{datetime}*.buf',
-                 datetime_format='%Y%m%d_%H%M%S',
-                 filename_datetime_format=(4, 19, '%Y%m%d_%H%M%S'),
-                 msg_name_lookup=None):
-        self.path = path
-        self.month_path_str = month_path_str
-        self.day_search_str = day_search_str
-        self.file_search_str = file_search_str
-        self.filename_datetime_format = filename_datetime_format
-        super(AscatL2SsmBufr, self).__init__(path, AscatL2SsmBufrFile,
-                                             subpath_templ=[month_path_str],
-                                             fname_templ=file_search_str,
-                                             datetime_format=datetime_format,
-                                             exact_templ=False,
-                                             ioclass_kws={
-                                                 'msg_name_lookup':
-                                                     msg_name_lookup})
+    gen_fields_beam = {
+        'Radar Incidence Angle': ('inc', np.float32, bufr_nan),
+        'Backscatter': ('sig', np.float32, bufr_nan),
+        'Antenna Beam Azimuth': ('azi', np.float32, bufr_nan),
+        'ASCAT Sigma-0 Usability': ('f_usable', np.uint8, None),
+        'Beam Identifier': ('beam_num', np.uint8, None),
+        'Radiometric Resolution (Noise Value)': ('kp_noise', np.float32, bufr_nan),
+        'ASCAT KP Estimate Quality': ('kp', np.float32, bufr_nan),
+        'ASCAT Land Fraction': ('f_land', np.float32, None)}
 
-    def _get_orbit_start_date(self, filename):
-        orbit_start_str = \
-            os.path.basename(filename)[self.filename_datetime_format[0]:
-                                       self.filename_datetime_format[1]]
-        return datetime.strptime(orbit_start_str,
-                                 self.filename_datetime_format[2])
+    gen_fields_lut = {
+        'Orbit Number': ('abs_orbit_nr', np.int32, None, None),
+        'Cross-Track Cell Number': ('node_num', np.uint8, None, None),
+        'Direction Of Motion Of Moving Observing Platform': ('sat_track_azi', np.float32, None, None),
+        'Surface Soil Moisture (Ms)': ('sm', np.float32, bufr_nan, float32_nan),
+        'Estimated Error In Surface Soil Moisture': ('sm_noise', np.float32, bufr_nan, float32_nan),
+        'Backscatter': ('sig40', np.float32, bufr_nan, float32_nan),
+        'Estimated Error In Sigma0 At 40 Deg Incidence Angle': ('sig40_noise', np.float32, bufr_nan, float32_nan),
+        'Slope At 40 Deg Incidence Angle': ('slope40', np.float32, bufr_nan, float32_nan),
+        'Estimated Error In Slope At 40 Deg Incidence Angle': ('slope40_noise', np.float32, bufr_nan, float32_nan),
+        'Soil Moisture Sensitivity': ('sm_sens', np.float32, bufr_nan, float32_nan),
+        'Dry Backscatter': ('dry_sig40', np.float32, bufr_nan, float32_nan),
+        'Wet Backscatter': ('wet_sig40', np.float32, bufr_nan, float32_nan),
+        'Mean Surface Soil Moisture': ('sm_mean', np.float32, bufr_nan, float32_nan),
+        'Rain Fall Detection': ('rf', np.float32, None, None),
+        'Soil Moisture Correction Flag': ('corr_flag', np.uint8, bufr_nan, uint8_nan),
+        'Soil Moisture Processing Flag': ('proc_flag', np.uint8, bufr_nan, uint8_nan),
+        'Soil Moisture Quality': ('agg_flag', np.uint8, bufr_nan, uint8_nan),
+        'Snow Cover': ('snow_prob', np.uint8, bufr_nan, uint8_nan),
+        'Frozen Land Surface Fraction': ('frozen_prob', np.uint8, bufr_nan, uint8_nan),
+        'Inundation And Wetland Fraction': ('wetland', np.uint8, bufr_nan, uint8_nan),
+        'Topographic Complexity': ('topo', np.uint8, bufr_nan, uint8_nan)}
 
-    def tstamps_for_daterange(self, startdate, enddate):
-        """
-        Get the timestamps as datetime array that are possible for the
-        given day.
+    for var_name in skip_fields:
+        if var_name in data:
+            data.pop(var_name)
 
-        For this product it is not fixed but has to be looked up from
-        the hard disk since bufr files are not regular spaced and only
-        europe is in this product. For a global product a 3 minute
-        spacing could be used as a fist approximation
+    for var_name, (new_name, new_dtype,
+                   nan_val, new_nan_val) in gen_fields_lut.items():
+        if nan_val is not None:
+            data[var_name][data[var_name] == nan_val] = new_nan_val
+        data[new_name] = data.pop(var_name).astype(new_dtype)
 
-        Parameters
-        ----------
-        startdate : datetime.date or datetime.datetime
-            start date
-        enddate : datetime.date or datetime.datetime
-            end date
+    for var_name, (new_name, new_dtype, nan_val) in gen_fields_beam.items():
+        f = ['{}_{}'.format(b, var_name) for b in ['f', 'm', 'a']]
+        data[new_name] = np.vstack(
+            (data.pop(f[0]), data.pop(f[1]),
+             data.pop(f[2]))).T.astype(new_dtype)
+        if nan_val is not None:
+            data[new_name][data[new_name] == nan_val] = float32_nan
 
-        Returns
-        -------
-        dates : list
-            list of datetimes
-        """
-        file_list = []
-        delta_all = enddate - startdate
-        timestamps = []
+    if data['node_num'].max() == 82:
+        data['swath_indicator'] = 1 * (data['node_num'] > 41)
+    elif data['node_num'].max() == 42:
+        data['swath_indicator'] = 1 * (data['node_num'] > 21)
+    else:
+        raise ValueError('Cross-track cell number size unknown')
 
-        for i in range(delta_all.days + 1):
-            timestamp = startdate + timedelta(days=i)
+    n_lines = data['lat'].shape[0] / data['node_num'].max()
+    data['line_num'] = np.arange(n_lines).repeat(data['node_num'].max())
 
-            files = self._search_files(
-                timestamp, custom_templ=self.day_search_str)
+    sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
+    data['sat_id'] = np.zeros(data['time'].size, dtype=np.uint8) + sat_id[
+        int(metadata['platform_id'])]
 
-            file_list.extend(sorted(files))
+    # compute ascending/descending direction
+    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
 
-        for filename in file_list:
-            timestamps.append(self._get_orbit_start_date(filename))
-
-        timestamps = [dt for dt in timestamps if (
-            startdate <= dt <= enddate)]
-        return timestamps
+    return data
 
 
-class AscatL2SsmBufrChunked(IntervalReadingMixin, AscatL2SsmBufr):
+class BUFRReader():
+
     """
-    Reads BUFR files but does not return them on a file by file basis but in
-    bigger chunks. For example it allows to read multiple 3 minute PDU's in
-    half orbit chunks of 50 minutes. This speeds up operations like e.g.
-    resampling of the data.
-
-    Parameters
-    ----------
-    chunk_minutes: int, optional
-        How many minutes should a chunk of data cover.
-    """
-
-    def __init__(self, path, month_path_str='h07_%Y%m_buf',
-                 day_search_str='h07_%Y%m%d_*.buf',
-                 file_search_str='h07_{datetime}*.buf',
-                 datetime_format='%Y%m%d_%H%M%S',
-                 filename_datetime_format=(4, 19, '%Y%m%d_%H%M%S'),
-                 msg_name_lookup=None, chunk_minutes=50):
-        super(AscatL2SsmBufrChunked, self).__init__(
-            path,
-            month_path_str=month_path_str,
-            day_search_str=day_search_str,
-            file_search_str=file_search_str,
-            datetime_format=datetime_format,
-            filename_datetime_format=filename_datetime_format,
-            msg_name_lookup=msg_name_lookup,
-            chunk_minutes=chunk_minutes)
-
-
-class BUFRReader(object):
-    """
-    BUFR reader based on the pybufr-ecmwf package but faster
-
-    Parameters
-    ----------
-    filename : string
-        filename of the bufr file
-    kelem_guess : int, optional
-        if the elements per variable in as message are known
-        please specify here.
-        Otherwise the elements will be found out via trial and error
-        This works most of the time but is not 100 percent failsafe
-        Default: 500
-    max_tries : int, optional
-        the Reader will try max_tries times to unpack a bufr message.
-        Some messages can not be read even if the array sizes are ok.
-        Most of the time these files are corrupt.
-
+    BUFR reader based on the pybufr-ecmwf package but faster.
     """
 
     def __init__(self, filename, kelem_guess=500, max_tries=10):
+        """
+
+        Parameters
+        ----------
+        filename: string
+            filename of the bufr file
+        kelem_guess: int, optional
+            if the elements per variable in as message are known
+            please specify here.
+            Otherwise the elements will be found out via trial and error
+            This works most of the time but is not 100 percent failsafe
+            Default: 500
+        max_tries: int, optional
+            the Reader will try max_tries times to unpack a bufr message.
+            Some messages can not be read even if the array sizes are ok.
+            Most of the time these files are corrupt.
+        """
         self.bufr = raw_bufr_file.RawBUFRFile()
         self.bufr.open(filename, 'rb')
         self.nr_messages = self.bufr.get_num_bufr_msgs()
@@ -859,14 +636,17 @@ class BUFRReader(object):
 
     def messages(self):
         """
+        Read messages.
+
         Raises
         ------
-        IOError:
+        IOError: exception
             if a message cannot be unpacked after max_tries tries
 
         Returns
         -------
-        data : yield results of messages
+        data: numpy.ndarray
+            Results of messages
         """
         count = 0
         for i in np.arange(self.nr_messages) + 1:
@@ -894,9 +674,9 @@ class BUFRReader(object):
             kvals = ksup_first * kelem
             max_kelem = 500000
             self.init_values = np.zeros(kvals, dtype=np.float64)
-            self.cvals = np.zeros((kvals, 80), dtype=np.character)
-            # try to expand bufr message with the first guess for
-            # kelem
+            self.cvals = np.zeros((kvals, 80), dtype='S1')
+
+            # try to expand bufr message with the first guess for kelem
             increment_arraysize = True
             while increment_arraysize:
                 cnames = np.zeros((kelem, 64), dtype='|S1')
@@ -956,42 +736,3 @@ class BUFRReader(object):
 
     def __exit__(self, exc, val, trace):
         self.bufr.close()
-
-
-def julday(month, day, year, hour=0, minute=0, second=0):
-    """
-    Julian date from month, day, and year (can be scalars or arrays)
-    (function from pytesmo)
-    Parameters
-    ----------
-    month : numpy.ndarray or int32
-        Month.
-    day : numpy.ndarray or int32
-        Day.
-    year : numpy.ndarray or int32
-        Year.
-    hour : numpy.ndarray or int32, optional
-        Hour.
-    minute : numpy.ndarray or int32, optional
-        Minute.
-    second : numpy.ndarray or int32, optional
-        Second.
-    Returns
-    -------
-    jul : numpy.ndarray or double
-        Julian day.
-    """
-    month = np.array(month)
-    day = np.array(day)
-    inJanFeb = month <= 2
-    jy = year - inJanFeb
-    jm = month + 1 + inJanFeb * 12
-
-    jul = np.int32(np.floor(365.25 * jy) +
-                   np.floor(30.6001 * jm) + (day + 1720995.0))
-    ja = np.int32(0.01 * jy)
-    jul += 2 - ja + np.int32(0.25 * ja)
-
-    jul = jul + hour / 24.0 - 0.5 + minute / 1440.0 + second / 86400.0
-
-    return jul
