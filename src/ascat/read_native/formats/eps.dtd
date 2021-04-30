@@ -1,0 +1,170 @@
+<!--
+File: eps.dtd
+Purpose: Format of Eugene EPS protocol formats descriptions
+$Log: eps.dtd,v $
+Revision 1.1  2003/02/28 10:49:19  melson
+Initial revision
+
+
+Copyright (c) Eumetsat 2003, 2004
+-->
+
+
+<!ELEMENT format ((version-control|brief-description|full-description|file-extensions|geolocation|image|parameters|protocol|product)*) >
+
+<!ELEMENT version-control ((format-version|pfs-version)*) >
+<!ELEMENT format-version ((major|minor|baseline)*) >
+<!ELEMENT pfs-version ((major|minor)*) >
+<!ELEMENT baseline (#PCDATA) >
+<!ELEMENT major (#PCDATA) >
+<!ELEMENT minor (#PCDATA) >
+
+<!ELEMENT brief-description (#PCDATA) >
+<!ELEMENT full-description (#PCDATA) >
+
+<!ELEMENT file-extensions ((glob)*) >
+<!ELEMENT glob (#PCDATA) >
+
+<!ELEMENT geolocation (#PCDATA|name|description|latitude|longitude)* >
+<!ELEMENT latitude (#PCDATA) >
+<!ELEMENT longitude (#PCDATA) >
+<!ELEMENT name (#PCDATA) >
+<!ELEMENT description (#PCDATA) >
+<!ELEMENT label (#PCDATA) >
+
+<!ELEMENT image ((parameter|name|description|source|geolocation)*) >
+<!ELEMENT source (#PCDATA) >
+
+<!ELEMENT parameters ((parameter)*) >
+<!ELEMENT parameter (#PCDATA|label|name)* >
+
+<!ELEMENT protocol (#PCDATA) >
+
+<!ELEMENT product ((mphr|sphr|geadr|giadr|veadr|viadr|mdr)*) >
+<!ELEMENT mphr ((section|field|array|delimiter)*) >
+<!ELEMENT sphr ((section|field|array|delimiter)*) >
+<!ELEMENT geadr EMPTY >
+<!ELEMENT giadr ((section|field|array|delimiter)*) >
+<!ELEMENT veadr EMPTY >
+<!ELEMENT viadr ((section|field|array|delimiter)*) >
+<!ELEMENT mdr ((section|field|array|delimiter|if)*) >
+
+<!ELEMENT section ((section|field|array|delimiter)*) >
+<!ELEMENT if ((field|section|array|delimiter)*) >
+<!ELEMENT array ((field|section|array|delimiter|bit)*) >
+<!ELEMENT field ((item|bit|bits|array|delimiter)*) >
+<!ELEMENT delimiter EMPTY >
+<!ELEMENT item EMPTY >
+<!ELEMENT bit EMPTY >
+<!ELEMENT bits EMPTY >
+
+<!ATTLIST format >
+<!ATTLIST version-control >
+<!ATTLIST format-version >
+<!ATTLIST pfs-version >
+<!ATTLIST baseline >
+<!ATTLIST major >
+<!ATTLIST minor >
+<!ATTLIST brief-description >
+<!ATTLIST full-description >
+<!ATTLIST file-extensions >
+<!ATTLIST glob >
+<!ATTLIST parameters >
+<!ATTLIST parameter name CDATA #IMPLIED 
+		    value CDATA #IMPLIED
+		    description CDATA #IMPLIED>
+
+<!ATTLIST protocol >
+
+<!ATTLIST product name CDATA #IMPLIED
+                  version CDATA #IMPLIED>
+
+<!ATTLIST mphr version CDATA #IMPLIED
+               block-size CDATA #IMPLIED
+               name CDATA #IMPLIED
+               subclass CDATA #IMPLIED
+               description CDATA #IMPLIED>
+
+<!ATTLIST sphr name CDATA #IMPLIED
+               version CDATA #IMPLIED
+               description CDATA #IMPLIED
+               instrument CDATA #IMPLIED
+               subclass CDATA #IMPLIED
+               block-size CDATA #IMPLIED>
+
+<!ATTLIST geadr name CDATA #IMPLIED
+                version CDATA #IMPLIED
+                subclass CDATA #IMPLIED
+                instrument CDATA #IMPLIED
+                description CDATA #IMPLIED
+                block-size CDATA #IMPLIED>
+
+<!ATTLIST giadr name CDATA #IMPLIED
+                subclass CDATA #IMPLIED
+                version CDATA #IMPLIED
+                instrument CDATA #IMPLIED
+                description CDATA #IMPLIED
+                block-size CDATA #IMPLIED>
+
+<!ATTLIST veadr name CDATA #IMPLIED
+                version CDATA #IMPLIED
+                subclass CDATA #IMPLIED
+                block-size CDATA #IMPLIED
+                instrument CDATA #IMPLIED
+                description CDATA #IMPLIED>
+
+<!ATTLIST viadr name CDATA #IMPLIED
+                subclass CDATA #IMPLIED
+                version CDATA #IMPLIED
+                instrument CDATA #IMPLIED
+                description CDATA #IMPLIED
+                block-size CDATA #IMPLIED
+                class CDATA #IMPLIED>
+
+<!ATTLIST mdr name CDATA #IMPLIED
+              subclass CDATA #IMPLIED
+              version CDATA #IMPLIED
+              instrument CDATA #IMPLIED
+              description CDATA #IMPLIED
+              block-size CDATA #IMPLIED>
+
+<!ATTLIST section name CDATA #IMPLIED
+                  description CDATA #IMPLIED
+                  type CDATA #IMPLIED
+                  block-size CDATA #IMPLIED>
+
+<!ATTLIST delimiter name CDATA #IMPLIED>
+
+<!ATTLIST field name CDATA #IMPLIED
+                type CDATA #REQUIRED
+                length CDATA #IMPLIED
+                description CDATA #IMPLIED
+                units CDATA #IMPLIED
+                scaling-factor CDATA #IMPLIED
+                default CDATA #IMPLIED
+		variable CDATA #IMPLIED
+                invalid CDATA #IMPLIED>
+
+<!ATTLIST if source CDATA #REQUIRED
+             condition CDATA #REQUIRED
+	     value CDATA #REQUIRED>
+
+<!ATTLIST array name CDATA #IMPLIED
+                labels CDATA #IMPLIED
+                label CDATA #IMPLIED
+                length CDATA #REQUIRED
+		type CDATA #IMPLIED>
+
+<!ATTLIST item value CDATA #IMPLIED
+               name CDATA #IMPLIED
+               description CDATA #IMPLIED>
+
+<!ATTLIST bit name CDATA #IMPLIED
+              length CDATA #IMPLIED
+              description CDATA #IMPLIED
+              default CDATA #IMPLIED>
+
+<!ATTLIST bits name CDATA #IMPLIED
+              length CDATA #IMPLIED
+              description CDATA #IMPLIED>
+

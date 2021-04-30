@@ -1,4 +1,4 @@
-# Copyright (c) 2020, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -27,328 +27,282 @@
 
 
 """
-Readers for lvl1b and lvl2 data in nc format.
+Readers for ASCAT Level 1b and Level 2 data in NetCDF format.
 """
 
 import os
-from datetime import datetime, timedelta
 
 import netCDF4
 import numpy as np
-import pandas as pd
+import xarray as xr
 
-from pygeobase.io_base import ImageBase
-from pygeobase.io_base import MultiTemporalImageBase
-from pygeobase.object_base import Image
+from ascat.utils import tmp_unzip
 
-ref_dt = np.datetime64('1970-01-01')
-ref_jd = 2440587.5  # julian date on 1970-01-01 00:00:00
+float32_nan = -999999.
+uint8_nan = np.iinfo(np.uint8).max
 
 
-class AscatL1NcFile(ImageBase):
+def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
     """
-    Read ASCAT L1 File in netCDF format, as downloaded from EUMETSAT
+    Read NetCDF file.
 
     Parameters
     ----------
     filename : str
-        Filename path.
-    mode : str, optional
-        Opening mode. Default: r
-    nc_variables: list, optional
-        list of variables to read from netCDF.
-        Default: read all available variables
+        Filename.
+    generic : bool
+        'True' reading and converting into generic format or
+        'False' reading original field names.
+    to_xarray : bool
+        'True' return data as xarray.Dataset
+        'False' return data as numpy.ndarray.
+    skip_fields : list
+        Variables to skip.
+    gen_fields_lut : dict
+        Conversion look-up table for generic names.
+
+    Returns
+    -------
+    ds : xarray.Dataset, numpy.ndarray
+        ASCAT data.
     """
+    data = {}
+    metadata = {}
 
-    def __init__(self, filename, mode='r', nc_variables=None, **kwargs):
-        """
-        Initialization of i/o object.
+    with netCDF4.Dataset(filename) as fid:
 
-        """
-        super(AscatL1NcFile, self).__init__(filename, mode=mode,
-                                            **kwargs)
-        self.nc_variables = nc_variables
-        self.ds = None
+        if hasattr(fid, 'platform'):
+            metadata['platform_id'] = fid.platform[2:]
+        elif hasattr(fid, 'platform_long_name'):
+            metadata['platform_id'] = fid.platform_long_name[2:]
 
-    def read(self, timestamp=None):
-        """
-        reads from the netCDF file given by the filename
+        metadata['orbit_start'] = fid.start_orbit_number
+        metadata['processor_major_version'] = fid.processor_major_version
+        metadata['product_minor_version'] = fid.product_minor_version
+        metadata['format_major_version'] = fid.format_major_version
+        metadata['format_minor_version'] = fid.format_minor_version
+        metadata['filename'] = os.path.basename(filename)
 
-        Returns
-        -------
-        data : pygeobase.object_base.Image
-        """
+        num_rows = fid.dimensions['numRows'].size
+        num_cells = fid.dimensions['numCells'].size
 
-        if self.ds is None:
-            self.ds = netCDF4.Dataset(self.filename)
+        dtype = []
+        for var_name in fid.variables.keys():
 
-        if self.nc_variables is None:
-            var_to_read = self.ds.variables.keys()
-        else:
-            var_to_read = self.nc_variables
+            if var_name in ['sigma0']:
+                continue
 
-        # make sure that essential variables are read always:
-        if 'latitude' not in var_to_read:
-            var_to_read.append('latitude')
-        if 'longitude' not in var_to_read:
-            var_to_read.append('longitude')
+            if generic and var_name in skip_fields:
+                continue
 
-        # store data in dictionary
-        dd = {}
-        metadata = {}
-        beams = ['f_', 'm_', 'a_']
-
-        metadata['sat_id'] = self.ds.platform[-1]
-        metadata['orbit_start'] = self.ds.start_orbit_number
-        metadata['processor_major_version'] = self.ds.processor_major_version
-        metadata['product_minor_version'] = self.ds.product_minor_version
-        metadata['format_major_version'] = self.ds.format_major_version
-        metadata['format_minor_version'] = self.ds.format_minor_version
-
-        num_cells = self.ds.dimensions['numCells'].size
-        for name in var_to_read:
-            variable = self.ds.variables[name]
-
-            if len(variable.shape) == 1:
-                # If the data is 1D then we repeat it for each cell
-                dd[name] = variable[:].flatten()
-                dd[name] = np.repeat(dd[name], num_cells)
-            elif len(variable.shape) == 2:
-                dd[name] = variable[:].flatten()
-            elif len(variable.shape) == 3:
-                # length of 3 means it is triplet data, so we split it
-                for i, beam in enumerate(beams):
-                    dd[beam + name] = variable[:, :, i].flatten()
-                    if name == 'azi_angle_trip':
-                        mask = dd[beam + name] < 0
-                        dd[beam + name][mask] += 360
+            if generic and var_name in gen_fields_lut:
+                new_var_name = gen_fields_lut[var_name][0]
+                fill_value = gen_fields_lut[var_name][2]
             else:
-                raise RuntimeError("Unexpected variable shape.")
+                new_var_name = var_name
+                fill_value = None
 
-            if name == 'utc_line_nodes':
-                utc_dates = netCDF4.num2date(
-                    dd[name], variable.units).astype('datetime64[ns]')
-                dd['jd'] = (utc_dates - ref_dt)/np.timedelta64(1, 'D') + ref_jd
+            var_data = fid.variables[var_name][:].filled(fill_value)
 
-        dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
+            if var_name == 'azi_angle_trip':
+                var_data[(var_data < 0) & (var_data != fill_value)] += 360
 
-        longitude = dd.pop('longitude')
-        latitude = dd.pop('latitude')
+            if len(fid.variables[var_name].shape) == 1:
+                var_data = var_data.repeat(num_cells)
+            elif len(fid.variables[var_name].shape) == 2:
+                var_data = var_data.flatten()
+            elif len(fid.variables[var_name].shape) == 3:
+                var_data = var_data.reshape(-1, 3)
+            else:
+                raise RuntimeError('Unknown dimension')
 
-        n_records = latitude.shape[0]
+            if var_name == 'utc_line_nodes':
+                var_data = var_data.astype(
+                    'timedelta64[s]') + np.datetime64('2000-01-01')
+
+            data[new_var_name] = var_data
+
+            if len(var_data.shape) == 1:
+                dtype.append((new_var_name, var_data.dtype.str))
+            elif len(var_data.shape) > 1:
+                dtype.append((new_var_name, var_data.dtype.str,
+                              var_data.shape[1:]))
+
+    num_records = num_rows * num_cells
+    coords_fields = ['lon', 'lat', 'time']
+
+    if generic:
+        sat_id = np.array([0, 4, 3, 5], dtype=np.uint8)
+        data['sat_id'] = np.zeros(num_records, dtype=np.uint8) + sat_id[
+            int(metadata['platform_id'])]
+        dtype.append(('sat_id', np.uint8))
+
+        n_records = data['lat'].shape[0]
         n_lines = n_records // num_cells
-        dd['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
-        dd['line_num'] = np.arange(n_lines).repeat(num_cells)
 
-        return Image(longitude, latitude, dd, metadata, timestamp,
-                     timekey='utc_line_nodes')
+        data['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
+        dtype.append(('node_num', np.uint8))
 
-    def write(self, data):
-        raise NotImplementedError()
+        data['line_num'] = np.arange(n_lines).repeat(num_cells)
+        dtype.append(('line_num', np.int32))
 
-    def flush(self):
-        pass
+    if to_xarray:
+        for k in data.keys():
+            if len(data[k].shape) == 1:
+                dim = ['obs']
+            elif len(data[k].shape) == 2:
+                dim = ['obs', 'beam']
 
-    def close(self):
-        pass
+            data[k] = (dim, data[k])
+
+        coords = {}
+        for cf in coords_fields:
+            coords[cf] = data.pop(cf)
+
+        ds = xr.Dataset(data, coords=coords, attrs=metadata)
+    else:
+        ds = np.empty(num_records, dtype=np.dtype(dtype))
+        for k, v in data.items():
+            ds[k] = v
+
+    return ds
 
 
-class AscatL2SsmNcFile(ImageBase):
+class AscatL1bNcFile():
+
     """
-    Read ASCAT L2 SSM File in netCDF format, as downloaded from EUMETSAT
-
-    Parameters
-    ----------
-    filename : str
-        Filename path.
-    mode : str, optional
-        Opening mode. Default: r
-    nc_variables: list, optional
-        list of variables to read from netCDF.
-        Default: read all available variables
-    """
-
-    def __init__(self, filename, mode='r', nc_variables=None, **kwargs):
-        """
-        Initialization of i/o object.
-
-        """
-        super(AscatL2SsmNcFile, self).__init__(filename, mode=mode,
-                                               **kwargs)
-        self.nc_variables = nc_variables
-        self.ds = None
-
-    def read(self, timestamp=None, ssm_masked=False):
-        """
-        reads from the netCDF file given by the filename
-
-        Returns
-        -------
-        data : pygeobase.object_base.Image
-        """
-
-        if self.ds is None:
-            self.ds = netCDF4.Dataset(self.filename)
-
-        if self.nc_variables is None:
-            var_to_read = self.ds.variables.keys()
-        else:
-            var_to_read = self.nc_variables
-
-        # make sure that essential variables are read always:
-        if 'latitude' not in var_to_read:
-            var_to_read.append('latitude')
-        if 'longitude' not in var_to_read:
-            var_to_read.append('longitude')
-
-        # store data in dictionary
-        dd = {}
-        metadata = {}
-
-        metadata['sat_id'] = self.ds.platform_long_name[-1]
-        metadata['orbit_start'] = self.ds.start_orbit_number
-        metadata['processor_major_version'] = self.ds.processor_major_version
-        metadata['product_minor_version'] = self.ds.product_minor_version
-        metadata['format_major_version'] = self.ds.format_major_version
-        metadata['format_minor_version'] = self.ds.format_minor_version
-
-        num_cells = self.ds.dimensions['numCells'].size
-        for name in var_to_read:
-            variable = self.ds.variables[name]
-            dd[name] = variable[:].flatten()
-            if len(variable.shape) == 1:
-                # If the data is 1D then we repeat it for each cell
-                dd[name] = np.repeat(dd[name], num_cells)
-
-            if name == 'utc_line_nodes':
-                utc_dates = netCDF4.num2date(
-                    dd[name], variable.units).astype('datetime64[ns]')
-                dd['jd'] = (utc_dates - ref_dt)/np.timedelta64(1, 'D') + ref_jd
-
-        # if the ssm_masked is True we mask out data with missing ssm value
-        if 'soil_moisture' in dd and ssm_masked is True:
-            # mask all the arrays based on fill_value of latitude
-            valid_data = ~dd['soil_moisture'].mask
-            for name in dd:
-                dd[name] = dd[name][valid_data]
-
-        longitude = dd.pop('longitude')
-        latitude = dd.pop('latitude')
-
-        n_records = latitude.shape[0]
-        n_lines = n_records // num_cells
-        dd['node_num'] = np.tile((np.arange(num_cells) + 1), n_lines)
-        dd['line_num'] = np.arange(n_lines).repeat(num_cells)
-
-        dd['as_des_pass'] = (dd['sat_track_azi'] < 270).astype(np.uint8)
-
-        return Image(longitude, latitude, dd, metadata, timestamp,
-                     timekey='utc_line_nodes')
-
-    def write(self, data):
-        raise NotImplementedError()
-
-    def flush(self):
-        pass
-
-    def close(self):
-        pass
-
-
-class AscatL2SsmNc(MultiTemporalImageBase):
-    """
-    Class for reading HSAF ASCAT SSM images in netCDF format.
-    The images have to be uncompressed in the following folder structure
-
-    Parameters
-    ----------
-    path: string
-        path where the data is stored
-    month_path_str: string, optional
-        if the files are stored in folders by month as is the standard on
-        the HSAF FTP Server then please specify the string that should be used
-        in datetime.datetime.strftime Default: ''
-    day_search_str: string, optional
-        to provide an iterator over all images of a day the method
-        _get_possible_timestamps looks for all available images on a day on the
-        harddisk. This string is used in datetime.datetime.strftime and in
-        glob.glob to search for all files on a day.
-    file_search_str: string, optional
-        this string is used in datetime.datetime.strftime and glob.glob to find
-        a 3 minute bufr file by the exact date.
-    datetime_format: string, optional
-        datetime format by which {datetime} will be replaced in file_search_str
-    nc_variables: list, optional
-        list of variables to read from netCDF.
-        Default: read all available variables
+    Read ASCAT Level 1b file in NetCDF format.
     """
 
-    def __init__(self, path, month_path_str='',
-                 day_search_str='W_XX-EUMETSAT-Darmstadt,'
-                                'SURFACE+SATELLITE,METOPA+'
-                                'ASCAT_C_EUMP_%Y%m%d*_125_ssm_l2.nc',
-                 file_search_str='W_XX-EUMETSAT-Darmstadt,'
-                                 'SURFACE+SATELLITE,METOPA+'
-                                 'ASCAT_C_EUMP_{datetime}*_125_ssm_l2.nc',
-                 datetime_format='%Y%m%d%H%M%S',
-                 filename_datetime_format=(62, 76, '%Y%m%d%H%M%S'),
-                 nc_variables=None):
-        self.path = path
-        self.month_path_str = month_path_str
-        self.day_search_str = day_search_str
-        self.file_search_str = file_search_str
-        self.filename_datetime_format = filename_datetime_format
-        super(AscatL2SsmNc, self).__init__(path, AscatL2SsmNcFile,
-                                           subpath_templ=[month_path_str],
-                                           fname_templ=file_search_str,
-                                           datetime_format=datetime_format,
-                                           exact_templ=False,
-                                           ioclass_kws={
-                                               'nc_variables': nc_variables})
-
-    def _get_orbit_start_date(self, filename):
-        orbit_start_str = \
-            os.path.basename(filename)[self.filename_datetime_format[0]:
-                                       self.filename_datetime_format[1]]
-        return datetime.strptime(orbit_start_str,
-                                 self.filename_datetime_format[2])
-
-    def tstamps_for_daterange(self, startdate, enddate):
+    def __init__(self, filename):
         """
-        Get the timestamps as datetime array that are possible for the
-        given day, if the timestamps are
-
-        For this product it is not fixed but has to be looked up from
-        the hard disk since bufr files are not regular spaced and only
-        europe is in this product. For a global product a 3 minute
-        spacing could be used as a fist approximation
+        Initialize AscatL1bNcFile.
 
         Parameters
         ----------
-        startdate : datetime.date or datetime.datetime
-            start date
-        enddate : datetime.date or datetime.datetime
-            end date
+        filename : str
+            Filename.
+        """
+        if os.path.splitext(filename)[1] == '.gz':
+            self.filename = tmp_unzip(filename)
+        else:
+            self.filename = filename
+
+    def read(self, generic=False, to_xarray=False):
+        """
+        Read ASCAT Level 1b data.
+
+        Parameters
+        ----------
+        generic : bool, optional
+            'True' reading and converting into generic format or
+            'False' reading original field names (default: False).
+        to_xarray : bool, optional
+            'True' return data as xarray.Dataset
+            'False' return data as numpy.ndarray (default: False).
 
         Returns
         -------
-        dates : list
-            list of datetimes
+        ds : xarray.Dataset, numpy.ndarray
+            ASCAT Level 1b data.
         """
-        file_list = []
-        delta_all = enddate - startdate
-        timestamps = []
+        gen_fields_lut = {'longitude': ('lon', np.float32, None),
+                          'latitude': ('lat', np.float32, None),
+                          'utc_line_nodes': ('time', np.float32, None),
+                          'inc_angle_trip': ('inc', np.float32, float32_nan),
+                          'azi_angle_trip': ('azi', np.float32, float32_nan),
+                          'sigma0_trip': ('sig', np.float32, float32_nan),
+                          'kp': ('kp', np.float32, float32_nan),
+                          'f_kp': ('kp_quality', np.float32, uint8_nan),
+                          'num_val_trip': ('num_val', np.float32, None)}
 
-        for i in range(delta_all.days + 1):
-            timestamp = startdate + timedelta(days=i)
+        skip_fields = ['f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel',
+                       'f_ref', 'abs_line_number']
 
-            files = self._search_files(
-                timestamp, custom_templ=self.day_search_str)
+        ds = read_nc(self.filename, generic, to_xarray,
+                     skip_fields, gen_fields_lut)
 
-            file_list.extend(sorted(files))
+        return ds
 
-        for filename in file_list:
-            timestamps.append(self._get_orbit_start_date(filename))
+    def close(self):
+        """
+        Close file.
+        """
+        pass
 
-        timestamps = [dt for dt in timestamps if startdate <= dt <= enddate]
-        return timestamps
+
+class AscatL2NcFile:
+
+    """
+    Read ASCAT Level 2 file in NetCDF format.
+    """
+
+    def __init__(self, filename):
+        """
+        Initialize AscatL2NcFile.
+
+        Parameters
+        ----------
+        filename : str
+            Filename.
+        """
+        if os.path.splitext(filename)[1] == '.gz':
+            self.filename = tmp_unzip(filename)
+        else:
+            self.filename = filename
+
+    def read(self, generic=False, to_xarray=False):
+        """
+        Read ASCAT Level 2 data.
+
+        Parameters
+        ----------
+        generic : bool, optional
+            'True' reading and converting into generic format or
+            'False' reading original field names (default: False).
+        to_xarray : bool, optional
+            'True' return data as xarray.Dataset
+            'False' return data as numpy.ndarray (default: False).
+
+        Returns
+        -------
+        ds : dict, xarray.Dataset
+            ASCAT Level 2 data.
+        """
+        gen_fields_lut = {'longitude': ('lon', np.float32, None),
+                          'latitude': ('lat', np.float32, None),
+                          'utc_line_nodes': ('time', np.float32, None),
+                          'inc_angle_trip': ('inc', np.float32, float32_nan),
+                          'azi_angle_trip': ('azi', np.float32, float32_nan),
+                          'sigma0_trip': ('sig', np.float32, float32_nan),
+                          'kp': ('kp', np.float32, float32_nan),
+                          'soil_moisture': ('sm', np.float32, float32_nan),
+                          'soil_moisture_error': ('sm_noise', np.float32, float32_nan),
+                          'sigma40': ('sig40', np.float32, float32_nan),
+                          'sigma40_error': ('sig40_noise', np.float32, float32_nan),
+                          'slope40': ('slope40', np.float32, float32_nan),
+                          'slope40_error': ('slope40_noise', np.float32, float32_nan),
+                          'soil_moisture_sensitivity': ('sm_sens', np.float32, float32_nan),
+                          'dry_backscatter': ('dry_sig40', np.float32, float32_nan),
+                          'wet_backscatter': ('wet_sig40', np.float32, float32_nan),
+                          'mean_soil_moisture': ('sm_mean', np.float32, float32_nan),
+                          'proc_flag1': ('corr_flag', np.uint8, None),
+                          'proc_flag2': ('proc_flag', np.uint8, None),
+                          'aggregated_quality_flag': ('agg_flag', np.uint8, None),
+                          'snow_cover_probability': ('snow_prob', np.uint8, None),
+                          'frozen_soil_probability': ('frozen_prob', np.uint8, None),
+                          'wetland_flag': ('wetland', np.uint8, None),
+                          'topography_flag': ('topo', np.uint8, None)}
+
+        skip_fields = ['abs_line_number']
+
+        ds = read_nc(self.filename, generic, to_xarray,
+                     skip_fields, gen_fields_lut)
+
+        return ds
+
+    def close(self):
+        """
+        Close file.
+        """
+        pass

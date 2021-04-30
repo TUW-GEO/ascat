@@ -1,4 +1,4 @@
-# Copyright (c) 2020, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -29,219 +29,109 @@ import os
 import sys
 import pytest
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import numpy as np
 import numpy.testing as nptest
 
-import ascat.h_saf as H_SAF
+from ascat.h_saf import H08Bufr
+from ascat.h_saf import H08BufrFileList
+from ascat.h_saf import H14GribFileList
+from ascat.h_saf import AscatNrtBufrFileList
+from ascat.h_saf import AscatSsmDataRecord
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_H08(unittest.TestCase):
 
+    """
+    Test H08 reading.
+    """
+
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
-                                 'hsaf', 'h08')
-        self.reader = H_SAF.H08img(data_path)
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
         """
-        test getting the image offsets for a known day
-        2010-05-01
+        Setup test data.
         """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime(2010, 5, 1), datetime(2010, 5, 1, 12))
-        timestamps_should = [datetime(2010, 5, 1, 8, 33, 1)]
-        assert sorted(timestamps) == sorted(timestamps_should)
+        self.root_path = os.path.join(
+            os.path.dirname(__file__), 'ascat_test_data', 'hsaf', 'h08')
 
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
-            datetime(2010, 5, 1, 8, 33, 1))
-        # do not check data content at the moment just shapes and structure
-        assert sorted(data.keys()) == sorted(
-            ['ssm', 'corr_flag', 'ssm_noise', 'proc_flag'])
-        assert lons.shape == (3120, 7680)
-        assert lats.shape == (3120, 7680)
-        for var in data:
-            assert data[var].shape == (3120, 7680)
+    def test_read(self):
+        """
+        Test read file.
+        """
+        filename = os.path.join(self.root_path, 'h08_201005_buf',
+                                'h08_20100501_083301_metopa_18322_ZAMG.buf')
 
-    def test_image_reading_bbox_empty(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
-            datetime(2010, 5, 1, 8, 33, 1), lat_lon_bbox=[45, 48, 15, 18])
+        h08 = H08Bufr(filename)
+        data = h08.read()
 
-        # do not check data content at the moment just shapes and structure
-        assert data is None
-        assert lons is None
-        assert lats is None
+        assert sorted(data.keys()) == sorted(['lon', 'lat', 'ssm', 'corr_flag',
+                                              'ssm_noise', 'proc_flag'])
+        for var_name, var in data.items():
+            assert var.shape == (3120, 7680)
 
-    def test_image_reading_bbox(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
-            datetime(2010, 5, 1, 8, 33, 1),
-            lat_lon_bbox=[60, 70, 15, 25])
+    def test_read_files(self):
+        """
+        Test read files.
+        """
+        h08_files = H08BufrFileList(self.root_path)
 
-        # do not check data content at the moment just shapes and structure
-        assert sorted(data.keys()) == sorted(
-            ['ssm', 'corr_flag', 'ssm_noise', 'proc_flag'])
-        assert lons.shape == (2400, 2400)
-        assert lats.shape == (2400, 2400)
-        for var in data:
-            assert data[var].shape == (2400, 2400)
+        dt = datetime(2010, 5, 1, 8, 33, 1)
+        data = h08_files.read(dt)
+
+        assert sorted(data.keys()) == sorted(['lon', 'lat', 'ssm', 'corr_flag',
+                                              'ssm_noise', 'proc_flag'])
+        for var_name, var in data.items():
+            assert var.shape == (3120, 7680)
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_H07(unittest.TestCase):
+class Test_AscatNrtSsm(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__),  'ascat_test_data',
-                                 'hsaf', 'h07')
-        self.reader = H_SAF.H07img(data_path)
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
         """
-        test getting the image offsets for a known day
-        2010-05-01
+        Setup test data.
         """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime(2010, 5, 1), datetime(2010, 5, 1, 12))
-        timestamps_should = [datetime(2010, 5, 1, 8, 33, 1)]
-        assert sorted(timestamps) == sorted(timestamps_should)
+        self.root_path = os.path.join(
+            os.path.dirname(__file__),  'ascat_test_data', 'hsaf')
 
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
-            datetime(2010, 5, 1, 8, 33, 1))
-
-        ssm_should = np.array([51.2, 65.6, 46.2, 56.9, 61.4, 61.5, 58.1, 47.1,
-                               72.7, 13.8, 60.9, 52.1, 78.5, 57.8, 56.2, 79.8,
-                               67.7, 53.8, 86.5, 29.4, 50.6, 88.8, 56.9, 68.9,
-                               52.4, 64.4, 81.5, 50.5, 84., 79.6, 47.4, 79.5,
-                               46.9, 60.7, 81.3, 52.9, 84.5, 25.5, 79.2, 93.3,
-                               52.6, 93.9, 74.4, 91.4, 76.2, 92.5, 80., 88.3,
-                               79.1, 97.2, 56.8])
-
-        lats_should = np.array([70.21162, 69.32506, 69.77325, 68.98149,
-                                69.12295, 65.20364, 67.89625, 67.79844,
-                                67.69112, 67.57446, 67.44865, 67.23221,
-                                66.97207, 66.7103, 66.34695, 65.90996,
-                                62.72462, 61.95761, 61.52935, 61.09884,
-                                60.54359, 65.60223, 65.33588, 65.03098,
-                                64.58972, 61.46131, 60.62553, 59.52057,
-                                64.27395, 63.80293, 60.6569, 59.72684,
-                                58.74838, 63.42774])
-
-        ssm_mean_should = np.array([0.342,  0.397,  0.402,  0.365,  0.349,
-                                    0.354,  0.37,  0.36, 0.445,  0.211,
-                                    0.394,  0.354,  0.501,  0.361,  0.366,
-                                    0.45, 0.545,  0.329,  0.506,  0.229,
-                                    0.404,  0.591,  0.348,  0.433, 0.29,
-                                    0.508,  0.643,  0.343,  0.519, 0.61,
-                                    0.414,  0.594, 0.399,  0.512,  0.681,
-                                    0.457,  0.622,  0.396,  0.572,  0.7,
-                                    0.302,  0.722,  0.493,  0.747,  0.521,
-                                    0.72,  0.578,  0.718, 0.536,  0.704,
-                                    0.466]) * 100
-
-        nptest.assert_allclose(lats[25:-1:30], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
-                               15:-1:20], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['Mean Surface Soil Moisture'][15:-1:20],
-                               ssm_mean_should,
-                               atol=0.01)
-
-
-@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_H16(unittest.TestCase):
-
-    def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'ascat_test_data', 'hsaf', 'h16')
-        self.reader = H_SAF.H16img(data_path, month_path_str='')
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
+    def test_h16_read(self):
         """
-        test getting the image offsets for a known day
-        2010-05-01
+        Test read file.
         """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime(2017, 2, 20), datetime(2017, 2, 21))
-        timestamps_should = [datetime(2017, 2, 20, 11, 0, 0) +
-                             timedelta(minutes=3) * n for n in range(8)]
-        assert sorted(timestamps) == sorted(timestamps_should)
+        dt = datetime(2017, 2, 20, 11, 15, 0)
+        h16 = AscatNrtBufrFileList(os.path.join(self.root_path, 'h16'), 'h16')
+        data = h16.read(dt)
 
-    def test_offset_getting_datetime_boundary(self):
-        """
-        test getting the image offsets for a known daterange,
-        checks if exact datetimes are used
-        """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime(2017, 2, 20, 11, 3),
-            datetime(2017, 2, 20, 11, 12))
-        timestamps_should = [datetime(2017, 2, 20, 11, 3, 0) +
-                             timedelta(minutes=3) * n for n in range(4)]
-        assert sorted(timestamps) == sorted(timestamps_should)
-
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
-            datetime(2017, 2, 20, 11, 15, 0))
-
-        ssm_should = np.array([0., 3.6, 7.8, 8.2, 12.3, 14.7, 21.6, 26.7,
-                               30.6, 32.2, 43., 50.5, 46.3, 47.6, 58.])
+        sm_should = np.array([0., 3.6, 7.8, 8.2, 12.3, 14.7, 21.6, 26.7,
+                              30.6, 32.2, 43., 50.5, 46.3, 47.6, 58.])
 
         lats_should = np.array([-28.25222, -28.21579, -28.1789, -28.14155,
                                 -28.10374, -28.06547, -28.02674, -27.98755,
                                 -27.94791, -27.90782, -27.86727, -27.82627,
                                 -27.78482, -27.74292, -27.70058, ])
 
-        ssm_mean_should = np.array([32.8, 35.1, 37.8, 39.2, 39., 38., 36.2,
-                                    39.6, 43.8, 45.6, 46.1, 47., 43.7, 46.,
-                                    46.7])
+        sm_mean_should = np.array([32.8, 35.1, 37.8, 39.2, 39., 38., 36.2,
+                                   39.6, 43.8, 45.6, 46.1, 47., 43.7, 46.,
+                                   46.7])
 
-        nptest.assert_allclose(lats[798:813], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
-                               798:813], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['Mean Surface Soil Moisture'][798:813],
-                               ssm_mean_should,
+        nptest.assert_allclose(data['lat'][798:813], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['sm'][798:813], sm_should, atol=0.01)
+        nptest.assert_allclose(data['sm_mean'][798:813], sm_mean_should,
                                atol=0.01)
 
-
-@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_H101(unittest.TestCase):
-
-    def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'ascat_test_data', 'hsaf', 'h101')
-        self.reader = H_SAF.H101img(data_path, month_path_str='')
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
+    def test_h101_read(self):
         """
-        test getting the image offsets for a known day
-        2010-05-01
+        Test read file.
         """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime(2017, 2, 20), datetime(2017, 2, 21))
-        timestamps_should = [datetime(2017, 2, 20, 10, 24, 0) +
-                             timedelta(minutes=3) * n for n in range(8)]
-        assert sorted(timestamps) == sorted(timestamps_should)
+        dt = datetime(2017, 2, 20, 10, 42, 0)
+        h101 = AscatNrtBufrFileList(
+            os.path.join(self.root_path, 'h101'), 'h101')
+        data = h101.read(dt)
 
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
-            datetime(2017, 2, 20, 10, 42, 0))
-
-        ssm_should = np.array([26.1, 31.5, 49.5, 64.3, 80.3, 87.9, 24.5, 18.5,
-                               20., 12.9, 6.3, 3.1, 3.5, 5.7, 2., 0., 4.6, 8.,
-                               9.6, 11.8])
+        sm_should = np.array([26.1, 31.5, 49.5, 64.3, 80.3, 87.9, 24.5, 18.5,
+                              20., 12.9, 6.3, 3.1, 3.5, 5.7, 2., 0., 4.6, 8.,
+                              9.6, 11.8])
 
         lats_should = np.array([56.26292, 56.29267, 56.32112, 56.34827,
                                 56.37413, 56.39868, 51.98611, 52.08869,
@@ -249,47 +139,27 @@ class Test_H101(unittest.TestCase):
                                 52.58802, 52.68512, 52.78127, 52.87648,
                                 52.97073, 53.06402, 53.15634, 53.24768])
 
-        ssm_mean_should = np.array([22.8, 27., 31.8, 38.3, 44.3, 52.4, 24.8,
-                                    27.8, 24.7, 23.9, 22.8, 25., 25.6, 26.1,
-                                    25.9, 26.9, 28.5, 27.8, 24.3, 22.7])
+        sm_mean_should = np.array([22.8, 27., 31.8, 38.3, 44.3, 52.4, 24.8,
+                                   27.8, 24.7, 23.9, 22.8, 25., 25.6, 26.1,
+                                   25.9, 26.9, 28.5, 27.8, 24.3, 22.7])
 
-        nptest.assert_allclose(lats[1800:1820], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
-                               1800:1820], ssm_should, atol=0.01)
-        nptest.assert_allclose(
-            data['Mean Surface Soil Moisture'][1800:1820],
-            ssm_mean_should, atol=0.01)
+        nptest.assert_allclose(data['lat'][1800:1820], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['sm'][1800:1820], sm_should, atol=0.01)
+        nptest.assert_allclose(data['sm_mean'][1800:1820], sm_mean_should,
+                               atol=0.01)
 
-
-@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_H102(unittest.TestCase):
-
-    def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'ascat_test_data', 'hsaf', 'h102')
-        self.reader = H_SAF.H102img(data_path, month_path_str='')
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
+    def test_h102_read(self):
         """
-        test getting the image offsets for a known day
-        2010-05-01
+        Test read file.
         """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime(2017, 2, 20), datetime(2017, 2, 21))
-        timestamps_should = [datetime(
-            2017, 2, 20, 10, 24, 0) + timedelta(minutes=3) * n for n in range(8)]
-        assert sorted(timestamps) == sorted(timestamps_should)
+        dt = datetime(2017, 2, 20, 10, 42, 0)
+        h102 = AscatNrtBufrFileList(
+            os.path.join(self.root_path, 'h102'), 'h102')
+        data = h102.read(dt)
 
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
-            datetime(2017, 2, 20, 10, 42, 0))
-
-        ssm_should = np.array([45.8, 43.5, 41.7, 42.7, 38.6, 31.1, 23.4, 21.7,
-                               23.6, 26.8, 30.5, 30.1, 32.7, 34.7, 35.8, 38.3,
-                               46.2, 53.7, 46.2])
+        sm_should = np.array([45.8, 43.5, 41.7, 42.7, 38.6, 31.1, 23.4, 21.7,
+                              23.6, 26.8, 30.5, 30.1, 32.7, 34.7, 35.8, 38.3,
+                              46.2, 53.7, 46.2])
 
         lats_should = np.array([43.16844, 43.21142, 43.25423, 43.29686,
                                 43.33931, 43.38158, 43.42367, 43.46558,
@@ -297,62 +167,40 @@ class Test_H102(unittest.TestCase):
                                 43.67243, 43.71326, 43.7539, 43.79436,
                                 43.83463, 43.87472, 43.91463])
 
-        ssm_mean_should = np.array([50.8, 44.5, 36.3, 29.9, 28.7, 29.1, 30.,
-                                    30.1, 30.8, 33., 34.9, 35.7, 35.2, 34.2,
-                                    32.9, 32.9, 34.5, 32.7, 30.6])
+        sm_mean_should = np.array([50.8, 44.5, 36.3, 29.9, 28.7, 29.1, 30.,
+                                   30.1, 30.8, 33., 34.9, 35.7, 35.2, 34.2,
+                                   32.9, 32.9, 34.5, 32.7, 30.6])
 
-        nptest.assert_allclose(lats[0:19], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
-                               0:19], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['Mean Surface Soil Moisture'][0:19],
-                               ssm_mean_should,
+        nptest.assert_allclose(data['lat'][0:19], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['sm'][0:19], sm_should, atol=0.01)
+        nptest.assert_allclose(data['sm_mean'][0:19], sm_mean_should,
                                atol=0.01)
 
-
-@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
-class Test_H103(unittest.TestCase):
-
-    def setUp(self):
-        data_path = os.path.join(
-            os.path.dirname(__file__),  'ascat_test_data', 'hsaf', 'h103')
-        self.reader = H_SAF.H103img(data_path, month_path_str='')
-
-    def tearDown(self):
-        self.reader = None
-
-    def test_offset_getting(self):
+    def test_h103_read(self):
         """
-        test getting the image offsets for a known day
-        2010-05-01
+        Test read file.
         """
-        timestamps = self.reader.tstamps_for_daterange(
-            datetime(2017, 2, 20), datetime(2017, 2, 21))
-        timestamps_should = [datetime(
-            2017, 2, 20, 10, 30, 0) + timedelta(minutes=3) * n for n in range(8)]
-        assert sorted(timestamps) == sorted(timestamps_should)
+        dt = datetime(2017, 2, 20, 10, 30, 0)
+        h103 = AscatNrtBufrFileList(
+            os.path.join(self.root_path, 'h103'), 'h103')
+        data = h103.read(dt)
 
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
-            datetime(2017, 2, 20, 10, 30, 0))
-
-        ssm_should = np.array([20.4, 15.2, 4.2, 0., 0.7, 6.8, 14.2, 21.9,
-                               23.7, 17.4, 14.8, 19.8, 15.4, 17.1, 28.9,
-                               28.5, 23.9, 18.1, 25.4])
+        sm_should = np.array([20.4, 15.2, 4.2, 0., 0.7, 6.8, 14.2, 21.9,
+                              23.7, 17.4, 14.8, 19.8, 15.4, 17.1, 28.9,
+                              28.5, 23.9, 18.1, 25.4])
 
         lats_should = np.array([8.82896, 8.85636, 8.88373, 8.91107, 8.93837,
                                 8.96564, 8.99288, 9.02009, 9.04726, 9.0744,
                                 9.1015, 9.12858, 9.15561, 9.18262, 9.20959,
                                 9.23653, 9.26343, 9.2903, 9.31713])
 
-        ssm_mean_should = np.array([14., 14., 13.8, 13.5, 13.3, 13.1, 12.8,
-                                    12.6, 12.6, 12., 12.1, 12.6, 13.2, 14.1,
-                                    13.9, 12.4, 10.9, 10.3, 10.7])
+        sm_mean_should = np.array([14., 14., 13.8, 13.5, 13.3, 13.1, 12.8,
+                                   12.6, 12.6, 12., 12.1, 12.6, 13.2, 14.1,
+                                   13.9, 12.4, 10.9, 10.3, 10.7])
 
-        nptest.assert_allclose(lats[0:19], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][
-                               0:19], ssm_should, atol=0.01)
-        nptest.assert_allclose(data['Mean Surface Soil Moisture'][0:19],
-                               ssm_mean_should,
+        nptest.assert_allclose(data['lat'][0:19], lats_should, atol=1e-5)
+        nptest.assert_allclose(data['sm'][0:19], sm_should, atol=0.01)
+        nptest.assert_allclose(data['sm_mean'][0:19], sm_mean_should,
                                atol=0.01)
 
 
@@ -360,338 +208,267 @@ class Test_H103(unittest.TestCase):
 class Test_H14(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(
+        """
+        Setup test data.
+        """
+        self.root_path = os.path.join(
             os.path.dirname(__file__),  'ascat_test_data', 'hsaf', 'h14')
-        self.reader = H_SAF.H14img(data_path, expand_grid=False)
-        self.expand_reader = H_SAF.H14img(data_path, expand_grid=True)
 
-    def tearDown(self):
-        self.reader = None
-        self.expand_reader = None
+    def test_read(self):
+        """
+        Test read file.
+        """
+        dt = datetime(2014, 5, 15, 0)
+        h14 = H14GribFileList(self.root_path)
+        data = h14.read(dt)
 
-    def test_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.reader.read(
-            datetime(2014, 5, 15))
-        assert sorted(data.keys()) == sorted(['SM_layer1_0-7cm',
+        assert sorted(data.keys()) == sorted(['lat', 'lon',
+                                              'SM_layer1_0-7cm',
                                               'SM_layer2_7-28cm',
                                               'SM_layer3_28-100cm',
                                               'SM_layer4_100-289cm'])
-        assert lons.shape == (843490,)
-        assert lats.shape == (843490,)
-        for var in data:
-            assert data[var].shape == (843490,)
-            assert meta[var]['name']
-            assert meta[var]['units'] in ['dimensionless', 'unknown']
 
-    def test_expanded_image_reading(self):
-        data, meta, timestamp, lons, lats, time_var = self.expand_reader.read(
-            datetime(2014, 5, 15))
-        assert sorted(data.keys()) == sorted(['SM_layer1_0-7cm',
-                                              'SM_layer2_7-28cm',
-                                              'SM_layer3_28-100cm',
-                                              'SM_layer4_100-289cm'])
-        assert lons.shape == (800, 1600)
-        assert lats.shape == (800, 1600)
         for var in data:
             assert data[var].shape == (800, 1600)
-            assert meta[var]['name']
-            assert meta[var]['units'] in ['dimensionless', 'unknown']
 
 
-class Test_H25Ts(unittest.TestCase):
+class Test_AscatSsmDataRecord(unittest.TestCase):
 
     def setUp(self):
 
         path = os.path.dirname(__file__)
 
-        cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'h25')
-        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
-        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
-                                         'static_layer')
+        self.gpi = 3066159
+        self.cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf')
+        self.grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
+        self.static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
+                                              'static_layer')
 
-        self.ascat_reader = H_SAF.H25Ts(cdr_path, grid_path,
-                                        static_layer_path=static_layer_path)
+    def test_read_h25(self):
+        """
+        Test read H25.
+        """
+        self.h25 = AscatSsmDataRecord(
+            os.path.join(self.cdr_path, 'h25'), self.grid_path,
+            static_layer_path=self.static_layer_path)
 
-    def tearDown(self):
-        self.ascat_reader.close()
+        data = self.h25.read(self.gpi, absolute_sm=True)
+        assert data.attrs['gpi'] == self.gpi
 
-    def test_read(self):
+        np.testing.assert_approx_equal(
+            data.attrs['lon'], 19.03533, significant=4)
+        np.testing.assert_approx_equal(
+            data.attrs['lat'], 70.05438, significant=4)
 
-        gpi = 3066159
-        result = self.ascat_reader.read(gpi, absolute_sm=True)
-        assert result.gpi == gpi
-
-        np.testing.assert_approx_equal(result.longitude, 19.03533,
-                                       significant=4)
-        np.testing.assert_approx_equal(result.latitude, 70.05438,
-                                       significant=4)
-
-        assert len(result.data) == 7737
-        assert result.data.iloc[15].name.to_pydatetime() == \
-            datetime(2007, 1, 7, 10, 49, 9, 4)
-        assert result.data.iloc[15]['sm'] == 22
-        assert result.data.iloc[15]['ssf'] == 1
-        assert result.data.iloc[15]['sm_noise'] == 6
-        assert result.data.iloc[15]['frozen_prob'] == 0
-        assert result.data.iloc[15]['snow_prob'] == 127
-        assert result.data.iloc[15]['orbit_dir'].decode('utf-8') == 'D'
-        assert result.data.iloc[15]['proc_flag'] == 0
+        assert len(data) == 7737
+        assert data.iloc[15].name.to_pydatetime() == datetime(
+            2007, 1, 7, 10, 49, 9, 4)
+        assert data.iloc[15]['sm'] == 22
+        assert data.iloc[15]['ssf'] == 1
+        assert data.iloc[15]['sm_noise'] == 6
+        assert data.iloc[15]['frozen_prob'] == 0
+        assert data.iloc[15]['snow_prob'] == 127
+        assert data.iloc[15]['orbit_dir'].decode('utf-8') == 'D'
+        assert data.iloc[15]['proc_flag'] == 0
 
         np.testing.assert_equal(
-            result.data.iloc[15]['abs_sm_gldas'], np.nan)
+            data.iloc[15]['abs_sm_gldas'], np.nan)
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_noise_gldas'], np.nan)
-
-        np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_hwsd'], 0.1078, significant=6)
-        np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.0294, significant=6)
-
-        assert result.topo_complex == 9
-        assert result.wetland_frac == 41
+            data.iloc[15]['abs_sm_noise_gldas'], np.nan)
 
         np.testing.assert_approx_equal(
-            result.porosity_gldas, np.nan, significant=5)
+            data.iloc[15]['abs_sm_hwsd'], 0.1078, significant=6)
         np.testing.assert_approx_equal(
-            result.porosity_hwsd, 0.49000001, significant=5)
+            data.iloc[15]['abs_sm_noise_hwsd'], 0.0294, significant=6)
 
+        assert data.attrs['topo_complex'] == 9
+        assert data.attrs['wetland_frac'] == 41
 
-class Test_H108Ts(unittest.TestCase):
+        np.testing.assert_approx_equal(
+            data.attrs['porosity_gldas'], np.nan, significant=5)
+        np.testing.assert_approx_equal(
+            data.attrs['porosity_hwsd'], 0.49000001, significant=5)
 
-    def setUp(self):
+    def test_read_h108(self):
+        """
+        Test read H108.
+        """
+        self.h108 = AscatSsmDataRecord(
+            os.path.join(self.cdr_path, 'h108'), self.grid_path,
+            static_layer_path=self.static_layer_path)
 
-        path = os.path.dirname(__file__)
+        data = self.h108.read(self.gpi, absolute_sm=True)
+        assert data.attrs['gpi'] == self.gpi
 
-        cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'h108')
-        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
-        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
-                                         'static_layer')
-
-        self.ascat_reader = H_SAF.H108Ts(cdr_path, grid_path,
-                                         static_layer_path=static_layer_path)
-
-    def tearDown(self):
-        self.ascat_reader.close()
-
-    def test_read(self):
-
-        gpi = 3066159
-        result = self.ascat_reader.read(gpi, absolute_sm=True)
-        assert result.gpi == gpi
-
-        np.testing.assert_approx_equal(result.longitude, 19.03533,
+        np.testing.assert_approx_equal(data.attrs['lon'], 19.03533,
                                        significant=4)
-        np.testing.assert_approx_equal(result.latitude, 70.05438,
+        np.testing.assert_approx_equal(data.attrs['lat'], 70.05438,
                                        significant=4)
 
-        assert len(result.data) == 8222
-        assert result.data.iloc[15].name.to_pydatetime() == \
-            datetime(2007, 1, 7, 10, 49, 9, 4)
-        assert result.data.iloc[15]['sm'] == 22
-        assert result.data.iloc[15]['ssf'] == 2
-        assert result.data.iloc[15]['sm_noise'] == 6
-        assert result.data.iloc[15]['frozen_prob'] == 0
-        assert result.data.iloc[15]['snow_prob'] == 127
-        assert result.data.iloc[15]['orbit_dir'].decode('utf-8') == 'D'
-        assert result.data.iloc[15]['proc_flag'] == 0
+        assert len(data) == 8222
+        assert data.iloc[15].name.to_pydatetime() == datetime(
+            2007, 1, 7, 10, 49, 9, 4)
+        assert data.iloc[15]['sm'] == 22
+        assert data.iloc[15]['ssf'] == 2
+        assert data.iloc[15]['sm_noise'] == 6
+        assert data.iloc[15]['frozen_prob'] == 0
+        assert data.iloc[15]['snow_prob'] == 127
+        assert data.iloc[15]['orbit_dir'].decode('utf-8') == 'D'
+        assert data.iloc[15]['proc_flag'] == 0
 
         np.testing.assert_equal(
-            result.data.iloc[15]['abs_sm_gldas'], np.nan)
+            data.iloc[15]['abs_sm_gldas'], np.nan)
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_noise_gldas'], np.nan)
+            data.iloc[15]['abs_sm_noise_gldas'], np.nan)
 
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_hwsd'], 0.1078, significant=6)
+            data.iloc[15]['abs_sm_hwsd'], 0.1078, significant=6)
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.0294, significant=6)
+            data.iloc[15]['abs_sm_noise_hwsd'], 0.0294, significant=6)
 
-        assert result.topo_complex == 9
-        assert result.wetland_frac == 41
+        assert data.attrs['topo_complex'] == 9
+        assert data.attrs['wetland_frac'] == 41
 
-        np.testing.assert_equal(
-            result.porosity_gldas, np.nan)
-        np.testing.assert_approx_equal(
-            result.porosity_hwsd, 0.49000001, significant=5)
+        np.testing.assert_equal(data.attrs['porosity_gldas'], np.nan)
+        np.testing.assert_approx_equal(data.attrs['porosity_hwsd'],
+                                       0.49000001, significant=5)
 
+    def test_read_h109(self):
+        """
+        Test read H109.
+        """
+        self.h109 = AscatSsmDataRecord(
+            os.path.join(self.cdr_path, 'h109'), self.grid_path,
+            static_layer_path=self.static_layer_path)
 
-class Test_H109Ts(unittest.TestCase):
+        data = self.h109.read(self.gpi, absolute_sm=True)
+        assert data.attrs['gpi'] == self.gpi
 
-    def setUp(self):
-
-        path = os.path.dirname(__file__)
-
-        cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'h109')
-        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
-        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
-                                         'static_layer')
-
-        self.ascat_reader = H_SAF.H109Ts(cdr_path, grid_path,
-                                         static_layer_path=static_layer_path)
-
-    def tearDown(self):
-        self.ascat_reader.close()
-
-    def test_read(self):
-
-        gpi = 3066159
-        result = self.ascat_reader.read(gpi, absolute_sm=True)
-        assert result.gpi == gpi
-
-        np.testing.assert_approx_equal(result.longitude, 19.03533,
+        np.testing.assert_approx_equal(data.attrs['lon'], 19.03533,
                                        significant=4)
-        np.testing.assert_approx_equal(result.latitude, 70.05438,
+        np.testing.assert_approx_equal(data.attrs['lat'], 70.05438,
                                        significant=4)
 
-        assert len(result.data) == 11736
-        assert result.data.iloc[15].name.to_pydatetime() == \
+        assert len(data) == 11736
+        assert data.iloc[15].name.to_pydatetime() == \
             datetime(2007, 1, 7, 10, 49, 9, 379200)
-        assert result.data.iloc[15]['sm'] == 27
-        assert result.data.iloc[15]['ssf'] == 1
-        assert result.data.iloc[15]['sm_noise'] == 5
-        assert result.data.iloc[15]['frozen_prob'] == 0
-        assert result.data.iloc[15]['snow_prob'] == 127
-        assert result.data.iloc[15]['dir'] == 1
-        assert result.data.iloc[15]['proc_flag'] == 0
-        assert result.data.iloc[15]['corr_flag'] == 16
-        assert result.data.iloc[15]['sat_id'] == 3
+        assert data.iloc[15]['sm'] == 27
+        assert data.iloc[15]['ssf'] == 1
+        assert data.iloc[15]['sm_noise'] == 5
+        assert data.iloc[15]['frozen_prob'] == 0
+        assert data.iloc[15]['snow_prob'] == 127
+        assert data.iloc[15]['dir'] == 1
+        assert data.iloc[15]['proc_flag'] == 0
+        assert data.iloc[15]['corr_flag'] == 16
+        assert data.iloc[15]['sat_id'] == 3
 
         np.testing.assert_equal(
-            result.data.iloc[15]['abs_sm_gldas'], np.nan)
+            data.iloc[15]['abs_sm_gldas'], np.nan)
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_noise_gldas'], np.nan)
+            data.iloc[15]['abs_sm_noise_gldas'], np.nan)
 
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_hwsd'], 0.1323, significant=6)
+            data.iloc[15]['abs_sm_hwsd'], 0.1323, significant=6)
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
+            data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
 
-        assert result.topo_complex == 9
-        assert result.wetland_frac == 41
+        assert data.attrs['topo_complex'] == 9
+        assert data.attrs['wetland_frac'] == 41
 
-        np.testing.assert_equal(
-            result.porosity_gldas, np.nan)
-        np.testing.assert_approx_equal(
-            result.porosity_hwsd, 0.49000001, significant=5)
+        np.testing.assert_equal(data.attrs['porosity_gldas'], np.nan)
+        np.testing.assert_approx_equal(data.attrs['porosity_hwsd'],
+                                       0.49000001, significant=5)
 
+    def test_read_h110(self):
+        """
+        Test read H110.
+        """
+        self.h110 = AscatSsmDataRecord(
+            os.path.join(self.cdr_path, 'h110'), self.grid_path,
+            static_layer_path=self.static_layer_path)
 
-class Test_H110Ts(unittest.TestCase):
+        data = self.h110.read(self.gpi, absolute_sm=True)
+        assert data.attrs['gpi'] == self.gpi
 
-    def setUp(self):
-
-        path = os.path.dirname(__file__)
-
-        cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'h110')
-        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
-        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
-                                         'static_layer')
-
-        self.ascat_reader = H_SAF.H110Ts(cdr_path, grid_path,
-                                         static_layer_path=static_layer_path)
-
-    def tearDown(self):
-        self.ascat_reader.close()
-
-    def test_read(self):
-
-        gpi = 3066159
-        result = self.ascat_reader.read(gpi, absolute_sm=True)
-        assert result.gpi == gpi
-
-        np.testing.assert_approx_equal(result.longitude, 19.03533,
+        np.testing.assert_approx_equal(data.attrs['lon'], 19.03533,
                                        significant=4)
-        np.testing.assert_approx_equal(result.latitude, 70.05438,
+        np.testing.assert_approx_equal(data.attrs['lat'], 70.05438,
                                        significant=4)
 
-        assert len(result.data) == 1148
-        assert result.data.iloc[15].name.to_pydatetime() == \
-            datetime(2016, 1, 3, 19, 34, 28, 99200)
-        assert result.data.iloc[15]['sm'] == 48
-        assert result.data.iloc[15]['ssf'] == 1
-        assert result.data.iloc[15]['sm_noise'] == 5
-        assert result.data.iloc[15]['frozen_prob'] == 0
-        assert result.data.iloc[15]['snow_prob'] == 127
-        assert result.data.iloc[15]['dir'] == 0
-        assert result.data.iloc[15]['proc_flag'] == 0
-        assert result.data.iloc[15]['corr_flag'] == 0
-        assert result.data.iloc[15]['sat_id'] == 4
+        assert len(data) == 1148
+        assert data.iloc[15].name.to_pydatetime() == datetime(
+            2016, 1, 3, 19, 34, 28, 99200)
+        assert data.iloc[15]['sm'] == 48
+        assert data.iloc[15]['ssf'] == 1
+        assert data.iloc[15]['sm_noise'] == 5
+        assert data.iloc[15]['frozen_prob'] == 0
+        assert data.iloc[15]['snow_prob'] == 127
+        assert data.iloc[15]['dir'] == 0
+        assert data.iloc[15]['proc_flag'] == 0
+        assert data.iloc[15]['corr_flag'] == 0
+        assert data.iloc[15]['sat_id'] == 4
 
         np.testing.assert_equal(
-            result.data.iloc[15]['abs_sm_gldas'], np.nan)
+            data.iloc[15]['abs_sm_gldas'], np.nan)
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_noise_gldas'], np.nan)
+            data.iloc[15]['abs_sm_noise_gldas'], np.nan)
 
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_hwsd'], 0.2352, significant=6)
+            data.iloc[15]['abs_sm_hwsd'], 0.2352, significant=6)
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
+            data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
 
-        assert result.topo_complex == 9
-        assert result.wetland_frac == 41
+        assert data.attrs['topo_complex'] == 9
+        assert data.attrs['wetland_frac'] == 41
 
-        np.testing.assert_equal(
-            result.porosity_gldas, np.nan)
-        np.testing.assert_approx_equal(
-            result.porosity_hwsd, 0.49000001, significant=5)
+        np.testing.assert_equal(data.attrs['porosity_gldas'], np.nan)
+        np.testing.assert_approx_equal(data.attrs['porosity_hwsd'],
+                                       0.49000001, significant=5)
 
+    def test_read_h111(self):
+        """
+        Test read H111.
+        """
+        self.h111 = AscatSsmDataRecord(
+            os.path.join(self.cdr_path, 'h111'), self.grid_path,
+            static_layer_path=self.static_layer_path)
 
-class Test_H111Ts(unittest.TestCase):
+        data = self.h111.read(self.gpi, absolute_sm=True)
+        assert data.attrs['gpi'] == self.gpi
 
-    def setUp(self):
-
-        path = os.path.dirname(__file__)
-
-        cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'h111')
-        grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
-        static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
-                                         'static_layer')
-
-        self.ascat_reader = H_SAF.H111Ts(cdr_path, grid_path,
-                                         static_layer_path=static_layer_path)
-
-    def tearDown(self):
-        self.ascat_reader.close()
-
-    def test_read(self):
-
-        gpi = 3066159
-        result = self.ascat_reader.read(gpi, absolute_sm=True)
-        assert result.gpi == gpi
-
-        np.testing.assert_approx_equal(result.longitude, 19.03533,
+        np.testing.assert_approx_equal(data.attrs['lon'], 19.03533,
                                        significant=4)
-        np.testing.assert_approx_equal(result.latitude, 70.05438,
+        np.testing.assert_approx_equal(data.attrs['lat'], 70.05438,
                                        significant=4)
 
-        assert len(result.data) == 13715
-        assert result.data.iloc[15].name.to_pydatetime() == \
-            datetime(2007, 1, 7, 10, 49, 9, 379200)
-        assert result.data.iloc[15]['sm'] == 28
-        assert result.data.iloc[15]['ssf'] == 1
-        assert result.data.iloc[15]['sm_noise'] == 5
-        assert result.data.iloc[15]['frozen_prob'] == 0
-        assert result.data.iloc[15]['snow_prob'] == 127
-        assert result.data.iloc[15]['dir'] == 1
-        assert result.data.iloc[15]['proc_flag'] == 0
-        assert result.data.iloc[15]['corr_flag'] == 4
-        assert result.data.iloc[15]['sat_id'] == 3
+        assert len(data) == 13715
+        assert data.iloc[15].name.to_pydatetime() == datetime(
+            2007, 1, 7, 10, 49, 9, 379200)
+        assert data.iloc[15]['sm'] == 28
+        assert data.iloc[15]['ssf'] == 1
+        assert data.iloc[15]['sm_noise'] == 5
+        assert data.iloc[15]['frozen_prob'] == 0
+        assert data.iloc[15]['snow_prob'] == 127
+        assert data.iloc[15]['dir'] == 1
+        assert data.iloc[15]['proc_flag'] == 0
+        assert data.iloc[15]['corr_flag'] == 4
+        assert data.iloc[15]['sat_id'] == 3
 
-        np.testing.assert_equal(
-            result.data.iloc[15]['abs_sm_gldas'], np.nan)
+        np.testing.assert_equal(data.iloc[15]['abs_sm_gldas'], np.nan)
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_noise_gldas'], np.nan)
+            data.iloc[15]['abs_sm_noise_gldas'], np.nan)
 
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_hwsd'], 0.1372, significant=6)
+            data.iloc[15]['abs_sm_hwsd'], 0.1372, significant=6)
         np.testing.assert_approx_equal(
-            result.data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
+            data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
 
-        assert result.topo_complex == 9
-        assert result.wetland_frac == 41
+        assert data.attrs['topo_complex'] == 9
+        assert data.attrs['wetland_frac'] == 41
 
-        np.testing.assert_equal(
-            result.porosity_gldas, np.nan)
-        np.testing.assert_approx_equal(
-            result.porosity_hwsd, 0.49000001, significant=5)
+        np.testing.assert_equal(data.attrs['porosity_gldas'], np.nan)
+        np.testing.assert_approx_equal(data.attrs['porosity_hwsd'],
+                                       0.49000001, significant=5)
 
     def test_read_2points_cell_switch(self):
         """
@@ -699,25 +476,17 @@ class Test_H111Ts(unittest.TestCase):
         This did not work in the past when the static layer class
         was closed too soon.
         """
+        self.h111 = AscatSsmDataRecord(
+            os.path.join(self.cdr_path, 'h111'), self.grid_path,
+            static_layer_path=self.static_layer_path)
 
         gpi = 3066159
-        result = self.ascat_reader.read(gpi, absolute_sm=True)
-        assert result.gpi == gpi
+        data = self.h111.read(gpi, absolute_sm=True)
+        assert data.attrs['gpi'] == gpi
+
         gpi = 2577735
-        result = self.ascat_reader.read(gpi, absolute_sm=True)
-        assert result.gpi == gpi
-
-
-def test_hsaf_ts_class_init():
-    """
-    Test for initialization of the classes that change nothing but the setup code.
-    """
-
-    path = os.path.dirname(__file__)
-    grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
-    H_SAF.H112Ts('Test', grid_path)
-    H_SAF.H113Ts('Test', grid_path)
-    H_SAF.H114Ts('Test', grid_path)
+        data = self.h111.read(gpi, absolute_sm=True)
+        assert data.attrs['gpi'] == gpi
 
 
 if __name__ == "__main__":
