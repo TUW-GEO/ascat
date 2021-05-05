@@ -597,19 +597,36 @@ def conv_epsl1bszf_generic(data, metadata):
                    'flagfield_rf2', 'flagfield_pl', 'flagfield_gen1',
                    'flagfield_gen2']
 
-    gen_fields_lut = {'inc_angle_full': ('inc', np.float32),
-                      'azi_angle_full': ('azi', np.float32),
-                      'sigma0_full': ('sig', np.float32)}
+    gen_fields_lut = {
+        'inc_angle_full': ('inc', np.float32, (0, 90), float32_nan),
+        'azi_angle_full': ('azi', np.float32, (0, 360), float32_nan),
+        'sigma0_full': ('sig', np.float32, (-35, 35), float32_nan),
+        'sat_track_azi': ('sat_track_azi', np.float32, (0, 360), float32_nan),
+        'beam_number': ('beam_number', np.int8, (1, 6), int8_nan),
+        'swath_indicator': ('swath_indicator', np.int8, (0, 1), int8_nan),
+        'land_frac': ('land_frac', np.float32, (0, 1), float32_nan),
+        'f_usable': ('f_usable', np.int8, (0, 2), int8_nan),
+        'f_land': ('f_land', np.int8, (0, 1), int8_nan),
+        'as_des_pass': ('as_des_pass', np.uint8, (0, 1), uint8_nan),
+        'time': ('time', None, (np.datetime64('1900-01-01'),
+                                np.datetime64('2100-01-01')),  0),
+        'lon': ('lon', np.float32, (-180, 180), float32_nan),
+        'lat': ('lat', np.float32, (-90, 90), float32_nan)}
 
     for var_name in skip_fields:
-        if var_name in data:
-            data.pop(var_name)
+        data.pop(var_name, None)
 
-    for var_name in data.keys():
-        if var_name in gen_fields_lut:
-            new_name = gen_fields_lut[var_name][0]
-            new_dtype = gen_fields_lut[var_name][1]
-            data[new_name] = data.pop(var_name).astype(new_dtype)
+    for var_name, (new_name, new_dtype, valid_range, nan_val) in gen_fields_lut.items():
+        if new_dtype is None:
+            data[new_name] = np.ma.array(data.pop(var_name))
+            data[new_name].mask = ((data[new_name] < valid_range[0]) |
+                                   (data[new_name] > valid_range[1]))
+            data[new_name].set_fill_value(nan_val)
+        else:
+            data[new_name] = np.ma.array(data.pop(var_name).astype(new_dtype))
+            data[new_name].mask = ((data[new_name] < valid_range[0]) |
+                                   (data[new_name] > valid_range[1]))
+            data[new_name].set_fill_value(nan_val)
 
     return data
 
@@ -789,7 +806,12 @@ def read_eps_l1b(filename, generic=False, to_xarray=False):
             else:
                 # collect dtype info
                 dtype = []
+                fill_values = {}
+
                 for var_name in data.keys():
+
+                    if var_name == 'beam_number' and generic:
+                        continue
 
                     if len(data[var_name][subset].shape) == 1:
                         dtype.append(
@@ -799,13 +821,16 @@ def read_eps_l1b(filename, generic=False, to_xarray=False):
                             subset].dtype.str, data[var_name][
                                 subset].shape[1:]))
 
-                ds[antenna] = np.empty(
+                    fill_values[var_name] = data[var_name].fill_value
+
+                ds[antenna] = np.ma.empty(
                     data['time'][subset].size, dtype=np.dtype(dtype))
 
                 for var_name, v in data.items():
                     if var_name == 'beam_number' and generic:
                         continue
                     ds[antenna][var_name] = v[subset]
+                    ds[antenna][var_name].set_fill_value(fill_values[var_name])
 
     elif ptype in ['SZR', 'SZO']:
 
