@@ -32,7 +32,7 @@ Readers for ASCAT Level 1b and Level 2 data in EPS Native format.
 import os
 import fnmatch
 from gzip import GzipFile
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from tempfile import NamedTemporaryFile
 
 import numpy as np
@@ -40,10 +40,8 @@ import xarray as xr
 import lxml.etree as etree
 from cadati.jd_date import jd2dt
 
-short_cds_time = np.dtype([('day', np.uint16), ('time', np.uint32)])
-
-long_cds_time = np.dtype([('day', np.uint16), ('ms', np.uint32),
-                          ('mms', np.uint16)])
+short_cds_time = np.dtype([('day', '>u2'), ('time', '>u4')])
+long_cds_time = np.dtype([('day', '>u2'), ('ms', '>u4'), ('mms', '>u2')])
 
 long_nan = np.iinfo(np.int32).min
 ulong_nan = np.iinfo(np.uint32).max
@@ -56,6 +54,41 @@ float32_nan = -999999.
 
 # 2000-01-01 00:00:00
 julian_epoch = 2451544.5
+
+
+class AscatL1bEpsSzfFile:
+
+    """
+    ASCAT Level 1b EPS Native reader class.
+    """
+
+    def __init__(self, filename):
+        """
+        Initialize AscatL1bEpsFile.
+
+        Parameters
+        ----------
+        filename : str
+            Filename.
+        """
+        self.filename = filename
+
+    def read(self, generic=False, to_xarray=False):
+        """
+        Read ASCAT Level 1b data.
+
+        Returns
+        -------
+        ds : xarray.Dataset
+            ASCAT Level 1b data.
+        """
+        return read_eps_l1b_szf(self.filename, generic, to_xarray)
+
+    def close(self):
+        """
+        Close file.
+        """
+        pass
 
 
 class AscatL1bEpsFile:
@@ -145,192 +178,263 @@ class EPSProduct:
         """
         self.filename = filename
         self.fid = None
-        self.grh = None
         self.mphr = None
         self.sphr = None
-        self.ipr = None
-        self.geadr = None
-        self.giadr_archive = None
-        self.veadr = None
-        self.viadr = None
-        self.viadr_scaled = None
-        self.viadr_grid = None
-        self.viadr_grid_scaled = None
-        self.dummy_mdr = None
+        self.aux = defaultdict(list)
         self.mdr = None
-        self.eor = 0
-        self.bor = 0
-        self.mdr_counter = 0
-        self.filesize = 0
+        self.scaled_mdr = None
         self.xml_file = None
         self.xml_doc = None
         self.mdr_template = None
-        self.scaled_mdr = None
         self.scaled_template = None
         self.sfactor = None
 
-    def read_product(self):
-        """
-        Read complete file and create numpy arrays from raw byte string data.
-        """
-        # open file in read-binary mode
-        self.fid = open(self.filename, 'rb')
+        self.grh_dtype = np.dtype([('record_class', 'u1'),
+                                   ('instrument_group', 'u1'),
+                                   ('record_subclass', 'u1'),
+                                   ('record_subclass_version', 'u1'),
+                                   ('record_size', '>u4'),
+                                   ('record_start_time', short_cds_time),
+                                   ('record_stop_time', short_cds_time)])
+
+        self.ipr_dtype = np.dtype([('grh', self.grh_dtype),
+                                   ('target_record_class', 'u1'),
+                                   ('target_instrument_group', 'u1'),
+                                   ('target_record_subclass', 'u1'),
+                                   ('target_record_offset', '>u4')])
+
+        self.pointer_dtype = np.dtype([('grh', self.grh_dtype),
+                                       ('aux_data_pointer', 'u1', 100)])
+
         self.filesize = os.path.getsize(self.filename)
-        self.eor = self.fid.tell()
 
-        # loop as long as the current position hasn't reached the end of file
-        while self.eor < self.filesize:
+    def read_mphr(self):
+        """
+        Read only Main Product Header Record (MPHR).
+        """
+        with open(self.filename, 'rb') as fid:
+            grh = np.fromfile(fid, dtype=self.grh_dtype, count=1)[0]
+            if grh['record_class'] == 1:
+                mphr = fid.read(grh['record_size'] - grh.itemsize)
+                mphr = OrderedDict(item.replace(' ', '').split('=')
+                                   for item in
+                                   mphr.decode("utf-8").split('\n')[:-1])
 
-            # remember beginning of the record
-            self.bor = self.fid.tell()
+        return mphr
 
-            # read grh of current record (Generic Record Header)
-            self.grh = self._read_record(grh_record())
-            record_size = self.grh[0]['record_size']
-            record_class = self.grh[0]['record_class']
-            record_subclass = self.grh[0]['record_subclass']
+    def read(self, full=True, unsafe=False, scale_mdr=True):
+        """
+        Read EPS file.
 
-            # mphr (Main Product Header Reader)
-            if record_class == 1:
-                self._read_mphr()
+        Parameters
+        ----------
+        full : bool, optional
+            Read full file content (True) or just Main Product Header
+            Record (MPHR) and Main Data Record (MDR) (False). Default: True
+        unsafe : bool, optional
+            If True it is (unsafely) assumed that MDR are continuously
+            stacked until the end of file. Makes reading a lot faster.
+            Default: False
+        scale_mdr : bool, optional
+            Compute scaled MDR (True) or not (False). Default: True
 
-                # find the xml file corresponding to the format version
-                self.xml_file = self._get_eps_xml()
-                self.xml_doc = etree.parse(self.xml_file)
-                self.mdr_template, self.scaled_template, self.sfactor = \
-                    self._read_xml_mdr()
+        Returns
+        -------
+        mphr : dict self.sphr, self.aux, self.mdr, scaled_mdr
+            Main Product Header Record (MPHR).
+        sphr : dict
+            Secondary Product Header Product (SPHR).
+        aux : dict
+            Auxiliary Header Products.
+        mdr : numpy.ndarray
+            Main Data Record (MDR)
+        scaled_mdr : numpy.ndarray
+            Scaled Main Data Record (MPHR) or None if not computed.
+        """
+        self.fid = open(self.filename, 'rb')
 
-            # sphr (Secondary Product Header Record)
-            elif record_class == 2:
-                self._read_sphr()
+        abs_pos = 0
+        grh = None
+        prev_grh = None
+        record_count = 0
 
-            # ipr (Internal Pointer Record)
-            elif record_class == 3:
-                ipr_element = self._read_record(ipr_record())
-                if self.ipr is None:
-                    self.ipr = {}
-                    self.ipr['data'] = [ipr_element]
-                    self.ipr['grh'] = [self.grh]
-                else:
-                    self.ipr['data'].append(ipr_element)
-                    self.ipr['grh'].append(self.grh)
+        while True:
 
-            # geadr (Global External Auxiliary Data Record)
-            elif record_class == 4:
-                geadr_element = self._read_pointer()
-                if self.geadr is None:
-                    self.geadr = {}
-                    self.geadr['data'] = [geadr_element]
-                    self.geadr['grh'] = [self.grh]
-                else:
-                    self.geadr['data'].append(geadr_element)
-                    self.geadr['grh'].append(self.grh)
+            # read generic record header of data block
+            grh = np.fromfile(self.fid, dtype=self.grh_dtype, count=1)[0]
 
-            # veadr (Variable External Auxiliary Data Record)
-            elif record_class == 6:
-                veadr_element = self._read_pointer()
-                if self.veadr is None:
-                    self.veadr = {}
-                    self.veadr['data'] = [veadr_element]
-                    self.veadr['grh'] = [self.grh]
-                else:
-                    self.veadr['data'].append(veadr_element)
-                    self.veadr['grh'].append(self.grh)
+            if grh['record_class'] == 8 and unsafe:
+                num_mdr = (self.filesize -
+                           abs_pos) // self.mdr_template.itemsize
+                self.fid.seek(abs_pos)
+                self.read_record_class(grh, num_mdr)
+                break
 
-            # viadr (Variable Internal Auxiliary Data Record)
-            elif record_class == 7:
-                template, scaled_template, sfactor = self._read_xml_viadr(
-                    record_subclass)
-                viadr_element = self._read_record(template)
-                viadr_element_sc = self._scaling(viadr_element,
-                                                 scaled_template, sfactor)
+            if prev_grh is None:
+                prev_grh = grh
 
-                # store viadr_grid separately
-                if record_subclass == 8:
-                    if self.viadr_grid is None:
-                        self.viadr_grid = [viadr_element]
-                        self.viadr_grid_scaled = [viadr_element_sc]
-                    else:
-                        self.viadr_grid.append(viadr_element)
-                        self.viadr_grid_scaled.append(viadr_element_sc)
-                else:
-                    if self.viadr is None:
-                        self.viadr = {}
-                        self.viadr_scaled = {}
-                        self.viadr['data'] = [viadr_element]
-                        self.viadr['grh'] = [self.grh]
-                        self.viadr_scaled['data'] = [viadr_element_sc]
-                        self.viadr_scaled['grh'] = [self.grh]
-                    else:
-                        self.viadr['data'].append(viadr_element)
-                        self.viadr['grh'].append(self.grh)
-                        self.viadr_scaled['data'].append(viadr_element_sc)
-                        self.viadr_scaled['grh'].append(self.grh)
+            if ((prev_grh['record_class'] != grh['record_class']) or
+                    (prev_grh['record_subclass'] != grh['record_subclass'])):
 
-            # mdr (Measurement Data Record)
-            elif record_class == 8:
-                if self.grh[0]['instrument_group'] == 13:
-                    self.dummy_mdr = self._read_record(self.mdr_template)
-                else:
-                    mdr_element = self._read_record(self.mdr_template)
-                    if self.mdr is None:
-                        self.mdr = [mdr_element]
-                    else:
-                        self.mdr.append(mdr_element)
-                    self.mdr_counter += 1
+                # compute record start position of previous record
+                start_pos = (abs_pos - prev_grh['record_size'] * record_count)
+                self.fid.seek(start_pos)
 
+                if full or (prev_grh['record_class'] == 8 or
+                            prev_grh['record_class'] == 1):
+                    # read previous record, because new one is coming
+                    self.read_record_class(prev_grh, record_count)
+
+                # reset record class count
+                record_count = 1
             else:
-                raise RuntimeError("Record class not found.")
+                # same record class as before, increase count
+                record_count += 1
 
-            # return pointer to the beginning of the record
-            self.fid.seek(self.bor)
-            self.fid.seek(record_size, 1)
+            abs_pos += grh['record_size']
 
-            # determine number of bytes read
-            # end of record
-            self.eor = self.fid.tell()
+            # position after record
+            self.fid.seek(abs_pos)
+
+            # store grh
+            prev_grh = grh
+
+            # end of file?
+            if abs_pos == self.filesize:
+
+                # compute record start position of previous record class
+                start_pos = (abs_pos - prev_grh['record_size'] * record_count)
+                self.fid.seek(start_pos)
+
+                # read final record class(es)
+                self.read_record_class(prev_grh, record_count)
+
+                break
 
         self.fid.close()
 
-        self.mdr = np.hstack(self.mdr)
-        self.scaled_mdr = self._scaling(self.mdr, self.scaled_template,
-                                        self.sfactor)
+        if scale_mdr:
+            self.scaled_mdr = self._scaling(self.mdr, self.scaled_template,
+                                            self.mdr_sfactor)
 
-    def _scaling(self, unscaled_data, scaled_template, sfactor):
-        """
-        Scale the data
-        """
-        scaled_data = np.zeros_like(unscaled_data, dtype=scaled_template)
+        return self.mphr, self.sphr, self.aux, self.mdr, self.scaled_mdr
 
-        for name, sf in zip(unscaled_data.dtype.names, sfactor):
-            if sf != 1:
-                scaled_data[name] = unscaled_data[name] / sf
+    def read_record_class(self, grh, record_count):
+        """
+        Read record class.
+
+        Parameters
+        ----------
+        grh : numpy.ndarray
+            Generic record header.
+        record_count : int
+            Number of records.
+        """
+        # mphr (Main Product Header Reader)
+        if grh['record_class'] == 1:
+            self.fid.seek(grh.itemsize, 1)
+            self._read_mphr(grh)
+
+            # find the xml file corresponding to the format version
+            # and load template
+            self.xml_file = self._get_eps_xml()
+            self.xml_doc = etree.parse(self.xml_file)
+            self.mdr_template, self.scaled_template, self.mdr_sfactor = \
+                self._read_xml_mdr()
+
+        # sphr (Secondary Product Header Record)
+        elif grh['record_class'] == 2:
+            self.fid.seek(grh.itemsize, 1)
+            self._read_sphr(grh)
+
+        # ipr (Internal Pointer Record)
+        elif grh['record_class'] == 3:
+            data = np.fromfile(self.fid, dtype=self.ipr_dtype,
+                               count=record_count)
+            self.aux['ipr'].append(data)
+
+        # geadr (Global External Auxiliary Data Record)
+        elif grh['record_class'] == 4:
+            data = self._read_pointer(record_count)
+            self.aux['geadr'].append(data)
+
+        # veadr (Variable External Auxiliary Data Record)
+        elif grh['record_class'] == 6:
+            data = self._read_pointer(record_count)
+            self.aux['veadr'].append(data)
+
+        # viadr (Variable Internal Auxiliary Data Record)
+        elif grh['record_class'] == 7:
+            template, scaled_template, sfactor = self._read_xml_viadr(
+                grh['record_subclass'])
+            viadr_element = np.fromfile(self.fid, dtype=template,
+                                        count=record_count)
+
+            viadr_element_sc = self._scaling(viadr_element,
+                                             scaled_template, sfactor)
+
+            # store viadr_grid separately
+            if grh['record_subclass'] == 8:
+                self.aux['viadr_grid'].append(viadr_element)
+                self.aux['viadr_grid_scaled'].append(viadr_element_sc)
             else:
-                scaled_data[name] = unscaled_data[name]
+                self.aux['viadr'].append(viadr_element)
+                self.aux['viadr_scaled'].append(viadr_element_sc)
 
-        return scaled_data
+        # mdr (Measurement Data Record)
+        elif grh['record_class'] == 8:
+            if grh['instrument_group'] == 13:
+                self.dummy_mdr = np.fromfile(
+                    self.fid, dtype=self.mdr_template, count=record_count)
+            else:
+                self.mdr = np.fromfile(
+                    self.fid, dtype=self.mdr_template, count=record_count)
+                self.mdr_counter = record_count
+        else:
+            raise RuntimeError("Record class not found.")
 
-    def _read_record(self, dtype, count=1):
+    def _scaling(self, unscaled_mdr, scaled_template, sfactor):
         """
-        Read record
-        """
-        record = np.fromfile(self.fid, dtype=dtype, count=count)
-        return record.newbyteorder('B')
+        Scale the MDR.
 
-    def _read_mphr(self):
+        Parameters
+        ----------
+        unscaled_mdr : numpy.ndarray
+            Raw MDR.
+        scaled_template : numpy.dtype
+            Scaled MDR template.
+        sfactor : dict
+            Scale factors.
+
+        Returns
+        -------
+        scaled_mdr : numpy.ndarray
+            Scaled MDR.
+        """
+        scaled_mdr = np.empty(unscaled_mdr.shape, dtype=scaled_template)
+
+        for key, value in sfactor.items():
+            if value != 1:
+                scaled_mdr[key] = unscaled_mdr[key] * 1./value
+            else:
+                scaled_mdr[key] = unscaled_mdr[key]
+
+        return scaled_mdr
+
+    def _read_mphr(self, grh):
         """
         Read Main Product Header (MPHR).
         """
-        mphr = self.fid.read(self.grh[0]['record_size'] - self.grh[0].itemsize)
+        mphr = self.fid.read(grh['record_size'] - grh.itemsize)
         self.mphr = OrderedDict(item.replace(' ', '').split('=')
                                 for item in
                                 mphr.decode("utf-8").split('\n')[:-1])
 
-    def _read_sphr(self):
+    def _read_sphr(self, grh):
         """
         Read Special Product Header (SPHR).
         """
-        sphr = self.fid.read(self.grh[0]['record_size'] - self.grh[0].itemsize)
+        sphr = self.fid.read(grh['record_size'] - grh.itemsize)
         self.sphr = OrderedDict(item.replace(' ', '').split('=')
                                 for item in
                                 sphr.decode("utf-8").split('\n')[:-1])
@@ -339,9 +443,9 @@ class EPSProduct:
         """
         Read pointer record.
         """
-        dtype = np.dtype([('aux_data_pointer', np.ubyte, 100)])
-        record = np.fromfile(self.fid, dtype=dtype, count=count)
-        return record.newbyteorder('B')
+        record = np.fromfile(self.fid, dtype=self.pointer_dtype, count=count)
+
+        return record
 
     def _get_eps_xml(self):
         """
@@ -424,14 +528,14 @@ class EPSProduct:
             length = []
 
         conv = {'longtime': long_cds_time, 'time': short_cds_time,
-                'boolean': np.uint8, 'integer1': np.int8,
-                'uinteger1': np.uint8, 'integer': np.int32,
-                'uinteger': np.uint32, 'integer2': np.int16,
-                'uinteger2': np.uint16, 'integer4': np.int32,
-                'uinteger4': np.uint32, 'integer8': np.int64,
-                'enumerated': np.uint8, 'string': 'str', 'bitfield': np.uint8}
+                'boolean': 'u1', 'integer1': 'i1',
+                'uinteger1': 'u1', 'integer': '>i4',
+                'uinteger': '>u4', 'integer2': '>i2',
+                'uinteger2': '>u2', 'integer4': '>i4',
+                'uinteger4': '>u4', 'integer8': '>i8',
+                'enumerated': 'u1', 'string': 'str', 'bitfield': 'u1'}
 
-        scaling_factor = []
+        scaling_factor = {}
         scaled_dtype = []
         dtype = []
 
@@ -439,21 +543,22 @@ class EPSProduct:
 
             if 'scaling-factor' in value:
                 sf_dtype = np.float32
-                sf = float(eval(value['scaling-factor'].replace('^', '**')))
+                sf_split = value['scaling-factor'].split('^')
+                scaling_factor[key] = np.int(sf_split[0])**np.int(sf_split[1])
             else:
                 sf_dtype = conv[value['type']]
-                sf = 1.
+                scaling_factor[key] = 1
 
-            if not isinstance(value['length'], list):
-                length = [value['length']]
+            length = value['length']
+
+            if length == 1:
+                scaled_dtype.append((key, sf_dtype))
+                dtype.append((key, conv[value['type']]))
             else:
-                length = value['length']
+                scaled_dtype.append((key, sf_dtype, length))
+                dtype.append((key, conv[value['type']], length))
 
-            scaling_factor.append(sf)
-            scaled_dtype.append((key, sf_dtype, length))
-            dtype.append((key, conv[value['type']], length))
-
-        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(scaling_factor)
+        return np.dtype(dtype), np.dtype(scaled_dtype), scaling_factor
 
     def _read_xml_mdr(self):
         """
@@ -517,63 +622,37 @@ class EPSProduct:
             length = []
 
         conv = {'longtime': long_cds_time, 'time': short_cds_time,
-                'boolean': np.uint8, 'integer1': np.int8,
-                'uinteger1': np.uint8, 'integer': np.int32,
-                'uinteger': np.uint32, 'integer2': np.int16,
-                'uinteger2': np.uint16, 'integer4': np.int32,
-                'uinteger4': np.uint32, 'integer8': np.int64,
-                'enumerated': np.uint8, 'string': 'str', 'bitfield': np.uint8}
+                'boolean': 'u1', 'integer1': 'i1',
+                'uinteger1': 'u1', 'integer': '>i4',
+                'uinteger': '>u4', 'integer2': '>i2',
+                'uinteger2': '>u2', 'integer4': '>i4',
+                'uinteger4': '>u4', 'integer8': '>i8',
+                'enumerated': 'u1', 'string': 'str', 'bitfield': 'u1'}
 
-        scaling_factor = []
+        scaling_factor = {}
         scaled_dtype = []
-        dtype = []
+        dtype = [('grh', self.grh_dtype)]
 
         for key, value in data.items():
 
             if 'scaling-factor' in value:
                 sf_dtype = np.float32
-                sf = float(eval(value['scaling-factor'].replace('^', '**')))
+                sf_split = value['scaling-factor'].split('^')
+                scaling_factor[key] = np.int(sf_split[0])**np.int(sf_split[1])
             else:
                 sf_dtype = conv[value['type']]
-                sf = 1.
+                scaling_factor[key] = 1
 
-            scaling_factor.append(sf)
+            length = value['length']
 
-            if not isinstance(value['length'], list):
-                length = [value['length']]
+            if length == 1:
+                scaled_dtype.append((key, sf_dtype))
+                dtype.append((key, conv[value['type']]))
             else:
-                length = value['length']
+                scaled_dtype.append((key, sf_dtype, length))
+                dtype.append((key, conv[value['type']], length))
 
-            scaled_dtype.append((key, sf_dtype, length))
-            dtype.append((key, conv[value['type']], length))
-
-        return np.dtype(dtype), np.dtype(scaled_dtype), np.array(scaling_factor)
-
-
-def grh_record():
-    """
-    Generic record header.
-    """
-    record_dtype = np.dtype([('record_class', np.ubyte),
-                             ('instrument_group', np.ubyte),
-                             ('record_subclass', np.ubyte),
-                             ('record_subclass_version', np.ubyte),
-                             ('record_size', np.uint32),
-                             ('record_start_time', short_cds_time),
-                             ('record_stop_time', short_cds_time)])
-
-    return record_dtype
-
-
-def ipr_record():
-    """
-    ipr template.
-    """
-    record_dtype = np.dtype([('target_record_class', np.ubyte),
-                             ('target_instrument_group', np.ubyte),
-                             ('target_record_subclass', np.ubyte),
-                             ('target_record_offset', np.uint32)])
-    return record_dtype
+        return np.dtype(dtype), np.dtype(scaled_dtype), scaling_factor
 
 
 def conv_epsl1bszf_generic(data, metadata):
@@ -977,7 +1056,7 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
     return ds
 
 
-def read_eps(filename):
+def read_eps(filename, mphr_only=False):
     """
     Read EPS file.
 
@@ -1004,7 +1083,12 @@ def read_eps(filename):
 
     # create the eps object with the filename and read it
     prod = EPSProduct(filename)
-    prod.read_product()
+
+    if mphr_only:
+        mphr = prod.read_mphr()
+        prod.mphr = mphr
+    else:
+        prod.read()
 
     # remove the temporary copy
     if zipped:
@@ -1225,36 +1309,43 @@ def read_szf_fmv_12(eps_file):
     orbit_gri : numpy.ndarray
         6.25km orbit lat/lon grid.
     """
-    raw_data = eps_file.scaled_mdr
-    mphr = eps_file.mphr
-
-    n_node_per_line = raw_data['LONGITUDE_FULL'].shape[1]
-    n_lines = eps_file.mdr_counter
-
     data = {}
     metadata = {}
+
+    n_lines = eps_file.mdr_counter
+    n_node_per_line = eps_file.mdr['LONGITUDE_FULL'].shape[1]
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
 
-    ascat_time = shortcdstime2jd(raw_data['UTC_LOCALISATION'].flatten()['day'],
-                                 raw_data['UTC_LOCALISATION'].flatten()[
-                                     'time'])
-    data['jd'] = ascat_time[idx_nodes]
-
-    metadata['spacecraft_id'] = np.int8(mphr['SPACECRAFT_ID'][-1])
+    # extract metadata
+    metadata['spacecraft_id'] = np.int8(eps_file.mphr['SPACECRAFT_ID'][-1])
     metadata['orbit_start'] = np.uint32(eps_file.mphr['ORBIT_START'])
 
     fields = ['processor_major_version', 'processor_minor_version',
               'format_major_version', 'format_minor_version']
     for f in fields:
-        metadata[f] = np.int16(mphr[f.upper()])
+        metadata[f] = np.int16(eps_file.mphr[f.upper()])
+
+    # extract time
+    dt = np.datetime64('2000-01-01') + eps_file.mdr[
+        'UTC_LOCALISATION']['day'].astype('timedelta64[D]') + eps_file.mdr[
+            'UTC_LOCALISATION']['time'].astype('timedelta64[ms]')
+    data['dt'] = dt[idx_nodes]
 
     fields = ['degraded_inst_mdr', 'degraded_proc_mdr', 'sat_track_azi',
               'beam_number', 'flagfield_rf1', 'flagfield_rf2',
               'flagfield_pl', 'flagfield_gen1']
-    for f in fields:
-        data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
-    data['swath_indicator'] = np.uint8(data['beam_number'].flatten() > 3)
+    # extract data
+    for f in fields:
+        if eps_file.mdr_sfactor[f.upper()] == 1:
+            data[f] = eps_file.mdr[f.upper()].flatten()[idx_nodes]
+        else:
+            data[f] = (eps_file.mdr[f.upper()].flatten() *
+                       1./eps_file.mdr_sfactor[f.upper()])[idx_nodes]
+
+    data['swath_indicator'] = (data[
+        'beam_number'].flatten() > 3).astype(np.uint8)
+    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
 
     fields = [('longitude_full', long_nan),
               ('latitude_full', long_nan),
@@ -1265,62 +1356,27 @@ def read_szf_fmv_12(eps_file):
               ('flagfield_gen2', byte_nan)]
 
     for f, nan_val in fields:
-        data[f] = raw_data[f.upper()].flatten()
-        valid = eps_file.mdr[f.upper()].flatten() != nan_val
-        data[f][~valid] = nan_val
+        data[f] = eps_file.mdr[f.upper()].flatten()
+        invalid = eps_file.mdr[f.upper()].flatten() == nan_val
 
-    # modify longitudes from (0, 360) to (-180,180)
+        if eps_file.mdr_sfactor[f.upper()] != 1:
+            data[f] = data[f] * 1./eps_file.mdr_sfactor[f.upper()]
+
+        data[f][invalid] = nan_val
+
+    # modify longitudes from (0, 360) to (-180, 180)
     mask = np.logical_and(data['longitude_full'] != long_nan,
                           data['longitude_full'] > 180)
     data['longitude_full'][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
-    mask = (data['azi_angle_full'] != int_nan) & (data['azi_angle_full'] < 0)
-    data['azi_angle_full'][mask] += 360
+    idx = (data['azi_angle_full'] != int_nan) & (data['azi_angle_full'] < 0)
+    data['azi_angle_full'][idx] += 360
 
-    grid_nodes_per_line = 2 * 81
+    # set flags
+    data['f_usable'] = set_flags(data)
 
-    viadr_grid = np.concatenate(eps_file.viadr_grid)
-    orbit_grid = np.zeros(viadr_grid.size * grid_nodes_per_line,
-                          dtype=np.dtype([('lon', np.float32),
-                                          ('lat', np.float32),
-                                          ('node_num', np.uint8),
-                                          ('line_num', np.uint32)]))
-
-    for pos_all in range(orbit_grid['lon'].size):
-        line = pos_all // grid_nodes_per_line
-        pos_small = pos_all % 81
-        if pos_all % grid_nodes_per_line <= 80:
-            # left swath
-            orbit_grid['lon'][pos_all] = viadr_grid[
-                'LONGITUDE_LEFT'][line][80 - pos_small]
-            orbit_grid['lat'][pos_all] = viadr_grid[
-                'LATITUDE_LEFT'][line][80 - pos_small]
-        else:
-            # right swath
-            orbit_grid['lon'][pos_all] = viadr_grid[
-                'LONGITUDE_RIGHT'][line][pos_small]
-            orbit_grid['lat'][pos_all] = viadr_grid[
-                'LATITUDE_RIGHT'][line][pos_small]
-
-    orbit_grid['node_num'] = np.tile((np.arange(grid_nodes_per_line) + 1),
-                                     viadr_grid.size)
-
-    lines = np.arange(0, viadr_grid.size * 2, 2)
-    orbit_grid['line_num'] = np.repeat(lines, grid_nodes_per_line)
-
-    fields = ['lon', 'lat']
-    for field in fields:
-        orbit_grid[field] = orbit_grid[field] * 1e-6
-
-    mask = (orbit_grid['lon'] != long_nan) & (orbit_grid['lon'] > 180)
-    orbit_grid['lon'][mask] += -360.
-
-    set_flags(data)
-
-    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
-
-    return data, metadata, orbit_grid
+    return data, metadata
 
 
 def read_smx_fmv_12(eps_file):
@@ -1447,6 +1503,55 @@ def set_flags(data):
     Compute summary flag for each measurement with a value of 0, 1 or 2
     indicating nominal, slightly degraded or severely degraded data.
 
+    The format of ASCAT products is defined by
+    "EPS programme generic product format specification" (EPS.GGS.SPE.96167)
+    and "ASCAT level 1 product format specification" (EPS.MIS.SPE.97233).
+
+    bit name      category   description
+    ------------------------------------
+
+    flagfield_rf1
+    0  fnoise     amber     noise missing, interpolated noise value used instead
+    1  fpgp       amber     degraded power gain product
+    2  vpgp       red       very degraded power gain product
+    3  fhrx       amber     degraded filter shape
+    4  vhrx       red       very degraded filter shape
+
+    flagfield_rf2
+    0  pgp_ool    red       power gain product is outside limits
+    1  noise_ool  red       measured noise value is outside limits
+
+    flagfield_pl
+    0  forb       red       orbit height is outside limits
+    1  fatt       red       no yaw steering
+    2  fcfg       red       unexpected instrument configuration
+    3  fman       red       satellite maneuver
+    4  fosv       warning   osv file missing (fman may be incorrect)
+
+    flagfield_gen1
+    0  ftel       warning   telemetry missing (ftool may be incorrect)
+    1  ftool      red       telemetry out of limits
+
+    flagfield_gen2
+    0  fsol   amber     possible interference from solar array
+    1  fland  warning   lat/long position is over land
+    2  fgeo   red       geolocation algorithm failed
+
+    Each flag has belongs to a particular category which indicates the impact
+    on data quality. Flags in the "amber" category indicate that the data is
+    slightly degraded but still usable. Flags in the "red" category indicate
+    that the data is severely degraded and should be discarded or
+    used with caution.
+
+    A simple algorithm for calculating a single summary flag with a value of
+    0, 1 or 2 indicating nominal, slightly degraded or severely degraded is
+
+    function calc_status( flags )
+        status = 0
+        if any amber flags are set then status = 1
+        if any red flags are set then status = 2
+    return status
+
     Parameters
     ----------
     data : numpy.ndarray
@@ -1454,40 +1559,30 @@ def set_flags(data):
 
     Returns
     -------
-    data : numpy.ndarray
-        SZF data with updated flags.
+    f_usable : numpy.ndarray
+        Flag indicating nominal (0), slightly degraded (1) or
+        severely degraded(2).
     """
-    # category:status = 'red': 2, 'amber': 1, 'warning': 0
-    flag_status_bit = {'flagfield_rf1': {'2': [2, 4], '1': [0, 1, 3]},
-                       'flagfield_rf2': {'2': [0, 1]},
-                       'flagfield_pl': {'2': [0, 1, 2, 3], '0': [4]},
-                       'flagfield_gen1': {'2': [1], '0': [0]},
-                       'flagfield_gen2': {'2': [2], '1': [0], '0': [1]}}
+    flag_status_bit = {'flagfield_rf1': np.array([1, 1, 2, 1, 2, 0, 0, 0]),
+                       'flagfield_rf2': np.array([2, 2, 0, 0, 0, 0, 0, 0]),
+                       'flagfield_pl':  np.array([2, 2, 2, 2, 0, 0, 0, 0]),
+                       'flagfield_gen1': np.array([0, 2, 0, 0, 0, 0, 0, 0]),
+                       'flagfield_gen2': np.array([1, 0, 2, 0, 0, 0, 0, 0])}
 
-    for flagfield in flag_status_bit.keys():
+    f_usable = np.zeros(data['sigma0_full'].shape, dtype=np.uint8)
 
-        # get flag data in binary format to get flags
-        unpacked_bits = np.unpackbits(data[flagfield])
+    for flagfield, bitmask in flag_status_bit.items():
+        subset = np.nonzero(data[flagfield])[0]
 
-        # find indizes where a flag is set
-        set_bits = np.where(unpacked_bits == 1)[0]
-        if set_bits.size != 0:
-            pos_8 = 7 - (set_bits % 8)
+        if subset.size > 0:
+            unpacked_bits = np.fliplr(np.unpackbits(
+                data[flagfield][subset]).reshape(-1, 8).astype(np.bool))
 
-            for category in sorted(flag_status_bit[flagfield].keys()):
-                if (int(category) == 0) and (flagfield != 'flagfield_gen2'):
-                    continue
+            flag = np.ma.array(
+                np.tile(bitmask, unpacked_bits.shape[0]).reshape(-1, 8),
+                mask=~unpacked_bits, fill_value=0)
 
-                for bit2check in flag_status_bit[flagfield][category]:
-                    pos = np.where(pos_8 == bit2check)[0]
-                    data['f_usable'] = np.zeros(data['flagfield_gen2'].size,
-                                                dtype=np.int8)
-                    data['f_usable'][set_bits[pos] // 8] = int(category)
+            f_usable[subset] = np.max(np.vstack(
+                (f_usable[subset], flag.filled().max(axis=1))), axis=0)
 
-                    # land points
-                    if (flagfield == 'flagfield_gen2') and (bit2check == 1):
-                        data['f_land'] = np.zeros(data['flagfield_gen2'].size,
-                                                  dtype=np.int8)
-                        data['f_land'][set_bits[pos] // 8] = 1
-
-    return data
+    return f_usable
