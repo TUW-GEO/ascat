@@ -835,7 +835,6 @@ def read_eps_l1b(filename, generic=False, to_xarray=False):
         else:
             raise RuntimeError("L1b SZF format version not supported.")
 
-        data['time'] = jd2dt(data.pop('jd'))
         rename_coords = {'longitude_full': 'lon', 'latitude_full': 'lat'}
 
         for k, v in rename_coords.items():
@@ -1327,7 +1326,7 @@ def read_szf_fmv_12(eps_file):
     dt = np.datetime64('2000-01-01') + eps_file.mdr[
         'UTC_LOCALISATION']['day'].astype('timedelta64[D]') + eps_file.mdr[
             'UTC_LOCALISATION']['time'].astype('timedelta64[ms]')
-    data['dt'] = dt[idx_nodes]
+    data['time'] = dt[idx_nodes]
 
     fields = ['degraded_inst_mdr', 'degraded_proc_mdr', 'sat_track_azi',
               'beam_number', 'flagfield_rf1', 'flagfield_rf2',
