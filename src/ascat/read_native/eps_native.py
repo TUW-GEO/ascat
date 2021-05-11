@@ -82,7 +82,8 @@ class AscatL1bEpsSzfFile:
         ds : xarray.Dataset
             ASCAT Level 1b data.
         """
-        return read_eps_l1b_szf(self.filename, generic, to_xarray)
+        return read_eps_l1b(self.filename, generic, to_xarray,
+                            full=False, unsafe=True, scale_mdr=False)
 
     def close(self):
         """
@@ -259,11 +260,14 @@ class EPSProduct:
         record_count = 0
 
         while True:
-
             # read generic record header of data block
             grh = np.fromfile(self.fid, dtype=self.grh_dtype, count=1)[0]
 
             if grh['record_class'] == 8 and unsafe:
+                if np.mod((self.filesize - abs_pos),
+                          self.mdr_template.itemsize) != 0:
+                    raise RuntimeError('Unsafe reading failed!')
+
                 num_mdr = (self.filesize -
                            abs_pos) // self.mdr_template.itemsize
                 self.fid.seek(abs_pos)
@@ -804,7 +808,8 @@ def conv_epsl2szx_generic(data, metadata):
     return data
 
 
-def read_eps_l1b(filename, generic=False, to_xarray=False):
+def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
+                 unsafe=False, scale_mdr=True):
     """
     Level 1b reader and data preparation.
 
@@ -824,7 +829,9 @@ def read_eps_l1b(filename, generic=False, to_xarray=False):
     ds : xarray.Dataset, dict of xarray.Dataset
         ASCAT Level 1b data.
     """
-    eps_file = read_eps(filename)
+    eps_file = read_eps(filename, full=full, unsafe=unsafe,
+                        scale_mdr=scale_mdr)
+
     ptype = eps_file.mphr['PRODUCT_TYPE']
     fmv = int(eps_file.mphr['FORMAT_MAJOR_VERSION'])
 
@@ -1055,7 +1062,8 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
     return ds
 
 
-def read_eps(filename, mphr_only=False):
+def read_eps(filename, mphr_only=False, full=True, unsafe=False,
+             scale_mdr=True):
     """
     Read EPS file.
 
@@ -1087,7 +1095,7 @@ def read_eps(filename, mphr_only=False):
         mphr = prod.read_mphr()
         prod.mphr = mphr
     else:
-        prod.read()
+        prod.read(full, unsafe, scale_mdr)
 
     # remove the temporary copy
     if zipped:
