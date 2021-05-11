@@ -831,7 +831,7 @@ def read_eps_l1b(filename, generic=False, to_xarray=False):
     if ptype == 'SZF':
 
         if fmv == 12:
-            data, metadata, orbit_grid = read_szf_fmv_12(eps_file)
+            data, metadata = read_szf_fmv_12(eps_file)
         else:
             raise RuntimeError("L1b SZF format version not supported.")
 
@@ -1306,8 +1306,6 @@ def read_szf_fmv_12(eps_file):
     -------
     data : numpy.ndarray
         SZF data.
-    orbit_gri : numpy.ndarray
-        6.25km orbit lat/lon grid.
     """
     data = {}
     metadata = {}
