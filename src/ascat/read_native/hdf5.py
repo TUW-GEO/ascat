@@ -225,9 +225,14 @@ def conv_hdf5l1b_generic(data, metadata):
     data['as_des_pass'] = (
         data['sat_track_azi'] < 270).astype(np.uint8)
 
-    data = set_flags(data)
+    flags = {'flagfield_rf1': np.tile(data['flagfield_rf1'], 192),
+             'flagfield_rf2': np.tile(data['flagfield_rf2'], 192),
+             'flagfield_pl': np.tile(data['flagfield_pl'], 192),
+             'flagfield_gen1': data['flagfield_gen1'].flatten(),
+             'flagfield_gen2': data['flagfield_gen2'].flatten()}
+
+    data['f_usable'] = set_flags(flags)
     data['f_usable'] = data['f_usable'].reshape(-1, 192)
-    data['f_land'] = data['f_land'].reshape(-1, 192)
 
     data['swath_indicator'] = np.int8(data['beam_number'].flatten() > 3)
 

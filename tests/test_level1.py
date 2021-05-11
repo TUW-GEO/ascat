@@ -138,8 +138,7 @@ class Test_AscatL1bFile(unittest.TestCase):
                                        self.h5_ds[antenna][coord], atol=1e-4)
 
             matching = ['sig', 'inc', 'azi', 'sat_id', 'as_des_pass',
-                        'land_frac', 'f_usable', 'f_land', 'beam_number',
-                        'swath_indicator']
+                        'beam_number', 'swath_indicator']
 
             for field in matching:
                 nptest.assert_allclose(self.eps_ds[antenna][coord],

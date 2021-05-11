@@ -1574,7 +1574,7 @@ def set_flags(data):
                        'flagfield_gen1': np.array([0, 2, 0, 0, 0, 0, 0, 0]),
                        'flagfield_gen2': np.array([1, 0, 2, 0, 0, 0, 0, 0])}
 
-    f_usable = np.zeros(data['sigma0_full'].shape, dtype=np.uint8)
+    f_usable = np.zeros(data['flagfield_rf1'].size, dtype=np.uint8)
 
     for flagfield, bitmask in flag_status_bit.items():
         subset = np.nonzero(data[flagfield])[0]
