@@ -685,7 +685,7 @@ def conv_epsl1bszf_generic(data, metadata):
         'swath_indicator': ('swath_indicator', np.int8, (0, 1), int8_nan),
         'land_frac': ('land_frac', np.float32, (0, 1), float32_nan),
         'f_usable': ('f_usable', np.int8, (0, 2), int8_nan),
-        'f_land': ('f_land', np.int8, (0, 1), int8_nan),
+        # 'f_land': ('f_land', np.int8, (0, 1), int8_nan),
         'as_des_pass': ('as_des_pass', np.uint8, (0, 1), uint8_nan),
         'time': ('time', None, (np.datetime64('1900-01-01'),
                                 np.datetime64('2100-01-01')),  0),
