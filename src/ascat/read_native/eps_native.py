@@ -40,6 +40,8 @@ import xarray as xr
 import lxml.etree as etree
 from cadati.jd_date import jd2dt
 
+from ascat.utils import get_toi_subset, get_roi_subset
+
 short_cds_time = np.dtype([('day', '>u2'), ('time', '>u4')])
 long_cds_time = np.dtype([('day', '>u2'), ('ms', '>u4'), ('mms', '>u2')])
 
@@ -73,7 +75,7 @@ class AscatL1bEpsSzfFile:
         """
         self.filename = filename
 
-    def read(self, generic=False, to_xarray=False):
+    def read(self, toi=None, roi=None, generic=True, to_xarray=False):
         """
         Read ASCAT Level 1b data.
 
@@ -82,8 +84,22 @@ class AscatL1bEpsSzfFile:
         ds : xarray.Dataset
             ASCAT Level 1b data.
         """
-        return read_eps_l1b(self.filename, generic, to_xarray,
-                            full=False, unsafe=True, scale_mdr=False)
+        ds = read_eps_l1b(self.filename, generic, to_xarray,
+                          full=False, unsafe=True, scale_mdr=False)
+
+        if toi:
+            ds = get_toi_subset(ds, toi)
+
+        if roi:
+            ds = get_roi_subset(ds, roi)
+
+        return ds
+
+    def read_period(self, dt_start, dt_end, **kwargs):
+        """
+        Read interval.
+        """
+        return self.read(toi=(dt_start, dt_end), **kwargs)
 
     def close(self):
         """
