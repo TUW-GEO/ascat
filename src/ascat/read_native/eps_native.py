@@ -282,13 +282,14 @@ class EPSProduct:
             if grh['record_class'] == 8 and unsafe:
                 if np.mod((self.filesize - abs_pos),
                           self.mdr_template.itemsize) != 0:
-                    raise RuntimeError('Unsafe reading failed!')
-
-                num_mdr = (self.filesize -
-                           abs_pos) // self.mdr_template.itemsize
-                self.fid.seek(abs_pos)
-                self.read_record_class(grh, num_mdr)
-                break
+                    # Unsafe reading fails, switching to safe reading
+                    unsafe = False
+                else:
+                    num_mdr = (self.filesize -
+                               abs_pos) // self.mdr_template.itemsize
+                    self.fid.seek(abs_pos)
+                    self.read_record_class(grh, num_mdr)
+                    break
 
             if prev_grh is None:
                 prev_grh = grh
