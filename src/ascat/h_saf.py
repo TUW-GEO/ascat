@@ -371,10 +371,10 @@ class H14Grib:
                            '43': 'SM_layer4_100-289cm'}
         else:
             param_names = {
-                'SWI Soil wetness index in layer 1': 'SM_layer1_0-7cm',
-                'SWI Soil wetness index in layer 2': 'SM_layer2_7-28cm',
-                'SWI Soil wetness index in layer 3': 'SM_layer3_28-100cm',
-                'SWI Soil wetness index in layer 4': 'SM_layer4_100-289cm',
+                'SWI1 Soil wetness index in layer 1': 'SM_layer1_0-7cm',
+                'SWI2 Soil wetness index in layer 2': 'SM_layer2_7-28cm',
+                'SWI3 Soil wetness index in layer 3': 'SM_layer3_28-100cm',
+                'SWI4 Soil wetness index in layer 4': 'SM_layer4_100-289cm',
                 'Soil wetness index in layer 1': 'SM_layer1_0-7cm',
                 'Soil wetness index in layer 2': 'SM_layer2_7-28cm',
                 'Soil wetness index in layer 3': 'SM_layer3_28-100cm',
