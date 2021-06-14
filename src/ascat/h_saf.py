@@ -383,7 +383,11 @@ class H14Grib:
                 message.expand_grid(self.expand_grid)
                 if i == 1:
                     data['lat'], data['lon'] = message.latlons()
-                data[param_names[message['parameterName']]] = message.values
+
+                try:
+                    data[param_names[message['parameterName']]] = message.values
+                except KeyError:
+                    print(message['parameterName'])
 
                 # read and store metadata
                 md = {}
