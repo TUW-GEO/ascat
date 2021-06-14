@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 2.0.1
+=============
+
+- Update ASCAT Level 1b SZF reader
+- Fix test error of H14
+
 Version 2.0.0
 =============
 
