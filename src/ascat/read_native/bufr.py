@@ -429,7 +429,7 @@ class AscatL2BufrFile():
 
         # concatenate lists to array
         for var_name in data.keys():
-            data[var_name] = np.concatenate(data[var_name])
+            data[var_name] = np.ma.concatenate(data[var_name])
             # fix scaling
             if var_name == 'Mean Surface Soil Moisture':
                 data[var_name][data[var_name] != bufr_nan] *= 100.
@@ -479,7 +479,6 @@ class AscatL2BufrFile():
             for var_name in data.keys():
                 if len(data[var_name].shape) == 1:
                     dtype.append((var_name, data[var_name].dtype.str))
-
                     fill_value.append(data[var_name].fill_value)
                 elif len(data[var_name].shape) > 1:
                     dtype.append((var_name, data[var_name].dtype.str,
