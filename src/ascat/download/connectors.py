@@ -27,6 +27,7 @@
 
 import os
 import sys
+import base64
 import urllib
 import requests
 import logging
@@ -37,8 +38,7 @@ from datetime import timedelta
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s %(levelname)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 
 
 class Connector:
@@ -133,38 +133,37 @@ class HttpConnector(Connector):
             Path (local) where to save file
         """
         stream_response = requests.get(
-            file_remote,
-            params={'format': 'json'},
+            file_remote, params={"format": "json"},
             stream=True,
-            headers={'Authorization': 'Bearer {}'.format(self.access_token)})
+            headers={"Authorization": "Bearer {}".format(self.access_token)})
 
         self._assert_response(stream_response)
 
-        tail = ''
-        if stream_response.headers['Content-Type'] == 'application/zip':
-            tail = '.zip'
+        tail = ""
+        if stream_response.headers["Content-Type"] == "application/zip":
+            tail = ".zip"
 
         # Download the file (and display progress)
         progress = 0
 
-        logging.info('Start download: {}'.format(file_local))
+        logging.info("Start download: {}".format(file_local))
 
-        with open(file_local+tail, 'wb') as f:
+        with open(file_local + tail, "wb") as f:
             for chunk in stream_response.iter_content(chunk_size=1024):
                 if chunk:
                     f.write(chunk)
                     f.flush()
-                    if(progress % 1024 == 0):
+                    if progress % 1024 == 0:
                         sys.stdout.write("\r%dkB" % progress)
                         sys.stdout.flush()
                     progress += 1
             sys.stdout.write("\r%dkB" % progress)
             sys.stdout.flush()
 
-        if os.path.exists(file_local+tail):
-            logging.info('Download finished')
+        if os.path.exists(file_local + tail):
+            logging.info("Download finished")
         else:
-            logging.error('Downloaded file not found')
+            logging.error("Downloaded file not found")
 
 
 class FtpConnector(Connector):
@@ -195,10 +194,10 @@ class FtpConnector(Connector):
             Dictionary of needed authentication parameters.
         """
         try:
-            self.ftp.login(credentials['user'], credentials['password'])
-            logging.info('FTP connection successfully established')
+            self.ftp.login(credentials["user"], credentials["password"])
+            logging.info("FTP connection successfully established")
         except:
-            logging.error('FTP connection failed. User or password incorrect')
+            logging.error("FTP connection failed. User or password incorrect")
 
     def grab_file(self, file_remote, file_local):
         """
@@ -212,24 +211,23 @@ class FtpConnector(Connector):
             path (local) where to save file
         """
         if file_remote not in self.ftp.nlst():
-            logging.warning('File not accessible on FTP: {}'.format(
-                file_remote))
+            logging.warning("File not accessible on FTP: {}".format(file_remote))
         else:
-            localfile = open(file_local, 'wb')
-            logging.info('Start download: {}'.format(file_remote))
-            self.ftp.retrbinary('RETR ' + file_remote, localfile.write, 1024)
+            localfile = open(file_local, "wb")
+            logging.info("Start download: {}".format(file_remote))
+            self.ftp.retrbinary("RETR " + file_remote, localfile.write, 1024)
             localfile.close()
             if os.path.exists(file_local):
-                logging.info('Finished download: {}'.format(file_local))
+                logging.info("Finished download: {}".format(file_local))
             else:
-                logging.error('Downloaded file not found')
+                logging.error("Downloaded file not found")
 
     def close(self):
         """
         Close connection.
         """
         self.ftp.close()
-        logging.info('FTP disconnect')
+        logging.info("FTP disconnect")
 
 
 class HsafConnector(FtpConnector):
@@ -238,7 +236,7 @@ class HsafConnector(FtpConnector):
     Class for downloading from HSAF via FTP.
     """
 
-    def __init__(self, base_url='ftphsaf.meteoam.it'):
+    def __init__(self, base_url="ftphsaf.meteoam.it"):
         """
         Initialize connector.
 
@@ -249,8 +247,7 @@ class HsafConnector(FtpConnector):
         """
         super().__init__(base_url)
 
-    def download(self, remote_path, local_path, start_date, end_date,
-                 limit=None):
+    def download(self, remote_path, local_path, start_date, end_date, limit=None):
         """
         Fetch resource location for download of multiple files in date range.
 
@@ -299,13 +296,12 @@ class HsafConnector(FtpConnector):
         self.ftp.cwd(remote_path)
 
         list_of_files = []
-        self.ftp.retrlines('NLST ', list_of_files.append)
+        self.ftp.retrlines("NLST ", list_of_files.append)
 
         days = end_date - start_date
         for i in tqdm(range(days.days)):
-            date = ((start_date + timedelta(days=i)).strftime("%Y%m%d"))
-            matches = sorted([x for x in list_of_files if date in x],
-                             reverse=True)
+            date = (start_date + timedelta(days=i)).strftime("%Y%m%d")
+            matches = sorted([x for x in list_of_files if date in x], reverse=True)
             yield matches
 
 
@@ -315,14 +311,14 @@ class EumConnector(HttpConnector):
     Class for downloading from EUMETSAT via HTTP requests.
     """
 
-    def __init__(self, base_url="http://api.eumetsat.int"):
+    def __init__(self, base_url="https://api.eumetsat.int"):
         """
         Initialize connector.
 
         Parameters
         ----------
         base_url : string, optional
-            Location of remote resource (default: http://api.eumetsat.int).
+            Location of remote resource (default: https://api.eumetsat.int).
         """
         super().__init__(base_url)
 
@@ -336,8 +332,8 @@ class EumConnector(HttpConnector):
             Dictionary of needed authentication parameters.
         """
         self.access_token = self._generate_token(
-            consumer_key=credentials['consumer_key'],
-            consumer_secret=credentials['consumer_secret'])
+            consumer_key=credentials["consumer_key"],
+            consumer_secret=credentials["consumer_secret"])
 
     def download(self, product, local_path, start_date, end_date,
                  coords=None, limit=None):
@@ -364,40 +360,31 @@ class EumConnector(HttpConnector):
         service_search = self.base_url + "/data/search-products/os"
         service_download = self.base_url + "/data/download/"
 
-        dataset_parameters = {'format': 'json', 'pi': product}
+        dataset_parameters = {"format": "json", "pi": product}
 
-        dataset_parameters['start'] = start_date.strftime(
-            '%Y-%m-%dT%H:%M:%S.%fZ')
-        dataset_parameters['end'] = end_date.strftime(
-            '%Y-%m-%dT%H:%M:%S.%fZ')
+        dataset_parameters["start"] = start_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        dataset_parameters["end"] = end_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
         if coords:
-            dataset_parameters['geo'] = 'POLYGON(({}))'.format(
-                ','.join(["{} {}".format(*coord) for coord in coords]))
+            dataset_parameters["geo"] = "POLYGON(({}))".format(
+                ",".join(["{} {}".format(*coord) for coord in coords])
+            )
 
         url = service_search
         response = requests.get(url, dataset_parameters)
         found_data_sets = response.json()
 
-        url_temp = ('collections/{coll_id}/dates/{year}/{month}/{day}/'
-                    'times/{hour}/{minute}')
+        url_temp = "collections/{coll_id}/products/{product}"
 
         i = 0
-        for selected_data_set in tqdm(found_data_sets['features']):
+        for selected_data_set in tqdm(found_data_sets["features"]):
 
-            coll_id = selected_data_set['properties']['parentIdentifier']
-            date = datetime.strptime(selected_data_set[
-                'properties']['date'].split("/", 1)[0], '%Y-%m-%dT%H:%M:%SZ')
-
+            coll_id = selected_data_set["properties"]["parentIdentifier"]
+            product = selected_data_set["properties"]["identifier"]
             download_url = service_download + urllib.parse.quote(
-                url_temp.format(
-                    coll_id=coll_id, year=date.strftime('%Y'),
-                    month=date.strftime('%m'), day=date.strftime('%d'),
-                    hour=date.strftime('%H'), minute=date.strftime('%M')))
+                url_temp.format(coll_id=coll_id, product=product))
 
-            file_local = os.path.join(
-                local_path, selected_data_set['properties']['identifier'])
-
+            file_local = os.path.join(local_path, product)
             self.grab_file(download_url, file_local)
 
             i = i + 1
@@ -422,15 +409,14 @@ class EumConnector(HttpConnector):
             An access token (if pass) or None (if fail).
         """
         token_url = self.base_url + "/token"
-
-        response = requests.post(
-            token_url,
-            auth=requests.auth.HTTPBasicAuth(consumer_key, consumer_secret),
-            data={'grant_type': 'client_credentials'},
-            headers={"Content-Type": "application/x-www-form-urlencoded"})
+        userpass = consumer_key + ':' + consumer_secret
+        encoded_userpass = base64.b64encode(userpass.encode()).decode()
+        headers = {"Authorization": "Basic {}".format(encoded_userpass)}
+        data_payload ={"grant_type": "client_credentials"}
+        response = requests.post(token_url, headers=headers, data=data_payload)
 
         self._assert_response(response)
-        return response.json()['access_token']
+        return response.json()["access_token"]
 
     def _assert_response(self, response, success_code=200):
         """
@@ -449,6 +435,6 @@ class EumConnector(HttpConnector):
         result : None or str
             Nothing if success, error message if fail.
         """
-        assert response.status_code == success_code,\
-            "API Request Failed: {}\n{}".format(response.status_code,
-                                                response.content)
+        assert (
+            response.status_code == success_code
+        ), "API Request Failed: {}\n{}".format(response.status_code, response.content)
