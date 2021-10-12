@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 2.0.2
+=============
+
+- Adapt EUMETSAT download API changes
+- Update read native bufr
+
 Version 2.0.1
 =============
 
