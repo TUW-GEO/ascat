@@ -51,6 +51,13 @@ except ImportError:
 bufr_nan = 1.7e+38
 float32_nan = -999999.
 uint8_nan = np.iinfo(np.uint8).max
+uint16_nan = np.iinfo(np.uint16).max
+int32_nan = np.iinfo(np.int32).max
+
+nan_val_dict = {np.float32: float32_nan,
+                np.uint8: uint8_nan,
+                np.uint16: uint16_nan,
+                np.int32: int32_nan}
 
 
 class AscatL1bBufrFile:
@@ -467,16 +474,27 @@ class AscatL2BufrFile():
         else:
             # collect dtype info
             dtype = []
+            fill_value = []
+
             for var_name in data.keys():
                 if len(data[var_name].shape) == 1:
                     dtype.append((var_name, data[var_name].dtype.str))
+
+                    fill_value.append(data[var_name].fill_value)
                 elif len(data[var_name].shape) > 1:
                     dtype.append((var_name, data[var_name].dtype.str,
                                   data[var_name].shape[1:]))
 
-            ds = np.empty(data['time'].size, dtype=np.dtype(dtype))
+                    fill_value.append(
+                        data[var_name].shape[1] * [data[var_name].fill_value])
+
+            ds = np.ma.empty(data['time'].size, dtype=np.dtype(dtype))
+            fill_value_arr = np.array((*fill_value,), dtype=np.dtype(dtype))
+
             for k, v in data.items():
                 ds[k] = v
+
+            ds.fill_value = fill_value_arr
 
         return ds
 
@@ -519,72 +537,102 @@ def conv_bufrl2_generic(data, metadata):
     skip_fields = ['Satellite Identifier']
 
     gen_fields_beam = {
-        'Radar Incidence Angle': ('inc', np.float32, bufr_nan),
-        'Backscatter': ('sig', np.float32, bufr_nan),
-        'Antenna Beam Azimuth': ('azi', np.float32, bufr_nan),
-        'ASCAT Sigma-0 Usability': ('f_usable', np.uint8, None),
-        'Beam Identifier': ('beam_num', np.uint8, None),
-        'Radiometric Resolution (Noise Value)': ('kp_noise', np.float32, bufr_nan),
-        'ASCAT KP Estimate Quality': ('kp', np.float32, bufr_nan),
-        'ASCAT Land Fraction': ('f_land', np.float32, None)}
+        'Radar Incidence Angle': ('inc', np.float32),
+        'Backscatter': ('sig', np.float32),
+        'Antenna Beam Azimuth': ('azi', np.float32),
+        'ASCAT Sigma-0 Usability': ('f_usable', np.uint8),
+        'Beam Identifier': ('beam_num', np.uint8),
+        'Radiometric Resolution (Noise Value)': ('kp_noise', np.float32),
+        'ASCAT KP Estimate Quality': ('kp', np.float32),
+        'ASCAT Land Fraction': ('f_land', np.float32)}
 
     gen_fields_lut = {
-        'Orbit Number': ('abs_orbit_nr', np.int32, None, None),
-        'Cross-Track Cell Number': ('node_num', np.uint8, None, None),
-        'Direction Of Motion Of Moving Observing Platform': ('sat_track_azi', np.float32, None, None),
-        'Surface Soil Moisture (Ms)': ('sm', np.float32, bufr_nan, float32_nan),
-        'Estimated Error In Surface Soil Moisture': ('sm_noise', np.float32, bufr_nan, float32_nan),
-        'Backscatter': ('sig40', np.float32, bufr_nan, float32_nan),
-        'Estimated Error In Sigma0 At 40 Deg Incidence Angle': ('sig40_noise', np.float32, bufr_nan, float32_nan),
-        'Slope At 40 Deg Incidence Angle': ('slope40', np.float32, bufr_nan, float32_nan),
-        'Estimated Error In Slope At 40 Deg Incidence Angle': ('slope40_noise', np.float32, bufr_nan, float32_nan),
-        'Soil Moisture Sensitivity': ('sm_sens', np.float32, bufr_nan, float32_nan),
-        'Dry Backscatter': ('dry_sig40', np.float32, bufr_nan, float32_nan),
-        'Wet Backscatter': ('wet_sig40', np.float32, bufr_nan, float32_nan),
-        'Mean Surface Soil Moisture': ('sm_mean', np.float32, bufr_nan, float32_nan),
-        'Rain Fall Detection': ('rf', np.float32, None, None),
-        'Soil Moisture Correction Flag': ('corr_flag', np.uint8, bufr_nan, uint8_nan),
-        'Soil Moisture Processing Flag': ('proc_flag', np.uint8, bufr_nan, uint8_nan),
-        'Soil Moisture Quality': ('agg_flag', np.uint8, bufr_nan, uint8_nan),
-        'Snow Cover': ('snow_prob', np.uint8, bufr_nan, uint8_nan),
-        'Frozen Land Surface Fraction': ('frozen_prob', np.uint8, bufr_nan, uint8_nan),
-        'Inundation And Wetland Fraction': ('wetland', np.uint8, bufr_nan, uint8_nan),
-        'Topographic Complexity': ('topo', np.uint8, bufr_nan, uint8_nan)}
+        'Orbit Number': ('abs_orbit_nr', np.int32),
+        'Cross-Track Cell Number': ('node_num', np.uint8),
+        'Direction Of Motion Of Moving Observing Platform': ('sat_track_azi',
+                                                             np.float32),
+        'Surface Soil Moisture (Ms)': ('sm', np.float32),
+        'Estimated Error In Surface Soil Moisture': ('sm_noise', np.float32),
+        'Backscatter': ('sig40', np.float32),
+        'Estimated Error In Sigma0 At 40 Deg Incidence Angle': ('sig40_noise',
+                                                                np.float32),
+        'Slope At 40 Deg Incidence Angle': ('slope40', np.float32),
+        'Estimated Error In Slope At 40 Deg Incidence Angle': ('slope40_noise',
+                                                               np.float32),
+        'Soil Moisture Sensitivity': ('sm_sens', np.float32),
+        'Dry Backscatter': ('dry_sig40', np.float32),
+        'Wet Backscatter': ('wet_sig40', np.float32),
+        'Mean Surface Soil Moisture': ('sm_mean', np.float32),
+        'Rain Fall Detection': ('rf', np.float32),
+        'Soil Moisture Correction Flag': ('corr_flag', np.uint8),
+        'Soil Moisture Processing Flag': ('proc_flag', np.uint8),
+        'Soil Moisture Quality': ('agg_flag', np.uint8),
+        'Snow Cover': ('snow_prob', np.uint8),
+        'Frozen Land Surface Fraction': ('frozen_prob', np.uint8),
+        'Inundation And Wetland Fraction': ('wetland', np.uint8),
+        'Topographic Complexity': ('topo', np.uint8)}
 
     for var_name in skip_fields:
         if var_name in data:
             data.pop(var_name)
 
-    for var_name, (new_name, new_dtype,
-                   nan_val, new_nan_val) in gen_fields_lut.items():
-        if nan_val is not None:
-            data[var_name][data[var_name] == nan_val] = new_nan_val
-        data[new_name] = data.pop(var_name).astype(new_dtype)
+    for var_name, (new_name, new_dtype) in gen_fields_lut.items():
+        mask = data[var_name] == bufr_nan
+        data[var_name][mask] = nan_val_dict[new_dtype]
+        data[new_name] = np.ma.array(data.pop(var_name).astype(new_dtype),
+                                     mask=mask)
+        data[new_name].fill_value = nan_val_dict[new_dtype]
 
-    for var_name, (new_name, new_dtype, nan_val) in gen_fields_beam.items():
+    for var_name, (new_name, new_dtype) in gen_fields_beam.items():
+
         f = ['{}_{}'.format(b, var_name) for b in ['f', 'm', 'a']]
-        data[new_name] = np.vstack(
+
+        mask = np.vstack((data[f[0]] == bufr_nan, data[f[1]] == bufr_nan,
+                          data[f[2]] == bufr_nan)).T
+
+        data[new_name] = np.ma.vstack(
             (data.pop(f[0]), data.pop(f[1]),
              data.pop(f[2]))).T.astype(new_dtype)
-        if nan_val is not None:
-            data[new_name][data[new_name] == nan_val] = float32_nan
+
+        data[new_name].mask = mask
+        data[new_name][mask] = nan_val_dict[new_dtype]
+
+        data[new_name].fill_value = nan_val_dict[new_dtype]
 
     if data['node_num'].max() == 82:
-        data['swath_indicator'] = 1 * (data['node_num'] > 41)
+        data['swath_indicator'] = np.ma.array(
+            1 * (data['node_num'] > 41), dtype=np.uint8,
+            mask=data['node_num'] > 82)
     elif data['node_num'].max() == 42:
-        data['swath_indicator'] = 1 * (data['node_num'] > 21)
+        data['swath_indicator'] = np.ma.array(
+            1 * (data['node_num'] > 21), dtype=np.uint8,
+            mask=data['node_num'] > 42)
     else:
         raise ValueError('Cross-track cell number size unknown')
 
     n_lines = data['lat'].shape[0] / data['node_num'].max()
-    data['line_num'] = np.arange(n_lines).repeat(data['node_num'].max())
+    line_num = np.arange(n_lines).repeat(data['node_num'].max())
+    data['line_num'] = np.ma.array(line_num, dtype=np.uint16,
+                                   mask=np.zeros_like(line_num),
+                                   fill_value=uint16_nan)
 
-    sat_id = np.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
-    data['sat_id'] = np.zeros(data['time'].size, dtype=np.uint8) + sat_id[
+    sat_id = np.ma.array([0, 0, 0, 4, 3, 5], dtype=np.uint8)
+    data['sat_id'] = np.ma.zeros(data['time'].size, dtype=np.uint8) + sat_id[
         int(metadata['platform_id'])]
+    data['sat_id'].mask = np.zeros(data['time'].size)
+    data['sat_id'].fill_value = uint8_nan
 
     # compute ascending/descending direction
-    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
+    data['as_des_pass'] = np.ma.array(
+        data['sat_track_azi'] < 270, dtype=np.uint8,
+        mask=np.zeros(data['time'].size), fill_value=uint8_nan)
+
+    data['lat'] = np.ma.array(data['lat'], mask=data['lat'] == bufr_nan,
+                              fill_value=float32_nan)
+    data['lon'] = np.ma.array(data['lon'], mask=data['lon'] == bufr_nan,
+                              fill_value=float32_nan)
+    data['time'] = np.ma.array(data['time'], mask=data['time'] == bufr_nan,
+                               fill_value=0)
 
     return data
 
