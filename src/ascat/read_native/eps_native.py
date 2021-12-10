@@ -61,7 +61,7 @@ julian_epoch = 2451544.5
 class AscatL1bEpsSzfFile:
 
     """
-    ASCAT Level 1b EPS Native reader class.
+    Class reading ASCAT Level 1b file in EPS Native format.
     """
 
     def __init__(self, filename):
@@ -79,25 +79,57 @@ class AscatL1bEpsSzfFile:
         """
         Read ASCAT Level 1b data.
 
+        Parameters
+        ----------
+        toi : tuple of datetime, optional
+            Filter data for given time of interest (default: None).
+            e.g. (datetime(2020, 1, 1, 12), datetime(2020, 1, 2))
+        roi : tuple of 4 float, optional
+            Filter data for region of interest (default: None).
+            e.g. latmin, lonmin, latmax, lonmax
+        generic : boolean, optional
+            Convert original data field names to generic field names
+            (default: True).
+        to_xarray : boolean, optional
+            Convert data to xarray.Dataset otherwise numpy.ndarray will be
+            returned (default: False).
+
         Returns
         -------
-        ds : xarray.Dataset
-            ASCAT Level 1b data.
+        data : xarray.Dataset or numpy.ndarray
+            ASCAT data.
+        metadata : dict
+            Metadata.
         """
-        ds = read_eps_l1b(self.filename, generic, to_xarray,
-                          full=False, unsafe=True, scale_mdr=False)
+        data, metadata = read_eps_l1b(self.filename, generic, to_xarray,
+                                      full=False, unsafe=True,
+                                      scale_mdr=False)
 
         if toi:
-            ds = get_toi_subset(ds, toi)
+            data = get_toi_subset(data, toi)
 
         if roi:
-            ds = get_roi_subset(ds, roi)
+            data = get_roi_subset(data, roi)
 
-        return ds
+        return data, metadata
 
     def read_period(self, dt_start, dt_end, **kwargs):
         """
         Read interval.
+
+        Parameters
+        ----------
+        dt_start : datetime
+            Start datetime.
+        dt_end : datetime
+            End datetime.
+
+        Returns
+        -------
+        data : xarray.Dataset or numpy.ndarray
+            ASCAT data.
+        metadata : dict
+            Metadata.
         """
         return self.read(toi=(dt_start, dt_end), **kwargs)
 
@@ -129,10 +161,21 @@ class AscatL1bEpsFile:
         """
         Read ASCAT Level 1b data.
 
+        Parameters
+        ----------
+        generic : boolean, optional
+            Convert original data field names to generic field names
+            (default: False).
+        to_xarray : boolean, optional
+            Convert data to xarray.Dataset otherwise numpy.ndarray will be
+            returned (default: False).
+
         Returns
         -------
-        ds : xarray.Dataset
-            ASCAT Level 1b data.
+        data : xarray.Dataset or numpy.ndarray
+            ASCAT data.
+        metadata : dict
+            Metadata.
         """
         return read_eps_l1b(self.filename, generic, to_xarray)
 
@@ -166,8 +209,19 @@ class AscatL2EpsFile:
 
         Returns
         -------
-        ds : dict, xarray.Dataset
-            ASCAT Level 1b data.
+        generic : boolean, optional
+            Convert original data field names to generic field names
+            (default: False).
+        to_xarray : boolean, optional
+            Convert data to xarray.Dataset otherwise numpy.ndarray will be
+            returned (default: False).
+
+        Returns
+        -------
+        data : xarray.Dataset or numpy.ndarray
+            ASCAT data.
+        metadata : dict
+            Metadata.
         """
         return read_eps_l2(self.filename, generic, to_xarray)
 
@@ -523,7 +577,7 @@ class EPSProduct:
             try:
                 var_len = child_items.pop('length')
                 if not longtime_flag:
-                    length.append(np.int(var_len))
+                    length.append(np.int64(var_len))
             except KeyError:
                 pass
 
@@ -537,7 +591,7 @@ class EPSProduct:
                     else:
                         try:
                             var_len = arr_items.pop('length')
-                            length.append(np.int(var_len))
+                            length.append(np.int64(var_len))
                         except KeyError:
                             pass
 
@@ -565,7 +619,8 @@ class EPSProduct:
             if 'scaling-factor' in value:
                 sf_dtype = np.float32
                 sf_split = value['scaling-factor'].split('^')
-                scaling_factor[key] = np.int(sf_split[0])**np.int(sf_split[1])
+                scaling_factor[key] = np.int64(
+                    sf_split[0])**np.int64(sf_split[1])
             else:
                 sf_dtype = conv[value['type']]
                 scaling_factor[key] = 1
@@ -608,7 +663,7 @@ class EPSProduct:
             try:
                 var_len = child_items.pop('length')
                 if not bitfield_flag:
-                    length.append(np.int(var_len))
+                    length.append(np.int64(var_len))
             except KeyError:
                 pass
 
@@ -631,7 +686,7 @@ class EPSProduct:
                         else:
                             try:
                                 var_len = arr_items.pop('length')
-                                length.append(np.int(var_len))
+                                length.append(np.int64(var_len))
                             except KeyError:
                                 pass
 
@@ -659,7 +714,8 @@ class EPSProduct:
             if 'scaling-factor' in value:
                 sf_dtype = np.float32
                 sf_split = value['scaling-factor'].split('^')
-                scaling_factor[key] = np.int(sf_split[0])**np.int(sf_split[1])
+                scaling_factor[key] = np.int64(
+                    sf_split[0])**np.int64(sf_split[1])
             else:
                 sf_dtype = conv[value['type']]
                 scaling_factor[key] = 1
@@ -986,14 +1042,12 @@ def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
 
             ds = np.empty(data['time'].size, dtype=np.dtype(dtype))
             for k, v in data.items():
-
                 ds[k] = v
-
     else:
         raise RuntimeError("Format not supported. Product type {:1}"
                            " Format major version: {:2}".format(ptype, fmv))
 
-    return ds
+    return ds, metadata
 
 
 def read_eps_l2(filename, generic=False, to_xarray=False):
@@ -1013,8 +1067,10 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
 
     Returns
     -------
-    ds : xarray.Dataset, dict of xarray.Dataset
-        ASCAT Level 1b data.
+    data : xarray.Dataset or numpy.ndarray
+        ASCAT data.
+    metadata : dict
+        Metadata.
     """
     eps_file = read_eps(filename)
     ptype = eps_file.mphr['PRODUCT_TYPE']
@@ -1057,7 +1113,7 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
             for cf in coords_fields:
                 coords[cf] = data.pop(cf)
 
-            ds = xr.Dataset(data, coords=coords, attrs=metadata)
+            data = xr.Dataset(data, coords=coords, attrs=metadata)
         else:
             # collect dtype info
             dtype = []
@@ -1070,13 +1126,13 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
 
             ds = np.empty(data['time'].size, dtype=np.dtype(dtype))
             for k, v in data.items():
-
                 ds[k] = v
+            data = ds
     else:
         raise ValueError("Format not supported. Product type {:1}"
                          " Format major version: {:2}".format(ptype, fmv))
 
-    return ds
+    return data, metadata
 
 
 def read_eps(filename, mphr_only=False, full=True, unsafe=False,
@@ -1598,7 +1654,7 @@ def set_flags(data):
 
         if subset.size > 0:
             unpacked_bits = np.fliplr(np.unpackbits(
-                data[flagfield][subset]).reshape(-1, 8).astype(np.bool))
+                data[flagfield][subset]).reshape(-1, 8).astype(bool))
 
             flag = np.ma.array(
                 np.tile(bitmask, unpacked_bits.shape[0]).reshape(-1, 8),

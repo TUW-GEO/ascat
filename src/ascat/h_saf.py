@@ -252,16 +252,22 @@ class H08BufrFileList(ChronFiles):
 
 class AscatNrtBufrFileList(ChronFiles):
 
-    def __init__(self, root_path, product_id='*'):
+    """
+    Class reading ASCAT NRT BUFR files.
+    """
+
+    def __init__(self, root_path, product_id='*', filename_template=None,
+                 subfolder_template=None):
         """
         Initialize.
         """
-        fn_templ = '{product_id}_{date}*.buf'
-        sf_templ = None
+        if filename_template is None:
+            filename_template = '{product_id}_{date}*.buf'
 
         self.product_id = product_id
 
-        super().__init__(root_path, AscatL2File, fn_templ, sf_templ=sf_templ)
+        super().__init__(root_path, AscatL2File, filename_template,
+                         sf_templ=subfolder_template)
 
     def _fmt(self, timestamp):
         """
@@ -475,6 +481,7 @@ class AscatSsmDataRecord(AscatGriddedNcTs):
                  grid_filename='TUW_WARP5_grid_info_2_2.nc',
                  static_layer_path=None, **kwargs):
         """
+        Initialize.
 
         Parameters
         ----------

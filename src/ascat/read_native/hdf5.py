@@ -42,7 +42,7 @@ from ascat.read_native.eps_native import set_flags
 class AscatL1bHdf5File:
 
     """
-    Read ASCAT Level 1b file in HDF5 format.
+    Class reading ASCAT Level 1b file in HDF5 format.
     """
 
     def __init__(self, filename):
@@ -71,8 +71,10 @@ class AscatL1bHdf5File:
 
         Returns
         -------
-        ds : xarray.Dataset, numpy.ndarray
-            ASCAT Level 1b data.
+        ds : dict
+            ASCAT data.
+        metadata : dict
+            Metadata.
         """
         data = {}
         metadata = {}
@@ -192,7 +194,7 @@ class AscatL1bHdf5File:
                         continue
                     ds[antenna][var_name] = data[var_name][subset]
 
-        return ds
+        return ds, metadata
 
     def close(self):
         """

@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.0.3
+=============
+
+- Return metadata when reading ASCAT data
+
 Version 2.0.2
 =============
 

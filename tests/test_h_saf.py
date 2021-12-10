@@ -100,8 +100,11 @@ class Test_AscatNrtSsm(unittest.TestCase):
         Test read file.
         """
         dt = datetime(2017, 2, 20, 11, 15, 0)
-        h16 = AscatNrtBufrFileList(os.path.join(self.root_path, 'h16'), 'h16')
-        data = h16.read(dt)
+        path = os.path.join(self.root_path, 'h16')
+        product = 'h16'
+
+        h16 = AscatNrtBufrFileList(path, product)
+        data, metadata = h16.read(dt)
 
         sm_should = np.array([0., 3.6, 7.8, 8.2, 12.3, 14.7, 21.6, 26.7,
                               30.6, 32.2, 43., 50.5, 46.3, 47.6, 58.])
@@ -125,9 +128,11 @@ class Test_AscatNrtSsm(unittest.TestCase):
         Test read file.
         """
         dt = datetime(2017, 2, 20, 10, 42, 0)
-        h101 = AscatNrtBufrFileList(
-            os.path.join(self.root_path, 'h101'), 'h101')
-        data = h101.read(dt)
+        path = os.path.join(self.root_path, 'h101')
+        product_id = 'h101'
+
+        h101 = AscatNrtBufrFileList(path, product_id)
+        data, metadata = h101.read(dt)
 
         sm_should = np.array([26.1, 31.5, 49.5, 64.3, 80.3, 87.9, 24.5, 18.5,
                               20., 12.9, 6.3, 3.1, 3.5, 5.7, 2., 0., 4.6, 8.,
@@ -153,9 +158,11 @@ class Test_AscatNrtSsm(unittest.TestCase):
         Test read file.
         """
         dt = datetime(2017, 2, 20, 10, 42, 0)
-        h102 = AscatNrtBufrFileList(
-            os.path.join(self.root_path, 'h102'), 'h102')
-        data = h102.read(dt)
+        path = os.path.join(self.root_path, 'h102')
+        product_id = 'h102'
+
+        h102 = AscatNrtBufrFileList(path, product_id)
+        data, metadata = h102.read(dt)
 
         sm_should = np.array([45.8, 43.5, 41.7, 42.7, 38.6, 31.1, 23.4, 21.7,
                               23.6, 26.8, 30.5, 30.1, 32.7, 34.7, 35.8, 38.3,
@@ -181,9 +188,11 @@ class Test_AscatNrtSsm(unittest.TestCase):
         Test read file.
         """
         dt = datetime(2017, 2, 20, 10, 30, 0)
-        h103 = AscatNrtBufrFileList(
-            os.path.join(self.root_path, 'h103'), 'h103')
-        data = h103.read(dt)
+        path = os.path.join(self.root_path, 'h103')
+        product_id = 'h103'
+
+        h103 = AscatNrtBufrFileList(path, product_id)
+        data, metadata = h103.read(dt)
 
         sm_should = np.array([20.4, 15.2, 4.2, 0., 0.7, 6.8, 14.2, 21.9,
                               23.7, 17.4, 14.8, 19.8, 15.4, 17.1, 28.9,

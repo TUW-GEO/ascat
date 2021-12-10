@@ -72,7 +72,7 @@ class Test_AscatL2BufrFile(unittest.TestCase):
         """
         Test read.
         """
-        data = self.reader.read()
+        data, metadata = self.reader.read()
 
         ssm_should = np.array(
             [29.2, 30.2, 35.7, 38.6, 37.5, 37.6, 40.5, 44.5, 40.7,
@@ -116,7 +116,7 @@ class Test_AscatL2NcFile(unittest.TestCase):
         """
         Test read.
         """
-        data = self.reader.read()
+        data, metadata = self.reader.read()
 
         ssm_should = np.array([2.96000004, 0., 0., 0., 0., 0., 0., 0., 0.,
                                1.82999992, 3.32999992, 4.78999996, 4.31999969,
@@ -172,8 +172,8 @@ class Test_AscatL2NcFile_AscatL2BufrFile(unittest.TestCase):
         """
         Test read.
         """
-        data_nc = self.reader_nc.read()
-        data_bufr = self.reader_bufr.read()
+        data_nc, metadata = self.reader_nc.read()
+        data_bufr, metadata = self.reader_bufr.read()
 
         nptest.assert_allclose(data_nc['latitude'], data_bufr['lat'],
                                atol=1e-4)
@@ -257,9 +257,9 @@ class Test_AscatL2File(unittest.TestCase):
         """
         Test read.
         """
-        bufr_ds = self.bufr.read()
-        eps_ds = self.eps.read()
-        nc_ds = self.nc.read()
+        bufr_ds, metadata = self.bufr.read()
+        eps_ds, metadata = self.eps.read()
+        nc_ds, metadata = self.nc.read()
 
         for coord in ['lon', 'lat']:
             nptest.assert_allclose(bufr_ds[coord], eps_ds[coord], atol=1e-4)
@@ -298,7 +298,7 @@ class Test_AscatL2File(unittest.TestCase):
         """
         Test read EPS.
         """
-        eps_ds = self.eps.read()
+        eps_ds, metadata = self.eps.read()
 
         sm_should = np.array(
             [69.11, 74.23, 74.12, 75.95, 76.23, 80.74, 83.45, 84.94, 84.28,
@@ -354,12 +354,20 @@ class Test_AscatL2FileList(unittest.TestCase):
         root_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
                                  'eumetsat', 'ASCAT_generic_reader_data')
 
-        self.bufr_smo = AscatL2BufrFileList(
-            os.path.join(root_path, 'bufr'), sat='B', res='SMO')
-        self.nc_smo = AscatL2NcFileList(
-            os.path.join(root_path, 'nc'), sat='B', res='SMO')
-        self.eps_smo = AscatL2EpsFileList(
-            os.path.join(root_path, 'eps_nat'), sat='B', res='SMO')
+        path = os.path.join(root_path, 'bufr')
+        sat = 'b'
+        product = 'smo'
+        self.bufr_smo = AscatL2BufrFileList(path, sat, product)
+
+        path = os.path.join(root_path, 'nc')
+        sat = 'b'
+        product = 'smo'
+        self.nc_smo = AscatL2NcFileList(path, sat, product)
+
+        path = os.path.join(root_path, 'eps_nat')
+        sat = 'b'
+        product = 'smo'
+        self.eps_smo = AscatL2EpsFileList(path, sat, product)
 
     def test_smo_read_date(self):
         """
@@ -367,9 +375,9 @@ class Test_AscatL2FileList(unittest.TestCase):
         """
         dt = datetime(2018, 6, 12, 3, 57, 0)
 
-        bufr_data = self.bufr_smo.read(dt)
-        nc_data = self.nc_smo.read(dt)
-        eps_data = self.eps_smo.read(dt)
+        bufr_data, metadata = self.bufr_smo.read(dt)
+        nc_data, metadata = self.nc_smo.read(dt)
+        eps_data, metadata = self.eps_smo.read(dt)
 
         for coord in ['lon', 'lat']:
             nptest.assert_allclose(
@@ -386,9 +394,9 @@ class Test_AscatL2FileList(unittest.TestCase):
         dt_start = datetime(2018, 6, 12, 4, 0, 0)
         dt_end = datetime(2018, 6, 12, 4, 13, 0)
 
-        bufr_data = self.bufr_smo.read_period(dt_start, dt_end)
-        nc_data = self.nc_smo.read_period(dt_start, dt_end)
-        eps_data = self.eps_smo.read_period(dt_start, dt_end)
+        bufr_data, metadata = self.bufr_smo.read_period(dt_start, dt_end)
+        nc_data, metadata = self.nc_smo.read_period(dt_start, dt_end)
+        eps_data, metadata = self.eps_smo.read_period(dt_start, dt_end)
 
         for coord in ['lon', 'lat']:
             nptest.assert_allclose(

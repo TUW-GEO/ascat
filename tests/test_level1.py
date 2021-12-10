@@ -90,9 +90,9 @@ class Test_AscatL1bFile(unittest.TestCase):
         """
         Test SZX data in all data formats (BUFR, EPS Native, NetCDF).
         """
-        self.bufr_ds = self.bufr.read()
-        self.eps_ds = self.eps.read()
-        self.nc_ds = self.nc.read()
+        self.bufr_ds, metadata = self.bufr.read()
+        self.eps_ds, metadata = self.eps.read()
+        self.nc_ds, metadata = self.nc.read()
 
         for f in ['lat', 'lon']:
             nptest.assert_allclose(self.bufr_ds[f], self.eps_ds[f], atol=1e-2)
@@ -129,8 +129,8 @@ class Test_AscatL1bFile(unittest.TestCase):
         """
         Test read SZF formats.
         """
-        self.eps_ds = self.eps_szf.read()
-        self.h5_ds = self.h5_szf.read()
+        self.eps_ds, metadata = self.eps_szf.read()
+        self.h5_ds, metadata = self.h5_szf.read()
 
         for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
             for coord in ['lon', 'lat']:
@@ -148,7 +148,7 @@ class Test_AscatL1bFile(unittest.TestCase):
         """
         Test read SZX EPS.
         """
-        self.reader = self.eps.read(generic=True)
+        self.reader, metadata = self.eps.read(generic=True)
 
         lat_should = np.array(
             [68.91681, 69.005196, 69.09337, 69.18132, 69.26905, 69.35655,
@@ -196,7 +196,7 @@ class Test_AscatL1bFile(unittest.TestCase):
         """
         Test read SZX EPS format version 11.
         """
-        self.reader = self.eps_fmv11.read()
+        self.reader, metadata = self.eps_fmv11.read()
 
         lat_should = np.array(
             [61.849445, 61.916786, 61.983864, 62.050674, 62.11722, 62.183495,
@@ -244,7 +244,7 @@ class Test_AscatL1bFile(unittest.TestCase):
         """
         Test read SZF EPS format.
         """
-        self.reader = self.eps_szf.read()
+        self.reader, metadata = self.eps_szf.read()
 
         lat_should = np.array(
             [64.45502, 64.42318, 64.39127, 64.35929, 64.32724, 64.29512,
@@ -298,15 +298,30 @@ class Test_AscatL1bFileList(unittest.TestCase):
         root_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
                                  'eumetsat', 'ASCAT_generic_reader_data')
 
-        self.bufr_szr = AscatL1bBufrFileList(
-            os.path.join(root_path, 'bufr'), sat='A')
-        self.nc_szr = AscatL1bNcFileList(os.path.join(root_path, 'nc'))
-        self.eps_szr = AscatL1bEpsFileList(os.path.join(root_path, 'eps_nat'))
+        path = os.path.join(root_path, 'bufr')
+        sat = 'a'
+        product = 'szr'
+        self.bufr_szr = AscatL1bBufrFileList(path, sat, product)
 
-        self.eps_szf = AscatL1bEpsFileList(
-            os.path.join(root_path, 'eps_nat'), sat='B', res='SZF')
-        self.hdf5_szf = AscatL1bHdf5FileList(
-            os.path.join(root_path, 'hdf5'), sat='B')
+        path = os.path.join(root_path, 'nc')
+        sat = 'a'
+        product = 'szr'
+        self.nc_szr = AscatL1bNcFileList(path, sat, product)
+
+        path = os.path.join(root_path, 'eps_nat')
+        sat = 'a'
+        product = 'szr'
+        self.eps_szr = AscatL1bEpsFileList(path, sat, product)
+
+        sat = 'b'
+        product = 'szf'
+        path = os.path.join(root_path, 'eps_nat')
+        self.eps_szf = AscatL1bEpsFileList(path, sat,  product)
+
+        sat = 'b'
+        product = 'szf'
+        path = os.path.join(root_path, 'hdf5')
+        self.hdf5_szf = AscatL1bHdf5FileList(path, sat, product)
 
     def test_szr_read_date(self):
         """
@@ -314,9 +329,9 @@ class Test_AscatL1bFileList(unittest.TestCase):
         """
         dt = datetime(2010, 6, 9, 1, 39, 0)
 
-        bufr_data = self.bufr_szr.read(dt)
-        nc_data = self.nc_szr.read(dt)
-        eps_data = self.eps_szr.read(dt)
+        bufr_data, metadata = self.bufr_szr.read(dt)
+        nc_data, metadata = self.nc_szr.read(dt)
+        eps_data, metadata = self.eps_szr.read(dt)
 
         for f in ['lat', 'lon']:
             nptest.assert_allclose(bufr_data[f], eps_data[f], atol=1e-2)
@@ -351,9 +366,9 @@ class Test_AscatL1bFileList(unittest.TestCase):
         dt_start = datetime(2010, 6, 9, 1, 39, 0)
         dt_end = datetime(2010, 6, 9, 2, 0, 0)
 
-        bufr_data = self.bufr_szr.read_period(dt_start, dt_end)
-        nc_data = self.nc_szr.read_period(dt_start, dt_end)
-        eps_data = self.eps_szr.read_period(dt_start, dt_end)
+        bufr_data, metadata = self.bufr_szr.read_period(dt_start, dt_end)
+        nc_data, metadata = self.nc_szr.read_period(dt_start, dt_end)
+        eps_data, metadata = self.eps_szr.read_period(dt_start, dt_end)
 
         for f in ['lat', 'lon']:
             nptest.assert_allclose(bufr_data[f], eps_data[f], atol=1e-2)
@@ -387,8 +402,8 @@ class Test_AscatL1bFileList(unittest.TestCase):
         """
         dt = datetime(2018, 6, 11, 4, 18, 0)
 
-        eps_data = self.eps_szf.read(dt)
-        hdf5_data = self.hdf5_szf.read(dt)
+        eps_data, metadata = self.eps_szf.read(dt)
+        hdf5_data, metadata = self.hdf5_szf.read(dt)
 
         for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
             for coord in ['lon', 'lat']:
@@ -410,8 +425,8 @@ class Test_AscatL1bFileList(unittest.TestCase):
         dt_start = datetime(2018, 6, 11, 4, 18, 0)
         dt_end = datetime(2018, 6, 11, 4, 19, 0)
 
-        eps_data = self.eps_szf.read_period(dt_start, dt_end)
-        hdf5_data = self.hdf5_szf.read_period(dt_start, dt_end)
+        eps_data, metadata = self.eps_szf.read_period(dt_start, dt_end)
+        hdf5_data, metadata = self.hdf5_szf.read_period(dt_start, dt_end)
 
         for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
             for coord in ['lon', 'lat']:

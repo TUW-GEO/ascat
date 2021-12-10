@@ -63,8 +63,10 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
 
     Returns
     -------
-    ds : xarray.Dataset, numpy.ndarray
+    data : xarray.Dataset or numpy.ndarray
         ASCAT data.
+    metadata : dict
+        Metadata.
     """
     data = {}
     metadata = {}
@@ -159,13 +161,14 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
         for cf in coords_fields:
             coords[cf] = data.pop(cf)
 
-        ds = xr.Dataset(data, coords=coords, attrs=metadata)
+        data = xr.Dataset(data, coords=coords, attrs=metadata)
     else:
         ds = np.empty(num_records, dtype=np.dtype(dtype))
         for k, v in data.items():
             ds[k] = v
+        data = ds
 
-    return ds
+    return data, metadata
 
 
 class AscatL1bNcFile():
@@ -203,8 +206,10 @@ class AscatL1bNcFile():
 
         Returns
         -------
-        ds : xarray.Dataset, numpy.ndarray
-            ASCAT Level 1b data.
+        data : xarray.Dataset or numpy.ndarray
+            ASCAT data.
+        metadata : dict
+            Metadata.
         """
         gen_fields_lut = {'longitude': ('lon', np.float32, None),
                           'latitude': ('lat', np.float32, None),
@@ -219,10 +224,10 @@ class AscatL1bNcFile():
         skip_fields = ['f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel',
                        'f_ref', 'abs_line_number']
 
-        ds = read_nc(self.filename, generic, to_xarray,
-                     skip_fields, gen_fields_lut)
+        data, metadata = read_nc(self.filename, generic, to_xarray,
+                                 skip_fields, gen_fields_lut)
 
-        return ds
+        return data, metadata
 
     def close(self):
         """
@@ -269,37 +274,38 @@ class AscatL2NcFile:
         ds : dict, xarray.Dataset
             ASCAT Level 2 data.
         """
-        gen_fields_lut = {'longitude': ('lon', np.float32, None),
-                          'latitude': ('lat', np.float32, None),
-                          'utc_line_nodes': ('time', np.float32, None),
-                          'inc_angle_trip': ('inc', np.float32, float32_nan),
-                          'azi_angle_trip': ('azi', np.float32, float32_nan),
-                          'sigma0_trip': ('sig', np.float32, float32_nan),
-                          'kp': ('kp', np.float32, float32_nan),
-                          'soil_moisture': ('sm', np.float32, float32_nan),
-                          'soil_moisture_error': ('sm_noise', np.float32, float32_nan),
-                          'sigma40': ('sig40', np.float32, float32_nan),
-                          'sigma40_error': ('sig40_noise', np.float32, float32_nan),
-                          'slope40': ('slope40', np.float32, float32_nan),
-                          'slope40_error': ('slope40_noise', np.float32, float32_nan),
-                          'soil_moisture_sensitivity': ('sm_sens', np.float32, float32_nan),
-                          'dry_backscatter': ('dry_sig40', np.float32, float32_nan),
-                          'wet_backscatter': ('wet_sig40', np.float32, float32_nan),
-                          'mean_soil_moisture': ('sm_mean', np.float32, float32_nan),
-                          'proc_flag1': ('corr_flag', np.uint8, None),
-                          'proc_flag2': ('proc_flag', np.uint8, None),
-                          'aggregated_quality_flag': ('agg_flag', np.uint8, None),
-                          'snow_cover_probability': ('snow_prob', np.uint8, None),
-                          'frozen_soil_probability': ('frozen_prob', np.uint8, None),
-                          'wetland_flag': ('wetland', np.uint8, None),
-                          'topography_flag': ('topo', np.uint8, None)}
+        gen_fields_lut = {
+            'longitude': ('lon', np.float32, None),
+            'latitude': ('lat', np.float32, None),
+            'utc_line_nodes': ('time', np.float32, None),
+            'inc_angle_trip': ('inc', np.float32, float32_nan),
+            'azi_angle_trip': ('azi', np.float32, float32_nan),
+            'sigma0_trip': ('sig', np.float32, float32_nan),
+            'kp': ('kp', np.float32, float32_nan),
+            'soil_moisture': ('sm', np.float32, float32_nan),
+            'soil_moisture_error': ('sm_noise', np.float32, float32_nan),
+            'sigma40': ('sig40', np.float32, float32_nan),
+            'sigma40_error': ('sig40_noise', np.float32, float32_nan),
+            'slope40': ('slope40', np.float32, float32_nan),
+            'slope40_error': ('slope40_noise', np.float32, float32_nan),
+            'soil_moisture_sensitivity': ('sm_sens', np.float32, float32_nan),
+            'dry_backscatter': ('dry_sig40', np.float32, float32_nan),
+            'wet_backscatter': ('wet_sig40', np.float32, float32_nan),
+            'mean_soil_moisture': ('sm_mean', np.float32, float32_nan),
+            'proc_flag1': ('corr_flag', np.uint8, None),
+            'proc_flag2': ('proc_flag', np.uint8, None),
+            'aggregated_quality_flag': ('agg_flag', np.uint8, None),
+            'snow_cover_probability': ('snow_prob', np.uint8, None),
+            'frozen_soil_probability': ('frozen_prob', np.uint8, None),
+            'wetland_flag': ('wetland', np.uint8, None),
+            'topography_flag': ('topo', np.uint8, None)}
 
         skip_fields = ['abs_line_number']
 
-        ds = read_nc(self.filename, generic, to_xarray,
-                     skip_fields, gen_fields_lut)
+        data, metadata = read_nc(self.filename, generic, to_xarray,
+                                 skip_fields, gen_fields_lut)
 
-        return ds
+        return data, metadata
 
     def close(self):
         """

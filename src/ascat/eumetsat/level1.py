@@ -46,12 +46,12 @@ from ascat.file_handling import ChronFiles
 class AscatL1bFile:
 
     """
-    ASCAT Level 1b reader class.
+    Class reading ASCAT Level 1b files.
     """
 
-    def __init__(self, filename, file_format=None, mode='r'):
+    def __init__(self, filename, file_format=None):
         """
-        Initialize AscatL1File.
+        Initialize.
 
         Parameters
         ----------
@@ -63,7 +63,6 @@ class AscatL1bFile:
         """
         self.filename = filename
         self.fid = None
-        self.mode = mode
 
         if file_format is None:
             file_format = get_file_format(self.filename)
@@ -93,25 +92,47 @@ class AscatL1bFile:
         roi : tuple of 4 float, optional
             Filter data for region of interest (default: None).
             e.g. latmin, lonmin, latmax, lonmax
+        generic : boolean, optional
+            Convert original data field names to generic field names
+            (default: True).
+        to_xarray : boolean, optional
+            Convert data to xarray.Dataset otherwise numpy.ndarray will be
+            returned (default: False).
 
         Returns
         -------
-        ds : xarray.Dataset, numpy.ndarray
-            ASCAT Level 2 data.
+        data : xarray.Dataset or numpy.ndarray
+            ASCAT data.
+        metadata : dict
+            Metadata.
         """
-        ds = self.fid.read(generic=generic, to_xarray=to_xarray)
+        data, metadata = self.fid.read(generic=generic, to_xarray=to_xarray)
 
         if toi:
-            ds = get_toi_subset(ds, toi)
+            data = get_toi_subset(data, toi)
 
         if roi:
-            ds = get_roi_subset(ds, roi)
+            data = get_roi_subset(data, roi)
 
-        return ds
+        return data, metadata
 
     def read_period(self, dt_start, dt_end, **kwargs):
         """
         Read interval.
+
+        Parameters
+        ----------
+        dt_start : datetime
+            Start datetime.
+        dt_end : datetime
+            End datetime.
+
+        Returns
+        -------
+        data : xarray.Dataset or numpy.ndarray
+            ASCAT data.
+        metadata : dict
+            Metadata.
         """
         return self.read(toi=(dt_start, dt_end), **kwargs)
 
@@ -146,16 +167,36 @@ def get_file_format(filename):
 
 class AscatL1bBufrFileList(ChronFiles):
 
-    def __init__(self, path, sat='A', res='SZR'):
+    """
+    Class reading ASCAT L1b BUFR files.
+    """
+
+    def __init__(self, path, sat, product, filename_template=None):
         """
         Initialize.
-        """
-        sat_lut = {'A': 2, 'B': 1, 'C': 3}
-        self.sat = sat_lut[sat]
-        self.res = res
-        fn_templ = 'M0{sat}-ASCA-ASC{res}1B0200-NA-9.1-{date}.000000000Z-*-*.bfr'
 
-        super().__init__(path, AscatL1bFile, fn_templ)
+        Parameters
+        ----------
+        path : str
+            Path to input data.
+        sat : str
+            Metop satellite ('a', 'b', 'c').
+        product : str
+            Product type ('szf', 'szr', 'szo').
+        filename_template : str, optional
+            Filename template (default:
+            'M0{sat}-ASCA-ASC{product}1B0200-NA-9.1-{date}.000000000Z-*-*.bfr')
+        """
+        sat_lut = {'a': 2, 'b': 1, 'c': 3}
+        self.sat = sat_lut[sat]
+
+        self.product = product.upper()
+
+        if filename_template is None:
+            filename_template = ('M0{sat}-ASCA-ASC{product}1B0200-NA-9.1-'
+                                 '{date}.000000000Z-*-*.bfr')
+
+        super().__init__(path, AscatL1bFile, filename_template)
 
     def _fmt(self, timestamp):
         """
@@ -174,7 +215,7 @@ class AscatL1bBufrFileList(ChronFiles):
             Subfolder format.
         """
         fn_read_fmt = {'date': timestamp.strftime('%Y%m%d%H%M%S'),
-                       'sat': self.sat, 'res': self.res}
+                       'sat': self.sat, 'product': self.product}
         fn_write_fmt = None
         sf_read_fmt = None
         sf_write_fmt = sf_read_fmt
@@ -212,21 +253,50 @@ class AscatL1bBufrFileList(ChronFiles):
         data : numpy.ndarray
             Data.
         """
-        return np.hstack(data)
+        if type(data) == list:
+            if type(data[0]) == tuple:
+                metadata = [element[1] for element in data]
+                data = np.hstack([element[0] for element in data])
+                data = (data, metadata)
+            else:
+                data = np.hstack(data)
+
+        return data
 
 
 class AscatL1bNcFileList(ChronFiles):
 
-    def __init__(self, path, sat='A', res='SZR'):
+    """
+    Class reading ASCAT L1b NetCDF files.
+    """
+
+    def __init__(self, path, sat, product, filename_template=None):
         """
         Initialize.
+
+        Parameters
+        ----------
+        path : str
+            Path to input data.
+        sat : str
+            Metop satellite ('a', 'b', 'c').
+        product : str
+            Product type ('szr', 'szo').
+        filename_template : str, optional
+            Filename template (default:
+            'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOP{sat}+ASCAT_C_EUMP_{date}_*_eps_o_{product}_l1.nc')
         """
         self.sat = sat
-        res_lut = {'SZR': '125', 'SZO': '250'}
-        self.sampling = res_lut[res]
-        fn_templ = 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOP{sat}+ASCAT_C_EUMP_{date}_*_eps_o_{sampling}_l1.nc'
 
-        super().__init__(path, AscatL1bFile, fn_templ)
+        lut = {'szr': '125', 'szo': '250'}
+        self.product = lut[product]
+
+        if filename_template is None:
+            filename_template = (
+                'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOP{sat}+'
+                'ASCAT_C_EUMP_{date}_*_eps_o_{product}_l1.nc')
+
+        super().__init__(path, AscatL1bFile, filename_template)
 
     def _fmt(self, timestamp):
         """
@@ -245,7 +315,8 @@ class AscatL1bNcFileList(ChronFiles):
             Subfolder format.
         """
         fn_read_fmt = {'date': timestamp.strftime('%Y%m%d%H%M%S'),
-                       'sat': self.sat, 'sampling': self.sampling}
+                       'sat': self.sat.upper(),
+                       'product': self.product.upper()}
         fn_write_fmt = None
         sf_read_fmt = None
         sf_write_fmt = sf_read_fmt
@@ -283,23 +354,47 @@ class AscatL1bNcFileList(ChronFiles):
         data : numpy.ndarray
             Data.
         """
-        return np.hstack(data)
+        if type(data) == list:
+            if type(data[0]) == tuple:
+                metadata = [element[1] for element in data]
+                data = np.hstack([element[0] for element in data])
+                data = (data, metadata)
+            else:
+                data = np.hstack(data)
+
+        return data
 
 
 class AscatL1bEpsFileList(ChronFiles):
 
-    def __init__(self, path, sat='A', res='SZR'):
+    """
+    Class reading ASCAT L1b Eps files.
+    """
+
+    def __init__(self, path, sat, product, filename_template=None):
         """
         Initialize.
+
+        Parameters
+        ----------
+        path : str
+            Path to input data.
+        sat : str
+            Metop satellite ('a', 'b', 'c').
+        product : str
+            Product type ('szf', 'szr', 'szo').
+        filename_template : str, optional
+            Filename template (default:
+                'ASCA_{product}_1B_M0{sat}_{date}Z_*_*_*_*.nat')
         """
-        sat_lut = {'A': 2, 'B': 1, 'C': 3}
+        sat_lut = {'a': 2, 'b': 1, 'c': 3, '?': '?'}
         self.sat = sat_lut[sat]
+        self.product = product
 
-        self.res = res
+        if filename_template is None:
+            filename_template = 'ASCA_{product}_1B_M0{sat}_{date}Z_*_*_*_*.nat'
 
-        fn_templ = 'ASCA_{res}_1B_M0{sat}_{date}Z_*_*_*_*.nat'
-
-        super().__init__(path, AscatL1bFile, fn_templ)
+        super().__init__(path, AscatL1bFile, filename_template)
 
     def _fmt(self, timestamp):
         """
@@ -318,7 +413,7 @@ class AscatL1bEpsFileList(ChronFiles):
             Subfolder format.
         """
         fn_read_fmt = {'date': timestamp.strftime('%Y%m%d%H%M%S'),
-                       'sat': self.sat, 'res': self.res}
+                       'sat': self.sat, 'product': self.product.upper()}
         fn_write_fmt = None
         sf_read_fmt = None
         sf_write_fmt = sf_read_fmt
@@ -356,30 +451,65 @@ class AscatL1bEpsFileList(ChronFiles):
         data : numpy.ndarray
             Data.
         """
-        if self.res == 'SZF':
-            merged_data = defaultdict(list)
-            for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
-                for d in data:
-                    merged_data[antenna].append(d.pop(antenna))
-                merged_data[antenna] = np.hstack(merged_data[antenna])
+        metadata = {}
+        if self.product == 'szf':
+            if type(data) == list:
+                if type(data[0]) == tuple:
+                    metadata = [element[1] for element in data]
+                    merged_data = defaultdict(list)
+                    for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
+                        for d in data:
+                            merged_data[antenna].append(d[0].pop(antenna))
+                        merged_data[antenna] = np.hstack(merged_data[antenna])
+                else:
+                    merged_data = defaultdict(list)
+                    for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
+                        for d in data:
+                            merged_data[antenna].append(d.pop(antenna))
+                        merged_data[antenna] = np.hstack(merged_data[antenna])
+            else:
+                merged_data = data
         else:
-            merged_data = np.hstack(data)
+            if type(data) == list:
+                if type(data[0]) == tuple:
+                    metadata = [element[1] for element in data]
+                    merged_data = np.hstack([element[0] for element in data])
+                else:
+                    merged_data = np.hstack(data)
+            else:
+                merged_data = data
+
+        merged_data = (merged_data, metadata)
 
         return merged_data
 
 
 class AscatL1bHdf5FileList(ChronFiles):
 
-    def __init__(self, path, sat='A'):
+    """
+    Class reading ASCAT L1b HDF5 files.
+    """
+
+    def __init__(self, path, sat, product, filename_template=None):
         """
         Initialize.
+
+        path : str
+            Path to input data.
+        sat : str
+            Metop satellite ('a', 'b', 'c').
+        filename_template : str, optional
+            Filename template (default:
+              'ASCA_SZF_1B_M0{sat}_{date}Z_*_*_*_*.h5')
         """
-        sat_lut = {'A': 2, 'B': 1, 'C': 3}
+        sat_lut = {'a': '2', 'b': '1', 'c': '3', '?': '?'}
         self.sat = sat_lut[sat]
+        self.product = product
 
-        fn_templ = 'ASCA_SZF_1B_M0{sat}_{date}Z_*_*_*_*.h5'
+        if filename_template is None:
+            filename_template = 'ASCA_{product}_1B_M0{sat}_{date}Z_*_*_*_*.h5'
 
-        super().__init__(path, AscatL1bFile, fn_templ)
+        super().__init__(path, AscatL1bFile, filename_template)
 
     def _fmt(self, timestamp):
         """
@@ -398,7 +528,7 @@ class AscatL1bHdf5FileList(ChronFiles):
             Subfolder format.
         """
         fn_read_fmt = {'date': timestamp.strftime('%Y%m%d%H%M%S'),
-                       'sat': self.sat}
+                       'sat': self.sat, 'product': self.product.upper()}
         fn_write_fmt = None
         sf_read_fmt = None
         sf_write_fmt = sf_read_fmt
@@ -436,11 +566,25 @@ class AscatL1bHdf5FileList(ChronFiles):
         data : numpy.ndarray
             Data.
         """
-        merged_data = defaultdict(list)
+        metadata = {}
 
-        for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
-            for d in data:
-                merged_data[antenna].append(d.pop(antenna))
-            merged_data[antenna] = np.hstack(merged_data[antenna])
+        if type(data) == list:
+            if type(data[0]) == tuple:
+                metadata = [element[1] for element in data]
+                merged_data = defaultdict(list)
+                for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
+                    for d in data:
+                        merged_data[antenna].append(d[0].pop(antenna))
+                    merged_data[antenna] = np.hstack(merged_data[antenna])
+            else:
+                merged_data = defaultdict(list)
+                for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
+                    for d in data:
+                        merged_data[antenna].append(d.pop(antenna))
+                    merged_data[antenna] = np.hstack(merged_data[antenna])
+        else:
+            merged_data = data
+
+        merged_data = (merged_data, metadata)
 
         return merged_data

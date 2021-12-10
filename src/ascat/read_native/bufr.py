@@ -199,7 +199,7 @@ class AscatL1bBufrFile:
             for cf in coords_fields:
                 coords[cf] = data.pop(cf)
 
-            ds = xr.Dataset(data, coords=coords, attrs=metadata)
+            data = xr.Dataset(data, coords=coords, attrs=metadata)
         else:
             # collect dtype info
             dtype = []
@@ -214,7 +214,9 @@ class AscatL1bBufrFile:
             for k, v in data.items():
                 ds[k] = v
 
-        return ds
+            data = ds
+
+        return data, metadata
 
     def close(self):
         """
@@ -232,16 +234,16 @@ def conv_bufrl1b_generic(data, metadata):
     BUFR encoding - Spacecraft_id
     - 1 ERS 1
     - 2 ERS 2
-    - 3 METOP-1 (Metop-B)
-    - 4 METOP-2 (Metop-A)
-    - 5 METOP-3 (Metop-C)
+    - 3 Metop-1 (Metop-B)
+    - 4 Metop-2 (Metop-A)
+    - 5 Metop-3 (Metop-C)
 
     Internal encoding - sat_id
     - 1 ERS 1
     - 2 ERS 2
-    - 3 METOP-2 (Metop-A)
-    - 4 METOP-1 (Metop-B)
-    - 5 METOP-3 (Metop-C)
+    - 3 Metop-2 (Metop-A)
+    - 4 Metop-1 (Metop-B)
+    - 5 Metop-3 (Metop-C)
 
     Parameters
     ----------
@@ -390,17 +392,19 @@ class AscatL2BufrFile():
 
         Parameters
         ----------
-        generic: bool, optional
+        generic : bool, optional
             'True' reading and converting into generic format or
             'False' reading original field names(default: False).
-        to_xarray: bool, optional
+        to_xarray : bool, optional
             'True' return data as xarray.Dataset
             'False' return data as numpy.ndarray(default: False).
 
         Returns
         -------
-        ds: xarray.Dataset, numpy.ndarray
-            ASCAT Level 1b data.
+        data : xarray.Dataset or numpy.ndarray
+            ASCAT data.
+        metadata : dict
+            Metadata.
         """
         data = defaultdict(list)
 
@@ -470,7 +474,7 @@ class AscatL2BufrFile():
             for cf in coords_fields:
                 coords[cf] = data.pop(cf)
 
-            ds = xr.Dataset(data, coords=coords, attrs=metadata)
+            data = xr.Dataset(data, coords=coords, attrs=metadata)
         else:
             # collect dtype info
             dtype = []
@@ -494,8 +498,9 @@ class AscatL2BufrFile():
                 ds[k] = v
 
             ds.fill_value = fill_value_arr
+            data = ds
 
-        return ds
+        return data, metadata
 
     def close(self):
         pass
@@ -510,16 +515,16 @@ def conv_bufrl2_generic(data, metadata):
     BUFR encoding - Spacecraft_id
     - 1 ERS 1
     - 2 ERS 2
-    - 3 METOP-1 (Metop-B)
-    - 4 METOP-2 (Metop-A)
-    - 5 METOP-3 (Metop-C)
+    - 3 Metop-1 (Metop-B)
+    - 4 Metop-2 (Metop-A)
+    - 5 Metop-3 (Metop-C)
 
     Internal encoding - sat_id
     - 1 ERS 1
     - 2 ERS 2
-    - 3 METOP-2 (Metop-A)
-    - 4 METOP-1 (Metop-B)
-    - 5 METOP-3 (Metop-C)
+    - 3 Metop-2 (Metop-A)
+    - 4 Metop-1 (Metop-B)
+    - 5 Metop-3 (Metop-C)
 
     Parameters
     ----------
@@ -626,12 +631,13 @@ def conv_bufrl2_generic(data, metadata):
         data['sat_track_azi'] < 270, dtype=np.uint8,
         mask=np.zeros(data['time'].size), fill_value=uint8_nan)
 
-    data['lat'] = np.ma.array(data['lat'], mask=data['lat'] == bufr_nan,
-                              fill_value=float32_nan)
-    data['lon'] = np.ma.array(data['lon'], mask=data['lon'] == bufr_nan,
-                              fill_value=float32_nan)
-    data['time'] = np.ma.array(data['time'], mask=data['time'] == bufr_nan,
-                               fill_value=0)
+    mask = data['lat'] == bufr_nan
+    data['lat'] = np.ma.array(data['lat'], mask=mask, fill_value=float32_nan)
+
+    mask = data['lon'] == bufr_nan
+    data['lon'] = np.ma.array(data['lon'], mask=mask, fill_value=float32_nan)
+
+    data['time'] = np.ma.array(data['time'], mask=mask, fill_value=0)
 
     return data
 
@@ -699,12 +705,12 @@ class BUFRReader():
         for i in np.arange(self.nr_messages) + 1:
             tries = 0
 
-            ksup = np.zeros(self.size_ksup, dtype=np.int)
-            ksec0 = np.zeros(self.size_ksec0, dtype=np.int)
-            ksec1 = np.zeros(self.size_ksec1, dtype=np.int)
-            ksec2 = np.zeros(self.size_ksec2, dtype=np.int)
-            ksec3 = np.zeros(self.size_ksec3, dtype=np.int)
-            ksec4 = np.zeros(self.size_ksec4, dtype=np.int)
+            ksup = np.zeros(self.size_ksup, dtype=np.int64)
+            ksec0 = np.zeros(self.size_ksec0, dtype=np.int64)
+            ksec1 = np.zeros(self.size_ksec1, dtype=np.int64)
+            ksec2 = np.zeros(self.size_ksec2, dtype=np.int64)
+            ksec3 = np.zeros(self.size_ksec3, dtype=np.int64)
+            ksec4 = np.zeros(self.size_ksec4, dtype=np.int64)
 
             kerr = 0
             data = self.bufr.get_raw_bufr_msg(i)
@@ -760,7 +766,7 @@ class BUFRReader():
                         max_kelem = kvals
 
                     self.init_values = np.zeros(kvals, dtype=np.float64)
-                    self.cvals = np.zeros((kvals, 80), dtype=np.character)
+                    self.cvals = np.zeros((kvals, 80), dtype=np.dtype('S1'))
 
             decoded_values = ksup[4]
             # set kelem_guess to decoded values of last message
