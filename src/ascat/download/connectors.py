@@ -38,7 +38,8 @@ from datetime import timedelta
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s: %(message)s")
 
 
 class Connector:
@@ -211,7 +212,8 @@ class FtpConnector(Connector):
             path (local) where to save file
         """
         if file_remote not in self.ftp.nlst():
-            logging.warning("File not accessible on FTP: {}".format(file_remote))
+            logging.warning(
+                "File not accessible on FTP: {}".format(file_remote))
         else:
             localfile = open(file_local, "wb")
             logging.info("Start download: {}".format(file_remote))
@@ -301,7 +303,8 @@ class HsafConnector(FtpConnector):
         days = end_date - start_date
         for i in tqdm(range(days.days)):
             date = (start_date + timedelta(days=i)).strftime("%Y%m%d")
-            matches = sorted([x for x in list_of_files if date in x], reverse=True)
+            matches = sorted(
+                [x for x in list_of_files if date in x], reverse=True)
             yield matches
 
 
@@ -362,8 +365,10 @@ class EumConnector(HttpConnector):
 
         dataset_parameters = {"format": "json", "pi": product}
 
-        dataset_parameters["start"] = start_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        dataset_parameters["end"] = end_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        dataset_parameters["dtstart"] = start_date.strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ")
+        dataset_parameters["dtend"] = end_date.strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ")
 
         if coords:
             dataset_parameters["geo"] = "POLYGON(({}))".format(
@@ -374,22 +379,49 @@ class EumConnector(HttpConnector):
         response = requests.get(url, dataset_parameters)
         found_data_sets = response.json()
 
-        url_temp = "collections/{coll_id}/products/{product}"
+        url = service_search
+        dataset_parameters['si'] = 0
+        items_per_page = 10
 
-        i = 0
-        for selected_data_set in tqdm(found_data_sets["features"]):
+        all_found_data_sets = []
+        while dataset_parameters['si'] < found_data_sets['properties']['totalResults']:
+            response = requests.get(url, dataset_parameters)
+            found_data_sets = response.json()
+            all_found_data_sets.append(found_data_sets)
+            dataset_parameters['si'] = dataset_parameters['si'] + \
+                items_per_page
 
-            coll_id = selected_data_set["properties"]["parentIdentifier"]
-            product = selected_data_set["properties"]["identifier"]
-            download_url = service_download + urllib.parse.quote(
-                url_temp.format(coll_id=coll_id, product=product))
+        url_temp = "collections/{coll_id}/products/{product_id}"
 
-            file_local = os.path.join(local_path, product)
-            self.grab_file(download_url, file_local)
+        stop_download = False
 
-            i = i + 1
-            if limit and limit == i:
-                break
+        count = 0
+        if all_found_data_sets:
+            print('Found {} data sets'.format(
+                found_data_sets['properties']['totalResults']))
+
+            for found_data_sets in all_found_data_sets:
+                for selected_data_set in found_data_sets['features']:
+                    count = count + 1
+                    coll_id = selected_data_set["properties"]["parentIdentifier"]
+                    product_id = selected_data_set['properties']['identifier']
+                    download_url = service_download + urllib.parse.quote(
+                        url_temp.format(coll_id=coll_id, product_id=product_id))
+                    print(
+                        "Download URL (via product-ID) ({}): ".format(
+                            str(count)), download_url)
+
+                    file_local = os.path.join(local_path, product)
+                    self.grab_file(download_url, file_local)
+
+                    if limit and limit == count:
+                        stop_download = True
+                        break
+
+                if stop_download:
+                    break
+        else:
+            print('No data sets found')
 
     def _generate_token(self, consumer_key, consumer_secret):
         """
@@ -412,7 +444,7 @@ class EumConnector(HttpConnector):
         userpass = consumer_key + ':' + consumer_secret
         encoded_userpass = base64.b64encode(userpass.encode()).decode()
         headers = {"Authorization": "Basic {}".format(encoded_userpass)}
-        data_payload ={"grant_type": "client_credentials"}
+        data_payload = {"grant_type": "client_credentials"}
         response = requests.post(token_url, headers=headers, data=data_payload)
 
         self._assert_response(response)
