@@ -411,7 +411,7 @@ class EumConnector(HttpConnector):
                         "Download URL (via product-ID) ({}): ".format(
                             str(count)), download_url)
 
-                    file_local = os.path.join(local_path, product)
+                    file_local = os.path.join(local_path, product_id)
                     self.grab_file(download_url, file_local)
 
                     if limit and limit == count:
