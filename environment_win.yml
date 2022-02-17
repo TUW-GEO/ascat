@@ -5,13 +5,13 @@ dependencies:
 - numpy
 - pandas
 - pygrib
-- netCDF4
 - pykdtree
 - h5py
 - xarray
 - pip
 - pip: 
   - cadati
+  - netCDF4
   - requests
   - tqdm
   - lxml
