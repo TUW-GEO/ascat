@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ['3.8']
+        python-version: ['3.6']
         os: ["ubuntu-latest"]
 
     steps:
@@ -55,6 +55,7 @@ jobs:
         shell: bash -l {0}
         run: |
           pip install .
+          pip install pytest==6.2.5
           python setup.py test
       - name: Upload Coverage
         shell: bash -l {0}
