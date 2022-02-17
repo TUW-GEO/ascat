@@ -6,12 +6,12 @@ dependencies:
 - pandas
 - pygrib
 - pykdtree
-- h5py
-- xarray
 - pip
 - pip: 
   - cadati
   - netCDF4
+  - h5py
+  - xarray
   - requests
   - tqdm
   - lxml
