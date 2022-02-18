@@ -1,16 +1,16 @@
 name: ascat_env
-channels:
-  - conda-forge
+# channels:
+#   - conda-forge
 dependencies:
 - numpy
 - pandas
 - pygrib
 - pykdtree
 - h5py
+- netCDF4
 - pip
 - pip: 
   - cadati
-  - netCDF4
   - xarray
   - requests
   - tqdm
