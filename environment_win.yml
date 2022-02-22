@@ -1,6 +1,6 @@
 name: ascat_env
-# channels:
-#   - conda-forge
+channels:
+  - conda-forge
 dependencies:
 - numpy
 - pandas
