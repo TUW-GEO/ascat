@@ -7,7 +7,7 @@ dependencies:
 - pygrib
 - pykdtree
 - h5py
-- netCDF4
+- netCDF4==1.5.4
 - pip
 - pip: 
   - cadati
