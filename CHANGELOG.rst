@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 2.0.4
+=============
+
+- Fix download
+- Update CI
+
 Version 2.0.3
 =============
 
