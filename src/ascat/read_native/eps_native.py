@@ -39,6 +39,8 @@ import numpy as np
 import xarray as xr
 import lxml.etree as etree
 from cadati.jd_date import jd2dt
+from datetime import datetime
+from datetime import timedelta
 
 from ascat.utils import get_toi_subset, get_roi_subset
 
@@ -52,6 +54,7 @@ uint_nan = np.iinfo(np.uint16).max
 byte_nan = np.iinfo(np.byte).min
 int8_nan = np.iinfo(np.int8).max
 uint8_nan = np.iinfo(np.uint8).max
+int32_nan = np.iinfo(np.int32).max
 float32_nan = -999999.
 
 # 2000-01-01 00:00:00
@@ -931,8 +934,6 @@ def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
         for i, antenna in enumerate(antennas):
 
             subset = data['beam_number'] == i+1
-            metadata['beam_number'] = i+1
-            metadata['beam_name'] = antenna
 
             # convert spacecraft_id to internal sat_id
             sat_id = np.array([4, 3, 5])
@@ -1046,6 +1047,8 @@ def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
     else:
         raise RuntimeError("Format not supported. Product type {:1}"
                            " Format major version: {:2}".format(ptype, fmv))
+
+    metadata['filename'] = os.path.basename(filename)
 
     return ds, metadata
 
@@ -1397,6 +1400,8 @@ def read_szf_fmv_12(eps_file):
     # extract metadata
     metadata['spacecraft_id'] = np.int8(eps_file.mphr['SPACECRAFT_ID'][-1])
     metadata['orbit_start'] = np.uint32(eps_file.mphr['ORBIT_START'])
+    metadata['state_vector_time'] = datetime.strptime(
+        eps_file.mphr['STATE_VECTOR_TIME'][:-4], '%Y%m%d%H%M%S')
 
     fields = ['processor_major_version', 'processor_minor_version',
               'format_major_version', 'format_minor_version']
@@ -1412,6 +1417,26 @@ def read_szf_fmv_12(eps_file):
     fields = ['degraded_inst_mdr', 'degraded_proc_mdr', 'sat_track_azi',
               'beam_number', 'flagfield_rf1', 'flagfield_rf2',
               'flagfield_pl', 'flagfield_gen1']
+
+    # 101 min = 6082 seconds
+    # state_vector_time = ascending node crossing time - 1520.5,
+    # time crossing at -90 lat
+    orbit_start_time = metadata[
+        'state_vector_time'] - timedelta(seconds=1520.5)
+    orbit_end_time = orbit_start_time + timedelta(seconds=6082)
+
+    data['orbit_nr'] = np.ma.zeros(
+        data['time'].size, dtype=np.int32,
+        fill_value=int32_nan) + metadata['orbit_start']
+    data['orbit_nr'][data['time'] > orbit_end_time] += 1
+
+    metadata['orbits'] = {}
+    for orbit_nr in np.unique(data['orbit_nr']):
+        if orbit_nr == metadata['orbit_start']:
+            metadata['orbits'][orbit_nr] = (orbit_start_time, orbit_end_time)
+        else:
+            metadata['orbits'][orbit_nr] = (
+                orbit_end_time, orbit_end_time+timedelta(seconds=6082))
 
     # extract data
     for f in fields:
@@ -1489,10 +1514,8 @@ def read_smx_fmv_12(eps_file):
                                  raw_data['UTC_LINE_NODES'].flatten()['time'])
     data['jd'] = ascat_time[idx_nodes]
 
-    fields = [('sigma0_trip', long_nan),
-              ('inc_angle_trip', uint_nan),
-              ('azi_angle_trip', int_nan),
-              ('kp', uint_nan),
+    fields = [('sigma0_trip', long_nan), ('inc_angle_trip', uint_nan),
+              ('azi_angle_trip', int_nan), ('kp', uint_nan),
               ('f_land', uint_nan)]
 
     for f, nan_val in fields:
