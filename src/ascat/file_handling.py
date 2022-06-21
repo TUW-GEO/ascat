@@ -619,7 +619,7 @@ class ChronFiles(MultiFileHandler):
         for dt_cur in np.arange(dt_start, dt_end, dt_delta).astype(datetime):
             files, dates = self.search_date(dt_cur, return_date=True)
             for f, dt in zip(files, dates):
-                if files not in filenames and dt >= dt_start and dt <= dt_end:
+                if f not in filenames and dt >= dt_start and dt <= dt_end:
                     filenames.append(f)
 
         return filenames
