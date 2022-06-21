@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.0.5
+=============
+
+- Fix file handing bug (duplicated file names)
+
 Version 2.0.4
 =============
 
