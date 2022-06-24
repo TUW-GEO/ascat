@@ -143,7 +143,7 @@ def parse_args_hsaf_download(args):
                         help='end date in YYYYMMDD format')
 
     parser.add_argument('-co', '--coords',
-                        help='end date in YYYYMMDD format')
+                        help='A custom polygon using EPSG:4326 decimal degrees')
 
     parser.add_argument('-l', '--limit',
                         help='Filter number of results')
@@ -185,7 +185,7 @@ def parse_args_eumetsat_download(args):
                         help='end date in YYYYMMDD format')
 
     parser.add_argument('-co', '--coords',
-                        help='end date in YYYYMMDD format')
+                        help='A custom polygon using EPSG:4326 decimal degrees')
 
     parser.add_argument('-l', '--limit',
                         help='Filter number of results')

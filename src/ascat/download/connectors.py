@@ -1,4 +1,4 @@
-# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2022, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,6 @@ import urllib
 import requests
 import logging
 from ftplib import FTP
-from datetime import datetime
 from datetime import timedelta
 
 from tqdm import tqdm
