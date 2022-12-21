@@ -44,8 +44,8 @@ from datetime import timedelta
 
 from ascat.utils import get_toi_subset, get_roi_subset
 
-short_cds_time = np.dtype([('day', '>u2'), ('time', '>u4')])
-long_cds_time = np.dtype([('day', '>u2'), ('ms', '>u4'), ('mms', '>u2')])
+short_cds_time = np.dtype([("day", ">u2"), ("time", ">u4")])
+long_cds_time = np.dtype([("day", ">u2"), ("ms", ">u4"), ("mms", ">u2")])
 
 long_nan = np.iinfo(np.int32).min
 ulong_nan = np.iinfo(np.uint32).max
@@ -263,22 +263,22 @@ class EPSProduct:
         self.scaled_template = None
         self.sfactor = None
 
-        self.grh_dtype = np.dtype([('record_class', 'u1'),
-                                   ('instrument_group', 'u1'),
-                                   ('record_subclass', 'u1'),
-                                   ('record_subclass_version', 'u1'),
-                                   ('record_size', '>u4'),
-                                   ('record_start_time', short_cds_time),
-                                   ('record_stop_time', short_cds_time)])
+        self.grh_dtype = np.dtype([("record_class", "u1"),
+                                   ("instrument_group", "u1"),
+                                   ("record_subclass", "u1"),
+                                   ("record_subclass_version", "u1"),
+                                   ("record_size", ">u4"),
+                                   ("record_start_time", short_cds_time),
+                                   ("record_stop_time", short_cds_time)])
 
-        self.ipr_dtype = np.dtype([('grh', self.grh_dtype),
-                                   ('target_record_class', 'u1'),
-                                   ('target_instrument_group', 'u1'),
-                                   ('target_record_subclass', 'u1'),
-                                   ('target_record_offset', '>u4')])
+        self.ipr_dtype = np.dtype([("grh", self.grh_dtype),
+                                   ("target_record_class", "u1"),
+                                   ("target_instrument_group", "u1"),
+                                   ("target_record_subclass", "u1"),
+                                   ("target_record_offset", ">u4")])
 
-        self.pointer_dtype = np.dtype([('grh', self.grh_dtype),
-                                       ('aux_data_pointer', 'u1', 100)])
+        self.pointer_dtype = np.dtype([("grh", self.grh_dtype),
+                                       ("aux_data_pointer", "u1", 100)])
 
         self.filesize = os.path.getsize(self.filename)
 
@@ -286,13 +286,13 @@ class EPSProduct:
         """
         Read only Main Product Header Record (MPHR).
         """
-        with open(self.filename, 'rb') as fid:
+        with open(self.filename, "rb") as fid:
             grh = np.fromfile(fid, dtype=self.grh_dtype, count=1)[0]
-            if grh['record_class'] == 1:
-                mphr = fid.read(grh['record_size'] - grh.itemsize)
-                mphr = OrderedDict(item.replace(' ', '').split('=')
+            if grh["record_class"] == 1:
+                mphr = fid.read(grh["record_size"] - grh.itemsize)
+                mphr = OrderedDict(item.replace(" ", "").split("=")
                                    for item in
-                                   mphr.decode("utf-8").split('\n')[:-1])
+                                   mphr.decode("utf-8").split("\n")[:-1])
 
         return mphr
 
@@ -325,7 +325,7 @@ class EPSProduct:
         scaled_mdr : numpy.ndarray
             Scaled Main Data Record (MPHR) or None if not computed.
         """
-        self.fid = open(self.filename, 'rb')
+        self.fid = open(self.filename, "rb")
 
         abs_pos = 0
         grh = None
@@ -336,7 +336,7 @@ class EPSProduct:
             # read generic record header of data block
             grh = np.fromfile(self.fid, dtype=self.grh_dtype, count=1)[0]
 
-            if grh['record_class'] == 8 and unsafe:
+            if grh["record_class"] == 8 and unsafe:
                 if np.mod((self.filesize - abs_pos),
                           self.mdr_template.itemsize) != 0:
                     # Unsafe reading fails, switching to safe reading
@@ -351,15 +351,15 @@ class EPSProduct:
             if prev_grh is None:
                 prev_grh = grh
 
-            if ((prev_grh['record_class'] != grh['record_class']) or
-                    (prev_grh['record_subclass'] != grh['record_subclass'])):
+            if ((prev_grh["record_class"] != grh["record_class"]) or
+                    (prev_grh["record_subclass"] != grh["record_subclass"])):
 
                 # compute record start position of previous record
-                start_pos = (abs_pos - prev_grh['record_size'] * record_count)
+                start_pos = (abs_pos - prev_grh["record_size"] * record_count)
                 self.fid.seek(start_pos)
 
-                if full or (prev_grh['record_class'] == 8 or
-                            prev_grh['record_class'] == 1):
+                if full or (prev_grh["record_class"] == 8 or
+                            prev_grh["record_class"] == 1):
                     # read previous record, because new one is coming
                     self.read_record_class(prev_grh, record_count)
 
@@ -369,7 +369,7 @@ class EPSProduct:
                 # same record class as before, increase count
                 record_count += 1
 
-            abs_pos += grh['record_size']
+            abs_pos += grh["record_size"]
 
             # position after record
             self.fid.seek(abs_pos)
@@ -381,7 +381,7 @@ class EPSProduct:
             if abs_pos == self.filesize:
 
                 # compute record start position of previous record class
-                start_pos = (abs_pos - prev_grh['record_size'] * record_count)
+                start_pos = (abs_pos - prev_grh["record_size"] * record_count)
                 self.fid.seek(start_pos)
 
                 # read final record class(es)
@@ -409,7 +409,7 @@ class EPSProduct:
             Number of records.
         """
         # mphr (Main Product Header Reader)
-        if grh['record_class'] == 1:
+        if grh["record_class"] == 1:
             self.fid.seek(grh.itemsize, 1)
             self._read_mphr(grh)
 
@@ -421,30 +421,30 @@ class EPSProduct:
                 self._read_xml_mdr()
 
         # sphr (Secondary Product Header Record)
-        elif grh['record_class'] == 2:
+        elif grh["record_class"] == 2:
             self.fid.seek(grh.itemsize, 1)
             self._read_sphr(grh)
 
         # ipr (Internal Pointer Record)
-        elif grh['record_class'] == 3:
+        elif grh["record_class"] == 3:
             data = np.fromfile(self.fid, dtype=self.ipr_dtype,
                                count=record_count)
-            self.aux['ipr'].append(data)
+            self.aux["ipr"].append(data)
 
         # geadr (Global External Auxiliary Data Record)
-        elif grh['record_class'] == 4:
+        elif grh["record_class"] == 4:
             data = self._read_pointer(record_count)
-            self.aux['geadr'].append(data)
+            self.aux["geadr"].append(data)
 
         # veadr (Variable External Auxiliary Data Record)
-        elif grh['record_class'] == 6:
+        elif grh["record_class"] == 6:
             data = self._read_pointer(record_count)
-            self.aux['veadr'].append(data)
+            self.aux["veadr"].append(data)
 
         # viadr (Variable Internal Auxiliary Data Record)
-        elif grh['record_class'] == 7:
+        elif grh["record_class"] == 7:
             template, scaled_template, sfactor = self._read_xml_viadr(
-                grh['record_subclass'])
+                grh["record_subclass"])
             viadr_element = np.fromfile(self.fid, dtype=template,
                                         count=record_count)
 
@@ -452,16 +452,16 @@ class EPSProduct:
                                              scaled_template, sfactor)
 
             # store viadr_grid separately
-            if grh['record_subclass'] == 8:
-                self.aux['viadr_grid'].append(viadr_element)
-                self.aux['viadr_grid_scaled'].append(viadr_element_sc)
+            if grh["record_subclass"] == 8:
+                self.aux["viadr_grid"].append(viadr_element)
+                self.aux["viadr_grid_scaled"].append(viadr_element_sc)
             else:
-                self.aux['viadr'].append(viadr_element)
-                self.aux['viadr_scaled'].append(viadr_element_sc)
+                self.aux["viadr"].append(viadr_element)
+                self.aux["viadr_scaled"].append(viadr_element_sc)
 
         # mdr (Measurement Data Record)
-        elif grh['record_class'] == 8:
-            if grh['instrument_group'] == 13:
+        elif grh["record_class"] == 8:
+            if grh["instrument_group"] == 13:
                 self.dummy_mdr = np.fromfile(
                     self.fid, dtype=self.mdr_template, count=record_count)
             else:
@@ -503,19 +503,19 @@ class EPSProduct:
         """
         Read Main Product Header (MPHR).
         """
-        mphr = self.fid.read(grh['record_size'] - grh.itemsize)
-        self.mphr = OrderedDict(item.replace(' ', '').split('=')
+        mphr = self.fid.read(grh["record_size"] - grh.itemsize)
+        self.mphr = OrderedDict(item.replace(" ", "").split("=")
                                 for item in
-                                mphr.decode("utf-8").split('\n')[:-1])
+                                mphr.decode("utf-8").split("\n")[:-1])
 
     def _read_sphr(self, grh):
         """
         Read Special Product Header (SPHR).
         """
-        sphr = self.fid.read(grh['record_size'] - grh.itemsize)
-        self.sphr = OrderedDict(item.replace(' ', '').split('=')
+        sphr = self.fid.read(grh["record_size"] - grh.itemsize)
+        self.sphr = OrderedDict(item.replace(" ", "").split("=")
                                 for item in
-                                sphr.decode("utf-8").split('\n')[:-1])
+                                sphr.decode("utf-8").split("\n")[:-1])
 
     def _read_pointer(self, count=1):
         """
@@ -529,56 +529,56 @@ class EPSProduct:
         """
         Find the corresponding eps xml file.
         """
-        format_path = os.path.join(os.path.dirname(__file__), 'formats')
+        format_path = os.path.join(os.path.dirname(__file__), "formats")
 
-        # loop through files where filename starts with 'eps_ascat'.
-        for filename in fnmatch.filter(os.listdir(format_path), 'eps_ascat*'):
+        # loop through files where filename starts with "eps_ascat".
+        for filename in fnmatch.filter(os.listdir(format_path), "eps_ascat*"):
             doc = etree.parse(os.path.join(format_path, filename))
-            file_extension = doc.xpath('//file-extensions')[0].getchildren()[0]
+            file_extension = doc.xpath("//file-extensions")[0].getchildren()[0]
 
-            format_version = doc.xpath('//format-version')
+            format_version = doc.xpath("//format-version")
             for elem in format_version:
                 major = elem.getchildren()[0]
                 minor = elem.getchildren()[1]
 
                 # return the xml file matching the metadata of the datafile.
-                if major.text == self.mphr['FORMAT_MAJOR_VERSION'] and \
-                        minor.text == self.mphr['FORMAT_MINOR_VERSION'] and \
+                if major.text == self.mphr["FORMAT_MAJOR_VERSION"] and \
+                        minor.text == self.mphr["FORMAT_MINOR_VERSION"] and \
                         self.mphr[
-                            'PROCESSING_LEVEL'] in file_extension.text and \
-                        self.mphr['PRODUCT_TYPE'] in file_extension.text:
+                            "PROCESSING_LEVEL"] in file_extension.text and \
+                        self.mphr["PRODUCT_TYPE"] in file_extension.text:
                     return os.path.join(format_path, filename)
 
     def _read_xml_viadr(self, subclassid):
         """
         Read xml record of viadr class.
         """
-        elements = self.xml_doc.xpath('//viadr')
+        elements = self.xml_doc.xpath("//viadr")
         data = OrderedDict()
         length = []
 
         # find the element with the correct subclass
         for elem in elements:
             item_dict = dict(elem.items())
-            subclass = int(item_dict['subclass'])
+            subclass = int(item_dict["subclass"])
             if subclass == subclassid:
                 break
 
         for child in elem.getchildren():
 
-            if child.tag == 'delimiter':
+            if child.tag == "delimiter":
                 continue
 
             child_items = dict(child.items())
-            name = child_items.pop('name')
+            name = child_items.pop("name")
 
             # check if the item is of type longtime
-            longtime_flag = ('type' in child_items and
-                             'longtime' in child_items['type'])
+            longtime_flag = ("type" in child_items and
+                             "longtime" in child_items["type"])
 
-            # append the length if it isn't the special case of type longtime
+            # append the length if it isn"t the special case of type longtime
             try:
-                var_len = child_items.pop('length')
+                var_len = child_items.pop("length")
                 if not longtime_flag:
                     length.append(np.int64(var_len))
             except KeyError:
@@ -586,32 +586,32 @@ class EPSProduct:
 
             data[name] = child_items
 
-            if child.tag == 'array':
+            if child.tag == "array":
                 for arr in child.iterdescendants():
                     arr_items = dict(arr.items())
-                    if arr.tag == 'field':
+                    if arr.tag == "field":
                         data[name].update(arr_items)
                     else:
                         try:
-                            var_len = arr_items.pop('length')
+                            var_len = arr_items.pop("length")
                             length.append(np.int64(var_len))
                         except KeyError:
                             pass
 
             if length:
-                data[name].update({'length': length})
+                data[name].update({"length": length})
             else:
-                data[name].update({'length': 1})
+                data[name].update({"length": 1})
 
             length = []
 
-        conv = {'longtime': long_cds_time, 'time': short_cds_time,
-                'boolean': 'u1', 'integer1': 'i1',
-                'uinteger1': 'u1', 'integer': '>i4',
-                'uinteger': '>u4', 'integer2': '>i2',
-                'uinteger2': '>u2', 'integer4': '>i4',
-                'uinteger4': '>u4', 'integer8': '>i8',
-                'enumerated': 'u1', 'string': 'str', 'bitfield': 'u1'}
+        conv = {"longtime": long_cds_time, "time": short_cds_time,
+                "boolean": "u1", "integer1": "i1",
+                "uinteger1": "u1", "integer": ">i4",
+                "uinteger": ">u4", "integer2": ">i2",
+                "uinteger2": ">u2", "integer4": ">i4",
+                "uinteger4": ">u4", "integer8": ">i8",
+                "enumerated": "u1", "string": "str", "bitfield": "u1"}
 
         scaling_factor = {}
         scaled_dtype = []
@@ -619,23 +619,23 @@ class EPSProduct:
 
         for key, value in data.items():
 
-            if 'scaling-factor' in value:
+            if "scaling-factor" in value:
                 sf_dtype = np.float32
-                sf_split = value['scaling-factor'].split('^')
+                sf_split = value["scaling-factor"].split("^")
                 scaling_factor[key] = np.int64(
                     sf_split[0])**np.int64(sf_split[1])
             else:
-                sf_dtype = conv[value['type']]
+                sf_dtype = conv[value["type"]]
                 scaling_factor[key] = 1
 
-            length = value['length']
+            length = value["length"]
 
             if length == 1:
                 scaled_dtype.append((key, sf_dtype))
-                dtype.append((key, conv[value['type']]))
+                dtype.append((key, conv[value["type"]]))
             else:
                 scaled_dtype.append((key, sf_dtype, length))
-                dtype.append((key, conv[value['type']], length))
+                dtype.append((key, conv[value["type"]], length))
 
         return np.dtype(dtype), np.dtype(scaled_dtype), scaling_factor
 
@@ -643,28 +643,28 @@ class EPSProduct:
         """
         Read xml record of mdr class.
         """
-        elements = self.xml_doc.xpath('//mdr')
+        elements = self.xml_doc.xpath("//mdr")
         data = OrderedDict()
         length = []
         elem = elements[0]
 
         for child in elem.getchildren():
 
-            if child.tag == 'delimiter':
+            if child.tag == "delimiter":
                 continue
 
             child_items = dict(child.items())
-            name = child_items.pop('name')
+            name = child_items.pop("name")
 
             # check if the item is of type bitfield
-            bitfield_flag = ('type' in child_items and
-                             ('bitfield' in child_items['type'] or 'time' in
-                              child_items['type']))
+            bitfield_flag = ("type" in child_items and
+                             ("bitfield" in child_items["type"] or "time" in
+                              child_items["type"]))
 
-            # append the length if it isn't the special case of type
+            # append the length if it isn"t the special case of type
             # bitfield or time
             try:
-                var_len = child_items.pop('length')
+                var_len = child_items.pop("length")
                 if not bitfield_flag:
                     length.append(np.int64(var_len))
             except KeyError:
@@ -672,65 +672,65 @@ class EPSProduct:
 
             data[name] = child_items
 
-            if child.tag == 'array':
+            if child.tag == "array":
                 for arr in child.iterdescendants():
                     arr_items = dict(arr.items())
 
                     # check if the type is bitfield
-                    bitfield_flag = ('type' in arr_items and
-                                     'bitfield' in arr_items['type'])
+                    bitfield_flag = ("type" in arr_items and
+                                     "bitfield" in arr_items["type"])
 
                     if bitfield_flag:
                         data[name].update(arr_items)
                         break
                     else:
-                        if arr.tag == 'field':
+                        if arr.tag == "field":
                             data[name].update(arr_items)
                         else:
                             try:
-                                var_len = arr_items.pop('length')
+                                var_len = arr_items.pop("length")
                                 length.append(np.int64(var_len))
                             except KeyError:
                                 pass
 
             if length:
-                data[name].update({'length': length})
+                data[name].update({"length": length})
             else:
-                data[name].update({'length': 1})
+                data[name].update({"length": 1})
 
             length = []
 
-        conv = {'longtime': long_cds_time, 'time': short_cds_time,
-                'boolean': 'u1', 'integer1': 'i1',
-                'uinteger1': 'u1', 'integer': '>i4',
-                'uinteger': '>u4', 'integer2': '>i2',
-                'uinteger2': '>u2', 'integer4': '>i4',
-                'uinteger4': '>u4', 'integer8': '>i8',
-                'enumerated': 'u1', 'string': 'str', 'bitfield': 'u1'}
+        conv = {"longtime": long_cds_time, "time": short_cds_time,
+                "boolean": "u1", "integer1": "i1",
+                "uinteger1": "u1", "integer": ">i4",
+                "uinteger": ">u4", "integer2": ">i2",
+                "uinteger2": ">u2", "integer4": ">i4",
+                "uinteger4": ">u4", "integer8": ">i8",
+                "enumerated": "u1", "string": "str", "bitfield": "u1"}
 
         scaling_factor = {}
         scaled_dtype = []
-        dtype = [('grh', self.grh_dtype)]
+        dtype = [("grh", self.grh_dtype)]
 
         for key, value in data.items():
 
-            if 'scaling-factor' in value:
+            if "scaling-factor" in value:
                 sf_dtype = np.float32
-                sf_split = value['scaling-factor'].split('^')
+                sf_split = value["scaling-factor"].split("^")
                 scaling_factor[key] = np.int64(
                     sf_split[0])**np.int64(sf_split[1])
             else:
-                sf_dtype = conv[value['type']]
+                sf_dtype = conv[value["type"]]
                 scaling_factor[key] = 1
 
-            length = value['length']
+            length = value["length"]
 
             if length == 1:
                 scaled_dtype.append((key, sf_dtype))
-                dtype.append((key, conv[value['type']]))
+                dtype.append((key, conv[value["type"]]))
             else:
                 scaled_dtype.append((key, sf_dtype, length))
-                dtype.append((key, conv[value['type']], length))
+                dtype.append((key, conv[value["type"]], length))
 
         return np.dtype(dtype), np.dtype(scaled_dtype), scaling_factor
 
@@ -751,26 +751,26 @@ def conv_epsl1bszf_generic(data, metadata):
     data : dict of numpy.ndarray
         Converted dataset.
     """
-    skip_fields = ['utc_localisation-days', 'utc_localisation-milliseconds',
-                   'degraded_inst_mdr', 'degraded_proc_mdr', 'flagfield_rf1',
-                   'flagfield_rf2', 'flagfield_pl', 'flagfield_gen1',
-                   'flagfield_gen2']
+    skip_fields = ["utc_localisation-days", "utc_localisation-milliseconds",
+                   "degraded_inst_mdr", "degraded_proc_mdr", "flagfield_rf1",
+                   "flagfield_rf2", "flagfield_pl", "flagfield_gen1",
+                   "flagfield_gen2"]
 
     gen_fields_lut = {
-        'inc_angle_full': ('inc', np.float32, (0, 90), float32_nan),
-        'azi_angle_full': ('azi', np.float32, (0, 360), float32_nan),
-        'sigma0_full': ('sig', np.float32, (-35, 35), float32_nan),
-        'sat_track_azi': ('sat_track_azi', np.float32, (0, 360), float32_nan),
-        'beam_number': ('beam_number', np.int8, (1, 6), int8_nan),
-        'swath_indicator': ('swath_indicator', np.int8, (0, 1), int8_nan),
-        'land_frac': ('land_frac', np.float32, (0, 1), float32_nan),
-        'f_usable': ('f_usable', np.int8, (0, 2), int8_nan),
-        # 'f_land': ('f_land', np.int8, (0, 1), int8_nan),
-        'as_des_pass': ('as_des_pass', np.uint8, (0, 1), uint8_nan),
-        'time': ('time', None, (np.datetime64('1900-01-01'),
-                                np.datetime64('2100-01-01')),  0),
-        'lon': ('lon', np.float32, (-180, 180), float32_nan),
-        'lat': ('lat', np.float32, (-90, 90), float32_nan)}
+        "inc_angle_full": ("inc", np.float32, (0, 90), float32_nan),
+        "azi_angle_full": ("azi", np.float32, (0, 360), float32_nan),
+        "sigma0_full": ("sig", np.float32, (-35, 35), float32_nan),
+        "sat_track_azi": ("sat_track_azi", np.float32, (0, 360), float32_nan),
+        "beam_number": ("beam_number", np.int8, (1, 6), int8_nan),
+        "swath_indicator": ("swath_indicator", np.int8, (0, 1), int8_nan),
+        "land_frac": ("land_frac", np.float32, (0, 1), float32_nan),
+        "f_usable": ("f_usable", np.int8, (0, 2), int8_nan),
+        # "f_land": ("f_land", np.int8, (0, 1), int8_nan),
+        "as_des_pass": ("as_des_pass", np.uint8, (0, 1), uint8_nan),
+        "time": ("time", None, (np.datetime64("1900-01-01"),
+                                np.datetime64("2100-01-01")),  0),
+        "lon": ("lon", np.float32, (-180, 180), float32_nan),
+        "lat": ("lat", np.float32, (-90, 90), float32_nan)}
 
     for var_name in skip_fields:
         data.pop(var_name, None)
@@ -806,13 +806,13 @@ def conv_epsl1bszx_generic(data, metadata):
     data : dict of numpy.ndarray
         Converted dataset.
     """
-    gen_fields_lut = {'inc_angle_trip': ('inc', np.float32, uint_nan),
-                      'azi_angle_trip': ('azi', np.float32, int_nan),
-                      'sigma0_trip': ('sig', np.float32, long_nan),
-                      'kp': ('kp', np.float32, uint_nan),
-                      'f_kp': ('kp_quality', np.uint8, uint8_nan)}
+    gen_fields_lut = {"inc_angle_trip": ("inc", np.float32, uint_nan),
+                      "azi_angle_trip": ("azi", np.float32, int_nan),
+                      "sigma0_trip": ("sig", np.float32, long_nan),
+                      "kp": ("kp", np.float32, uint_nan),
+                      "f_kp": ("kp_quality", np.uint8, uint8_nan)}
 
-    skip_fields = ['flagfield_rf1', 'f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel']
+    skip_fields = ["flagfield_rf1", "f_f", "f_v", "f_oa", "f_sa", "f_tel"]
 
     for var_name in skip_fields:
         if var_name in data:
@@ -823,7 +823,7 @@ def conv_epsl1bszx_generic(data, metadata):
         if nan_val is not None:
             data[new_name][data[new_name] == nan_val] = float32_nan
 
-    data['sat_id'] = np.repeat(metadata['sat_id'], data['time'].size)
+    data["sat_id"] = np.repeat(metadata["sat_id"], data["time"].size)
 
     return data
 
@@ -845,30 +845,30 @@ def conv_epsl2szx_generic(data, metadata):
         Converted dataset.
     """
     gen_fields_lut = {
-        'inc_angle_trip': ('inc', np.float32, uint_nan),
-        'azi_angle_trip': ('azi', np.float32, int_nan),
-        'sigma0_trip': ('sig', np.float32, long_nan),
-        'soil_moisture': ('sm', np.float32, uint_nan),
-        'soil_moisture_error': ('sm_noise', np.float32, uint_nan),
-        'mean_surf_soil_moisture': ('sm_mean', np.float32, uint_nan),
-        'soil_moisture_sensetivity': ('sm_sens', np.float32, ulong_nan),
-        'sigma40': ('sig40', np.float32, long_nan),
-        'sigma40_error': ('sig40_noise', np.float32, long_nan),
-        'slope40': ('slope40', np.float32, long_nan),
-        'slope40_error': ('slope40_noise', np.float32, long_nan),
-        'dry_backscatter': ('dry_sig40', np.float32, long_nan),
-        'wet_backscatter': ('wet_sig40', np.float32, long_nan),
-        'as_des_pass': ('as_des_pass', np.uint8, None),
-        'aggregated_quality_flag': ('agg_flag', np.uint8, None),
-        'processing_flags': ('proc_flag', np.uint8, None),
-        'correction_flags': ('corr_flag', np.uint8, None),
-        'snow_cover_probability': ('snow_prob', np.uint8, None),
-        'frozen_soil_probability': ('frozen_prob', np.uint8, None),
-        'innudation_or_wetland': ('wetland', np.uint8, None),
-        'topographical_complexity': ('topo', np.uint8, None),
-        'kp': ('kp', np.float32, uint_nan)}
+        "inc_angle_trip": ("inc", np.float32, uint_nan),
+        "azi_angle_trip": ("azi", np.float32, int_nan),
+        "sigma0_trip": ("sig", np.float32, long_nan),
+        "soil_moisture": ("sm", np.float32, uint_nan),
+        "soil_moisture_error": ("sm_noise", np.float32, uint_nan),
+        "mean_surf_soil_moisture": ("sm_mean", np.float32, uint_nan),
+        "soil_moisture_sensetivity": ("sm_sens", np.float32, ulong_nan),
+        "sigma40": ("sig40", np.float32, long_nan),
+        "sigma40_error": ("sig40_noise", np.float32, long_nan),
+        "slope40": ("slope40", np.float32, long_nan),
+        "slope40_error": ("slope40_noise", np.float32, long_nan),
+        "dry_backscatter": ("dry_sig40", np.float32, long_nan),
+        "wet_backscatter": ("wet_sig40", np.float32, long_nan),
+        "as_des_pass": ("as_des_pass", np.uint8, None),
+        "aggregated_quality_flag": ("agg_flag", np.uint8, None),
+        "processing_flags": ("proc_flag", np.uint8, None),
+        "correction_flags": ("corr_flag", np.uint8, None),
+        "snow_cover_probability": ("snow_prob", np.uint8, None),
+        "frozen_soil_probability": ("frozen_prob", np.uint8, None),
+        "innudation_or_wetland": ("wetland", np.uint8, None),
+        "topographical_complexity": ("topo", np.uint8, None),
+        "kp": ("kp", np.float32, uint_nan)}
 
-    skip_fields = ['flagfield_rf1', 'f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel']
+    skip_fields = ["flagfield_rf1", "f_f", "f_v", "f_oa", "f_sa", "f_tel"]
 
     for var_name in skip_fields:
         if var_name in data:
@@ -879,7 +879,7 @@ def conv_epsl2szx_generic(data, metadata):
         if nan_val is not None:
             data[new_name][data[new_name] == nan_val] = float32_nan
 
-    data['sat_id'] = np.repeat(metadata['sat_id'], data['time'].size)
+    data["sat_id"] = np.repeat(metadata["sat_id"], data["time"].size)
 
     return data
 
@@ -894,11 +894,11 @@ def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
     filename : str
         ASCAT Level 1b file name in EPS Native format.
     generic : bool, optional
-        'True' reading and converting into generic format or
-        'False' reading original field names (default: False).
+        "True" reading and converting into generic format or
+        "False" reading original field names (default: False).
     to_xarray : bool, optional
-        'True' return data as xarray.Dataset
-        'False' return data as numpy.ndarray (default: False).
+        "True" return data as xarray.Dataset
+        "False" return data as numpy.ndarray (default: False).
 
     Returns
     -------
@@ -908,17 +908,17 @@ def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
     eps_file = read_eps(filename, full=full, unsafe=unsafe,
                         scale_mdr=scale_mdr)
 
-    ptype = eps_file.mphr['PRODUCT_TYPE']
-    fmv = int(eps_file.mphr['FORMAT_MAJOR_VERSION'])
+    ptype = eps_file.mphr["PRODUCT_TYPE"]
+    fmv = int(eps_file.mphr["FORMAT_MAJOR_VERSION"])
 
-    if ptype == 'SZF':
+    if ptype == "SZF":
 
         if fmv == 12:
             data, metadata = read_szf_fmv_12(eps_file)
         else:
             raise RuntimeError("L1b SZF format version not supported.")
 
-        rename_coords = {'longitude_full': 'lon', 'latitude_full': 'lat'}
+        rename_coords = {"longitude_full": "lon", "latitude_full": "lat"}
 
         for k, v in rename_coords.items():
             data[v] = data.pop(k)
@@ -928,40 +928,42 @@ def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
 
         # 1 Left Fore Antenna, 2 Left Mid Antenna 3 Left Aft Antenna
         # 4 Right Fore Antenna, 5 Right Mid Antenna, 6 Right Aft Antenna
-        antennas = ['lf', 'lm', 'la', 'rf', 'rm', 'ra']
+        left_beams = ["lf-vv", "lm-vv", "la-vv"]
+        right_beams = ["rf-vv", "rm-vv", "ra-vv"]
+        all_beams = left_beams + right_beams
+
         ds = OrderedDict()
 
-        for i, antenna in enumerate(antennas):
+        for i, beam in enumerate(all_beams):
 
-            subset = data['beam_number'] == i+1
+            subset = data["beam_number"] == i+1
 
             # convert spacecraft_id to internal sat_id
             sat_id = np.array([4, 3, 5])
-            metadata['sat_id'] = sat_id[metadata['spacecraft_id']-1]
+            metadata["sat_id"] = sat_id[metadata["spacecraft_id"]-1]
 
             # convert dict to xarray.Dataset or numpy.ndarray
             if to_xarray:
                 sub_data = {}
                 for var_name in data.keys():
 
-                    if var_name == 'beam_number' and generic:
+                    if var_name == "beam_number" and generic:
                         continue
 
                     if len(data[var_name].shape) == 1:
-                        dim = ['obs']
+                        dim = ["obs"]
                     elif len(data[var_name].shape) == 2:
-                        dim = ['obs', 'echo']
+                        dim = ["obs", "echo"]
 
                     sub_data[var_name] = (dim, data[var_name][subset])
 
                 coords = {}
-                coords_fields = ['lon', 'lat', 'time']
+                coords_fields = ["lon", "lat", "time"]
 
                 for cf in coords_fields:
                     coords[cf] = sub_data.pop(cf)
 
-                ds[antenna] = xr.Dataset(sub_data, coords=coords,
-                                         attrs=metadata)
+                ds[beam] = xr.Dataset(sub_data, coords=coords, attrs=metadata)
             else:
                 # collect dtype info
                 dtype = []
@@ -969,7 +971,7 @@ def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
 
                 for var_name in data.keys():
 
-                    if var_name == 'beam_number' and generic:
+                    if var_name == "beam_number" and generic:
                         continue
 
                     if len(data[var_name][subset].shape) == 1:
@@ -982,16 +984,16 @@ def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
 
                     fill_values[var_name] = data[var_name].fill_value
 
-                ds[antenna] = np.ma.empty(
-                    data['time'][subset].size, dtype=np.dtype(dtype))
+                ds[beam] = np.ma.empty(
+                    data["time"][subset].size, dtype=np.dtype(dtype))
 
                 for var_name, v in data.items():
-                    if var_name == 'beam_number' and generic:
+                    if var_name == "beam_number" and generic:
                         continue
-                    ds[antenna][var_name] = v[subset]
-                    ds[antenna][var_name].set_fill_value(fill_values[var_name])
+                    ds[beam][var_name] = v[subset]
+                    ds[beam][var_name].set_fill_value(fill_values[var_name])
 
-    elif ptype in ['SZR', 'SZO']:
+    elif ptype in ["SZR", "SZO"]:
 
         if fmv == 11:
             data, metadata = read_szx_fmv_11(eps_file)
@@ -1000,16 +1002,16 @@ def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
         else:
             raise RuntimeError("SZX format version not supported.")
 
-        data['time'] = jd2dt(data.pop('jd'))
+        data["time"] = jd2dt(data.pop("jd"))
 
-        rename_coords = {'longitude': 'lon', 'latitude': 'lat'}
+        rename_coords = {"longitude": "lon", "latitude": "lat"}
 
         for k, v in rename_coords.items():
             data[v] = data.pop(k)
 
         # convert spacecraft_id to internal sat_id
         sat_id = np.array([4, 3, 5])
-        metadata['sat_id'] = sat_id[metadata['spacecraft_id']-1]
+        metadata["sat_id"] = sat_id[metadata["spacecraft_id"]-1]
 
         # add/rename/remove fields according to generic format
         if generic:
@@ -1019,14 +1021,14 @@ def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
         if to_xarray:
             for k in data.keys():
                 if len(data[k].shape) == 1:
-                    dim = ['obs']
+                    dim = ["obs"]
                 elif len(data[k].shape) == 2:
-                    dim = ['obs', 'beam']
+                    dim = ["obs", "beam"]
 
                 data[k] = (dim, data[k])
 
             coords = {}
-            coords_fields = ['lon', 'lat', 'time']
+            coords_fields = ["lon", "lat", "time"]
             for cf in coords_fields:
                 coords[cf] = data.pop(cf)
 
@@ -1041,14 +1043,14 @@ def read_eps_l1b(filename, generic=False, to_xarray=False, full=True,
                     dtype.append((var_name, data[var_name].dtype.str,
                                   data[var_name].shape[1:]))
 
-            ds = np.empty(data['time'].size, dtype=np.dtype(dtype))
+            ds = np.empty(data["time"].size, dtype=np.dtype(dtype))
             for k, v in data.items():
                 ds[k] = v
     else:
         raise RuntimeError("Format not supported. Product type {:1}"
                            " Format major version: {:2}".format(ptype, fmv))
 
-    metadata['filename'] = os.path.basename(filename)
+    metadata["filename"] = os.path.basename(filename)
 
     return ds, metadata
 
@@ -1062,11 +1064,11 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
     filename : str
         ASCAT Level 1b file name in EPS Native format.
     generic : bool, optional
-        'True' reading and converting into generic format or
-        'False' reading original field names (default: False).
+        "True" reading and converting into generic format or
+        "False" reading original field names (default: False).
     to_xarray : bool, optional
-        'True' return data as xarray.Dataset
-        'False' return data as numpy.ndarray (default: False).
+        "True" return data as xarray.Dataset
+        "False" return data as numpy.ndarray (default: False).
 
     Returns
     -------
@@ -1076,26 +1078,26 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
         Metadata.
     """
     eps_file = read_eps(filename)
-    ptype = eps_file.mphr['PRODUCT_TYPE']
-    fmv = int(eps_file.mphr['FORMAT_MAJOR_VERSION'])
+    ptype = eps_file.mphr["PRODUCT_TYPE"]
+    fmv = int(eps_file.mphr["FORMAT_MAJOR_VERSION"])
 
-    if ptype in ['SMR', 'SMO']:
+    if ptype in ["SMR", "SMO"]:
 
         if fmv == 12:
             data, metadata = read_smx_fmv_12(eps_file)
         else:
             raise RuntimeError("L2 SM format version not supported.")
 
-        data['time'] = jd2dt(data.pop('jd'))
+        data["time"] = jd2dt(data.pop("jd"))
 
-        rename_coords = {'longitude': 'lon', 'latitude': 'lat'}
+        rename_coords = {"longitude": "lon", "latitude": "lat"}
 
         for k, v in rename_coords.items():
             data[v] = data.pop(k)
 
         # convert spacecraft_id to internal sat_id
         sat_id = np.array([4, 3, 5])
-        metadata['sat_id'] = sat_id[metadata['spacecraft_id']-1]
+        metadata["sat_id"] = sat_id[metadata["spacecraft_id"]-1]
 
         # add/rename/remove fields according to generic format
         if generic:
@@ -1105,14 +1107,14 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
         if to_xarray:
             for k in data.keys():
                 if len(data[k].shape) == 1:
-                    dim = ['obs']
+                    dim = ["obs"]
                 elif len(data[k].shape) == 2:
-                    dim = ['obs', 'beam']
+                    dim = ["obs", "beam"]
 
                 data[k] = (dim, data[k])
 
             coords = {}
-            coords_fields = ['lon', 'lat', 'time']
+            coords_fields = ["lon", "lat", "time"]
             for cf in coords_fields:
                 coords[cf] = data.pop(cf)
 
@@ -1127,7 +1129,7 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
                     dtype.append((var_name, data[var_name].dtype.str,
                                   data[var_name].shape[1:]))
 
-            ds = np.empty(data['time'].size, dtype=np.dtype(dtype))
+            ds = np.empty(data["time"].size, dtype=np.dtype(dtype))
             for k, v in data.items():
                 ds[k] = v
             data = ds
@@ -1154,7 +1156,7 @@ def read_eps(filename, mphr_only=False, full=True, unsafe=False,
         EPS data.
     """
     zipped = False
-    if os.path.splitext(filename)[1] == '.gz':
+    if os.path.splitext(filename)[1] == ".gz":
         zipped = True
 
     # for zipped files use an unzipped temporary copy
@@ -1198,51 +1200,51 @@ def read_szx_fmv_11(eps_file):
     raw_unscaled = eps_file.mdr
     mphr = eps_file.mphr
 
-    n_node_per_line = raw_data['LONGITUDE'].shape[1]
-    n_lines = raw_data['LONGITUDE'].shape[0]
-    n_records = raw_data['LONGITUDE'].size
+    n_node_per_line = raw_data["LONGITUDE"].shape[1]
+    n_lines = raw_data["LONGITUDE"].shape[0]
+    n_records = raw_data["LONGITUDE"].size
 
     data = {}
     metadata = {}
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
 
-    ascat_time = shortcdstime2jd(raw_data['UTC_LINE_NODES'].flatten()['day'],
-                                 raw_data['UTC_LINE_NODES'].flatten()['time'])
-    data['jd'] = ascat_time[idx_nodes]
+    ascat_time = shortcdstime2jd(raw_data["UTC_LINE_NODES"].flatten()["day"],
+                                 raw_data["UTC_LINE_NODES"].flatten()["time"])
+    data["jd"] = ascat_time[idx_nodes]
 
-    metadata['spacecraft_id'] = np.int8(mphr['SPACECRAFT_ID'][-1])
-    metadata['orbit_start'] = np.uint32(mphr['ORBIT_START'])
+    metadata["spacecraft_id"] = np.int8(mphr["SPACECRAFT_ID"][-1])
+    metadata["orbit_start"] = np.uint32(mphr["ORBIT_START"])
 
-    fields = ['processor_major_version', 'processor_minor_version',
-              'format_major_version', 'format_minor_version']
+    fields = ["processor_major_version", "processor_minor_version",
+              "format_major_version", "format_minor_version"]
 
     for f in fields:
         metadata[f] = np.int16(mphr[f.upper()])
 
-    fields = ['sat_track_azi']
+    fields = ["sat_track_azi"]
     for f in fields:
         data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
-    fields = [('longitude', long_nan), ('latitude', long_nan),
-              ('swath_indicator', byte_nan)]
+    fields = [("longitude", long_nan), ("latitude", long_nan),
+              ("swath_indicator", byte_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].flatten()
         valid = raw_unscaled[f.upper()].flatten() != nan_val
         data[f][~valid] = nan_val
 
-    fields = [('sigma0_trip', long_nan),
-              ('inc_angle_trip', uint_nan),
-              ('azi_angle_trip', int_nan),
-              ('kp', uint_nan),
-              ('f_kp', byte_nan),
-              ('f_usable', byte_nan),
-              ('f_f', uint_nan),
-              ('f_v', uint_nan),
-              ('f_oa', uint_nan),
-              ('f_sa', uint_nan),
-              ('f_tel', uint_nan),
-              ('f_land', uint_nan)]
+    fields = [("sigma0_trip", long_nan),
+              ("inc_angle_trip", uint_nan),
+              ("azi_angle_trip", int_nan),
+              ("kp", uint_nan),
+              ("f_kp", byte_nan),
+              ("f_usable", byte_nan),
+              ("f_f", uint_nan),
+              ("f_v", uint_nan),
+              ("f_oa", uint_nan),
+              ("f_sa", uint_nan),
+              ("f_tel", uint_nan),
+              ("f_land", uint_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].reshape(n_records, 3)
@@ -1250,18 +1252,18 @@ def read_szx_fmv_11(eps_file):
         data[f][~valid] = nan_val
 
     # modify longitudes from (0, 360) to (-180,180)
-    mask = np.logical_and(data['longitude'] != long_nan,
-                          data['longitude'] > 180)
-    data['longitude'][mask] += -360.
+    mask = np.logical_and(data["longitude"] != long_nan,
+                          data["longitude"] > 180)
+    data["longitude"][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
-    mask = (data['azi_angle_trip'] != int_nan) & (data['azi_angle_trip'] < 0)
-    data['azi_angle_trip'][mask] += 360
+    mask = (data["azi_angle_trip"] != int_nan) & (data["azi_angle_trip"] < 0)
+    data["azi_angle_trip"][mask] += 360
 
-    data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
+    data["node_num"] = np.tile((np.arange(n_node_per_line) + 1),
                                n_lines).astype(np.uint8)
-    data['line_num'] = idx_nodes.astype(np.uint16)
-    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
+    data["line_num"] = idx_nodes.astype(np.uint16)
+    data["as_des_pass"] = (data["sat_track_azi"] < 270).astype(np.uint8)
 
     return data, metadata
 
@@ -1284,55 +1286,55 @@ def read_szx_fmv_12(eps_file):
     raw_unscaled = eps_file.mdr
     mphr = eps_file.mphr
 
-    n_node_per_line = raw_data['LONGITUDE'].shape[1]
-    n_lines = raw_data['LONGITUDE'].shape[0]
-    n_records = raw_data['LONGITUDE'].size
+    n_node_per_line = raw_data["LONGITUDE"].shape[1]
+    n_lines = raw_data["LONGITUDE"].shape[0]
+    n_records = raw_data["LONGITUDE"].size
 
     data = {}
     metadata = {}
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
 
-    ascat_time = shortcdstime2jd(raw_data['UTC_LINE_NODES'].flatten()['day'],
-                                 raw_data['UTC_LINE_NODES'].flatten()['time'])
-    data['jd'] = ascat_time[idx_nodes]
+    ascat_time = shortcdstime2jd(raw_data["UTC_LINE_NODES"].flatten()["day"],
+                                 raw_data["UTC_LINE_NODES"].flatten()["time"])
+    data["jd"] = ascat_time[idx_nodes]
 
-    metadata['spacecraft_id'] = np.int8(mphr['SPACECRAFT_ID'][-1])
-    metadata['orbit_start'] = np.uint32(mphr['ORBIT_START'])
+    metadata["spacecraft_id"] = np.int8(mphr["SPACECRAFT_ID"][-1])
+    metadata["orbit_start"] = np.uint32(mphr["ORBIT_START"])
 
-    fields = ['processor_major_version', 'processor_minor_version',
-              'format_major_version', 'format_minor_version']
+    fields = ["processor_major_version", "processor_minor_version",
+              "format_major_version", "format_minor_version"]
 
     for f in fields:
         metadata[f] = np.int16(mphr[f.upper()])
 
-    fields = ['degraded_inst_mdr', 'degraded_proc_mdr', 'sat_track_azi',
-              'abs_line_number']
+    fields = ["degraded_inst_mdr", "degraded_proc_mdr", "sat_track_azi",
+              "abs_line_number"]
 
     for f in fields:
         data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
-    fields = [('longitude', long_nan), ('latitude', long_nan),
-              ('swath indicator', byte_nan)]
+    fields = [("longitude", long_nan), ("latitude", long_nan),
+              ("swath indicator", byte_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].flatten()
         valid = raw_unscaled[f.upper()].flatten() != nan_val
         data[f][~valid] = nan_val
 
-    fields = [('sigma0_trip', long_nan),
-              ('inc_angle_trip', uint_nan),
-              ('azi_angle_trip', int_nan),
-              ('kp', uint_nan),
-              ('num_val_trip', ulong_nan),
-              ('f_kp', byte_nan),
-              ('f_usable', byte_nan),
-              ('f_f', uint_nan),
-              ('f_v', uint_nan),
-              ('f_oa', uint_nan),
-              ('f_sa', uint_nan),
-              ('f_tel', uint_nan),
-              ('f_ref', uint_nan),
-              ('f_land', uint_nan)]
+    fields = [("sigma0_trip", long_nan),
+              ("inc_angle_trip", uint_nan),
+              ("azi_angle_trip", int_nan),
+              ("kp", uint_nan),
+              ("num_val_trip", ulong_nan),
+              ("f_kp", byte_nan),
+              ("f_usable", byte_nan),
+              ("f_f", uint_nan),
+              ("f_v", uint_nan),
+              ("f_oa", uint_nan),
+              ("f_sa", uint_nan),
+              ("f_tel", uint_nan),
+              ("f_ref", uint_nan),
+              ("f_land", uint_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].reshape(n_records, 3)
@@ -1340,22 +1342,22 @@ def read_szx_fmv_12(eps_file):
         data[f][~valid] = nan_val
 
     # modify longitudes from (0, 360) to (-180,180)
-    mask = np.logical_and(data['longitude'] != long_nan,
-                          data['longitude'] > 180)
-    data['longitude'][mask] += -360.
+    mask = np.logical_and(data["longitude"] != long_nan,
+                          data["longitude"] > 180)
+    data["longitude"][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
-    mask = (data['azi_angle_trip'] != int_nan) & (data['azi_angle_trip'] < 0)
-    data['azi_angle_trip'][mask] += 360
+    mask = (data["azi_angle_trip"] != int_nan) & (data["azi_angle_trip"] < 0)
+    data["azi_angle_trip"][mask] += 360
 
-    data['node_num'] = np.tile((np.arange(n_node_per_line) + 1),
+    data["node_num"] = np.tile((np.arange(n_node_per_line) + 1),
                                n_lines).astype(np.uint8)
 
-    data['line_num'] = idx_nodes.astype(np.uint16)
+    data["line_num"] = idx_nodes.astype(np.uint16)
 
-    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
+    data["as_des_pass"] = (data["sat_track_azi"] < 270).astype(np.uint8)
 
-    data['swath_indicator'] = data.pop('swath indicator')
+    data["swath_indicator"] = data.pop("swath indicator")
 
     return data, metadata
 
@@ -1394,48 +1396,48 @@ def read_szf_fmv_12(eps_file):
     metadata = {}
 
     n_lines = eps_file.mdr_counter
-    n_node_per_line = eps_file.mdr['LONGITUDE_FULL'].shape[1]
+    n_node_per_line = eps_file.mdr["LONGITUDE_FULL"].shape[1]
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
 
     # extract metadata
-    metadata['spacecraft_id'] = np.int8(eps_file.mphr['SPACECRAFT_ID'][-1])
-    metadata['orbit_start'] = np.uint32(eps_file.mphr['ORBIT_START'])
-    metadata['state_vector_time'] = datetime.strptime(
-        eps_file.mphr['STATE_VECTOR_TIME'][:-4], '%Y%m%d%H%M%S')
+    metadata["spacecraft_id"] = np.int8(eps_file.mphr["SPACECRAFT_ID"][-1])
+    metadata["orbit_start"] = np.uint32(eps_file.mphr["ORBIT_START"])
+    metadata["state_vector_time"] = datetime.strptime(
+        eps_file.mphr["STATE_VECTOR_TIME"][:-4], "%Y%m%d%H%M%S")
 
-    fields = ['processor_major_version', 'processor_minor_version',
-              'format_major_version', 'format_minor_version']
+    fields = ["processor_major_version", "processor_minor_version",
+              "format_major_version", "format_minor_version"]
     for f in fields:
         metadata[f] = np.int16(eps_file.mphr[f.upper()])
 
     # extract time
-    dt = np.datetime64('2000-01-01') + eps_file.mdr[
-        'UTC_LOCALISATION']['day'].astype('timedelta64[D]') + eps_file.mdr[
-            'UTC_LOCALISATION']['time'].astype('timedelta64[ms]')
-    data['time'] = dt[idx_nodes]
+    dt = np.datetime64("2000-01-01") + eps_file.mdr[
+        "UTC_LOCALISATION"]["day"].astype("timedelta64[D]") + eps_file.mdr[
+            "UTC_LOCALISATION"]["time"].astype("timedelta64[ms]")
+    data["time"] = dt[idx_nodes]
 
-    fields = ['degraded_inst_mdr', 'degraded_proc_mdr', 'sat_track_azi',
-              'beam_number', 'flagfield_rf1', 'flagfield_rf2',
-              'flagfield_pl', 'flagfield_gen1']
+    fields = ["degraded_inst_mdr", "degraded_proc_mdr", "sat_track_azi",
+              "beam_number", "flagfield_rf1", "flagfield_rf2",
+              "flagfield_pl", "flagfield_gen1"]
 
     # 101 min = 6082 seconds
     # state_vector_time = ascending node crossing time - 1520.5,
     # time crossing at -90 lat
     orbit_start_time = metadata[
-        'state_vector_time'] - timedelta(seconds=1520.5)
+        "state_vector_time"] - timedelta(seconds=1520.5)
     orbit_end_time = orbit_start_time + timedelta(seconds=6082)
 
-    data['orbit_nr'] = np.ma.zeros(
-        data['time'].size, dtype=np.int32,
-        fill_value=int32_nan) + metadata['orbit_start']
-    data['orbit_nr'][data['time'] > orbit_end_time] += 1
+    data["orbit_nr"] = np.ma.zeros(
+        data["time"].size, dtype=np.int32,
+        fill_value=int32_nan) + metadata["orbit_start"]
+    data["orbit_nr"][data["time"] > orbit_end_time] += 1
 
-    metadata['orbits'] = {}
-    for orbit_nr in np.unique(data['orbit_nr']):
-        if orbit_nr == metadata['orbit_start']:
-            metadata['orbits'][orbit_nr] = (orbit_start_time, orbit_end_time)
+    metadata["orbits"] = {}
+    for orbit_nr in np.unique(data["orbit_nr"]):
+        if orbit_nr == metadata["orbit_start"]:
+            metadata["orbits"][orbit_nr] = (orbit_start_time, orbit_end_time)
         else:
-            metadata['orbits'][orbit_nr] = (
+            metadata["orbits"][orbit_nr] = (
                 orbit_end_time, orbit_end_time+timedelta(seconds=6082))
 
     # extract data
@@ -1446,17 +1448,17 @@ def read_szf_fmv_12(eps_file):
             data[f] = (eps_file.mdr[f.upper()].flatten() *
                        1./eps_file.mdr_sfactor[f.upper()])[idx_nodes]
 
-    data['swath_indicator'] = (data[
-        'beam_number'].flatten() > 3).astype(np.uint8)
-    data['as_des_pass'] = (data['sat_track_azi'] < 270).astype(np.uint8)
+    data["swath_indicator"] = (data[
+        "beam_number"].flatten() > 3).astype(np.uint8)
+    data["as_des_pass"] = (data["sat_track_azi"] < 270).astype(np.uint8)
 
-    fields = [('longitude_full', long_nan),
-              ('latitude_full', long_nan),
-              ('sigma0_full', long_nan),
-              ('inc_angle_full', uint_nan),
-              ('azi_angle_full', int_nan),
-              ('land_frac', uint_nan),
-              ('flagfield_gen2', byte_nan)]
+    fields = [("longitude_full", long_nan),
+              ("latitude_full", long_nan),
+              ("sigma0_full", long_nan),
+              ("inc_angle_full", uint_nan),
+              ("azi_angle_full", int_nan),
+              ("land_frac", uint_nan),
+              ("flagfield_gen2", byte_nan)]
 
     for f, nan_val in fields:
         data[f] = eps_file.mdr[f.upper()].flatten()
@@ -1468,16 +1470,16 @@ def read_szf_fmv_12(eps_file):
         data[f][invalid] = nan_val
 
     # modify longitudes from (0, 360) to (-180, 180)
-    mask = np.logical_and(data['longitude_full'] != long_nan,
-                          data['longitude_full'] > 180)
-    data['longitude_full'][mask] += -360.
+    mask = np.logical_and(data["longitude_full"] != long_nan,
+                          data["longitude_full"] > 180)
+    data["longitude_full"][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
-    idx = (data['azi_angle_full'] != int_nan) & (data['azi_angle_full'] < 0)
-    data['azi_angle_full'][idx] += 360
+    idx = (data["azi_angle_full"] != int_nan) & (data["azi_angle_full"] < 0)
+    data["azi_angle_full"][idx] += 360
 
     # set flags
-    data['f_usable'] = set_flags(data)
+    data["f_usable"] = set_flags(data)
 
     return data, metadata
 
@@ -1499,54 +1501,54 @@ def read_smx_fmv_12(eps_file):
     raw_data = eps_file.scaled_mdr
     raw_unscaled = eps_file.mdr
 
-    n_node_per_line = raw_data['LONGITUDE'].shape[1]
-    n_lines = raw_data['LONGITUDE'].shape[0]
+    n_node_per_line = raw_data["LONGITUDE"].shape[1]
+    n_lines = raw_data["LONGITUDE"].shape[0]
     n_records = eps_file.mdr_counter * n_node_per_line
     idx_nodes = np.arange(eps_file.mdr_counter).repeat(n_node_per_line)
 
     data = {}
     metadata = {}
 
-    metadata['spacecraft_id'] = np.int8(eps_file.mphr['SPACECRAFT_ID'][-1])
-    metadata['orbit_start'] = np.uint32(eps_file.mphr['ORBIT_START'])
+    metadata["spacecraft_id"] = np.int8(eps_file.mphr["SPACECRAFT_ID"][-1])
+    metadata["orbit_start"] = np.uint32(eps_file.mphr["ORBIT_START"])
 
-    ascat_time = shortcdstime2jd(raw_data['UTC_LINE_NODES'].flatten()['day'],
-                                 raw_data['UTC_LINE_NODES'].flatten()['time'])
-    data['jd'] = ascat_time[idx_nodes]
+    ascat_time = shortcdstime2jd(raw_data["UTC_LINE_NODES"].flatten()["day"],
+                                 raw_data["UTC_LINE_NODES"].flatten()["time"])
+    data["jd"] = ascat_time[idx_nodes]
 
-    fields = [('sigma0_trip', long_nan), ('inc_angle_trip', uint_nan),
-              ('azi_angle_trip', int_nan), ('kp', uint_nan),
-              ('f_land', uint_nan)]
+    fields = [("sigma0_trip", long_nan), ("inc_angle_trip", uint_nan),
+              ("azi_angle_trip", int_nan), ("kp", uint_nan),
+              ("f_land", uint_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].reshape(n_records, 3)
         valid = raw_unscaled[f.upper()].reshape(n_records, 3) != nan_val
         data[f][~valid] = nan_val
 
-    fields = ['sat_track_azi', 'abs_line_number']
+    fields = ["sat_track_azi", "abs_line_number"]
     for f in fields:
         data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
-    fields = [('longitude', long_nan, long_nan),
-              ('latitude', long_nan, long_nan),
-              ('swath_indicator', byte_nan, byte_nan),
-              ('soil_moisture', uint_nan, uint_nan),
-              ('soil_moisture_error', uint_nan, uint_nan),
-              ('sigma40', long_nan, long_nan),
-              ('sigma40_error', long_nan, long_nan),
-              ('slope40', long_nan, long_nan),
-              ('slope40_error', long_nan, long_nan),
-              ('dry_backscatter', long_nan, long_nan),
-              ('wet_backscatter', long_nan, long_nan),
-              ('mean_surf_soil_moisture', uint_nan, uint_nan),
-              ('soil_moisture_sensetivity', ulong_nan, float32_nan),
-              ('correction_flags', uint8_nan, uint8_nan),
-              ('processing_flags', uint8_nan, uint8_nan),
-              ('aggregated_quality_flag', uint8_nan, uint8_nan),
-              ('snow_cover_probability', uint8_nan, uint8_nan),
-              ('frozen_soil_probability', uint8_nan, uint8_nan),
-              ('innudation_or_wetland', uint8_nan, uint8_nan),
-              ('topographical_complexity', uint8_nan, uint8_nan)]
+    fields = [("longitude", long_nan, long_nan),
+              ("latitude", long_nan, long_nan),
+              ("swath_indicator", byte_nan, byte_nan),
+              ("soil_moisture", uint_nan, uint_nan),
+              ("soil_moisture_error", uint_nan, uint_nan),
+              ("sigma40", long_nan, long_nan),
+              ("sigma40_error", long_nan, long_nan),
+              ("slope40", long_nan, long_nan),
+              ("slope40_error", long_nan, long_nan),
+              ("dry_backscatter", long_nan, long_nan),
+              ("wet_backscatter", long_nan, long_nan),
+              ("mean_surf_soil_moisture", uint_nan, uint_nan),
+              ("soil_moisture_sensetivity", ulong_nan, float32_nan),
+              ("correction_flags", uint8_nan, uint8_nan),
+              ("processing_flags", uint8_nan, uint8_nan),
+              ("aggregated_quality_flag", uint8_nan, uint8_nan),
+              ("snow_cover_probability", uint8_nan, uint8_nan),
+              ("frozen_soil_probability", uint8_nan, uint8_nan),
+              ("innudation_or_wetland", uint8_nan, uint8_nan),
+              ("topographical_complexity", uint8_nan, uint8_nan)]
 
     for f, nan_val, new_nan_val in fields:
         data[f] = raw_data[f.upper()].flatten()
@@ -1554,27 +1556,27 @@ def read_smx_fmv_12(eps_file):
         data[f][~valid] = new_nan_val
 
     # sat_track_azi (uint)
-    data['as_des_pass'] = \
-        np.array(raw_data['SAT_TRACK_AZI'].flatten()[idx_nodes] < 270)
+    data["as_des_pass"] = \
+        np.array(raw_data["SAT_TRACK_AZI"].flatten()[idx_nodes] < 270)
 
     # modify longitudes from [0,360] to [-180,180]
-    mask = np.logical_and(data['longitude'] != long_nan,
-                          data['longitude'] > 180)
-    data['longitude'][mask] += -360.
+    mask = np.logical_and(data["longitude"] != long_nan,
+                          data["longitude"] > 180)
+    data["longitude"][mask] += -360.
 
     # modify azimuth from (-180, 180) to (0, 360)
-    mask = (data['azi_angle_trip'] != int_nan) & (data['azi_angle_trip'] < 0)
-    data['azi_angle_trip'][mask] += 360
+    mask = (data["azi_angle_trip"] != int_nan) & (data["azi_angle_trip"] < 0)
+    data["azi_angle_trip"][mask] += 360
 
-    fields = ['param_db_version', 'warp_nrt_version']
+    fields = ["param_db_version", "warp_nrt_version"]
     for f in fields:
-        data[f] = raw_data['PARAM_DB_VERSION'].flatten()[idx_nodes]
+        data[f] = raw_data["PARAM_DB_VERSION"].flatten()[idx_nodes]
 
-    metadata['spacecraft_id'] = int(eps_file.mphr['SPACECRAFT_ID'][2])
+    metadata["spacecraft_id"] = int(eps_file.mphr["SPACECRAFT_ID"][2])
 
-    data['node_num'] = np.tile((np.arange(n_node_per_line) + 1), n_lines)
+    data["node_num"] = np.tile((np.arange(n_node_per_line) + 1), n_lines)
 
-    data['line_num'] = idx_nodes
+    data["line_num"] = idx_nodes
 
     return data, metadata
 
@@ -1664,13 +1666,13 @@ def set_flags(data):
         Flag indicating nominal (0), slightly degraded (1) or
         severely degraded(2).
     """
-    flag_status_bit = {'flagfield_rf1': np.array([1, 1, 2, 1, 2, 0, 0, 0]),
-                       'flagfield_rf2': np.array([2, 2, 0, 0, 0, 0, 0, 0]),
-                       'flagfield_pl':  np.array([2, 2, 2, 2, 0, 0, 0, 0]),
-                       'flagfield_gen1': np.array([0, 2, 0, 0, 0, 0, 0, 0]),
-                       'flagfield_gen2': np.array([1, 0, 2, 0, 0, 0, 0, 0])}
+    flag_status_bit = {"flagfield_rf1": np.array([1, 1, 2, 1, 2, 0, 0, 0]),
+                       "flagfield_rf2": np.array([2, 2, 0, 0, 0, 0, 0, 0]),
+                       "flagfield_pl":  np.array([2, 2, 2, 2, 0, 0, 0, 0]),
+                       "flagfield_gen1": np.array([0, 2, 0, 0, 0, 0, 0, 0]),
+                       "flagfield_gen2": np.array([1, 0, 2, 0, 0, 0, 0, 0])}
 
-    f_usable = np.zeros(data['flagfield_rf1'].size, dtype=np.uint8)
+    f_usable = np.zeros(data["flagfield_rf1"].size, dtype=np.uint8)
 
     for flagfield, bitmask in flag_status_bit.items():
         subset = np.nonzero(data[flagfield])[0]

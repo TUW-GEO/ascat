@@ -55,7 +55,7 @@ class AscatL2File:
         filename : str
             Filename.
         file_format : str, optional
-            File format: '.nat', '.nc', '.bfr', '.h5' (default: None).
+            File format: ".nat", ".nc", ".bfr", ".h5" (default: None).
             If None file format will be guessed based on the file ending.
         """
         self.filename = filename
@@ -66,11 +66,11 @@ class AscatL2File:
 
         self.file_format = file_format
 
-        if self.file_format in ['.nat', '.nat.gz']:
+        if self.file_format in [".nat", ".nat.gz"]:
             self.fid = AscatL2EpsFile(self.filename)
-        elif self.file_format in ['.nc', '.nc.gz']:
+        elif self.file_format in [".nc", ".nc.gz"]:
             self.fid = AscatL2NcFile(self.filename)
-        elif self.file_format in ['.bfr', '.bfr.gz', '.buf', 'buf.gz']:
+        elif self.file_format in [".bfr", ".bfr.gz", ".buf", "buf.gz"]:
             self.fid = AscatL2BufrFile(self.filename)
         else:
             raise RuntimeError("ASCAT Level 2 file format unknown")
@@ -151,7 +151,7 @@ def get_file_format(filename):
     file_format : str
         File format indicator.
     """
-    if os.path.splitext(filename)[1] == '.gz':
+    if os.path.splitext(filename)[1] == ".gz":
         file_format = os.path.splitext(os.path.splitext(filename)[0])[1]
     else:
         file_format = os.path.splitext(filename)[1]
@@ -169,13 +169,13 @@ class AscatL2BufrFileList(ChronFiles):
         """
         Initialize.
         """
-        sat_lut = {'a': 2, 'b': 1, 'c': 3}
+        sat_lut = {"a": 2, "b": 1, "c": 3}
         self.sat = sat_lut[sat]
         self.product = product
 
         if filename_template is None:
-            filename_template = ('M0{sat}-ASCA-ASC{product}*-*-*-'
-                                 '{date}.000000000Z-*-*.bfr')
+            filename_template = ("M0{sat}-ASCA-ASC{product}*-*-*-"
+                                 "{date}.000000000Z-*-*.bfr")
 
         super().__init__(path, AscatL2File, filename_template)
 
@@ -195,8 +195,8 @@ class AscatL2BufrFileList(ChronFiles):
         sf_fmt : dict
             Subfolder format.
         """
-        fn_read_fmt = {'date': timestamp.strftime('%Y%m%d%H%M%S'),
-                       'sat': self.sat, 'product': self.product.upper()}
+        fn_read_fmt = {"date": timestamp.strftime("%Y%m%d%H%M%S"),
+                       "sat": self.sat, "product": self.product.upper()}
         fn_write_fmt = None
         sf_read_fmt = None
         sf_write_fmt = sf_read_fmt
@@ -218,7 +218,7 @@ class AscatL2BufrFileList(ChronFiles):
             Parsed date.
         """
         return datetime.strptime(os.path.basename(filename)[25:39],
-                                 '%Y%m%d%H%M%S')
+                                 "%Y%m%d%H%M%S")
 
     def _merge_data(self, data):
         """
@@ -260,22 +260,22 @@ class AscatL2NcFileList(ChronFiles):
         path : str
             Path to input data.
         sat : str
-            Metop satellite ('a', 'b', 'c').
+            Metop satellite ("a", "b", "c").
         product : str
-            Product type ('szf', 'szr', 'szo').
+            Product type ("szf", "szr", "szo").
         filename_template : str, optional
             Filename template (default:
-            'M0{sat}-ASCA-ASC{product}1B0200-NA-9.1-{date}.000000000Z-*-*.bfr')
+            "M0{sat}-ASCA-ASC{product}1B0200-NA-9.1-{date}.000000000Z-*-*.bfr")
         """
         self.sat = sat
 
-        lut = {'smr': '125', 'smo': '250'}
+        lut = {"smr": "125", "smo": "250"}
         self.product = lut[product]
 
         if filename_template is None:
             filename_template = (
-                'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOP{sat}+'
-                'ASCAT_C_EUMP_{date}_*_eps_o_{product}_ssm_l2.nc')
+                "W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOP{sat}+"
+                "ASCAT_C_EUMP_{date}_*_eps_o_{product}_ssm_l2.nc")
 
         super().__init__(path, AscatL2File, filename_template)
 
@@ -295,9 +295,9 @@ class AscatL2NcFileList(ChronFiles):
         sf_fmt : dict
             Subfolder format.
         """
-        fn_read_fmt = {'date': timestamp.strftime('%Y%m%d%H%M%S'),
-                       'sat': self.sat.upper(),
-                       'product': self.product.upper()}
+        fn_read_fmt = {"date": timestamp.strftime("%Y%m%d%H%M%S"),
+                       "sat": self.sat.upper(),
+                       "product": self.product.upper()}
         fn_write_fmt = None
         sf_read_fmt = None
         sf_write_fmt = sf_read_fmt
@@ -319,7 +319,7 @@ class AscatL2NcFileList(ChronFiles):
             Parsed date.
         """
         return datetime.strptime(os.path.basename(filename)[62:76],
-                                 '%Y%m%d%H%M%S')
+                                 "%Y%m%d%H%M%S")
 
     def _merge_data(self, data):
         """
@@ -361,19 +361,19 @@ class AscatL2EpsFileList(ChronFiles):
         path : str
             Path to input data.
         sat : str
-            Metop satellite ('a', 'b', 'c').
+            Metop satellite ("a", "b", "c").
         product : str
-            Product type ('szf', 'szr', 'szo').
+            Product type ("szf", "szr", "szo").
         filename_template : str, optional
             Filename template (default:
-                'ASCA_{product}_02_M0{sat}_{date}Z_*_*_*_*.nat')
+                "ASCA_{product}_02_M0{sat}_{date}Z_*_*_*_*.nat")
         """
-        sat_lut = {'a': 2, 'b': 1, 'c': 3, '?': '?'}
+        sat_lut = {"a": 2, "b": 1, "c": 3, "?": "?"}
         self.sat = sat_lut[sat]
         self.product = product
 
         if filename_template is None:
-            filename_template = 'ASCA_{product}_02_M0{sat}_{date}Z_*_*_*_*.nat'
+            filename_template = "ASCA_{product}_02_M0{sat}_{date}Z_*_*_*_*.nat"
 
         super().__init__(path, AscatL2File, filename_template)
 
@@ -393,8 +393,8 @@ class AscatL2EpsFileList(ChronFiles):
         sf_fmt : dict
             Subfolder format.
         """
-        fn_read_fmt = {'date': timestamp.strftime('%Y%m%d%H%M%S'),
-                       'sat': self.sat, 'product': self.product.upper()}
+        fn_read_fmt = {"date": timestamp.strftime("%Y%m%d%H%M%S"),
+                       "sat": self.sat, "product": self.product.upper()}
         fn_write_fmt = None
         sf_read_fmt = None
         sf_write_fmt = sf_read_fmt
@@ -416,7 +416,7 @@ class AscatL2EpsFileList(ChronFiles):
             Parsed date.
         """
         return datetime.strptime(os.path.basename(filename)[16:30],
-                                 '%Y%m%d%H%M%S')
+                                 "%Y%m%d%H%M%S")
 
     def _merge_data(self, data):
         """

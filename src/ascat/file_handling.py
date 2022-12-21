@@ -55,12 +55,12 @@ class FilenameTemplate:
             Root path.
         fn_templ : str
             Filename (glob) pattern.
-            e.g. '{date}_*.{suffix}'
+            e.g. "{date}_*.{suffix}"
         sf_templ : dict, optional
             Subfolder pattern defined as dictionary (default: None).
             Keys represent unique meta names of subfolders and values define
             real folder names and/or (glob) pattern.
-            e.g. {'variable': '*', 'tile': 'EN012*'}
+            e.g. {"variable": "*", "tile": "EN012*"}
         """
         self.root_path = root_path
         self.fn_templ = fn_templ
@@ -87,16 +87,16 @@ class FilenameTemplate:
         ----------
         fn_fmt : dict
             Filename format applied on filename pattern (fn_pattern).
-            e.g. fn_pattern = '{date}*.{suffix}'
-            with fn_format_dict = {'date': '20000101', 'suffix': 'nc'}
-            returns '20000101*.nc'
+            e.g. fn_pattern = "{date}*.{suffix}"
+            with fn_format_dict = {"date": "20000101", "suffix": "nc"}
+            returns "20000101*.nc"
         fmt : dict of dicts
             Format dictionary for subfolders. Each subfolder contains
             a dictionary defining the format of the folder name.
-            e.g. sf_pattern = {'years': {year}, 'months': {month}}
-            with format_dict = {'years': {'year': '2000'},
-                                'months': {'month': '02'}}
-            returns ['2000', '02']
+            e.g. sf_pattern = {"years": {year}, "months": {month}}
+            with format_dict = {"years": {"year": "2000"},
+                                "months": {"month": "02"}}
+            returns ["2000", "02"]
 
         Returns
         -------
@@ -121,9 +121,9 @@ class FilenameTemplate:
         ----------
         fmt : dict
             Filename format applied on filename pattern (fn_pattern).
-            e.g. fn_pattern = '{date}*.{suffix}'
-            with fmt = {'date': '20000101', 'suffix': 'nc'}
-            returns '20000101*.nc'
+            e.g. fn_pattern = "{date}*.{suffix}"
+            with fmt = {"date": "20000101", "suffix": "nc"}
+            returns "20000101*.nc"
 
         Returns
         -------
@@ -141,10 +141,10 @@ class FilenameTemplate:
         fmt : dict of dicts
             Format dictionary for subfolders. Each subfolder contains
             a dictionary defining the format of the folder name.
-            e.g. sf_pattern = {'years': {year}, 'months': {month}}
-            with format_dict = {'years': {'year': '2000'},
-                                'months': {'month': '02'}}
-            returns ['2000', '02']
+            e.g. sf_pattern = {"years": {year}, "months": {month}}
+            with format_dict = {"years": {"year": "2000"},
+                                "months": {"month": "02"}}
+            returns ["2000", "02"]
 
         Returns
         -------
@@ -183,12 +183,12 @@ class FileSearch:
             Root path.
         fn_pattern : str
             Filename (glob) pattern.
-            e.g. '{date}_*.{suffix}'
+            e.g. "{date}_*.{suffix}"
         sf_pattern : dict, optional
             Subfolder pattern defined as dictionary (default: None).
             Keys represent unique meta names of subfolders and values define
             real folder names and/or (glob) pattern.
-            e.g. {'variable': '*', 'tile': 'EN012*'}
+            e.g. {"variable": "*", "tile": "EN012*"}
         """
         self.file_templ = FilenameTemplate(root_path, fn_pattern, sf_pattern)
 
@@ -312,7 +312,7 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
         cls : class
             Class reading/writing files.
         fn_templ : str
-            Filename template (e.g. '{date}_ascat.nc').
+            Filename template (e.g. "{date}_ascat.nc").
         sf_templ : dict, optional
             Subfolder template defined as dictionary (default: None).
         cls_kwargs : dict, optional
@@ -365,13 +365,13 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
             if self.err:
                 raise
             else:
-                warnings.warn("IOError: {}".format(filename))
+                warnings.warn(f"IOError: {filename}")
 
     def _close(self):
         """
         Try closing file.
         """
-        if self.fid is not None and hasattr(self.fid, 'close'):
+        if self.fid is not None and hasattr(self.fid, "close"):
             self.fid.close()
             self.fid = None
 
@@ -424,13 +424,13 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
 
         data = None
         if len(filename) == 0:
-            msg = 'File not found: {}'.format(search_filename)
+            msg = f"File not found: {search_filename}"
             if self.err:
                 raise IOError(msg)
             else:
                 warnings.warn(msg)
         elif len(filename) > 1:
-            msg = 'Multiple files found'
+            msg = "Multiple files found"
             if self.err:
                 raise RuntimeError(msg)
             else:
@@ -559,7 +559,7 @@ class ChronFiles(MultiFileHandler):
         """
         return data
 
-    def search_date(self, timestamp, date_str='%Y%m%d*', date_field='date',
+    def search_date(self, timestamp, date_str="%Y%m%d*", date_field="date",
                     return_date=False):
         """
         Search files for given date.
@@ -668,7 +668,7 @@ class Csv:
     Read and write CSV file.
     """
 
-    def __init__(self, filename, mode='r'):
+    def __init__(self, filename, mode="r"):
         """
         Initialize Csv
 
@@ -697,16 +697,16 @@ class Csv:
             Data type.
         """
         dtype_list = []
-        for substr in header.split('(')[2:]:
+        for substr in header.split("(")[2:]:
             d = []
-            for substr2 in substr.split(','):
-                if substr2.endswith(')'):
+            for substr2 in substr.split(","):
+                if substr2.endswith(")"):
                     substr2 = substr2[:-1]
-                if substr2.endswith('\n'):
+                if substr2.endswith("\n"):
                     substr2 = substr2[:-4]
                 substr2 = substr2.strip()
                 substr2 = substr2.strip("'")
-                if substr2 == '':
+                if substr2 == "":
                     continue
                 d.append(substr2)
             dtype_list.append(tuple(d))
@@ -745,8 +745,8 @@ class Csv:
         """
         data = self.read()
 
-        subset = ((data['date'] >= np.datetime64(dt_start)) &
-                  (data['date'] <= np.datetime64(dt_end)))
+        subset = ((data["date"] >= np.datetime64(dt_start)) &
+                  (data["date"] <= np.datetime64(dt_end)))
 
         if np.sum(subset) > 0:
             data = data[subset]
@@ -765,7 +765,7 @@ class Csv:
             Data.
         """
         header = data.dtype.__repr__()
-        np.savetxt(self.filename, data, fmt='%s', header=header)
+        np.savetxt(self.filename, data, fmt="%s", header=header)
 
 
 class CsvFiles(ChronFiles):
@@ -783,8 +783,8 @@ class CsvFiles(ChronFiles):
         root_path : str
             Root path.
         """
-        fn_templ = 'prefix_{date}_{now}_postfix.csv'
-        sf_templ = {'Y': '{year}', 'M': '{month}'}
+        fn_templ = "prefix_{date}_{now}_postfix.csv"
+        sf_templ = {"Y": "{year}", "M": "{month}"}
 
         super().__init__(root_path, Csv, fn_templ, sf_templ=sf_templ)
 
@@ -804,14 +804,14 @@ class CsvFiles(ChronFiles):
         sf_fmt : dict
             Subfolder format.
         """
-        fn_read_fmt = {'date': timestamp.strftime('%Y%m%d_%H%M%S'),
-                       'now': '*'}
+        fn_read_fmt = {"date": timestamp.strftime("%Y%m%d_%H%M%S"),
+                       "now": "*"}
 
-        fn_write_fmt = {'date': timestamp.strftime('%Y%m%d_%H%M%S'),
-                        'now': datetime.now().strftime('%Y%m%d_%H%M%S')}
+        fn_write_fmt = {"date": timestamp.strftime("%Y%m%d_%H%M%S"),
+                        "now": datetime.now().strftime("%Y%m%d_%H%M%S")}
 
-        sf_read_fmt = {'Y': {'year': timestamp.strftime('%Y')},
-                       'M': {'month': timestamp.strftime('%m')}}
+        sf_read_fmt = {"Y": {"year": timestamp.strftime("%Y")},
+                       "M": {"month": timestamp.strftime("%m")}}
 
         sf_write_fmt = sf_read_fmt
 
@@ -832,7 +832,7 @@ class CsvFiles(ChronFiles):
             Parsed date.
         """
         return datetime.strptime(os.path.basename(filename)[7:22],
-                                 '%Y%m%d_%H%M%S')
+                                 "%Y%m%d_%H%M%S")
 
     def _merge_data(self, data):
         """
