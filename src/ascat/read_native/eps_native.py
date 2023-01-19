@@ -332,6 +332,8 @@ class EPSProduct:
         prev_grh = None
         record_count = 0
 
+        start_dt = datetime.now()
+
         while True:
             # read generic record header of data block
             grh = np.fromfile(self.fid, dtype=self.grh_dtype, count=1)[0]
@@ -387,6 +389,11 @@ class EPSProduct:
                 # read final record class(es)
                 self.read_record_class(prev_grh, record_count)
 
+                break
+
+            if (datetime.now() - start_dt) > timedelta(minutes=3):
+                print("Timeout reading EPS file")
+                self.mdr = None
                 break
 
         self.fid.close()
