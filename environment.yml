@@ -11,7 +11,7 @@ dependencies:
 - xarray
 - pybufr-ecmwf
 - pip
-- pip: 
+- pip:
   - cadati
   - requests
   - tqdm

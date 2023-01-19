@@ -1,29 +1,18 @@
-name: Upload pypi
+name: Publish on pypi.org
 
 on:
-   # trigger only on release
-   release:
-     types: [published]
-   # to trigger workflow manually from actions-tab
-   workflow_dispatch:
+  release:
+    types: [published]
 
 jobs:
-  build:
-    name: Upload to PyPI
-    if: |
-      startsWith(github.ref, 'refs/tags/v') &&
-      startsWith(github.repository, 'TUW-GEO')
-    needs: build
+  publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Print environment variables
-        run: |
-          echo "GITHUB_REF = $GITHUB_REF"
-          echo "GITHUB_REPOSITORY = $GITHUB_REPOSITORY"
-      - name: Download Artifacts
-        uses: actions/download-artifact@v2
-      - name: Display downloaded files
-        run: ls -aR
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - run: python3 -m pip install --upgrade build && python3 -m build
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@v1.4.1
         with:
