@@ -19,6 +19,5 @@ jobs:
           skip_existing: true
           verbose: true
           verify_metadata: true
-          packages_dir: Artifacts/dist/
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }} # this needs to be uploaded to github actions secrets
