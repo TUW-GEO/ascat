@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 2.0.6
+=============
+
+- Add timeout when reading corrupt EPS files
+- Change beam names when reading ASCAT SZF data (adding -vv)
+
 Version 2.0.5
 =============
 
