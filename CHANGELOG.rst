@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.1.0
+=============
+
+- Add support reading ascat fmv 13 for szf, szr, szo
+
 Version 2.0.6
 =============
 
