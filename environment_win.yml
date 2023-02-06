@@ -6,10 +6,10 @@ dependencies:
 - pandas
 - pygrib
 - pykdtree
-- h5py
-- netCDF4==1.5.4
+- h5py==3.6.0
+- netCDF4
 - pip
-- pip: 
+- pip:
   - cadati
   - xarray
   - requests

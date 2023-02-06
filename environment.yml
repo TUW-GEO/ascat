@@ -7,7 +7,7 @@ dependencies:
 - pygrib
 - netCDF4
 - pykdtree
-- h5py
+- h5py==3.6.0
 - xarray
 - pybufr-ecmwf
 - pip
