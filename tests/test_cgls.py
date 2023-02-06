@@ -44,7 +44,7 @@ def test_swi_ts_reader():
         os.path.dirname(__file__), 'ascat_test_data', 'cglops', 'swi_ts')
 
     rd = SWI_TS(data_path)
-    data = rd.read_ts(3002621, mask_frozen=False)
+    data = rd.read(3002621, mask_frozen=False)
     data_sorted = data.sort_index()
 
     assert np.all(data_sorted.index == data.index)
@@ -54,7 +54,7 @@ def test_swi_ts_reader():
     assert np.all(data_sorted.index == reference_index)
 
     lon, lat = rd.grid.gpi2lonlat(3002621)
-    data = rd.read_ts(lon, lat, mask_frozen=False)
+    data = rd.read(lon, lat, mask_frozen=False)
     data_sorted = data.sort_index()
 
     assert np.all(data_sorted.index == data.index)
@@ -82,7 +82,7 @@ def test_swi_ts_qflag_reading():
     data_path = os.path.join(
         os.path.dirname(__file__), 'ascat_test_data', 'cglops', 'swi_ts')
     rd = SWI_TS(data_path, parameters=['SWI_001', 'QFLAG_001', 'SSF'])
-    data = rd.read_ts(3002621, mask_frozen=True)
+    data = rd.read(3002621, mask_frozen=True)
     # check if QFLAG is correctly read. It should have as many NaN values as
     # SWI
     assert len(data[data.loc[:, 'QFLAG_001'] != np.nan]) > 0
