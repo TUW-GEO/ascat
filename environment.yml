@@ -4,12 +4,12 @@ channels:
 dependencies:
 - numpy
 - pandas
-- pygrib
-- netCDF4
+- pygrib==2.0.5
+- netCDF4==1.5.4
 - pykdtree
-- h5py==3.6.0
-- xarray
-- pybufr-ecmwf
+- h5py==3.1.0
+- xarray==0.17.0
+- pybufr-ecmwf==0.82
 - pip
 - pip:
   - cadati
