@@ -595,6 +595,8 @@ def read_eps_l1b(filename, timestamp):
             raw_data, metadata = read_szx_fmv_11(eps_file)
         elif fmv == 12:
             raw_data, metadata = read_szx_fmv_12(eps_file)
+        elif fmv == 13:
+            raw_data, metadata = read_szx_fmv_13(eps_file)
         else:
             raise RuntimeError("SZX format version not supported.")
 
@@ -792,6 +794,7 @@ def read_szx_fmv_12(eps_file):
     n_node_per_line = raw_data['LONGITUDE'].shape[1]
     n_lines = raw_data['LONGITUDE'].shape[0]
     n_records = raw_data['LONGITUDE'].size
+
     data = {}
     metadata = {}
     idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
@@ -805,18 +808,21 @@ def read_szx_fmv_12(eps_file):
 
     fields = ['PROCESSOR_MAJOR_VERSION', 'PROCESSOR_MINOR_VERSION',
               'FORMAT_MAJOR_VERSION', 'FORMAT_MINOR_VERSION']
+
     for field in fields:
         # metadata[field] = np.repeat(np.int16(mphr[field]),n_records)
         metadata[field] = np.int16(mphr[field])
 
     fields = ['DEGRADED_INST_MDR', 'DEGRADED_PROC_MDR', 'SAT_TRACK_AZI',
               'ABS_LINE_NUMBER']
+
     for field in fields:
         data[field] = raw_data[field].flatten()[idx_nodes]
 
     fields = [('LONGITUDE', long_nan),
               ('LATITUDE', long_nan),
               ('SWATH INDICATOR', byte_nan)]
+
     for field in fields:
         data[field[0]] = raw_data[field[0]].flatten()
         valid = raw_unscaled[field[0]].flatten() != field[1]
@@ -857,6 +863,95 @@ def read_szx_fmv_12(eps_file):
     data['LINE_NUM'] = idx_nodes
 
     data['AS_DES_PASS'] = (data['SAT_TRACK_AZI'] < 270).astype(np.uint8)
+
+    return data, metadata
+
+
+def read_szx_fmv_13(eps_file):
+    """
+    Read SZO/SZR format version
+
+    Parameters
+    ----------
+    eps_file : EPSProduct object
+        EPS Product object.
+
+    Returns
+    -------
+    data : numpy.ndarray
+        SZO/SZR data.
+    """
+    raw_data = eps_file.scaled_mdr
+    raw_unscaled = eps_file.mdr
+    mphr = eps_file.mphr
+
+    n_node_per_line = raw_data["LONGITUDE"].shape[1]
+    n_lines = raw_data["LONGITUDE"].shape[0]
+    n_records = raw_data["LONGITUDE"].size
+
+    data = {}
+    metadata = {}
+    idx_nodes = np.arange(n_lines).repeat(n_node_per_line)
+
+    ascat_time = shortcdstime2jd(raw_data["UTC_LINE_NODES"].flatten()["day"],
+                                 raw_data["UTC_LINE_NODES"].flatten()["time"])
+    data["jd"] = ascat_time[idx_nodes]
+
+    metadata["SPACECRAFT_ID"] = np.int8(mphr["SPACECRAFT_ID"][-1])
+    metadata["ORBIT_START"] = np.uint32(mphr["ORBIT_START"])
+
+    fields = [
+        "PROCESSOR_MAJOR_VERSION", "PROCESSOR_MINOR_VERSION",
+        "FORMAT_MAJOR_VERSION", "FORMAT_MINOR_VERSION"
+    ]
+
+    for f in fields:
+        metadata[f] = np.int16(mphr[f])
+
+    fields = [
+        "DEGRADED_INST_MDR", "DEGRADED_PROC_MDR", "SAT_TRACK_AZI",
+        "ABS_LINE_NUMBER"
+    ]
+
+    for f in fields:
+        data[f] = raw_data[f].flatten()[idx_nodes]
+
+    fields = [("LONGITUDE", long_nan),
+              ("LATITUDE", long_nan),
+              ("SWATH INDICATOR", byte_nan)]
+
+    for f, nan_val in fields:
+        data[f] = raw_data[f].flatten()
+        valid = raw_unscaled[f].flatten() != nan_val
+        data[f][~valid] = nan_val
+
+    fields = [("SIGMA0_TRIP", long_nan), ("INC_ANGLE_TRIP", uint_nan),
+              ("AZI_ANGLE_TRIP", int_nan), ("KP", uint_nan),
+              ("NUM_VAL_TRIP", ulong_nan), ("F_KP", byte_nan),
+              ("F_USABLE", byte_nan)]
+
+    for f, nan_val in fields:
+        data[f] = raw_data[f].reshape(n_records, 3)
+        valid = raw_unscaled[f].reshape(n_records, 3) != nan_val
+        data[f][~valid] = nan_val
+
+    # modify longitudes from (0, 360) to (-180,180)
+    mask = np.logical_and(data["LONGITUDE"] != long_nan,
+                          data["LONGITUDE"] > 180)
+    data["LONGITUDE"][mask] += -360.
+
+    # modify azimuth from (-180, 180) to (0, 360)
+    mask = (data["AZI_ANGLE_TRIP"] != int_nan) & (data["AZI_ANGLE_TRIP"] < 0)
+    data["AZI_ANGLE_TRIP"][mask] += 360
+
+    data["NODE_NUM"] = np.tile((np.arange(n_node_per_line) + 1),
+                               n_lines).astype(np.uint8)
+
+    data["LINE_NUM"] = idx_nodes.astype(np.uint16)
+
+    data["AS_DES_PASS"] = (data["SAT_TRACK_AZI"] < 270).astype(np.uint8)
+
+    # data["swath_indicator"] = data.pop("swath indicator")
 
     return data, metadata
 
@@ -1147,3 +1242,18 @@ def shortcdstime2jd(days, milliseconds):
     """
     offset = days + (milliseconds / 1000.) / (24. * 60. * 60.)
     return julian_epoch + offset
+
+
+# if __name__ == '__main__':
+#     from datetime import datetime
+#     filename = "/data-read/RADAR/warp/raw_ascat/metop_c_full/2023/ASCA_SZR_1B_M03_20230101005700Z_20230101024158Z_N_O_20230101024512Z.nat.gz"
+
+#     filename = "/data-read/RADAR/warp/raw_ascat/metop_c_full/2022/ASCA_SZR_1B_M03_20220101000900Z_20220101015058Z_N_O_20220101015055Z.nat.gz"
+
+#     # data = read_eps(filename)
+#     data = read_eps_l1b(filename, datetime(2000, 1, 1))
+#     print(data.data)
+
+#     import pdb
+#     pdb.set_trace()
+#     pass
