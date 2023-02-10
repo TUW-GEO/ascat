@@ -1838,7 +1838,7 @@ def read_szx_fmv_13(eps_file):
     fields = [("sigma0_trip", long_nan), ("inc_angle_trip", uint_nan),
               ("azi_angle_trip", int_nan), ("kp", uint_nan),
               ("num_val_trip", ulong_nan), ("f_kp", byte_nan),
-              ("f_usable", byte_nan)]
+              ("f_usable", byte_nan), ("land_frac", uint_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].reshape(n_records, 3)
@@ -1862,6 +1862,8 @@ def read_szx_fmv_13(eps_file):
     data["as_des_pass"] = (data["sat_track_azi"] < 270).astype(np.uint8)
 
     data["swath_indicator"] = data.pop("swath indicator")
+
+    data["f_land"] = data.pop("land_frac")
 
     return data, metadata
 
