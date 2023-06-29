@@ -129,10 +129,10 @@ class Test_AscatL1bFile(unittest.TestCase):
         """
         Test read SZF formats.
         """
-        self.eps_ds, metadata = self.eps_szf.read()
-        self.h5_ds, metadata = self.h5_szf.read()
+        self.eps_ds, eps_metadata = self.eps_szf.read()
+        self.h5_ds, h5_metadata = self.h5_szf.read()
 
-        for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
+        for antenna in ['lf-vv', 'lm-vv', 'la-vv', 'rf-vv', 'rm-vv', 'ra-vv']:
             for coord in ['lon', 'lat']:
                 nptest.assert_allclose(self.eps_ds[antenna][coord],
                                        self.h5_ds[antenna][coord], atol=1e-4)
@@ -275,13 +275,13 @@ class Test_AscatL1bFile(unittest.TestCase):
              '2018-06-11T04:18:01.479', '2018-06-11T04:18:01.479'],
             dtype='datetime64[ms]')
 
-        nptest.assert_allclose(self.reader['lf']['lat'][:25],
+        nptest.assert_allclose(self.reader['lf-vv']['lat'][:25],
                                lat_should, atol=1e-5)
-        nptest.assert_allclose(self.reader['lf']['lon'][:25],
+        nptest.assert_allclose(self.reader['lf-vv']['lon'][:25],
                                lon_should, atol=1e-5)
-        nptest.assert_allclose(self.reader['lf']['sig'][:25],
+        nptest.assert_allclose(self.reader['lf-vv']['sig'][:25],
                                sig_should, atol=1e-5)
-        nptest.assert_equal(self.reader['lf']['time'][190:200], t_should)
+        nptest.assert_equal(self.reader['lf-vv']['time'][190:200], t_should)
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
@@ -405,7 +405,7 @@ class Test_AscatL1bFileList(unittest.TestCase):
         eps_data, metadata = self.eps_szf.read(dt)
         hdf5_data, metadata = self.hdf5_szf.read(dt)
 
-        for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
+        for antenna in ['lf-vv', 'lm-vv', 'la-vv', 'rf-vv', 'rm-vv', 'ra-vv']:
             for coord in ['lon', 'lat']:
                 nptest.assert_allclose(eps_data[antenna][coord],
                                        hdf5_data[antenna][coord], atol=1e-4)
@@ -428,7 +428,7 @@ class Test_AscatL1bFileList(unittest.TestCase):
         eps_data, metadata = self.eps_szf.read_period(dt_start, dt_end)
         hdf5_data, metadata = self.hdf5_szf.read_period(dt_start, dt_end)
 
-        for antenna in ['lf', 'lm', 'la', 'rf', 'rm', 'ra']:
+        for antenna in ['lf-vv', 'lm-vv', 'la-vv', 'rf-vv', 'rm-vv', 'ra-vv']:
             for coord in ['lon', 'lat']:
                 nptest.assert_allclose(eps_data[antenna][coord],
                                        hdf5_data[antenna][coord], atol=1e-4)
