@@ -1,4 +1,4 @@
-# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2023, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -31,12 +31,15 @@ Readers for ASCAT Level 1b and Level 2 data in NetCDF format.
 """
 
 import os
+from datetime import datetime
 
 import netCDF4
 import numpy as np
 import xarray as xr
 
 from ascat.utils import tmp_unzip
+from ascat.utils import daterange
+from ascat.file_handling import ChronFiles
 
 float32_nan = -999999.
 uint8_nan = np.iinfo(np.uint8).max
@@ -312,3 +315,206 @@ class AscatL2NcFile:
         Close file.
         """
         pass
+
+
+
+class AscatSsmNcSwathFile:
+
+    """
+    Class reading ASCAT Surface Soil Moisture Netcdf swath file.
+    """
+
+    def __init__(self, filename):
+        """
+        Initialize object.
+
+        Parameters
+        ----------
+        filename : str
+            Filename.
+        """
+        self.filename = filename
+
+    def read(self, mask_and_scale=None):
+        """
+        Read/load data from NetCDF file.
+
+        Parameters
+        ----------
+        mask_and_scale : boolean, optional
+            Mask and scale data using _FillValue.
+
+        Returns
+        -------
+        data : xarray.Dataset
+            Data.
+        """
+        with xr.open_dataset(self.filename, mask_and_scale=mask_and_scale) as ds:
+            data = ds.load()
+
+        return data
+
+
+class AscatSsmNcSwathFileList(ChronFiles):
+
+    """
+    Class reading ASCAT Surface Soil Moisture Netcdf swath file list.
+    """
+
+    def __init__(self, path, filename_template=None, subfolder_template=None,
+                 sat="?", cls_kwargs=None):
+        """
+        Initialize object.
+
+        Parameters
+        ----------
+        path : str
+            Root path to data.
+        filename_template : str, optional
+            Filename template (default: "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H???_C_LIIB_{date}_*_*____.nc")
+        subfolder_template : str, optional
+            Subfolder template (default: /path/metop_{sat}/{year}/)
+        sat : str, optional
+            Satellite Metop-A: "A", Metop-B: "B", Metop-C: "C" or all: "?"
+            (default: "?")
+        cls_kwargs : dict, optional
+            Keyword arguments passed to file IO class (default: None).
+        """
+        if filename_template is None:
+            filename_template = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H???_C_LIIB_{date}_*_*____.nc"
+
+        if subfolder_template is None:
+            subfolder_template = {"satellite": "metop_{sat}", "date": "{year}"}
+
+        if cls_kwargs is None:
+            cls_kwargs = {}
+
+        self.sat = sat
+
+        super().__init__(path,
+                         AscatSsmNcSwathFile,
+                         filename_template,
+                         sf_temp=subfolder_template,
+                         cls_kwargs=cls_kwargs)
+
+    def _fmt(self, timestamp):
+        """
+        Definition of filename and subfolder format.
+
+        Parameters
+        ----------
+        timestamp : datetime
+            Time stamp.
+
+        Returns
+        -------
+        fn_fmt : dict
+            Filename format.
+        sf_fmt : dict
+            Subfolder format.
+        """
+        fn_read_fmt = {
+            "date": timestamp.strftime("%Y%m%d%H%M%S"),
+            "sat": self.sat.upper()
+        }
+        fn_write_fmt = None
+
+        sf_read_fmt = {
+            "satellite": {
+                "sat": self.sat
+            },
+            "date": {
+                "year": timestamp.strftime("%Y"),
+                "month": timestamp.strftime("%m"),
+                "day": timestamp.strftime("%d")
+            }
+        }
+        sf_write_fmt = None
+
+        return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
+
+    def _parse_date(self, filename, start=58, end=72):
+        """
+        Parse date from filename.
+
+        Parameters
+        ----------
+        filename : str
+            Filename.
+        start : int, optional
+            Start position of date field (default: 58).
+        start : int, optional
+            End position  of date field (default: 72).
+
+        Returns
+        -------
+        date : datetime
+            Parsed date.
+        """
+        return datetime.strptime(
+            os.path.basename(filename)[start:end], "%Y%m%d%H%M%S")
+
+    def search_date(self, timestamp, **kwargs):
+        """
+        Search date.
+
+        Parameters
+        ----------
+        timestamp : datetime
+            Date.
+
+        Returns
+        -------
+        filenames : list
+            Filenames.
+        """
+        return super().search_date(timestamp, date_str="%Y%m%d*", **kwargs)
+
+    def iter_daterange(self, start_date, end_date):
+        """
+        Generator returning filenames between start and end date.
+
+        Parameters
+        ----------
+        start_date : datetime
+            Start date.
+        end_date : datetime
+            End date.
+
+        Yields
+        ------
+        filename : str
+            Filename.
+        """
+        for single_date in daterange(start_date, end_date):
+            filenames = self.search_date(single_date)
+            for filename in filenames:
+                yield filename
+
+    def read_date(self, timestamp):
+        """
+        Read data for given timestamp.
+
+        Parameters
+        ----------
+        timestamp : datetime
+            Date.
+
+        Returns
+        -------
+        data : xarray.Dataset
+            Data.
+        """
+        filenames = self.search_date(timestamp)
+
+        if len(filenames) > 1:
+            raise RuntimeError(
+                f"Multiple files found for timestamp {timestamp}")
+        elif len(filenames) == 0:
+            print(f"No file found for timestamp {timestamp}")
+            data = None
+        else:
+            self._open(filenames[0])
+            data = self.fid.read()
+
+        return data

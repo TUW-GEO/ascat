@@ -1,4 +1,4 @@
-# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2023, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -25,11 +25,27 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from datetime import timedelta
 from gzip import GzipFile
 from tempfile import NamedTemporaryFile
 
 import numpy as np
 import xarray as xr
+
+
+def daterange(start_date, end_date):
+    """
+    Generator for daily datetimes.
+
+    Parameters
+    ----------
+    start_date : datetime
+        Start date.
+    end_date : datetime
+        End date.
+    """
+    for n in range(int((end_date - start_date).days)):
+        yield start_date + timedelta(n)
 
 
 def tmp_unzip(filename):
@@ -68,7 +84,7 @@ def db2lin(val):
     val : numpy.ndarray
         Values in linear domain.
     """
-    return 10 ** (val / 10.)
+    return 10**(val / 10.)
 
 
 def lin2db(val):
@@ -115,7 +131,7 @@ def get_window_radius(window, hp_radius):
     hp_weight = 0.5
     if window == 'hamming':
         alpha = 0.54
-        r = (np.pi * hp_radius) / np.arccos((hp_weight-alpha) / (1-alpha))
+        r = (np.pi * hp_radius) / np.arccos((hp_weight - alpha) / (1 - alpha))
     elif window == 'boxcar':
         r = hp_radius
     else:
