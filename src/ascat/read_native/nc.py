@@ -24,14 +24,13 @@
 # WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-
 """
 Readers for ASCAT Level 1b and Level 2 data in NetCDF format.
 """
 
 import os
 from datetime import datetime
+from datetime import timedelta
 
 import netCDF4
 import numpy as np
@@ -122,24 +121,24 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
                 raise RuntimeError('Unknown dimension')
 
             if var_name == 'utc_line_nodes':
-                var_data = var_data.astype(
-                    'timedelta64[s]') + np.datetime64('2000-01-01')
+                var_data = var_data.astype('timedelta64[s]') + np.datetime64(
+                    '2000-01-01')
 
             data[new_var_name] = var_data
 
             if len(var_data.shape) == 1:
                 dtype.append((new_var_name, var_data.dtype.str))
             elif len(var_data.shape) > 1:
-                dtype.append((new_var_name, var_data.dtype.str,
-                              var_data.shape[1:]))
+                dtype.append(
+                    (new_var_name, var_data.dtype.str, var_data.shape[1:]))
 
     num_records = num_rows * num_cells
     coords_fields = ['lon', 'lat', 'time']
 
     if generic:
         sat_id = np.array([0, 4, 3, 5], dtype=np.uint8)
-        data['sat_id'] = np.zeros(num_records, dtype=np.uint8) + sat_id[
-            int(metadata['platform_id'])]
+        data['sat_id'] = np.zeros(num_records, dtype=np.uint8) + sat_id[int(
+            metadata['platform_id'])]
         dtype.append(('sat_id', np.uint8))
 
         n_records = data['lat'].shape[0]
@@ -175,7 +174,6 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
 
 
 class AscatL1bNcFile():
-
     """
     Read ASCAT Level 1b file in NetCDF format.
     """
@@ -214,18 +212,21 @@ class AscatL1bNcFile():
         metadata : dict
             Metadata.
         """
-        gen_fields_lut = {'longitude': ('lon', np.float32, None),
-                          'latitude': ('lat', np.float32, None),
-                          'utc_line_nodes': ('time', np.float32, None),
-                          'inc_angle_trip': ('inc', np.float32, float32_nan),
-                          'azi_angle_trip': ('azi', np.float32, float32_nan),
-                          'sigma0_trip': ('sig', np.float32, float32_nan),
-                          'kp': ('kp', np.float32, float32_nan),
-                          'f_kp': ('kp_quality', np.float32, uint8_nan),
-                          'num_val_trip': ('num_val', np.float32, None)}
+        gen_fields_lut = {
+            'longitude': ('lon', np.float32, None),
+            'latitude': ('lat', np.float32, None),
+            'utc_line_nodes': ('time', np.float32, None),
+            'inc_angle_trip': ('inc', np.float32, float32_nan),
+            'azi_angle_trip': ('azi', np.float32, float32_nan),
+            'sigma0_trip': ('sig', np.float32, float32_nan),
+            'kp': ('kp', np.float32, float32_nan),
+            'f_kp': ('kp_quality', np.float32, uint8_nan),
+            'num_val_trip': ('num_val', np.float32, None)
+        }
 
-        skip_fields = ['f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel',
-                       'f_ref', 'abs_line_number']
+        skip_fields = [
+            'f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel', 'f_ref', 'abs_line_number'
+        ]
 
         data, metadata = read_nc(self.filename, generic, to_xarray,
                                  skip_fields, gen_fields_lut)
@@ -240,7 +241,6 @@ class AscatL1bNcFile():
 
 
 class AscatL2NcFile:
-
     """
     Read ASCAT Level 2 file in NetCDF format.
     """
@@ -301,7 +301,8 @@ class AscatL2NcFile:
             'snow_cover_probability': ('snow_prob', np.uint8, None),
             'frozen_soil_probability': ('frozen_prob', np.uint8, None),
             'wetland_flag': ('wetland', np.uint8, None),
-            'topography_flag': ('topo', np.uint8, None)}
+            'topography_flag': ('topo', np.uint8, None)
+        }
 
         skip_fields = ['abs_line_number']
 
@@ -317,9 +318,7 @@ class AscatL2NcFile:
         pass
 
 
-
 class AscatSsmNcSwathFile:
-
     """
     Class reading ASCAT Surface Soil Moisture Netcdf swath file.
     """
@@ -335,7 +334,7 @@ class AscatSsmNcSwathFile:
         """
         self.filename = filename
 
-    def read(self, mask_and_scale=None):
+    def read(self, mask_and_scale=None, sel_dt=None):
         """
         Read/load data from NetCDF file.
 
@@ -349,20 +348,29 @@ class AscatSsmNcSwathFile:
         data : xarray.Dataset
             Data.
         """
-        with xr.open_dataset(self.filename, mask_and_scale=mask_and_scale) as ds:
+        with xr.open_dataset(self.filename,
+                             mask_and_scale=mask_and_scale) as ds:
             data = ds.load()
+
+        if sel_dt is not None:
+            data = data.where((data.time >= sel_dt[0])
+                              & (data.time <= sel_dt[1]),
+                              drop=True)
 
         return data
 
 
 class AscatSsmNcSwathFileList(ChronFiles):
-
     """
     Class reading ASCAT Surface Soil Moisture Netcdf swath file list.
     """
 
-    def __init__(self, path, filename_template=None, subfolder_template=None,
-                 sat="?", cls_kwargs=None):
+    def __init__(self,
+                 path,
+                 filename_template=None,
+                 subfolder_template=None,
+                 sat="?",
+                 cls_kwargs=None):
         """
         Initialize object.
 
@@ -394,7 +402,7 @@ class AscatSsmNcSwathFileList(ChronFiles):
         super().__init__(path,
                          AscatSsmNcSwathFile,
                          filename_template,
-                         sf_temp=subfolder_template,
+                         sf_templ=subfolder_template,
                          cls_kwargs=cls_kwargs)
 
     def _fmt(self, timestamp):
@@ -433,7 +441,7 @@ class AscatSsmNcSwathFileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _parse_date(self, filename, start=58, end=72):
+    def _parse_date(self, filename, start=53, end=64):
         """
         Parse date from filename.
 
@@ -468,7 +476,7 @@ class AscatSsmNcSwathFileList(ChronFiles):
         filenames : list
             Filenames.
         """
-        return super().search_date(timestamp, date_str="%Y%m%d*", **kwargs)
+        return super().search_date(timestamp, date_str="%Y%m%d%H*", **kwargs)
 
     def iter_daterange(self, start_date, end_date):
         """
@@ -518,3 +526,55 @@ class AscatSsmNcSwathFileList(ChronFiles):
             data = self.fid.read()
 
         return data
+
+    def read_period(self,
+                    start_dt,
+                    end_dt,
+                    delta_dt=timedelta(hours=1),
+                    buffer_dt=timedelta(hours=1),
+                    **kwargs):
+        """
+        Read data for given interval.
+
+        Parameters
+        ----------
+        start_dt : datetime
+            Start datetime.
+        end_dt : datetime
+            End datetime.
+        delta_dt : timedelta, optional
+            Time delta used to jump through search date.
+        buffer_dt : timedelta, optional
+            Search buffer used to find files which could possibly contain
+            data but would be left out because of dt_start.
+
+        Returns
+        -------
+        data : dict, numpy.ndarray
+            Data stored in file.
+        """
+        filenames = self.search_period(start_dt - buffer_dt,
+                                       end_dt + buffer_dt, delta_dt)
+
+        merged_data = []
+
+        sel_dt = (np.datetime64(start_dt - timedelta(minutes=15)),
+                  np.datetime64(end_dt + timedelta(minutes=15)))
+
+        for filename in filenames:
+            self._open(filename)
+
+            try:
+                data = self.fid.read(sel_dt=sel_dt)
+
+                if data is not None:
+                    merged_data.append(data)
+            except:
+                print(f"Error reading: {self.fid.filename}")
+
+        if merged_data:
+            merged_data = xr.concat(merged_data, dim="obs")
+        else:
+            merged_data = None
+
+        return merged_data
