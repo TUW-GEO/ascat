@@ -55,7 +55,7 @@ jobs:
         shell: bash -l {0}
         run: |
           pip install .
-          pip install pytest==6.2.5 tomli==1.2.3
+          pip install pytest==6.2.5 coverage==5.2.1 tomli==1.2.3
           python setup.py test
       - name: Upload Coverage
         shell: bash -l {0}
