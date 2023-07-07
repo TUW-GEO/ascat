@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 2.1.1
+=============
+
+- Add draft for indexed ragged array netcdf file reader using xarray
+- Add ASCAT netcdf swath file reader
+
 Version 2.1.0
 =============
 
