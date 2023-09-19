@@ -75,8 +75,9 @@ class FilenameTemplate:
         if self.sf_templ is None:
             filename = self.root_path / self.fn_templ
         else:
-            filename = self.root_path.joinpath(*list(self.sf_templ.values()),
-                                               self.fn_templ)
+            filename = self.root_path.joinpath(
+                *list(self.sf_templ.values()), self.fn_templ
+            )
 
         return filename
 
@@ -158,8 +159,7 @@ class FilenameTemplate:
             for name, v in self.sf_templ.items():
                 if fmt is not None:
                     if name in fmt:
-                        subfolder.append(self.sf_templ[name].format(
-                            **fmt[name]))
+                        subfolder.append(self.sf_templ[name].format(**fmt[name]))
                     else:
                         subfolder.append(self.sf_templ[name])
                 else:
@@ -213,8 +213,9 @@ class FileSearch:
         filenames : list of str
             Return a possibly-empty list of path/file names that match.
         """
-        return glob.glob(self.file_templ.build_filename(fn_fmt, sf_fmt),
-                         recursive=recursive)
+        return glob.glob(
+            self.file_templ.build_filename(fn_fmt, sf_fmt), recursive=recursive
+        )
 
     def isearch(self, fn_fmt, sf_fmt=None, recursive=False):
         """
@@ -237,8 +238,9 @@ class FileSearch:
             Iterator which yields the same values as search() without
             actually storing them all simultaneously.
         """
-        return glob.iglob(self.file_templ.build_filename(fn_fmt, sf_fmt),
-                          recursive=recursive)
+        return glob.iglob(
+            self.file_templ.build_filename(fn_fmt, sf_fmt), recursive=recursive
+        )
 
     def create_search_func(self, func, recursive=False):
         """
@@ -261,6 +263,7 @@ class FileSearch:
             Custom search function returning a possibly-empty list
             of path/file names that match.
         """
+
         def custom_search(*args, **kwargs):
             fn_fmt, sf_fmt = func(*args, **kwargs)
             return self.search(fn_fmt, sf_fmt, recursive=recursive)
@@ -288,6 +291,7 @@ class FileSearch:
             Custom search function returning an iterator of path/file names
             that match.
         """
+
         def custom_search(*args, **kwargs):
             fn_fmt, sf_fmt = func(*args, **kwargs)
             return self.isearch(fn_fmt, sf_fmt, recursive=recursive)
@@ -301,8 +305,16 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
     MultiFileHandler class.
     """
 
-    def __init__(self, root_path, cls, fn_templ, sf_templ=None,
-                 cls_kwargs=None, err=False, cache_size=0):
+    def __init__(
+        self,
+        root_path,
+        cls,
+        fn_templ,
+        sf_templ=None,
+        cls_kwargs=None,
+        err=False,
+        cache_size=0,
+    ):
         """
         Initialize MultiFileHandler.
 
@@ -508,8 +520,13 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
         self._open(filename)
         self.fid.write(data, **cls_kwargs)
 
-    def search(self, fn_search_pattern, sf_search_pattern=None,
-               custom_fn_templ=None, custom_sf_templ=None):
+    def search(
+        self,
+        fn_search_pattern,
+        sf_search_pattern=None,
+        custom_fn_templ=None,
+        custom_sf_templ=None,
+    ):
         """
         Search files for given root path and filename/folder pattern.
 
@@ -568,8 +585,18 @@ def braces_to_re_groups(string):
 
     return "".join(parts)
 
-def datetime_wildcardify(dt, fmt, year=True, month=True, day=True, hour=True,
-                         minute=True, second=True, microsecond=True):
+
+def datetime_wildcardify(
+    dt,
+    fmt,
+    year=True,
+    month=True,
+    day=True,
+    hour=True,
+    minute=True,
+    second=True,
+    microsecond=True,
+):
     """
     Convert datetime object to string following given format, but with
     wildcards for the user-defined timesteps.
@@ -601,19 +628,19 @@ def datetime_wildcardify(dt, fmt, year=True, month=True, day=True, hour=True,
         String with wildcards.
     """
     if year:
-        fmt = fmt.replace('%Y', '*').replace('%y', '*')
+        fmt = fmt.replace("%Y", "*").replace("%y", "*")
     if month:
-        fmt = fmt.replace('%m', '*').replace('%b', '*').replace('%B', '*')
+        fmt = fmt.replace("%m", "*").replace("%b", "*").replace("%B", "*")
     if day:
-        fmt = fmt.replace('%d', '*').replace('%j', '*')
+        fmt = fmt.replace("%d", "*").replace("%j", "*")
     if hour:
-        fmt = fmt.replace('%H', '*').replace('%I', '*').replace('%p', '*')
+        fmt = fmt.replace("%H", "*").replace("%I", "*").replace("%p", "*")
     if minute:
-        fmt = fmt.replace('%M', '*')
+        fmt = fmt.replace("%M", "*")
     if second:
-        fmt = fmt.replace('%S', '*')
+        fmt = fmt.replace("%S", "*")
     if microsecond:
-        fmt = fmt.replace('%f', '*')
+        fmt = fmt.replace("%f", "*")
 
     return dt.strftime(fmt)
 
@@ -624,11 +651,23 @@ class ChronFiles(MultiFileHandler):
     Managing chronological files with a date field in the filename.
     """
 
-    def __init__(self, root_path, cls, fn_templ, sf_templ, cls_kwargs, err=True,
-                 fn_read_fmt=None, sf_read_fmt=None,
-                 fn_write_fmt=None, sf_write_fmt=None, cache_size=0):
-
-        super().__init__(root_path, cls, fn_templ, sf_templ, cls_kwargs, err, cache_size)
+    def __init__(
+        self,
+        root_path,
+        cls,
+        fn_templ,
+        sf_templ,
+        cls_kwargs,
+        err=True,
+        fn_read_fmt=None,
+        sf_read_fmt=None,
+        fn_write_fmt=None,
+        sf_write_fmt=None,
+        cache_size=0,
+    ):
+        super().__init__(
+            root_path, cls, fn_templ, sf_templ, cls_kwargs, err, cache_size
+        )
         self.fn_read_fmt = fn_read_fmt
         self.sf_read_fmt = sf_read_fmt
         self.fn_write_fmt = fn_write_fmt
@@ -657,7 +696,6 @@ class ChronFiles(MultiFileHandler):
             sf_write_fmt = self.sf_write_fmt(*fmt_args, **fmt_kwargs)
         else:
             sf_write_fmt = self.sf_write_fmt
-
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
@@ -690,7 +728,6 @@ class ChronFiles(MultiFileHandler):
             dates = [dates]
         return [datetime.strptime(date, date_str) for date in dates]
 
-
     def _merge_data(self, data):
         """
         Merge datasets after reading period. Needs to be overwritten
@@ -708,8 +745,9 @@ class ChronFiles(MultiFileHandler):
         """
         return self.fid.merge(data)
 
-    def search_date(self, timestamp, date_str="%Y%m%d", date_fields=["date"],
-                    return_date=False):
+    def search_date(
+        self, timestamp, date_str="%Y%m%d", date_fields=["date"], return_date=False
+    ):
         """
         Search files for given date.
 
@@ -734,7 +772,7 @@ class ChronFiles(MultiFileHandler):
 
         # We only have a single timestamp, but the filenames may have more than one date field
         # So we just pass it to all the date fields and reformat the necessary parts below.
-        fn_read_fmt, sf_read_fmt, _, _ = self._fmt(*[timestamp]*len(date_fields))
+        fn_read_fmt, sf_read_fmt, _, _ = self._fmt(*[timestamp] * len(date_fields))
 
         # Now we need to replace any fields in the datetime string more granular
         # search date with wildcards.
@@ -750,9 +788,11 @@ class ChronFiles(MultiFileHandler):
         # all matching filenames and add them to the list
         filenames = []
         for i, date_field in enumerate(date_fields):
-            fn_read_fmt[date_field] = datetime_wildcardify(timestamp, date_str, year=False,month=False,day=False)
+            fn_read_fmt[date_field] = datetime_wildcardify(
+                timestamp, date_str, year=False, month=False, day=False
+            )
             for field in date_fields[:i] + date_fields[i+1:]:
-                fn_read_fmt[field] = '*'
+                fn_read_fmt[field] = "*"
             fs = FileSearch(self.root_path, self.ft.fn_templ, self.ft.sf_templ)
             filenames += fs.search(fn_read_fmt, sf_read_fmt)
 
@@ -769,10 +809,15 @@ class ChronFiles(MultiFileHandler):
                 start_dates.append(start)
                 if len(fname_dates) > 1:
                     if end_dates and (end_dates[-1] > start):
-                        raise ValueError("Previous filename end date is after current filename start date."+\
-                                         "Overlap between files is not allowed."+\
-                                         "Overlapping filenames:\n"+filenames[i-1]+\
-                                         "\n"+filename)
+                        raise ValueError(
+                            "Previous filename end date is after current"
+                            + "filename start date. "
+                            + "Overlap between files is not allowed. "
+                            + "Overlapping filenames:\n"
+                            + filenames[i - 1]
+                            + "\n"
+                            + filename
+                        )
                     end = fname_dates[1]
                     end_dates.append(end)
 
@@ -780,8 +825,14 @@ class ChronFiles(MultiFileHandler):
 
         return filenames
 
-    def search_period(self, dt_start, dt_end, dt_delta=timedelta(days=1),
-                      date_str="%Y%m%d", date_fields=["date"]):
+    def search_period(
+        self,
+        dt_start,
+        dt_end,
+        dt_delta=timedelta(days=1),
+        date_str="%Y%m%d",
+        date_fields=["date"],
+    ):
         """
         Search files for time period.
 
@@ -801,17 +852,26 @@ class ChronFiles(MultiFileHandler):
         """
         filenames = []
 
-        for dt_cur in np.arange(dt_start, dt_end+dt_delta, dt_delta).astype(datetime):
-            files, dates = self.search_date(dt_cur, date_str, date_fields, return_date=True)
+        for dt_cur in np.arange(dt_start, dt_end + dt_delta, dt_delta).astype(datetime):
+            files, dates = self.search_date(
+                dt_cur, date_str, date_fields, return_date=True
+            )
             for f, dt in zip(files, dates):
-                if f not in filenames and dt >= dt_start and dt < dt_end+dt_delta:
+                if f not in filenames and dt >= dt_start and dt < dt_end + dt_delta:
                     filenames.append(f)
 
         return filenames
 
-    def read_period(self, dt_start, dt_end, dt_delta=timedelta(days=1),
-                    dt_buffer=timedelta(days=1), date_str="%Y%m%d", date_fields=["date"],
-                    **kwargs):
+    def read_period(
+        self,
+        dt_start,
+        dt_end,
+        dt_delta=timedelta(days=1),
+        dt_buffer=timedelta(days=1),
+        date_str="%Y%m%d",
+        date_fields=["date"],
+        **kwargs,
+    ):
         """
         Read data for given interval.
 
@@ -832,7 +892,9 @@ class ChronFiles(MultiFileHandler):
         data : dict, numpy.ndarray
             Data stored in file.
         """
-        filenames = self.search_period(dt_start-dt_buffer, dt_end, dt_delta, date_str, date_fields)
+        filenames = self.search_period(
+            dt_start - dt_buffer, dt_end, dt_delta, date_str, date_fields
+        )
 
         data = []
 
@@ -931,8 +993,9 @@ class Csv:
         """
         data = self.read()
 
-        subset = ((data["date"] >= np.datetime64(dt_start)) &
-                  (data["date"] <= np.datetime64(dt_end)))
+        subset = (data["date"] >= np.datetime64(dt_start)) & (
+            data["date"] <= np.datetime64(dt_end)
+        )
 
         if np.sum(subset) > 0:
             data = data[subset]
@@ -970,6 +1033,7 @@ class Csv:
         """
         return np.hstack(data)
 
+
 class CsvFiles(ChronFiles):
 
     """
@@ -1006,14 +1070,17 @@ class CsvFiles(ChronFiles):
         sf_fmt : dict
             Subfolder format.
         """
-        fn_read_fmt = {"date": timestamp.strftime("%Y%m%d_%H%M%S"),
-                       "now": "*"}
+        fn_read_fmt = {"date": timestamp.strftime("%Y%m%d_%H%M%S"), "now": "*"}
 
-        fn_write_fmt = {"date": timestamp.strftime("%Y%m%d_%H%M%S"),
-                        "now": datetime.now().strftime("%Y%m%d_%H%M%S")}
+        fn_write_fmt = {
+            "date": timestamp.strftime("%Y%m%d_%H%M%S"),
+            "now": datetime.now().strftime("%Y%m%d_%H%M%S"),
+        }
 
-        sf_read_fmt = {"Y": {"year": timestamp.strftime("%Y")},
-                       "M": {"month": timestamp.strftime("%m")}}
+        sf_read_fmt = {
+            "Y": {"year": timestamp.strftime("%Y")},
+            "M": {"month": timestamp.strftime("%m")},
+        }
 
         sf_write_fmt = sf_read_fmt
 
@@ -1033,8 +1100,7 @@ class CsvFiles(ChronFiles):
         date : datetime
             Parsed date.
         """
-        return datetime.strptime(Path(filename).name[7:22],
-                                 "%Y%m%d_%H%M%S")
+        return datetime.strptime(Path(filename).name[7:22], "%Y%m%d_%H%M%S")
 
     def _merge_data(self, data):
         """
