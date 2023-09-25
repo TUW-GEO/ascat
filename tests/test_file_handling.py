@@ -45,6 +45,7 @@ from ascat.file_handling import MultiFileHandler
 from ascat.file_handling import ChronFiles
 from ascat.file_handling import Csv
 
+
 class TestFilenameTemplate(unittest.TestCase):
     """
     Tests for FilenameTemplate class.

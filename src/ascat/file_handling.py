@@ -566,8 +566,8 @@ def braces_to_re_groups(string):
     --------
     >>> braces_to_re_groups("{year}-{month}-{day}")
     "(?P<year>.+)-(?P<month>.+)-(?P<day>.+)"
-    >>> braces_to_re_groups("{year}-{month}-{day}-{year}")
-    "(?P<year>.+)-(?P<month>.+)-(?P<day>.+)-(?P=year)"
+    >>> braces_to_re_groups("{year}-{month}-{day}_{year}-{month}-{day2}")
+    "(?P<year>.+)-(?P<month>.+)-(?P<day>.+)_(?P=year)-(?P=month)-(?P<day2>.+)"
     """
 
     pattern = re.compile(r"{(.+?)}")
