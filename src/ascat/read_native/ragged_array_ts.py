@@ -27,9 +27,37 @@
 
 import os
 import warnings
+from datetime import datetime
 
 import xarray as xr
 import numpy as np
+
+NC_FILL_FLOAT = np.float32(9969209968386869046778552952102584320)
+
+
+def var_order(dataset):
+    if "row_size" in dataset.data_vars:
+        first_var = "row_size"
+    elif "locationIndex" in dataset.data_vars:
+        first_var = "locationIndex"
+    else:
+        raise ValueError(
+            "No row_size or locationIndex in dataset. \
+                          Cannot determine if indexed or ragged"
+        )
+
+    order = [
+        first_var,
+        "lon",
+        "lat",
+        "alt",
+        "location_id",
+        "location_description",
+        "time",
+    ]
+    order.extend([v for v in dataset.data_vars if v not in order])
+
+    return dataset[order]
 
 
 class RAFile:
@@ -38,19 +66,20 @@ class RAFile:
 
     """
 
-    def __init__(self,
-                 loc_dim_name="locations",
-                 obs_dim_name="time",
-                 loc_ids_name="location_id",
-                 loc_descr_name="location_description",
-                 time_units="days since 1900-01-01 00:00:00",
-                 time_var="time",
-                 lat_var="lat",
-                 lon_var="lon",
-                 alt_var="alt",
-                 cache=False,
-                 mask_and_scale=False):
-
+    def __init__(
+        self,
+        loc_dim_name="locations",
+        obs_dim_name="time",
+        loc_ids_name="location_id",
+        loc_descr_name="location_description",
+        time_units="days since 1900-01-01 00:00:00",
+        time_var="time",
+        lat_var="lat",
+        lon_var="lon",
+        alt_var="alt",
+        cache=False,
+        mask_and_scale=False,
+    ):
         # dimension names
         self.dim = {"obs": obs_dim_name, "loc": loc_dim_name}
 
@@ -63,7 +92,7 @@ class RAFile:
             "time_units": time_units,
             "lat": lat_var,
             "lon": lon_var,
-            "alt": alt_var
+            "alt": alt_var,
         }
 
         self.cache = cache
@@ -77,13 +106,12 @@ class IRANcFile(RAFile):
     """
 
     def __init__(self, filename, **kwargs):
-
         super().__init__(**kwargs)
         self.filename = filename
 
-        with xr.open_dataset(self.filename,
-                             mask_and_scale=self.mask_and_scale) as ncfile:
-
+        with xr.open_dataset(
+            self.filename, mask_and_scale=self.mask_and_scale
+        ) as ncfile:
             var_list = [self.var["lon"], self.var["lat"], self.loc["ids"]]
 
             if self.cache:
@@ -145,9 +173,8 @@ class IRANcFile(RAFile):
                 data = self.dataset.sel(locations=i, time=j)
             else:
                 with xr.open_dataset(
-                        self.filename,
-                        mask_and_scale=self.mask_and_scale) as dataset:
-
+                    self.filename, mask_and_scale=self.mask_and_scale
+                ) as dataset:
                     j = dataset.locationIndex.values == i
                     data = dataset.sel(locations=i, time=j)
 
@@ -155,6 +182,84 @@ class IRANcFile(RAFile):
                 data = data[variables]
 
         return data
+
+    def read_compat(self, grid):
+        with xr.open_dataset(
+            self.filename, mask_and_scale=self.mask_and_scale
+        ) as dataset:
+            cell = int(dataset.attrs["id"].split(".")[0])
+            grid_gpis, grid_lons, grid_lats = grid.grid_points_for_cell(cell)
+
+            # alt and location_description generally are completely filled with
+            # NaN values/empty strings, and there is no way to derive them from
+            # the gpis yet, but in case they do have data for some reason, this
+            # maintains the existing data in alignment with the relevant
+            # location_ids and fills in the rest with NaNs/empty strings.
+            #
+            # NC_FILL_FLOAT is the NaN used for alt, since that's what's used by
+            # the previous writers/mergers, but it's against CF conventions to
+            # have fill values in dataset coordinates, so I'm not sure if this
+            # is appropriate
+            alt = dataset[self.var["alt"]].values
+            alt = np.append(alt, np.repeat(NC_FILL_FLOAT, (len(grid_gpis) - len(alt))))
+            location_description = dataset[self.loc["descr"]].values
+            location_description = np.append(
+                location_description,
+                np.repeat("", len(grid_gpis) - len(location_description)),
+            )
+
+            # get the array of location ids from dataset and append any missing location
+            # ids from the same cell to the end of the array
+            location_id = dataset[self.loc["ids"]].values[
+                np.asarray(dataset[self.loc["ids"]].values > 0).nonzero()
+            ]
+            location_id = np.concatenate(
+                (location_id, np.setdiff1d(grid_gpis, location_id))
+            )
+
+            # calculate what locationIndex will be after sorting the location_ids
+            sorter = np.argsort(np.sort(location_id))
+            locationIndex = sorter[
+                np.searchsorted(
+                    np.sort(location_id),
+                    location_id[dataset.locationIndex.values],
+                    sorter=sorter,
+                )
+            ]
+
+            # Need to drop locations dim and associated variables in order to
+            # add new versions of those variables with more entries.
+            dataset = dataset.drop_dims([self.dim["loc"]])
+
+            # Add back vars with locations dimension, which will then be sorted along
+            # with location_id
+            dataset[self.loc["ids"]] = xr.DataArray(location_id, dims=[self.dim["loc"]])
+            dataset[self.var["alt"]] = xr.DataArray(alt, dims=[self.dim["loc"]])
+            dataset[self.loc["descr"]] = xr.DataArray(
+                location_description, dims=[self.dim["loc"]]
+            )
+            dataset = dataset.sortby(self.loc["ids"])
+            assert np.all(dataset.location_id.values == np.array(grid_gpis))
+
+            # Add back the lons and lats, which were already properly sorted when
+            # retrieved from the grid
+            dataset[self.var["lon"]] = xr.DataArray(grid_lons, dims=[self.dim["loc"]])
+            dataset[self.var["lat"]] = xr.DataArray(grid_lats, dims=[self.dim["loc"]])
+
+            # Add the locationIndex
+            dataset["locationIndex"] = xr.DataArray(
+                locationIndex, dims=[self.dim["obs"]]
+            )
+
+            dataset = dataset.set_coords(
+                [self.var["lon"], self.var["lat"], self.var["alt"], self.var["time"]]
+            )
+
+            # Make sure the obs dimension is named obs
+            dataset = dataset.rename_dims({self.dim["obs"]: "obs"})
+            dataset = var_order(dataset)
+
+        return dataset
 
 
 class CRANcFile(RAFile):
@@ -177,12 +282,14 @@ class CRANcFile(RAFile):
         self.var["row"] = row_var
         self.filename = filename
 
-        with xr.open_dataset(self.filename,
-                             mask_and_scale=self.mask_and_scale) as ncfile:
-
+        with xr.open_dataset(
+            self.filename, mask_and_scale=self.mask_and_scale
+        ) as ncfile:
             var_list = [
-                self.var["lon"], self.var["lat"], self.loc["ids"],
-                self.var["row"]
+                self.var["lon"],
+                self.var["lat"],
+                self.loc["ids"],
+                self.var["row"],
             ]
 
             if self.cache:
@@ -190,13 +297,15 @@ class CRANcFile(RAFile):
 
                 self.locations = self.dataset[var_list].to_dataframe()
                 self.locations[self.var["row"]] = np.cumsum(
-                    self.locations[self.var["row"]])
+                    self.locations[self.var["row"]]
+                )
             else:
                 self.dataset = None
 
                 self.locations = ncfile[var_list].to_dataframe()
                 self.locations[self.var["row"]] = np.cumsum(
-                    self.locations[self.var["row"]])
+                    self.locations[self.var["row"]]
+                )
 
     @property
     def ids(self):
@@ -255,8 +364,8 @@ class CRANcFile(RAFile):
                 data = self.dataset.sel(locations=i, obs=slice(r_from, r_to))
             else:
                 with xr.open_dataset(
-                        self.filename,
-                        mask_and_scale=self.mask_and_scale) as dataset:
+                    self.filename, mask_and_scale=self.mask_and_scale
+                ) as dataset:
                     data = dataset.sel(locations=i, obs=slice(r_from, r_to))
 
             if variables is not None:
@@ -264,17 +373,162 @@ class CRANcFile(RAFile):
 
         return data
 
+    def read_compat(self, grid):
+        with xr.open_dataset(
+            self.filename, mask_and_scale=self.mask_and_scale
+        ) as dataset:
+            cell = int(dataset.attrs["id"].split(".")[0])
+            grid_gpis, grid_lons, grid_lats = grid.grid_points_for_cell(cell)
+            # alt = dataset[self.var["alt"]].values
+            # alt = np.append(alt, [NC_FILL_FLOAT]*(len(grid_gpis) - len(alt)))
+            # replace nans in row_size with zeros
+            row_size = np.where(
+                dataset[self.var["row"]].values > 0, dataset[self.var["row"]].values, 0
+            )
+
+            # get the array of location ids from dataset and append any missing location
+            # ids from the same cell to the end of the array
+            location_id = dataset[self.loc["ids"]].values[
+                np.asarray(dataset[self.loc["ids"]].values > 0).nonzero()
+            ]
+            location_id = np.concatenate(
+                (location_id, np.setdiff1d(grid_gpis, location_id))
+            )
+
+            # calculate locationIndex for the unsorted dataset
+            locationIndex = np.repeat(np.arange(len(row_size)), row_size)
+
+            # calculate what locationIndex will be after sorting the location_ids
+            sorter = np.argsort(np.sort(location_id))
+            locationIndex = sorter[
+                np.searchsorted(
+                    np.sort(location_id),
+                    location_id[locationIndex],
+                    sorter=sorter,
+                )
+            ]
+
+            dataset = dataset.drop_vars(["row_size"])
+            dataset[self.loc["ids"]] = xr.DataArray(location_id, dims=[self.dim["loc"]])
+            dataset["locationIndex"] = xr.DataArray(locationIndex, dims=["obs"])
+
+            # sort all vars with locations dim by location_ids
+            dataset = dataset.sortby(self.loc["ids"])
+            assert np.all(dataset.location_id.values == np.array(grid_gpis))
+            dataset[self.var["lon"]] = xr.DataArray(grid_lons, dims=[self.dim["loc"]])
+            dataset[self.var["lat"]] = xr.DataArray(grid_lats, dims=[self.dim["loc"]])
+
+            dataset = var_order(dataset)
+
+        return dataset
+
+
+default_attrs = {
+    "row_size": {
+        "long_name": "number of observations at this location",
+        "sample_dimension": "obs",
+    },
+    "lon": {
+        "standard_name": "longitude",
+        "long_name": "location longitude",
+        "units": "degrees_east",
+        "valid_range": np.array([-180, 180], dtype=np.float),
+    },
+    "lat": {
+        "standard_name": "latitude",
+        "long_name": "location latitude",
+        "units": "degrees_north",
+        "valid_range": np.array([-90, 90], dtype=np.float),
+    },
+    "alt": {
+        "standard_name": "height",
+        "long_name": "vertical distance above the surface",
+        "units": "m",
+        "positive": "up",
+        "axis": "Z",
+    },
+    "time": {
+        "standard_name": "time",
+        "long_name": "time of measurement",
+    },
+}
+
+
+default_encoding = {
+    "row_size": {
+        "dtype": "int64",
+    },
+    "lon": {
+        "dtype": "float32",
+    },
+    "lat": {
+        "dtype": "float32",
+    },
+    "alt": {
+        "dtype": "float32",
+    },
+    "location_id": {
+        "dtype": "int64",
+    },
+    "location_description": {
+        "dtype": "string",
+    },
+    "time": {
+        "dtype": "float64",
+        "units": "days since 1900-01-01 00:00:00",
+        "calendar": None,
+    },
+}
+
+for var in default_encoding:
+    default_encoding[var]["_FillValue"] = None
+    default_encoding[var]["zlib"] = True
+    default_encoding[var]["complevel"] = 4
+
+
+def compatible_write(compat_dataset, output_name, attributes=None, encoding=None):
+    """
+    Write a compatible dataset in contiguous ragged array format.
+    The output from IRANcFile.read_compat() and CRANcFile.read_compat()
+    are compatible, as well as any dataset produced as a concatenation of these two
+    along the obs dimension with `data_vars="minimal"`.
+    """
+    if attributes is None:
+        attributes = {}
+    if encoding is None:
+        encoding = {}
+
+    compat_dataset = compat_dataset.sortby(["locationIndex", "time"])
+
+    idxs, sizes = np.unique(compat_dataset.locationIndex, return_counts=True)
+    row_size = np.zeros_like(compat_dataset.location_id.values)
+    row_size[idxs] = sizes
+    compat_dataset["row_size"] = xr.DataArray(row_size, dims=["locations"])
+
+    compat_dataset = compat_dataset.drop_vars(["locationIndex"])
+    compat_dataset.attrs["date_created"] = str(
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+    encoding = {**default_encoding, **encoding}
+    attributes = {**default_attrs, **attributes}
+    if "locationIndex" in encoding:
+        encoding.pop("locationIndex")
+    if "locationIndex" in attributes:
+        attributes.pop("locationIndex")
+
+    for var, attrs in attributes.items():
+        compat_dataset[var] = compat_dataset[var].assign_attrs(attrs)
+        if var in ["row_size", "location_id", "location_description"]:
+            compat_dataset[var].encoding["coordinates"] = None
+
+    var_order(compat_dataset).to_netcdf(output_name, encoding=encoding)
+
 
 class GridCellFiles:
-
-    def __init__(self,
-                 path,
-                 grid,
-                 ioclass,
-                 cache=False,
-                 fn_format="{:04d}.nc",
-                 ioclass_kws=None):
-
+    def __init__(
+        self, path, grid, ioclass, cache=False, fn_format="{:04d}.nc", ioclass_kws=None
+    ):
         self.path = path
         self.grid = grid
         self.ioclass = ioclass
@@ -403,7 +657,8 @@ class GridCellFiles:
         if "ll_bbox" in kwargs:
             latmin, latmax, lonmin, lonmax = kwargs["ll_bbox"]
             location_ids = self.grid.get_bbox_grid_points(
-                latmin, latmax, lonmin, lonmax)
+                latmin, latmax, lonmin, lonmax
+            )
             kwargs.pop("ll_bbox", None)
         elif "gpis" in kwargs:
             subgrid = self.grid.subgrid_from_gpis(kwargs["gpis"])
