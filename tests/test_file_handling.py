@@ -41,7 +41,6 @@ from numpy.testing import assert_array_equal
 
 from ascat.file_handling import FilenameTemplate
 from ascat.file_handling import FileSearch
-from ascat.file_handling import MultiFileHandler
 from ascat.file_handling import ChronFiles
 from ascat.file_handling import Csv
 
