@@ -28,36 +28,14 @@
 import os
 import warnings
 from datetime import datetime
+from pathlib import Path
 
 import xarray as xr
 import numpy as np
 
+int8_nan = np.iinfo(np.int8).max
+int64_nan = np.iinfo(np.int64).min
 NC_FILL_FLOAT = np.float32(9969209968386869046778552952102584320)
-
-
-def var_order(dataset):
-    if "row_size" in dataset.data_vars:
-        first_var = "row_size"
-    elif "locationIndex" in dataset.data_vars:
-        first_var = "locationIndex"
-    else:
-        raise ValueError(
-            "No row_size or locationIndex in dataset. \
-                          Cannot determine if indexed or ragged"
-        )
-
-    order = [
-        first_var,
-        "lon",
-        "lat",
-        "alt",
-        "location_id",
-        "location_description",
-        "time",
-    ]
-    order.extend([v for v in dataset.data_vars if v not in order])
-
-    return dataset[order]
 
 
 class RAFile:
@@ -183,84 +161,6 @@ class IRANcFile(RAFile):
 
         return data
 
-    def read_compat(self, grid):
-        with xr.open_dataset(
-            self.filename, mask_and_scale=self.mask_and_scale
-        ) as dataset:
-            cell = int(dataset.attrs["id"].split(".")[0])
-            grid_gpis, grid_lons, grid_lats = grid.grid_points_for_cell(cell)
-
-            # alt and location_description generally are completely filled with
-            # NaN values/empty strings, and there is no way to derive them from
-            # the gpis yet, but in case they do have data for some reason, this
-            # maintains the existing data in alignment with the relevant
-            # location_ids and fills in the rest with NaNs/empty strings.
-            #
-            # NC_FILL_FLOAT is the NaN used for alt, since that's what's used by
-            # the previous writers/mergers, but it's against CF conventions to
-            # have fill values in dataset coordinates, so I'm not sure if this
-            # is appropriate
-            alt = dataset[self.var["alt"]].values
-            alt = np.append(alt, np.repeat(NC_FILL_FLOAT, (len(grid_gpis) - len(alt))))
-            location_description = dataset[self.loc["descr"]].values
-            location_description = np.append(
-                location_description,
-                np.repeat("", len(grid_gpis) - len(location_description)),
-            )
-
-            # get the array of location ids from dataset and append any missing location
-            # ids from the same cell to the end of the array
-            location_id = dataset[self.loc["ids"]].values[
-                np.asarray(dataset[self.loc["ids"]].values > 0).nonzero()
-            ]
-            location_id = np.concatenate(
-                (location_id, np.setdiff1d(grid_gpis, location_id))
-            )
-
-            # calculate what locationIndex will be after sorting the location_ids
-            sorter = np.argsort(np.sort(location_id))
-            locationIndex = sorter[
-                np.searchsorted(
-                    np.sort(location_id),
-                    location_id[dataset.locationIndex.values],
-                    sorter=sorter,
-                )
-            ]
-
-            # Need to drop locations dim and associated variables in order to
-            # add new versions of those variables with more entries.
-            dataset = dataset.drop_dims([self.dim["loc"]])
-
-            # Add back vars with locations dimension, which will then be sorted along
-            # with location_id
-            dataset[self.loc["ids"]] = xr.DataArray(location_id, dims=[self.dim["loc"]])
-            dataset[self.var["alt"]] = xr.DataArray(alt, dims=[self.dim["loc"]])
-            dataset[self.loc["descr"]] = xr.DataArray(
-                location_description, dims=[self.dim["loc"]]
-            )
-            dataset = dataset.sortby(self.loc["ids"])
-            assert np.all(dataset.location_id.values == np.array(grid_gpis))
-
-            # Add back the lons and lats, which were already properly sorted when
-            # retrieved from the grid
-            dataset[self.var["lon"]] = xr.DataArray(grid_lons, dims=[self.dim["loc"]])
-            dataset[self.var["lat"]] = xr.DataArray(grid_lats, dims=[self.dim["loc"]])
-
-            # Add the locationIndex
-            dataset["locationIndex"] = xr.DataArray(
-                locationIndex, dims=[self.dim["obs"]]
-            )
-
-            dataset = dataset.set_coords(
-                [self.var["lon"], self.var["lat"], self.var["alt"], self.var["time"]]
-            )
-
-            # Make sure the obs dimension is named obs
-            dataset = dataset.rename_dims({self.dim["obs"]: "obs"})
-            dataset = var_order(dataset)
-
-        return dataset
-
 
 class CRANcFile(RAFile):
     """
@@ -373,156 +273,336 @@ class CRANcFile(RAFile):
 
         return data
 
-    def read_compat(self, grid):
-        with xr.open_dataset(
-            self.filename, mask_and_scale=self.mask_and_scale
-        ) as dataset:
-            cell = int(dataset.attrs["id"].split(".")[0])
-            grid_gpis, grid_lons, grid_lats = grid.grid_points_for_cell(cell)
-            # alt = dataset[self.var["alt"]].values
-            # alt = np.append(alt, [NC_FILL_FLOAT]*(len(grid_gpis) - len(alt)))
-            # replace nans in row_size with zeros
-            row_size = np.where(
-                dataset[self.var["row"]].values > 0, dataset[self.var["row"]].values, 0
-            )
 
-            # get the array of location ids from dataset and append any missing location
-            # ids from the same cell to the end of the array
-            location_id = dataset[self.loc["ids"]].values[
-                np.asarray(dataset[self.loc["ids"]].values > 0).nonzero()
-            ]
-            location_id = np.concatenate(
-                (location_id, np.setdiff1d(grid_gpis, location_id))
-            )
+def var_order(dataset):
+    if "row_size" in dataset.data_vars:
+        first_var = "row_size"
+    elif "locationIndex" in dataset.data_vars:
+        first_var = "locationIndex"
+    else:
+        raise ValueError(
+            "No row_size or locationIndex in dataset. \
+                          Cannot determine if indexed or ragged"
+        )
 
-            # calculate locationIndex for the unsorted dataset
-            locationIndex = np.repeat(np.arange(len(row_size)), row_size)
+    order = [
+        first_var,
+        "lon",
+        "lat",
+        "alt",
+        "location_id",
+        "location_description",
+        "time",
+    ]
+    order.extend([v for v in dataset.data_vars if v not in order])
 
-            # calculate what locationIndex will be after sorting the location_ids
-            sorter = np.argsort(np.sort(location_id))
-            locationIndex = sorter[
-                np.searchsorted(
-                    np.sort(location_id),
-                    location_id[locationIndex],
-                    sorter=sorter,
-                )
-            ]
-
-            dataset = dataset.drop_vars(["row_size"])
-            dataset[self.loc["ids"]] = xr.DataArray(location_id, dims=[self.dim["loc"]])
-            dataset["locationIndex"] = xr.DataArray(locationIndex, dims=["obs"])
-
-            # sort all vars with locations dim by location_ids
-            dataset = dataset.sortby(self.loc["ids"])
-            assert np.all(dataset.location_id.values == np.array(grid_gpis))
-            dataset[self.var["lon"]] = xr.DataArray(grid_lons, dims=[self.dim["loc"]])
-            dataset[self.var["lat"]] = xr.DataArray(grid_lats, dims=[self.dim["loc"]])
-
-            dataset = var_order(dataset)
-
-        return dataset
+    return dataset[order]
 
 
-default_attrs = {
-    "row_size": {
-        "long_name": "number of observations at this location",
-        "sample_dimension": "obs",
-    },
-    "lon": {
-        "standard_name": "longitude",
-        "long_name": "location longitude",
-        "units": "degrees_east",
-        "valid_range": np.array([-180, 180], dtype=np.float),
-    },
-    "lat": {
-        "standard_name": "latitude",
-        "long_name": "location latitude",
-        "units": "degrees_north",
-        "valid_range": np.array([-90, 90], dtype=np.float),
-    },
-    "alt": {
-        "standard_name": "height",
-        "long_name": "vertical distance above the surface",
-        "units": "m",
-        "positive": "up",
-        "axis": "Z",
-    },
-    "time": {
-        "standard_name": "time",
-        "long_name": "time of measurement",
-    },
-}
+def indexed_to_contiguous(dataset):
+    if isinstance(dataset, (str, Path)):
+        with xr.open_dataset(dataset) as ds:
+            return indexed_to_contiguous(ds)
+
+    if not isinstance(dataset, xr.Dataset):
+        raise TypeError("dataset must be an xarray Dataset or a path to a netCDF file")
+    if "locationIndex" not in dataset:
+        raise ValueError("dataset must have a locationIndex variable")
+
+    dataset = dataset.sortby(["locationIndex", "time"])
+
+    # # this alone is simpler than what follows if one can assume that the locationIndex
+    # # is an integer sequence with no gaps
+    # dataset["row_size"] = np.unique(dataset["locationIndex"], return_counts=True)[1]
+
+    idxs, sizes = np.unique(dataset.locationIndex, return_counts=True)
+    row_size = np.zeros_like(dataset.location_id.values)
+    row_size[idxs] = sizes
+    dataset["row_size"] = xr.DataArray(row_size, dims=["locations"])
+
+    dataset = dataset.drop_vars(["locationIndex"])
+
+    return var_order(dataset)
 
 
-default_encoding = {
-    "row_size": {
-        "dtype": "int64",
-    },
-    "lon": {
-        "dtype": "float32",
-    },
-    "lat": {
-        "dtype": "float32",
-    },
-    "alt": {
-        "dtype": "float32",
-    },
-    "location_id": {
-        "dtype": "int64",
-    },
-    "location_description": {
-        "dtype": "string",
-    },
-    "time": {
-        "dtype": "float64",
-        "units": "days since 1900-01-01 00:00:00",
-        "calendar": None,
-    },
-}
+def contiguous_to_indexed(dataset):
+    if isinstance(dataset, (str, Path)):
+        with xr.open_dataset(dataset) as ds:
+            return contiguous_to_indexed(ds)
 
-for var in default_encoding:
-    default_encoding[var]["_FillValue"] = None
-    default_encoding[var]["zlib"] = True
-    default_encoding[var]["complevel"] = 4
+    if not isinstance(dataset, xr.Dataset):
+        raise TypeError("dataset must be an xarray Dataset or a path to a netCDF file")
+    if "row_size" not in dataset:
+        raise ValueError("dataset must have a row_size variable")
+
+    row_size = np.where(dataset["row_size"].values > 0, dataset["row_size"].values, 0)
+
+    locationIndex = np.repeat(np.arange(len(row_size)), row_size)
+    dataset["locationIndex"] = xr.DataArray(locationIndex, dims=["obs"])
+    dataset = dataset.drop_vars(["row_size"])
+    return dataset
 
 
-def compatible_write(compat_dataset, output_name, attributes=None, encoding=None):
-    """
-    Write a compatible dataset in contiguous ragged array format.
-    The output from IRANcFile.read_compat() and CRANcFile.read_compat()
-    are compatible, as well as any dataset produced as a concatenation of these two
-    along the obs dimension with `data_vars="minimal"`.
-    """
+def dataset_ra_type(dataset):
+    if "locationIndex" in dataset:
+        return "indexed"
+    if "row_size" in dataset:
+        return "contiguous"
+    raise ValueError("dataset must have either locationIndex or row_size")
+
+
+def set_attributes(dataset, attributes=None):
     if attributes is None:
         attributes = {}
-    if encoding is None:
-        encoding = {}
 
-    compat_dataset = compat_dataset.sortby(["locationIndex", "time"])
+    if "row_size" in dataset.data_vars:
+        first_var = "row_size"
+    elif "locationIndex" in dataset.data_vars:
+        first_var = "locationIndex"
+    else:
+        raise ValueError(
+            "No row_size or locationIndex in dataset. \
+                          Cannot determine if indexed or ragged"
+        )
 
-    idxs, sizes = np.unique(compat_dataset.locationIndex, return_counts=True)
-    row_size = np.zeros_like(compat_dataset.location_id.values)
-    row_size[idxs] = sizes
-    compat_dataset["row_size"] = xr.DataArray(row_size, dims=["locations"])
+    first_var_attrs = {
+        "row_size": {
+            "long_name": "number of observations at this location",
+            "sample_dimension": "obs",
+        },
+        "locationIndex": {
+            "long_name": "which location this observation is for",
+            "sample_dimension": "locations",
+        },
+    }
 
-    compat_dataset = compat_dataset.drop_vars(["locationIndex"])
-    compat_dataset.attrs["date_created"] = str(
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    )
+    default_attrs = {
+        first_var: first_var_attrs[first_var],
+        "lon": {
+            "standard_name": "longitude",
+            "long_name": "location longitude",
+            "units": "degrees_east",
+            "valid_range": np.array([-180, 180], dtype=float),
+        },
+        "lat": {
+            "standard_name": "latitude",
+            "long_name": "location latitude",
+            "units": "degrees_north",
+            "valid_range": np.array([-90, 90], dtype=float),
+        },
+        "alt": {
+            "standard_name": "height",
+            "long_name": "vertical distance above the surface",
+            "units": "m",
+            "positive": "up",
+            "axis": "Z",
+        },
+        "time": {
+            "standard_name": "time",
+            "long_name": "time of measurement",
+        },
+        "location_id": {
+        },
+        "location_description": {
+        },
+    }
 
-    encoding = {**default_encoding, **encoding}
     attributes = {**default_attrs, **attributes}
-    if "locationIndex" in encoding:
-        encoding.pop("locationIndex")
-    if "locationIndex" in attributes:
-        attributes.pop("locationIndex")
 
     for var, attrs in attributes.items():
-        compat_dataset[var] = compat_dataset[var].assign_attrs(attrs)
-        if var in ["row_size", "location_id", "location_description"]:
-            compat_dataset[var].encoding["coordinates"] = None
+        dataset[var] = dataset[var].assign_attrs(attrs)
+        if var in ["row_size", "locationIndex", "location_id", "location_description"]:
+            dataset[var].encoding["coordinates"] = None
 
-    var_order(compat_dataset).to_netcdf(output_name, encoding=encoding)
+    dataset.attrs["date_created"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return dataset
+
+
+def create_encoding(dataset, custom_encoding=None):
+    """
+    Create an encoding dictionary for a dataset, optionally
+    overriding the default encoding or adding additional
+    encoding parameters.
+    New parameters cannot be added to default encoding for
+    a variable, only overridden.
+
+    E.g. if you want to add a "units" encoding to "lon",
+    you should also pass "dtype", "zlib", "complevel",
+    and "_FillValue" if you don't want to lose those., dupe_window
+    """
+    if custom_encoding is None:
+        custom_encoding = {}
+
+    if "row_size" in dataset.data_vars:
+        first_var = "row_size"
+    elif "locationIndex" in dataset.data_vars:
+        first_var = "locationIndex"
+    else:
+        raise ValueError(
+            "No row_size or locationIndex in dataset. \
+                          Cannot determine if indexed or ragged"
+        )
+    # hard code the default encodings for coordinates and
+    # row_size stuff
+    default_encoding = {
+        first_var: {
+            "dtype": "int64",
+        },
+        "lon": {
+            "dtype": "float32",
+        },
+        "lat": {
+            "dtype": "float32",
+        },
+        "alt": {
+            "dtype": "float32",
+        },
+        "location_id": {
+            "dtype": "int64",
+        },
+        # # for some reason setting this throws an error but
+        # # it gets handled properly automatically when left out
+        # "location_description": {
+        #     "dtype": "str",
+        # },
+        "time": {
+            "dtype": "float64",
+            "units": "days since 1900-01-01 00:00:00",
+        },
+    }
+
+    for var in default_encoding:
+        default_encoding[var]["_FillValue"] = None
+        default_encoding[var]["zlib"] = True
+        default_encoding[var]["complevel"] = 4
+
+    default_encoding.update(
+        {
+            var: {
+                "dtype": dtype,
+                "zlib": bool(np.issubdtype(dtype, np.number)),
+                "complevel": 4,
+                "_FillValue": None,
+            }
+            for var, dtype in dataset.dtypes.items()
+        }
+    )
+
+    encoding = {**default_encoding, **custom_encoding}
+
+    return encoding
+
+
+def udunits_name_to_datetime(unit):
+    """
+    Convert a udunits name to a datetime unit
+    """
+    lookup = {
+        "days": "D",
+        "hours": "h",
+        "minutes": "m",
+        "seconds": "s",
+        "milliseconds": "ms",
+        "microseconds": "us",
+        "nanoseconds": "ns",
+    }
+
+    return lookup[unit]
+
+
+def merge_netCDFs(file_list, out_format="contiguous", dupe_window=None):
+    if dupe_window is None:
+        dupe_window = np.timedelta64(10, "m")
+    location_vars = {}
+    locationIndex = np.array([], dtype=np.int64)
+    # # uncomment these to open all files at once and allow for
+    # # passing in a list of paths or a list of open datasets
+    # if isinstance(file_list[0], (str, Path)):
+    #    with contextlib.ExitStack() as stack:
+    #        datasets = [stack.enter_context(xr.open_dataset(f)) for f in file_list]
+    #        return merge_netCDFs(datasets)
+    # for ds in file_list:
+    for ncfile in file_list:
+        with xr.open_dataset(ncfile, decode_cf=False) as ds:
+            if dataset_ra_type(ds) != "indexed":
+                ds = contiguous_to_indexed(ds)
+            location_id = ds["location_id"].values[
+                ds["location_id"].values != int64_nan + 2
+            ]
+            index = np.arange(0, len(location_id))
+            if location_vars.get("location_id") is not None:
+                common_locations = location_vars["location_id"]
+            else:
+                common_locations = np.array([], dtype=ds["location_id"].dtype)
+            new_loc_indices = index[~np.isin(location_id, common_locations)]
+
+            for v in ds.variables:
+                if "locations" in ds[v].dims:
+                    if v not in location_vars:
+                        location_vars[v] = np.array([], dtype=ds[v].dtype)
+                    location_vars[v] = np.concatenate(
+                        (location_vars[v], ds[v].values[new_loc_indices])
+                    )
+            sorter = np.argsort(location_vars["location_id"])
+            locationIndex = np.concatenate(
+                (
+                    locationIndex,
+                    sorter[
+                        np.searchsorted(
+                            location_vars["location_id"],
+                            ds["location_id"].values[ds["locationIndex"]],
+                            sorter=sorter,
+                        )
+                    ],
+                )
+            )
+
+    def preprocess(dataset):
+        if dataset_ra_type(dataset) != "indexed":
+            dataset = contiguous_to_indexed(dataset)
+        if "time" in dataset.dims:
+            dataset = dataset.rename_dims({"time": "obs"})
+        dataset = dataset.dropna(dim="locations", subset=["location_id"])
+        dataset = dataset.drop_dims("locations")
+        for var, var_data in location_vars.items():
+            dataset[var] = xr.DataArray(var_data, dims="locations")
+        dataset = dataset.set_coords(["lon", "lat", "alt", "time"])
+        return dataset
+
+    with xr.open_mfdataset(
+        file_list,
+        concat_dim="obs",
+        data_vars="minimal",
+        coords="minimal",
+        preprocess=preprocess,
+        combine="nested",
+    ) as merged_ds:
+        merged_ds.load()
+        merged_ds["locationIndex"] = xr.DataArray(locationIndex, dims="obs")
+
+        # deduplicate
+        merged_ds = merged_ds.sortby(["sat_id", "locationIndex", "time"])
+
+        # time_units = merged_ds["time"].attrs["units"].split("since")[0].strip()
+        # time_units = udunits_name_to_datetime(time_units)
+        dupl = np.insert(
+            (
+                abs(merged_ds["time"].values[1:] - merged_ds["time"].values[:-1])
+                < dupe_window
+            ),
+            0,
+            False,
+        )
+        merged_ds = merged_ds.sel(obs=~dupl)
+
+        if out_format == "contiguous":
+            merged_ds = indexed_to_contiguous(merged_ds)
+        # set variable order
+        merged_ds = var_order(merged_ds)
+        # set dataset ID
+        # TODO: should probably change this
+        merged_ds.attrs["id"] = ", ".join(set([f.name for f in file_list]))
+    return merged_ds
 
 
 class GridCellFiles:
