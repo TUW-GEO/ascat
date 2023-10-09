@@ -308,8 +308,12 @@ def var_order(dataset):
 
 
 def indexed_to_contiguous(dataset):
+    """
+    Convert an indexed dataset to a contiguous ragged array dataset.
+    Assumes that index variable is named "locationIndex".
+    """
     if isinstance(dataset, (str, Path)):
-        with xr.open_dataset(dataset) as ds:
+        with xr.open_dataset(dataset, mask_and_scale=False) as ds:
             return indexed_to_contiguous(ds)
 
     if not isinstance(dataset, xr.Dataset):
@@ -334,8 +338,12 @@ def indexed_to_contiguous(dataset):
 
 
 def contiguous_to_indexed(dataset):
+    """
+    Convert a contiguous ragged array to an indexed ragged array.
+    Assumes count variable is named "row_size".
+    """
     if isinstance(dataset, (str, Path)):
-        with xr.open_dataset(dataset) as ds:
+        with xr.open_dataset(dataset, mask_and_scale=False) as ds:
             return contiguous_to_indexed(ds)
 
     if not isinstance(dataset, xr.Dataset):
@@ -535,7 +543,7 @@ def merge_netCDFs(file_list, out_format="contiguous", dupe_window=None):
     #        return merge_netCDFs(datasets)
     # for ds in file_list:
     for ncfile in file_list:
-        with xr.open_dataset(ncfile, decode_cf=False) as ds:
+        with xr.open_dataset(ncfile, mask_and_scale=False) as ds:
             if dataset_ra_type(ds) != "indexed":
                 ds = contiguous_to_indexed(ds)
             location_id = ds["location_id"].values[
@@ -588,6 +596,7 @@ def merge_netCDFs(file_list, out_format="contiguous", dupe_window=None):
         coords="minimal",
         preprocess=preprocess,
         combine="nested",
+        mask_and_scale=False
     ) as merged_ds:
         merged_ds.load()
         merged_ds["locationIndex"] = xr.DataArray(locationIndex, dims="obs")
