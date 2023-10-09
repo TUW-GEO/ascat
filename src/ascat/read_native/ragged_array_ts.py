@@ -275,6 +275,14 @@ class CRANcFile(RAFile):
 
 
 def var_order(dataset):
+    """
+    Returns a reasonable variable order for a ragged array dataset,
+    based on that used in existing datasets.
+
+    Puts the count/index variable first depending on the ragged array type,
+    then lon, lat, alt, location_id, location_description, and time,
+    followed by the rest of the variables in the dataset.
+    """
     if "row_size" in dataset.data_vars:
         first_var = "row_size"
     elif "locationIndex" in dataset.data_vars:
@@ -344,26 +352,30 @@ def contiguous_to_indexed(dataset):
 
 
 def dataset_ra_type(dataset):
+    """
+    Determine if a dataset is indexed or contiguous.
+    Assumes count variable for contiguous RA is named "row_size".
+    Assumes index variable for indexed RA is named "locationIndex".
+    """
     if "locationIndex" in dataset:
         return "indexed"
     if "row_size" in dataset:
         return "contiguous"
-    raise ValueError("dataset must have either locationIndex or row_size")
+    raise ValueError("Dataset must have either locationIndex or row_size.\
+                     Cannot determine if ragged array is indexed or contiguous")
 
 
 def set_attributes(dataset, attributes=None):
+    """
+    Set attributes for a contiguous or indexed ragged array.
+    """
     if attributes is None:
         attributes = {}
 
-    if "row_size" in dataset.data_vars:
+    if dataset_ra_type(dataset) == "contiguous":
         first_var = "row_size"
-    elif "locationIndex" in dataset.data_vars:
+    elif dataset_ra_type(dataset) == "indexed":
         first_var = "locationIndex"
-    else:
-        raise ValueError(
-            "No row_size or locationIndex in dataset. \
-                          Cannot determine if indexed or ragged"
-        )
 
     first_var_attrs = {
         "row_size": {
@@ -428,7 +440,7 @@ def create_encoding(dataset, custom_encoding=None):
 
     E.g. if you want to add a "units" encoding to "lon",
     you should also pass "dtype", "zlib", "complevel",
-    and "_FillValue" if you don't want to lose those., dupe_window
+    and "_FillValue" if you don't want to lose those.
     """
     if custom_encoding is None:
         custom_encoding = {}
@@ -471,10 +483,10 @@ def create_encoding(dataset, custom_encoding=None):
         },
     }
 
-    for var in default_encoding:
-        default_encoding[var]["_FillValue"] = None
-        default_encoding[var]["zlib"] = True
-        default_encoding[var]["complevel"] = 4
+    for _, var_encoding in default_encoding.items():
+        var_encoding["_FillValue"] = None
+        var_encoding["zlib"] = True
+        var_encoding["complevel"] = 4
 
     default_encoding.update(
         {
