@@ -29,6 +29,7 @@ import unittest
 from pathlib import Path
 from datetime import datetime
 from tempfile import TemporaryDirectory
+from copy import deepcopy
 
 import numpy as np
 from numpy.testing import assert_equal
@@ -62,6 +63,7 @@ def data_setup():
     }
 
     def random_date_range(begin, d_range, n_dates):
+        np.random.seed(42)
         return sorted(
             [
                 (np.datetime64(begin) + np.random.choice(np.arange(0, d_range))).astype(
@@ -72,8 +74,9 @@ def data_setup():
         )
 
     # data that will be stored in contiguous ragged format
-    data_contiguous = {
+    old_data_contiguous = {
         #    "locationIndex": {1, 1, 1, 0, 0, 3, 3, 3, 3},
+        "sat_id": [1, 1, 1, 1, 1, 1, 1, 1, 1],
         "temp": [24, 23, 23, 31, 32, 35, 34, 34, 35],
         "humidity": [0.44, 0.32, 0.21, 0, 0, 0, 0, 0, 0],
         "location_id": [1002, 1001, 1004],
@@ -81,24 +84,89 @@ def data_setup():
         "time": random_date_range("2021-05-01 00:00:00", 31 * 24 * 3600, 9),
         "row_size": [3, 2, 4],
     }
-    data_contiguous["lon"] = [
+    old_data_contiguous["lon"] = [
         location_info["lon"][location_info["location_id"].index(s)]
-        for s in data_contiguous["location_id"]
+        for s in old_data_contiguous["location_id"]
     ]
-    data_contiguous["lat"] = [
+    old_data_contiguous["lat"] = [
         location_info["lat"][location_info["location_id"].index(s)]
-        for s in data_contiguous["location_id"]
+        for s in old_data_contiguous["location_id"]
     ]
-    data_contiguous["alt"] = [
+    old_data_contiguous["alt"] = [
         location_info["alt"][location_info["location_id"].index(s)]
-        for s in data_contiguous["location_id"]
+        for s in old_data_contiguous["location_id"]
     ]
+
+    ctg_ds_old = xr.Dataset(
+        data_vars=dict(
+            row_size=(["locations"], old_data_contiguous["row_size"]),
+            location_id=(["locations"], old_data_contiguous["location_id"]),
+            location_description=(["locations"], old_data_contiguous["location_description"]),
+            sat_id=(["obs"], old_data_contiguous["sat_id"]),
+            temp=(["obs"], old_data_contiguous["temp"]),
+            humidity=(["obs"], old_data_contiguous["humidity"]),
+        ),
+        coords=dict(
+            lon=(["locations"], old_data_contiguous["lon"]),
+            lat=(["locations"], old_data_contiguous["lat"]),
+            alt=(["locations"], old_data_contiguous["alt"]),
+            time=(["obs"], old_data_contiguous["time"]),
+        ),
+        attrs=dict(
+            id="test_contiguous_old.nc",
+            date_created=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            featureType="timeSeries",
+        ),
+    )
+
+    old_data_indexed = deepcopy(old_data_contiguous)
+    del old_data_indexed["row_size"]
+    old_data_indexed["locationIndex"] = [0, 0, 0, 1, 1, 2, 2, 2, 2]
+
+    old_data_indexed["lon"] = [
+        location_info["lon"][location_info["location_id"].index(s)]
+        for s in old_data_indexed["location_id"]
+    ]
+    old_data_indexed["lat"] = [
+        location_info["lat"][location_info["location_id"].index(s)]
+        for s in old_data_indexed["location_id"]
+    ]
+    old_data_indexed["alt"] = [
+        location_info["alt"][location_info["location_id"].index(s)]
+        for s in old_data_indexed["location_id"]
+    ]
+    idx_ds_old = xr.Dataset(
+        data_vars=dict(
+            locationIndex=(["obs"], old_data_indexed["locationIndex"]),
+            location_id=(["locations"], old_data_indexed["location_id"]),
+            location_description=(
+                ["locations"],
+                old_data_indexed["location_description"],
+            ),
+            sat_id=(["obs"], old_data_indexed["sat_id"]),
+            temp=(["obs"], old_data_indexed["temp"]),
+            humidity=(["obs"], old_data_indexed["humidity"]),
+        ),
+        coords=dict(
+            lon=(["locations"], old_data_indexed["lon"]),
+            lat=(["locations"], old_data_indexed["lat"]),
+            alt=(["locations"], old_data_indexed["alt"]),
+            time=(["obs"], old_data_indexed["time"]),
+        ),
+        attrs=dict(
+            id="test_indexed_old.nc",
+            date_created=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            featureType="timeSeries",
+        ),
+    )
+
     # new data we want to add on top, which is in indexed ragged format
     new_data_indexed = {
         "locationIndex": [1, 2, 1, 1, 2, 0, 0, 0, 0],
         "temp": [31, 19, 32, 32, 22, 18, 16, 17, 17],
         "humidity": [0, 0.33, 0, 0, 0.21, 0.97, 0.86, 0.22, 0.31],
         "location_id": [1003, 1004, 1005],
+        "sat_id": [1, 1, 1, 1, 1, 1, 1, 1, 1],
         "location_description": ["Glacier", "White Sands", "Yellowstone"],
         "time": random_date_range("2021-06-01 00:00:00", 30 * 24 * 3600, 9),
     }
@@ -115,28 +183,7 @@ def data_setup():
         for s in new_data_indexed["location_id"]
     ]
 
-    ctg_ds = xr.Dataset(
-        data_vars=dict(
-            row_size=(["locations"], data_contiguous["row_size"]),
-            location_id=(["locations"], data_contiguous["location_id"]),
-            location_description=(["locations"], data_contiguous["location_description"]),
-            temp=(["obs"], data_contiguous["temp"]),
-            humidity=(["obs"], data_contiguous["humidity"]),
-        ),
-        coords=dict(
-            lon=(["locations"], data_contiguous["lon"]),
-            lat=(["locations"], data_contiguous["lat"]),
-            alt=(["locations"], data_contiguous["alt"]),
-            time=(["obs"], data_contiguous["time"]),
-        ),
-        attrs=dict(
-            id="test_contiguous.nc",
-            date_created=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            featureType="timeSeries",
-        ),
-    )
-
-    idx_ds = xr.Dataset(
+    idx_ds_new = xr.Dataset(
         data_vars=dict(
             locationIndex=(["obs"], new_data_indexed["locationIndex"]),
             location_id=(["locations"], new_data_indexed["location_id"]),
@@ -144,6 +191,7 @@ def data_setup():
                 ["locations"],
                 new_data_indexed["location_description"],
             ),
+            sat_id=(["obs"], new_data_indexed["sat_id"]),
             temp=(["obs"], new_data_indexed["temp"]),
             humidity=(["obs"], new_data_indexed["humidity"]),
         ),
@@ -154,79 +202,36 @@ def data_setup():
             time=(["obs"], new_data_indexed["time"]),
         ),
         attrs=dict(
-            id="test_indexed.nc",
+            id="test_indexed_new.nc",
             date_created=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             featureType="timeSeries",
         ),
     )
 
-    new_data_indexed = {
-        "locationIndex": [0, 0, 0, 1, 1, 2, 2, 2, 2],
-        "temp": [24, 23, 23, 31, 32, 35, 34, 34, 35],
-        "humidity": [0.44, 0.32, 0.21, 0, 0, 0, 0, 0, 0],
-        "location_id": [1002, 1001, 1004],
-        "location_description": ["Yosemite", "Great Basin", "White Sands"],
-        "time": random_date_range("2021-05-01 00:00:00", 31 * 24 * 3600, 9),
-    }
-    new_data_indexed["lon"] = [
-        location_info["lon"][location_info["location_id"].index(s)]
-        for s in new_data_indexed["location_id"]
-    ]
-    new_data_indexed["lat"] = [
-        location_info["lat"][location_info["location_id"].index(s)]
-        for s in new_data_indexed["location_id"]
-    ]
-    new_data_indexed["alt"] = [
-        location_info["alt"][location_info["location_id"].index(s)]
-        for s in new_data_indexed["location_id"]
-    ]
-    idx_ds_2 = xr.Dataset(
-        data_vars=dict(
-            locationIndex=(["obs"], new_data_indexed["locationIndex"]),
-            location_id=(["locations"], new_data_indexed["location_id"]),
-            location_description=(
-                ["locations"],
-                new_data_indexed["location_description"],
-            ),
-            temp=(["obs"], new_data_indexed["temp"]),
-            humidity=(["obs"], new_data_indexed["humidity"]),
-        ),
-        coords=dict(
-            lon=(["locations"], new_data_indexed["lon"]),
-            lat=(["locations"], new_data_indexed["lat"]),
-            alt=(["locations"], new_data_indexed["alt"]),
-            time=(["obs"], new_data_indexed["time"]),
-        ),
-        attrs=dict(
-            id="test_indexed_2.nc",
-            date_created=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            featureType="timeSeries",
-        ),
-    )
-
-    ctg_ds.to_netcdf(tmpdir / "contiguous_RA.nc")
-    idx_ds.to_netcdf(tmpdir / "indexed_RA.nc")
-    idx_ds_2.to_netcdf(tmpdir / "indexed_RA_2.nc")
+    ctg_ds_old.to_netcdf(tmpdir / "contiguous_RA_old.nc")
+    idx_ds_old.to_netcdf(tmpdir / "indexed_RA_old.nc")
+    idx_ds_new.to_netcdf(tmpdir / "indexed_RA_new.nc")
+    return ctg_ds_old, idx_ds_old, idx_ds_new
 
 
 class TestHelpers(unittest.TestCase):
     """
     Test the helper functions
     """
-    def assertDictNumpyEqual(self, d1, d2, msg):
+    def assertDictNumpyEqual(self, d1, d2):
         try:
             np.testing.assert_equal(d1, d2)
         except AssertionError as e:
-            raise self.failureException(msg) from e
+            raise self.failureException(e)
 
     @classmethod
     def setUpClass(cls):
-        cls.ctg_old = xr.open_dataset(tmpdir / "contiguous_RA.nc")
-        cls.idx_new = xr.open_dataset(tmpdir / "indexed_RA.nc")
-        cls.idx_old = xr.open_dataset(tmpdir / "indexed_RA_2.nc")
+        cls.ctg_old = xr.open_dataset(tmpdir / "contiguous_RA_old.nc")
+        cls.idx_new = xr.open_dataset(tmpdir / "indexed_RA_new.nc")
+        cls.idx_old = xr.open_dataset(tmpdir / "indexed_RA_old.nc")
 
     def setUp(self):
-        self.addTypeEqualityFunc(dict, self.assertDictNumpyEqual)
+        pass
     #     self.ctg_old = xr.open_dataset(tmpdir / "contiguous_RA.nc")
     #     self.idx_new = xr.open_dataset(tmpdir / "indexed_RA.nc")
     #     self.idx_old = xr.open_dataset(tmpdir / "indexed_RA_2.nc")
@@ -244,6 +249,7 @@ class TestHelpers(unittest.TestCase):
             "location_id",
             "location_description",
             "time",
+            "sat_id",
             "temp",
             "humidity",
         ]
@@ -314,9 +320,9 @@ class TestHelpers(unittest.TestCase):
             with set_attributes(ds.copy()) as setted:
                 for var in setted.variables:
                     if var in expected:
-                        self.assertEqual(setted[var].attrs, expected[var])
+                        self.assertDictNumpyEqual(setted[var].attrs, expected[var])
                     else:
-                        self.assertEqual(setted[var].attrs, {})
+                        self.assertDictNumpyEqual(setted[var].attrs, {})
 
             # test that setting attrs works with extra attrs
             extra_attrs = {
@@ -327,11 +333,11 @@ class TestHelpers(unittest.TestCase):
             with set_attributes(ds.copy(), extra_attrs) as setted:
                 for var in setted.variables:
                     if var in extra_attrs:
-                        self.assertEqual(setted[var].attrs, extra_attrs[var])
+                        self.assertDictNumpyEqual(setted[var].attrs, extra_attrs[var])
                     elif var in expected:
-                        self.assertEqual(setted[var].attrs, expected[var])
+                        self.assertDictNumpyEqual(setted[var].attrs, expected[var])
                     else:
-                        self.assertEqual(setted[var].attrs, {})
+                        self.assertDictNumpyEqual(setted[var].attrs, {})
 
     def test_create_encoding(self):
         """
@@ -387,6 +393,12 @@ class TestHelpers(unittest.TestCase):
                 "complevel": 4,
                 "_FillValue": None,
             },
+            "sat_id": {
+                "dtype": np.dtype("int64"),
+                "zlib": True,
+                "complevel": 4,
+                "_FillValue": None,
+            },
             "temp": {
                 "dtype": np.dtype("int64"),
                 "zlib": True,
@@ -403,7 +415,7 @@ class TestHelpers(unittest.TestCase):
         for ds in [self.ctg_old, self.idx_new, self.idx_old]:
             ds_encoding = create_encoding(ds)
             for var in ds.variables:
-                self.assertEqual(expected[var], ds_encoding[var])
+                self.assertDictNumpyEqual(expected[var], ds_encoding[var])
 
     # def tearDown(self):
     #     self.ctg_old.close()
@@ -417,10 +429,23 @@ class TestHelpers(unittest.TestCase):
         cls.idx_old.close()
 
 
-class TestConversion():
+class TestConversion(unittest.TestCase):
     """
     Test the conversion functions
     """
+
+    def assertNanEqual(self, d1, d2):
+        try:
+            np.testing.assert_equal(d1, d2)
+        except AssertionError as e:
+            raise self.failureException(e)
+
+    @classmethod
+    def setUpClass(cls):
+        cls.ctg_old = xr.open_dataset(tmpdir / "contiguous_RA_old.nc")
+        cls.idx_new = xr.open_dataset(tmpdir / "indexed_RA_new.nc")
+        cls.idx_old = xr.open_dataset(tmpdir / "indexed_RA_old.nc")
+
     def setUp(self):
         """
         Set up the test data
@@ -431,29 +456,112 @@ class TestConversion():
         """
         Test conversion of indexed ragged array to contiguous ragged array
         """
-        pass
+        converted = indexed_to_contiguous(self.idx_old)
+        for var in converted.variables:
+            self.assertNanEqual(converted[var].values, self.ctg_old[var].values)
 
     def test_contiguous_to_indexed(self):
         """
         Test conversion of contiguous ragged array to indexed ragged array
         """
-        pass
+        converted = contiguous_to_indexed(self.ctg_old)
+        for var in converted.variables:
+            self.assertNanEqual(converted[var].values, self.idx_old[var].values)
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.ctg_old.close()
+        cls.idx_new.close()
+        cls.idx_old.close()
 
-class TestMerge():
+class TestMerge(unittest.TestCase):
     """
     Test the merge function
     """
 
-    def setUp(self):
-        return
+    def assertNanEqual(self, d1, d2):
+        try:
+            np.testing.assert_equal(d1, d2)
+        except AssertionError as e:
+            raise self.failureException(e)
+
+    @classmethod
+    def setUpClass(cls):
+        cls.ctg_old = tmpdir / "contiguous_RA_old.nc"
+        cls.idx_new = tmpdir / "indexed_RA_new.nc"
+        cls.idx_old = tmpdir / "indexed_RA_old.nc"
 
     def test_merge_netCDFs(self):
-        return
+        """
+        Test merging of netCDF files
+        """
+        # Test merging indexed with indexed
+        merged = merge_netCDFs([self.idx_old, self.idx_new])
+        expected = {
+            "row_size": np.array([3, 2, 7, 4, 2]),
+            "lon": np.array([-119.59, -114.3, -106.27, -113.61, -110.61]),
+            "lat": np.array([37.75, 38.97, 32.82, 48.68, 44.44]),
+            "alt": np.array([np.nan, np.nan, np.nan, np.nan, np.nan]),
+            "location_id": np.array([1002, 1001, 1004, 1003, 1005]),
+            "location_description": np.array(["Yosemite", "Great Basin", "White Sands", "Glacier", "Yellowstone"]),
+            "sat_id": np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]),
+            "temp": np.array([24, 23, 23, 31, 32, 35, 34, 34, 35, 31, 32, 32, 18, 16, 17, 17, 19, 22]),
+            "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.97, 0.86, 0.22, 0.31, 0.33, 0.21 ]),
+        }
+        time_order = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 10, 11, 17, 12, 13, 14, 15])
+        expected_times = np.concatenate((idx_ds_old["time"].values, idx_ds_new["time"].values))
+        for var in expected:
+            self.assertNanEqual(merged[var].values, expected[var])
+        self.assertNanEqual(merged["time"].values[time_order], expected_times)
+        merged.close()
+
+        # Test merging indexed with contiguous
+        merged = merge_netCDFs([self.ctg_old, self.idx_new])
+        expected = {
+            "row_size": np.array([3, 2, 7, 4, 2]),
+            "lon": np.array([-119.59, -114.3, -106.27, -113.61, -110.61]),
+            "lat": np.array([37.75, 38.97, 32.82, 48.68, 44.44]),
+            "alt": np.array([np.nan, np.nan, np.nan, np.nan, np.nan]),
+            "location_id": np.array([1002, 1001, 1004, 1003, 1005]),
+            "location_description": np.array(["Yosemite", "Great Basin", "White Sands", "Glacier", "Yellowstone"]),
+            "sat_id": np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]),
+            "temp": np.array([24, 23, 23, 31, 32, 35, 34, 34, 35, 31, 32, 32, 18, 16, 17, 17, 19, 22]),
+            "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.97, 0.86, 0.22, 0.31, 0.33, 0.21]),
+        }
+        time_order = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 10, 11, 17, 12, 13, 14, 15])
+        expected_times = np.concatenate((idx_ds_old["time"].values, idx_ds_new["time"].values))
+        for var in expected:
+            self.assertNanEqual(merged[var].values, expected[var])
+        self.assertNanEqual(merged["time"].values[time_order], expected_times)
+        merged.close()
+
+        # Test merging contiguous with contiguous with same data
+        merged = merge_netCDFs([self.ctg_old, self.ctg_old])
+        # for var in merged.variables:
+        #     print(f"\"{var}\": np.array([{', '.join(merged[var].values.astype(str))}]),")
+
+        print(np.argsort(merged["time"].values))
+        expected = {
+            "row_size": np.array([3, 2, 4]),
+            "lon": np.array([-119.59, -114.3, -106.27]),
+            "lat": np.array([37.75, 38.97, 32.82]),
+            "alt": np.array([np.nan, np.nan, np.nan]),
+            "location_id": np.array([1002, 1001, 1004]),
+            "location_description": np.array(["Yosemite", "Great Basin", "White Sands"]),
+            "sat_id": np.array([1, 1, 1, 1, 1, 1, 1, 1, 1]),
+            "temp": np.array([24, 23, 23, 31, 32, 35, 34, 34, 35]),
+            "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+        }
+        time_order = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8])
+        expected_times = idx_ds_old["time"].values
+        for var in expected:
+            self.assertNanEqual(merged[var].values, expected[var])
+        self.assertNanEqual(merged["time"].values[time_order], expected_times)
+        merged.close()
 
 
 if __name__ == "__main__":
     with TemporaryDirectory() as temp_directory:
         tmpdir = Path(temp_directory)
-        data_setup()
+        ctg_ds_old, idx_ds_old, idx_ds_new = data_setup()
         unittest.main(exit=False)
