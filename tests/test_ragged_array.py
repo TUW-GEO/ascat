@@ -44,7 +44,7 @@ from ascat.read_native.ragged_array_ts import create_encoding
 from ascat.read_native.ragged_array_ts import merge_netCDFs
 
 
-def data_setup():
+def data_setup(outdir):
     """
     Setup data for tests
     """
@@ -208,10 +208,59 @@ def data_setup():
         ),
     )
 
-    ctg_ds_old.to_netcdf(tmpdir / "contiguous_RA_old.nc")
-    idx_ds_old.to_netcdf(tmpdir / "indexed_RA_old.nc")
-    idx_ds_new.to_netcdf(tmpdir / "indexed_RA_new.nc")
-    return ctg_ds_old, idx_ds_old, idx_ds_new
+    # data that will be stored in contiguous ragged format but with some different satellites and timestamps
+    original_time_range = random_date_range("2021-05-01 00:00:00", 31 * 24 * 3600, 9)
+    new_time_range = [i + np.timedelta64(120, "s") for i in original_time_range]
+    new_data_contiguous = {
+        #    "locationIndex": {1, 1, 1, 0, 0, 3, 3, 3, 3},
+        "sat_id": [1, 1, 1, 1, 1, 2, 2, 2, 2],
+        "temp": [24, 23, 23, 31, 32, 35, 34, 34, 35],
+        "humidity": [0.44, 0.32, 0.21, 0, 0, 0, 0, 0, 0],
+        "location_id": [1002, 1001, 1004],
+        "location_description": ["Yosemite", "Great Basin", "White Sands"],
+        "time": new_time_range,
+        "row_size": [3, 2, 4],
+    }
+    new_data_contiguous["lon"] = [
+        location_info["lon"][location_info["location_id"].index(s)]
+        for s in new_data_contiguous["location_id"]
+    ]
+    new_data_contiguous["lat"] = [
+        location_info["lat"][location_info["location_id"].index(s)]
+        for s in new_data_contiguous["location_id"]
+    ]
+    new_data_contiguous["alt"] = [
+        location_info["alt"][location_info["location_id"].index(s)]
+        for s in new_data_contiguous["location_id"]
+    ]
+
+    ctg_ds_new = xr.Dataset(
+        data_vars=dict(
+            row_size=(["locations"], new_data_contiguous["row_size"]),
+            location_id=(["locations"], new_data_contiguous["location_id"]),
+            location_description=(["locations"], new_data_contiguous["location_description"]),
+            sat_id=(["obs"], new_data_contiguous["sat_id"]),
+            temp=(["obs"], new_data_contiguous["temp"]),
+            humidity=(["obs"], new_data_contiguous["humidity"]),
+        ),
+        coords=dict(
+            lon=(["locations"], new_data_contiguous["lon"]),
+            lat=(["locations"], new_data_contiguous["lat"]),
+            alt=(["locations"], new_data_contiguous["alt"]),
+            time=(["obs"], new_data_contiguous["time"]),
+        ),
+        attrs=dict(
+            id="test_contiguous_new.nc",
+            date_created=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            featureType="timeSeries",
+        ),
+    )
+
+    ctg_ds_old.to_netcdf(outdir / "contiguous_RA_old.nc")
+    idx_ds_old.to_netcdf(outdir / "indexed_RA_old.nc")
+    idx_ds_new.to_netcdf(outdir / "indexed_RA_new.nc")
+    ctg_ds_new.to_netcdf(outdir / "contiguous_RA_new.nc")
+    return ctg_ds_old, idx_ds_old, idx_ds_new, ctg_ds_new
 
 
 class TestHelpers(unittest.TestCase):
@@ -224,17 +273,21 @@ class TestHelpers(unittest.TestCase):
         except AssertionError as e:
             raise self.failureException(e)
 
-    @classmethod
-    def setUpClass(cls):
-        cls.ctg_old = xr.open_dataset(tmpdir / "contiguous_RA_old.nc")
-        cls.idx_new = xr.open_dataset(tmpdir / "indexed_RA_new.nc")
-        cls.idx_old = xr.open_dataset(tmpdir / "indexed_RA_old.nc")
-
     def setUp(self):
-        pass
-    #     self.ctg_old = xr.open_dataset(tmpdir / "contiguous_RA.nc")
-    #     self.idx_new = xr.open_dataset(tmpdir / "indexed_RA.nc")
-    #     self.idx_old = xr.open_dataset(tmpdir / "indexed_RA_2.nc")
+        self.temporary_directory = TemporaryDirectory()
+        self.tmpdir = Path(self.temporary_directory.name)
+        data_setup(self.tmpdir)
+        self.ctg_old = xr.open_dataset(self.tmpdir / "contiguous_RA_old.nc")
+        self.idx_new = xr.open_dataset(self.tmpdir / "indexed_RA_new.nc")
+        self.idx_old = xr.open_dataset(self.tmpdir / "indexed_RA_old.nc")
+        self.ctg_new = xr.open_dataset(self.tmpdir / "contiguous_RA_new.nc")
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+        self.ctg_old.close()
+        self.idx_new.close()
+        self.idx_old.close()
+        self.ctg_new.close()
 
     def test_var_order(self):
         """
@@ -344,14 +397,17 @@ class TestHelpers(unittest.TestCase):
         Test create_encoding
         """
         expected = {
+            # we expect int32 dtypes below rather than int64 because no dtypes were
+            # specified when actually writing the test data to file in data_setup.
+            # If they were (using set_encoding), then the dtypes would be int64.
             "row_size": {
-                "dtype": np.dtype("int64"),
+                "dtype": np.dtype("int32"),
                 "zlib": True,
                 "complevel": 4,
                 "_FillValue": None,
             },
             "locationIndex": {
-                "dtype": np.dtype("int64"),
+                "dtype": np.dtype("int32"),
                 "zlib": True,
                 "complevel": 4,
                 "_FillValue": None,
@@ -375,7 +431,7 @@ class TestHelpers(unittest.TestCase):
                 "complevel": 4,
             },
             "location_id": {
-                "dtype": np.dtype("int64"),
+                "dtype": np.dtype("int32"),
                 "zlib": True,
                 "complevel": 4,
                 "_FillValue": None,
@@ -394,13 +450,13 @@ class TestHelpers(unittest.TestCase):
                 "_FillValue": None,
             },
             "sat_id": {
-                "dtype": np.dtype("int64"),
+                "dtype": np.dtype("int32"),
                 "zlib": True,
                 "complevel": 4,
                 "_FillValue": None,
             },
             "temp": {
-                "dtype": np.dtype("int64"),
+                "dtype": np.dtype("int32"),
                 "zlib": True,
                 "complevel": 4,
                 "_FillValue": None,
@@ -415,18 +471,18 @@ class TestHelpers(unittest.TestCase):
         for ds in [self.ctg_old, self.idx_new, self.idx_old]:
             ds_encoding = create_encoding(ds)
             for var in ds.variables:
-                self.assertDictNumpyEqual(expected[var], ds_encoding[var])
+                try:
+                    self.assertDictNumpyEqual(ds_encoding[var], expected[var])
+                except:
+                    print(var)
+                    raise
 
-    # def tearDown(self):
-    #     self.ctg_old.close()
-    #     self.idx_new.close()
-    #     self.idx_old.close()
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.ctg_old.close()
-        cls.idx_new.close()
-        cls.idx_old.close()
+    # @classmethod
+    # def tearDownClass(cls):
+    #     cls.ctg_old.close()
+    #     cls.idx_new.close()
+    #     cls.idx_old.close()
 
 
 class TestConversion(unittest.TestCase):
@@ -440,17 +496,24 @@ class TestConversion(unittest.TestCase):
         except AssertionError as e:
             raise self.failureException(e)
 
-    @classmethod
-    def setUpClass(cls):
-        cls.ctg_old = xr.open_dataset(tmpdir / "contiguous_RA_old.nc")
-        cls.idx_new = xr.open_dataset(tmpdir / "indexed_RA_new.nc")
-        cls.idx_old = xr.open_dataset(tmpdir / "indexed_RA_old.nc")
-
     def setUp(self):
         """
         Set up the test data
         """
-        pass
+        self.temporary_directory = TemporaryDirectory()
+        self.tmpdir = Path(self.temporary_directory.name)
+        data_setup(self.tmpdir)
+        self.ctg_old = xr.open_dataset(self.tmpdir / "contiguous_RA_old.nc")
+        self.idx_new = xr.open_dataset(self.tmpdir / "indexed_RA_new.nc")
+        self.idx_old = xr.open_dataset(self.tmpdir / "indexed_RA_old.nc")
+        self.ctg_new = xr.open_dataset(self.tmpdir / "contiguous_RA_new.nc")
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+        self.ctg_old.close()
+        self.idx_new.close()
+        self.idx_old.close()
+        self.ctg_new.close()
 
     def test_indexed_to_contiguous(self):
         """
@@ -468,11 +531,11 @@ class TestConversion(unittest.TestCase):
         for var in converted.variables:
             self.assertNanEqual(converted[var].values, self.idx_old[var].values)
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.ctg_old.close()
-        cls.idx_new.close()
-        cls.idx_old.close()
+    # @classmethod
+    # def tearDownClass(cls):
+    #     cls.ctg_old.close()
+    #     cls.idx_new.close()
+    #     cls.idx_old.close()
 
 class TestMerge(unittest.TestCase):
     """
@@ -485,18 +548,35 @@ class TestMerge(unittest.TestCase):
         except AssertionError as e:
             raise self.failureException(e)
 
-    @classmethod
-    def setUpClass(cls):
-        cls.ctg_old = tmpdir / "contiguous_RA_old.nc"
-        cls.idx_new = tmpdir / "indexed_RA_new.nc"
-        cls.idx_old = tmpdir / "indexed_RA_old.nc"
+    # @classmethod
+    # def setUpClass(cls):
+    #     cls.ctg_old_fname = self.tmpdir / "contiguous_RA_old.nc"
+    #     cls.idx_new_fname = self.tmpdir / "indexed_RA_new.nc"
+    #     cls.idx_old_fname = self.tmpdir / "indexed_RA_old.nc"
+    #     cls.ctg_new_fname = self.tmpdir / "contiguous_RA_new.nc"
+
+    def setUp(self):
+        self.temporary_directory = TemporaryDirectory()
+        self.tmpdir = Path(self.temporary_directory.name)
+        self.ctg_ds_old, self.idx_ds_old, self.idx_ds_new, self.ctg_ds_new = data_setup(self.tmpdir)
+        self.ctg_old_fname = self.tmpdir / "contiguous_RA_old.nc"
+        self.idx_new_fname = self.tmpdir / "indexed_RA_new.nc"
+        self.idx_old_fname = self.tmpdir / "indexed_RA_old.nc"
+        self.ctg_new_fname = self.tmpdir / "contiguous_RA_new.nc"
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+        self.ctg_ds_old.close()
+        self.idx_ds_old.close()
+        self.idx_ds_new.close()
+        self.ctg_ds_new.close()
 
     def test_merge_netCDFs(self):
         """
         Test merging of netCDF files
         """
         # Test merging indexed with indexed
-        merged = merge_netCDFs([self.idx_old, self.idx_new])
+        merged = merge_netCDFs([self.idx_old_fname, self.idx_new_fname])
         expected = {
             "row_size": np.array([3, 2, 7, 4, 2]),
             "lon": np.array([-119.59, -114.3, -106.27, -113.61, -110.61]),
@@ -509,14 +589,14 @@ class TestMerge(unittest.TestCase):
             "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.97, 0.86, 0.22, 0.31, 0.33, 0.21 ]),
         }
         time_order = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 10, 11, 17, 12, 13, 14, 15])
-        expected_times = np.concatenate((idx_ds_old["time"].values, idx_ds_new["time"].values))
+        expected_times = np.concatenate((self.idx_ds_old["time"].values, self.idx_ds_new["time"].values))
         for var in expected:
             self.assertNanEqual(merged[var].values, expected[var])
         self.assertNanEqual(merged["time"].values[time_order], expected_times)
         merged.close()
 
         # Test merging indexed with contiguous
-        merged = merge_netCDFs([self.ctg_old, self.idx_new])
+        merged = merge_netCDFs([self.ctg_old_fname, self.idx_new_fname])
         expected = {
             "row_size": np.array([3, 2, 7, 4, 2]),
             "lon": np.array([-119.59, -114.3, -106.27, -113.61, -110.61]),
@@ -529,18 +609,17 @@ class TestMerge(unittest.TestCase):
             "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.97, 0.86, 0.22, 0.31, 0.33, 0.21]),
         }
         time_order = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 10, 11, 17, 12, 13, 14, 15])
-        expected_times = np.concatenate((idx_ds_old["time"].values, idx_ds_new["time"].values))
+        expected_times = np.concatenate((self.idx_ds_old["time"].values, self.idx_ds_new["time"].values))
         for var in expected:
             self.assertNanEqual(merged[var].values, expected[var])
         self.assertNanEqual(merged["time"].values[time_order], expected_times)
         merged.close()
 
         # Test merging contiguous with contiguous with same data
-        merged = merge_netCDFs([self.ctg_old, self.ctg_old])
+        merged = merge_netCDFs([self.ctg_old_fname, self.ctg_old_fname])
         # for var in merged.variables:
         #     print(f"\"{var}\": np.array([{', '.join(merged[var].values.astype(str))}]),")
 
-        print(np.argsort(merged["time"].values))
         expected = {
             "row_size": np.array([3, 2, 4]),
             "lon": np.array([-119.59, -114.3, -106.27]),
@@ -553,15 +632,42 @@ class TestMerge(unittest.TestCase):
             "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
         }
         time_order = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8])
-        expected_times = idx_ds_old["time"].values
+        expected_times = self.ctg_ds_old["time"].values
         for var in expected:
             self.assertNanEqual(merged[var].values, expected[var])
         self.assertNanEqual(merged["time"].values[time_order], expected_times)
         merged.close()
 
+        # Test merging contiguous with contiguous with different satellites
+        # Not passing a dupe_window here means that only the values from different
+        # satellites should be included, as the others will be filtered out as duplicates
+        merged = merge_netCDFs([self.ctg_old_fname, self.ctg_new_fname])
+        # for var in merged.variables:
+        #     print(f"\"{var}\": np.array([{', '.join(merged[var].values.astype(str))}]),")
+
+        # print(np.argsort(merged["time"].values))
+        expected = {
+            "row_size": np.array([3, 2, 8]),
+            "lon": np.array([-119.59, -114.3, -106.27]),
+            "lat": np.array([37.75, 38.97, 32.82]),
+            "alt": np.array([np.nan, np.nan, np.nan]),
+            "location_id": np.array([1002, 1001, 1004]),
+            "location_description": np.array(["Yosemite", "Great Basin", "White Sands"]),
+            "sat_id": np.array([1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 2, 1, 2]),
+            "temp": np.array([24, 23, 23, 31, 32, 35, 35, 34, 34, 34, 34, 35, 35]),
+            "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+        }
+        time_order = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+        expected_times = np.sort(np.concatenate((self.ctg_ds_old["time"].values,
+                                         self.ctg_ds_new["time"].values[-4:])))
+        for var in expected:
+            self.assertNanEqual(merged[var].values, expected[var])
+        self.assertNanEqual(merged["time"].values[time_order], expected_times)
+        merged.close()
+
+        # Test merging contiguous with contiguous with different satellites
+        # Passing a smaller dupe_window here will include more values from the
+        # satellite in the first dataset
 
 if __name__ == "__main__":
-    with TemporaryDirectory() as temp_directory:
-        tmpdir = Path(temp_directory)
-        ctg_ds_old, idx_ds_old, idx_ds_new = data_setup()
-        unittest.main(exit=False)
+    unittest.main(exit=False)
