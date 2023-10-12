@@ -657,17 +657,38 @@ class TestMerge(unittest.TestCase):
             "temp": np.array([24, 23, 23, 31, 32, 35, 35, 34, 34, 34, 34, 35, 35]),
             "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
         }
-        time_order = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
         expected_times = np.sort(np.concatenate((self.ctg_ds_old["time"].values,
                                          self.ctg_ds_new["time"].values[-4:])))
         for var in expected:
             self.assertNanEqual(merged[var].values, expected[var])
-        self.assertNanEqual(merged["time"].values[time_order], expected_times)
+        self.assertNanEqual(merged["time"].values, expected_times)
         merged.close()
 
         # Test merging contiguous with contiguous with different satellites
         # Passing a smaller dupe_window here will include more values from the
         # satellite in the first dataset
+        merged = merge_netCDFs([self.ctg_old_fname, self.ctg_new_fname],
+                               dupe_window=np.timedelta64(1, "m"))
+        # for var in merged.variables:
+        #     print(f"\"{var}\": np.array([{', '.join(merged[var].values.astype(str))}]),")
+
+        expected = {
+            "row_size": np.array([6, 4, 8]),
+            "lon": np.array([-119.59, -114.3, -106.27]),
+            "lat": np.array([37.75, 38.97, 32.82]),
+            "alt": np.array([np.nan, np.nan, np.nan]),
+            "location_id": np.array([1002, 1001, 1004]),
+            "location_description": np.array(["Yosemite", "Great Basin", "White Sands"]),
+            "sat_id": np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 2, 1, 2]),
+            "temp": np.array([24, 24, 23, 23, 23, 23, 31, 31, 32, 32, 35, 35, 34, 34, 34, 34, 35, 35]),
+            "humidity": np.array([0.44, 0.44, 0.32, 0.32, 0.21, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+        }
+        expected_times = np.sort(np.concatenate((self.ctg_ds_old["time"].values,
+                                         self.ctg_ds_new["time"].values)))
+        for var in expected:
+            self.assertNanEqual(merged[var].values, expected[var])
+        self.assertNanEqual(merged["time"].values, expected_times)
+        merged.close()
 
 if __name__ == "__main__":
     unittest.main(exit=False)
