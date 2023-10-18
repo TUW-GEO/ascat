@@ -628,6 +628,7 @@ def merge_netCDFs(file_list, out_format="contiguous", dupe_window=None):
         # set dataset ID
         # TODO: should probably change this
         merged_ds.attrs["id"] = ", ".join(set([f.name for f in file_list]))
+        merged_ds.encoding["unlimited_dims"] = []
     return merged_ds
 
 
