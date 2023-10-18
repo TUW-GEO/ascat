@@ -587,6 +587,11 @@ def merge_netCDFs(file_list, out_format="contiguous", dupe_window=None):
         for var, var_data in location_vars.items():
             dataset[var] = xr.DataArray(var_data, dims="locations")
         dataset = dataset.set_coords(["lon", "lat", "alt", "time"])
+        try:
+            # not sure how to test if time is already an index except like this
+            dataset = dataset.reset_index("time")
+        except ValueError:
+            pass
         return dataset
 
     with xr.open_mfdataset(
