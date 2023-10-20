@@ -1,4 +1,4 @@
-# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2023, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -24,53 +24,148 @@
 # WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 """
 Test file handler.
 """
 
+import shutil
 import unittest
 import random
-import time
+import tempfile
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from datetime import datetime, timedelta
 
 import numpy as np
-from numpy.testing import assert_array_equal
 
 from ascat.file_handling import FilenameTemplate
 from ascat.file_handling import FileSearch
 from ascat.file_handling import ChronFiles
 from ascat.file_handling import Csv
+from ascat.file_handling import CsvFiles
+
+
+def generate_test_data():
+    """
+    Generate fake test data.
+    """
+    tmpdir = Path(tempfile.mkdtemp())
+
+    for num in ["01", "02", "03"]:
+        for tile in ["EN01212", "EN01234", "EN01256"]:
+            folder = tmpdir / Path(f"temperature/{tile}")
+
+            folder.mkdir(parents=True, exist_ok=True)
+
+            filename = tmpdir / Path(
+                f"temperature/{tile}/202201{num}_ascat.csv")
+
+            csv_file = Csv(filename, mode="w")
+            file_dates = [
+                datetime.strptime(f"202201{num}", "%Y%m%d") +
+                timedelta(seconds=(3600 * i + seconds))
+                for i, seconds in enumerate(range(3500, 3700))
+            ]
+
+            file_temps = random.choices(range(20, 35), k=15)
+            dtype = np.dtype([("date", "datetime64[s]"),
+                              ("temperature", "float32")])
+            write_data = np.array(list(zip(file_dates, file_temps)),
+                                  dtype=dtype)
+            csv_file.write(write_data)
+
+    for num in ["01", "02", "03"]:
+        for tile in ["EN01212", "EN01234", "EN01256"]:
+            prev_time = datetime.strptime(f"202201{num}0000", "%Y%m%d%H%M")
+            next_day = prev_time + timedelta(days=1)
+
+            folder = tmpdir / Path(f"precipitation/{tile}")
+            folder.mkdir(parents=True, exist_ok=True)
+
+            while prev_time < next_day:
+                file_dates = [
+                    prev_time + timedelta(seconds=i)
+                    for i in range(random.randrange(120, 180))
+                    if (random.randrange(10) < 7)
+                ]
+                for i, date in enumerate(file_dates):
+                    if date >= next_day:
+                        prev_time = date
+                        del (file_dates[i + 1:])
+
+                if len(file_dates) < 2:
+                    continue
+
+                d1, d2 = file_dates[0].strftime(
+                    "%Y%m%d"), file_dates[-2].strftime("%Y%m%d")
+                t1, t2 = file_dates[0].strftime(
+                    "%H%M%S"), file_dates[-2].strftime("%H%M%S")
+                filename = folder / Path(f"ascat_{d1}_{t1}-{d2}_{t2}.csv")
+
+                csv_file = Csv(filename, mode="w")
+                file_precips = random.choices(range(0, 5),
+                                              k=len(file_dates) - 1)
+                dtype = np.dtype([("date", "datetime64[s]"),
+                                  ("precipitation", "float32")])
+                write_data = np.array(list(zip(file_dates[:-1], file_precips)),
+                                      dtype=dtype)
+                csv_file.write(write_data)
+                prev_time = file_dates[-1]
+
+    return tmpdir
+
+
+class CustomTestCase(unittest.TestCase):
+    """
+    Custom test case generating and deleting test data.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdir = generate_test_data()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdir)
 
 
 class TestFilenameTemplate(unittest.TestCase):
     """
     Tests for FilenameTemplate class.
     """
+
     def setUp(self):
-        root_path = tmpdir/"file_handler_test_data"
+        """
+        Setup test.
+        """
+        self.tmpdir = Path(tempfile.mkdtemp())
         fn_pattern = "{date}_*.{suffix}"
         sf_pattern = {"variables": "{variable}", "tiles": "{tile}"}
-        self.template = FilenameTemplate(root_path, fn_pattern, sf_pattern)
+        self.template = FilenameTemplate(self.tmpdir, fn_pattern, sf_pattern)
 
     def test_template_property(self):
         """
         Test the template property.
         """
-
-        self.assertEqual(str(self.template.template), str(tmpdir/"file_handler_test_data/{variable}/{tile}/{date}_*.{suffix}"))
+        self.assertEqual(
+            str(self.template.template),
+            str(self.tmpdir / "{variable}/{tile}/{date}_*.{suffix}"))
 
     def test_build_filename(self):
         """
         Test the build_filename method.
         """
-
         fn_fmt = {"date": "20220101", "suffix": "csv"}
-        sf_fmt = {"variables": {"variable": "temperature"}, "tiles": {"tile": "EN01234"}}
-        self.assertEqual(self.template.build_filename(fn_fmt, sf_fmt),
-                         str(tmpdir/"file_handler_test_data/temperature/EN01234/20220101_*.csv"))
+        sf_fmt = {
+            "variables": {
+                "variable": "temperature"
+            },
+            "tiles": {
+                "tile": "EN01234"
+            }
+        }
+        self.assertEqual(
+            self.template.build_filename(fn_fmt, sf_fmt),
+            str(self.tmpdir / "temperature/EN01234/20220101_*.csv"))
 
     def test_build_basename(self):
         """
@@ -83,323 +178,374 @@ class TestFilenameTemplate(unittest.TestCase):
         """
         Test the build_subfolder method.
         """
-        fmt = {"variables": {"variable": "temperature"}, "tiles": {"tile": "EN01234"}}
-        self.assertEqual(self.template.build_subfolder(fmt), ["temperature", "EN01234"])
+        fmt = {
+            "variables": {
+                "variable": "temperature"
+            },
+            "tiles": {
+                "tile": "EN01234"
+            }
+        }
+        self.assertEqual(self.template.build_subfolder(fmt),
+                         ["temperature", "EN01234"])
 
 
-class TestFileSearch(unittest.TestCase):
+class TestFileSearch(CustomTestCase):
     """
     Tests for FileSearch class.
     """
+
     def setUp(self):
-        root_path = tmpdir/"file_handler_test_data"
+        """
+        Setup test.
+        """
         fn_pattern = "{date}_*.{suffix}"
         sf_pattern = {"variables": "{variable}", "tiles": "{tile}"}
-        self.filesearch = FileSearch(root_path, fn_pattern, sf_pattern)
+        self.filesearch = FileSearch(self.tmpdir, fn_pattern, sf_pattern)
 
-        # test these with wildcards as well
     def test_search(self):
+        """
+        Test search.
+        """
         fn_fmt = {"date": "20220101", "suffix": "csv"}
-        sf_fmt = {"variables": {"variable": "temperature"}, "tiles": {"tile": "EN01234"}}
+        sf_fmt = {
+            "variables": {
+                "variable": "temperature"
+            },
+            "tiles": {
+                "tile": "EN01234"
+            }
+        }
         recursive = False
         search_result = self.filesearch.search(fn_fmt, sf_fmt, recursive)
-        expected_result = [str(tmpdir/"file_handler_test_data/temperature/EN01234/20220101_ascat.csv")]
-        self.assertEqual(set(search_result), set(expected_result))
+        expected_result = [
+            str(self.tmpdir / "temperature/EN01234/20220101_ascat.csv")
+        ]
+        self.assertEqual(search_result, expected_result)
 
     def test_search_wc(self):
+        """
+        Test search with wildcard.
+        """
         fn_fmt = {"date": "202201*", "suffix": "csv"}
-        sf_fmt = {"variables": {"variable": "temperature"}, "tiles": {"tile": "EN012*"}}
+        sf_fmt = {
+            "variables": {
+                "variable": "temperature"
+            },
+            "tiles": {
+                "tile": "EN012*"
+            }
+        }
         recursive = False
         search_result = self.filesearch.search(fn_fmt, sf_fmt, recursive)
-        expected_result = [str(item) for item in
-                           [tmpdir/"file_handler_test_data/temperature/EN01234/20220101_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01234/20220102_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01234/20220103_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01212/20220101_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01212/20220102_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01212/20220103_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01256/20220101_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01256/20220102_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01256/20220103_ascat.csv"]]
-        self.assertEqual(set(search_result), set(expected_result))
+        expected_result = [
+            str(item) for item in [
+                self.tmpdir /
+                "temperature/EN01234/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01234/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01234/20220103_ascat.csv", self.tmpdir /
+                "temperature/EN01212/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01212/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01212/20220103_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220103_ascat.csv"
+            ]
+        ]
+        self.assertEqual(sorted(search_result), sorted(expected_result))
 
     def test_isearch(self):
+        """
+        Test isearch.
+        """
         fn_fmt = {"date": "20220101", "suffix": "csv"}
-        sf_fmt = {"variables": {"variable": "temperature"}, "tiles": {"tile": "EN01234"}}
+        sf_fmt = {
+            "variables": {
+                "variable": "temperature"
+            },
+            "tiles": {
+                "tile": "EN01234"
+            }
+        }
         recursive = False
         search_result = self.filesearch.isearch(fn_fmt, sf_fmt, recursive)
-        expected_result = iter([str(tmpdir/"file_handler_test_data/temperature/EN01234/20220101_ascat.csv")])
-        self.assertEqual(set(search_result), set(expected_result))
+        expected_result = iter(
+            [str(self.tmpdir / "temperature/EN01234/20220101_ascat.csv")])
+
+        self.assertEqual(list(search_result), list(expected_result))
 
     def test_isearch_wc(self):
+        """
+        Test isearch with wildcard.
+        """
         fn_fmt = {"date": "202201*", "suffix": "csv"}
-        sf_fmt = {"variables": {"variable": "temperature"}, "tiles": {"tile": "EN012*"}}
+        sf_fmt = {
+            "variables": {
+                "variable": "temperature"
+            },
+            "tiles": {
+                "tile": "EN012*"
+            }
+        }
         recursive = False
         search_result = self.filesearch.isearch(fn_fmt, sf_fmt, recursive)
-        expected_result = iter([str(item) for item in
-                                [tmpdir/"file_handler_test_data/temperature/EN01212/20220101_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01234/20220101_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01256/20220101_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01212/20220102_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01234/20220102_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01256/20220102_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01212/20220103_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01234/20220103_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01256/20220103_ascat.csv"]])
-        self.assertEqual(set(search_result), set(expected_result))
+        expected_result = iter([
+            str(item) for item in [
+                self.tmpdir /
+                "temperature/EN01212/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01234/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01212/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01234/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01212/20220103_ascat.csv", self.tmpdir /
+                "temperature/EN01234/20220103_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220103_ascat.csv"
+            ]
+        ])
+        self.assertEqual(sorted(search_result), sorted(expected_result))
 
     def test_create_search_func(self):
+        """
+        Test custom search function.
+        """
+
         def custom_func(arg1, arg2):
             fn_fmt = {"date": arg1, "suffix": "csv"}
-            sf_fmt = {"variables": {"variable": arg2}, "tiles": {"tile": "EN01234"}}
+            sf_fmt = {
+                "variables": {
+                    "variable": arg2
+                },
+                "tiles": {
+                    "tile": "EN01234"
+                }
+            }
             return fn_fmt, sf_fmt
 
         recursive = False
-        custom_search_func = self.filesearch.create_search_func(custom_func, recursive)
+        custom_search_func = self.filesearch.create_search_func(
+            custom_func, recursive)
         search_result = custom_search_func("20220101", "temperature")
-        expected_result = [str(tmpdir/"file_handler_test_data/temperature/EN01234/20220101_ascat.csv")]
-        self.assertEqual(set(search_result), set(expected_result))
+        expected_result = [
+            str(self.tmpdir / "temperature/EN01234/20220101_ascat.csv")
+        ]
+        self.assertEqual(search_result, expected_result)
 
     def test_create_search_func_wc(self):
+        """
+        Test custom search function with wildcard.
+        """
+
         def custom_func(arg1, arg2):
             fn_fmt = {"date": arg1, "suffix": "csv"}
-            sf_fmt = {"variables": {"variable": arg2}, "tiles": {"tile": "EN012*"}}
+            sf_fmt = {
+                "variables": {
+                    "variable": arg2
+                },
+                "tiles": {
+                    "tile": "EN012*"
+                }
+            }
             return fn_fmt, sf_fmt
 
         recursive = False
-        custom_search_func = self.filesearch.create_search_func(custom_func, recursive)
+        custom_search_func = self.filesearch.create_search_func(
+            custom_func, recursive)
         search_result = custom_search_func("202201*", "temperature")
-        expected_result = [str(item) for item in
-                           [tmpdir/"file_handler_test_data/temperature/EN01234/20220101_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01234/20220102_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01234/20220103_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01212/20220101_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01212/20220102_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01212/20220103_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01256/20220101_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01256/20220102_ascat.csv",
-                            tmpdir/"file_handler_test_data/temperature/EN01256/20220103_ascat.csv"]]
-        self.assertEqual(set(search_result), set(expected_result))
+        expected_result = [
+            str(item) for item in [
+                self.tmpdir /
+                "temperature/EN01234/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01234/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01234/20220103_ascat.csv", self.tmpdir /
+                "temperature/EN01212/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01212/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01212/20220103_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220103_ascat.csv"
+            ]
+        ]
+        self.assertEqual(sorted(search_result), sorted(expected_result))
 
     def test_create_isearch_func(self):
+        """
+        Test custom isearch function with wildcard.
+        """
+
         def custom_func(arg1, arg2):
             fn_fmt = {"date": arg1, "suffix": "csv"}
-            sf_fmt = {"variables": {"variable": arg2}, "tiles": {"tile": "EN01234"}}
+            sf_fmt = {
+                "variables": {
+                    "variable": arg2
+                },
+                "tiles": {
+                    "tile": "EN01234"
+                }
+            }
             return fn_fmt, sf_fmt
 
         recursive = False
-        custom_isearch_func = self.filesearch.create_isearch_func(custom_func, recursive)
+        custom_isearch_func = self.filesearch.create_isearch_func(
+            custom_func, recursive)
         search_result = custom_isearch_func("20220101", "temperature")
-        expected_result = iter([str(tmpdir/"file_handler_test_data/temperature/EN01234/20220101_ascat.csv")])
-        self.assertEqual(set(search_result), set(expected_result))
+        expected_result = iter(
+            [str(self.tmpdir / "temperature/EN01234/20220101_ascat.csv")])
+
+        self.assertEqual(list(search_result), list(expected_result))
 
     def test_create_isearch_func_wc(self):
+        """
+        Test custom isearch function with wildcard.
+        """
+
         def custom_func(arg1, arg2):
             fn_fmt = {"date": arg1, "suffix": "csv"}
-            sf_fmt = {"variables": {"variable": arg2}, "tiles": {"tile": "EN012*"}}
+            sf_fmt = {
+                "variables": {
+                    "variable": arg2
+                },
+                "tiles": {
+                    "tile": "EN012*"
+                }
+            }
             return fn_fmt, sf_fmt
 
         recursive = False
-        custom_isearch_func = self.filesearch.create_isearch_func(custom_func, recursive)
+        custom_isearch_func = self.filesearch.create_isearch_func(
+            custom_func, recursive)
         search_result = custom_isearch_func("202201*", "temperature")
-        expected_result = iter([str(item) for item in
-                                [tmpdir/"file_handler_test_data/temperature/EN01234/20220101_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01234/20220102_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01234/20220103_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01212/20220101_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01212/20220102_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01212/20220103_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01256/20220101_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01256/20220102_ascat.csv",
-                                 tmpdir/"file_handler_test_data/temperature/EN01256/20220103_ascat.csv"]])
-        self.assertEqual(set(search_result), set(expected_result))
+        expected_result = iter([
+            str(item) for item in [
+                self.tmpdir /
+                "temperature/EN01234/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01234/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01234/20220103_ascat.csv", self.tmpdir /
+                "temperature/EN01212/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01212/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01212/20220103_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220101_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220102_ascat.csv", self.tmpdir /
+                "temperature/EN01256/20220103_ascat.csv"
+            ]
+        ])
+        self.assertEqual(sorted(search_result), sorted(expected_result))
 
 
-class TestChronFiles(unittest.TestCase):
+class TestChronFiles(CustomTestCase):
     """
     Tests for ChronFiles class, as well as MultiFileHandler
     """
+
     def setUp(self):
-        root_path = str(tmpdir/"file_handler_test_data")
+        """
+        Setup test.
+        """
         cls = Csv
         fn_templ = "{date}_ascat.csv"
         sf_templ = {"variables": "{variable}", "tiles": "{tile}"}
-        cls_kwargs = {"mode": "r"}
+        cls_kwargs = None
         err = True
         fn_read_fmt = lambda timestamp: {"date": timestamp.strftime("%Y%m%d")}
-        sf_read_fmt = {"variables": {"variable": "temperature"}, "tiles": {"tile": "EN01234"}}
-        self.chron_files = ChronFiles(root_path, cls, fn_templ, sf_templ, cls_kwargs, err,
-                                              fn_read_fmt, sf_read_fmt)
+        sf_read_fmt = {
+            "variables": {
+                "variable": "temperature"
+            },
+            "tiles": {
+                "tile": "EN01234"
+            }
+        }
+        self.chron_files = ChronFiles(self.tmpdir, cls, fn_templ, sf_templ,
+                                      cls_kwargs, err, fn_read_fmt,
+                                      sf_read_fmt)
 
     def test_search_date(self):
+        """
+        Test search date.
+        """
         timestamp = datetime(2022, 1, 1)
-        filenames = self.chron_files.search_date(timestamp, date_str="%Y%m%d",
-                                                 date_fields=["date"])
-        expected_filenames = [str(tmpdir/"file_handler_test_data/temperature/EN01234/20220101_ascat.csv")]
+        filenames = self.chron_files.search_date(timestamp,
+                                                 date_str="%Y%m%d",
+                                                 date_field="date")
+        expected_filenames = [
+            str(self.tmpdir / "temperature/EN01234/20220101_ascat.csv")
+        ]
         self.assertEqual(filenames, expected_filenames)
 
     def test_search_period(self):
+        """
+        Test search period.
+        """
         dt_start = datetime(2022, 1, 1)
         dt_end = datetime(2022, 1, 3)
-        filenames = self.chron_files.search_period(dt_start, dt_end, dt_delta=timedelta(days=1))
-        expected_filenames = [str(tmpdir/"file_handler_test_data/temperature/EN01234/20220101_ascat.csv"),
-                              str(tmpdir/"file_handler_test_data/temperature/EN01234/20220102_ascat.csv"),
-                              str(tmpdir/"file_handler_test_data/temperature/EN01234/20220103_ascat.csv")]
+        filenames = self.chron_files.search_period(dt_start,
+                                                   dt_end,
+                                                   dt_delta=timedelta(days=1))
+        expected_filenames = [
+            str(self.tmpdir / "temperature/EN01234/20220101_ascat.csv"),
+            str(self.tmpdir / "temperature/EN01234/20220102_ascat.csv"),
+            str(self.tmpdir / "temperature/EN01234/20220103_ascat.csv")
+        ]
         self.assertTrue(filenames)
         self.assertEqual(filenames, expected_filenames)
 
     def test_read_period(self):
+        """
+        Test read period.
+        """
         dt_start = datetime(2022, 1, 1, hour=12, minute=30)
-        dt_end = datetime(2022, 1, 2, hour = 12, minute=30)
-        data = self.chron_files.read_period(dt_start, dt_end, dt_delta=timedelta(days=1))
-        minimum_date = data["date"].min()
-        maximum_date = data["date"].max()
-        self.assertTrue(minimum_date >= dt_start)
-        self.assertTrue(maximum_date <= dt_end)
+        dt_end = datetime(2022, 1, 2, hour=12, minute=30)
+        data = self.chron_files.read_period(dt_start,
+                                            dt_end,
+                                            dt_delta=timedelta(days=1))
+
+        self.assertTrue(data["date"].min() >= dt_start)
+        self.assertTrue(data["date"].max() <= dt_end)
 
 
-class TestChronFiles_multidate(unittest.TestCase):
+class TestCsvFiles(unittest.TestCase):
     """
-    Tests for ChronFiles class with two-date filenames, as well as MultiFileHandler
+    Tests for CsvFiles class.
     """
+
     def setUp(self):
-        root_path = (tmpdir/"file_handler_test_data")
-        cls = Csv
-        fn_templ = "ascat_{dt1}-{dt2}.csv"
-        sf_templ = {"variables": "{variable}", "tiles": "{tile}"}
-        cls_kwargs = {"mode": "r"}
-        err = True
-        fn_read_fmt = lambda timestamp1, timestamp2: {"dt1": timestamp1.strftime("%Y%m%d_%H%M%S"), "dt2": timestamp2.strftime("%Y%m%d_%H%M%S")}
-        sf_read_fmt = {"variables": {"variable": "precipitation"}, "tiles": {"tile": "EN01234"}}
-        self.chron_files = ChronFiles(root_path, cls, fn_templ, sf_templ, cls_kwargs, err,
-                                                fn_read_fmt, sf_read_fmt)
+        """
+        Setup test.
+        """
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.csv = CsvFiles(self.tmpdir)
 
-    def test_search_date(self):
-        timestamp = datetime(2022, 1, 1)
-        filenames = self.chron_files.search_date(timestamp, date_str="%Y%m%d_%H%M%S",
-                                                 date_fields=["dt1", "dt2"])
-        unique_dates = set()
-        for fname in filenames:
-            fname_datetime = self.chron_files._parse_date(fname, "%Y%m%d_%H%M%S", ["dt1"])[0]
-            fname_date = datetime(fname_datetime.year, fname_datetime.month, fname_datetime.day)
-            unique_dates.add(fname_date)
+    def test_read_write(self):
+        """
+        Test read/write CSV files.
+        """
+        dtype = np.dtype([("date", "datetime64[h]"),
+                          ("temperature", "float32")])
 
-        expected_dates = {datetime(2022, 1, 1)}
-        self.assertTrue(filenames)
-        self.assertEqual(unique_dates, expected_dates)
+        dates = np.arange("2000-01-01", "2000-01-10", dtype="datetime64[D]")
 
-    def test_search_period(self):
-        dt_start = datetime(2022, 1, 1)
-        dt_end = datetime(2022, 1, 3)
-        filenames = self.chron_files.search_period(dt_start, dt_end, dt_delta=timedelta(days=1),
-                                                   date_str="%Y%m%d_%H%M%S", date_fields=["dt1", "dt2"])
-        unique_dates = set()
-        for fname in filenames:
-            fname_datetime = self.chron_files._parse_date(fname, "%Y%m%d_%H%M%S", ["dt1"])[0]
-            fname_date = datetime(fname_datetime.year, fname_datetime.month, fname_datetime.day)
-            unique_dates.add(fname_date)
+        tmp_data = {}
 
-        expected_dates = {datetime(2022, 1, 1), datetime(2022, 1, 2), datetime(2022, 1, 3)}
-        self.assertTrue(filenames)
-        self.assertEqual(unique_dates, expected_dates)
+        for date in dates:
+            dt = np.arange(date,
+                           date + np.timedelta64(1, "D"),
+                           dtype="datetime64[h]")
+            temperature = random.choices(range(0, 40), k=dt.size)
+            data = np.array(list(zip(dt, temperature)), dtype=dtype)
 
-    def test_merge(self):
-        timestamp1 = datetime(2022, 1, 1, hour=0, minute=0)
-        timestamp2 = datetime(2022, 1, 1, hour=12, minute=0)
-        timestamp3 = datetime(2022, 1, 2, hour=0, minute=0)
+            self.csv.write(data, date.astype(datetime))
+            tmp_data[date] = data
 
-        data1 = self.chron_files.read_period(timestamp1, timestamp2, dt_delta=timedelta(hours=1),
-                                             date_str="%Y%m%d_%H%M%S", date_fields=["dt1", "dt2"])
-        data2 = self.chron_files.read_period(timestamp2, timestamp3, dt_delta=timedelta(hours=1),
-                                                date_str="%Y%m%d_%H%M%S", date_fields=["dt1", "dt2"])
-        data3 = self.chron_files.read_period(timestamp1, timestamp3, dt_delta=timedelta(hours=1),
-                                                date_str="%Y%m%d_%H%M%S", date_fields=["dt1", "dt2"])
-        data_merged = np.unique(self.chron_files._merge_data([data1, data2]))
+        for date in dates:
+            data = self.csv.read(date.astype(datetime))
+            np.testing.assert_array_equal(data, tmp_data[date])
 
-        assert_array_equal(data3, data_merged)
-
-
-    def test_read_period(self):
-        dt_start = datetime(2022, 1, 1, hour=12, minute=30)
-        dt_end = datetime(2022, 1, 3, hour = 12, minute=30)
-        data = self.chron_files.read_period(dt_start, dt_end, dt_delta=timedelta(days=1),
-                                            date_str="%Y%m%d_%H%M%S", date_fields=["dt1", "dt2"])
-        minimum_date = data["date"].min().astype(datetime)
-        maximum_date = data["date"].max().astype(datetime)
-        self.assertTrue(minimum_date >= dt_start)
-        self.assertTrue(minimum_date.strftime("%Y%m%d") == dt_start.strftime("%Y%m%d"))
-        self.assertTrue(maximum_date <= dt_end)
-        self.assertTrue(maximum_date.strftime("%Y%m%d") == dt_end.strftime("%Y%m%d"))
-
-    def test_read_period_caching(self):
-        self.chron_files.cache_size = 10
-        self.chron_files.cache = {}
-        dt_start = datetime(2022, 1, 1, hour=12, minute=30)
-        dt_end = datetime(2022, 1, 3, hour = 12, minute=30)
-        filenames = self.chron_files.search_period(dt_start, dt_end, dt_delta=timedelta(days=1),
-                                                    date_str="%Y%m%d_%H%M%S", date_fields=["dt1", "dt2"])
-
-        start_time = time.time()
-        data = self.chron_files.read_file(filenames[0], cls_kwargs={})
-        end_time = time.time()
-        first_read_time = end_time - start_time
-        minimum_date = data["date"].min()
-        maximum_date = data["date"].max()
-        self.assertTrue(minimum_date >= dt_start)
-        self.assertTrue(maximum_date <= dt_end)
-
-        # read again, should be cached
-        start_time = time.time()
-        data = self.chron_files.read_file(filenames[0], cls_kwargs={})
-        end_time = time.time()
-        second_read_time = end_time - start_time
-
-        minimum_date = data["date"].min()
-        maximum_date = data["date"].max()
-        self.assertTrue(minimum_date >= dt_start)
-        self.assertTrue(maximum_date <= dt_end)
-        self.assertTrue(second_read_time < first_read_time)
+    def tearDown(self):
+        """
+        Tear down test.
+        """
+        shutil.rmtree(self.tmpdir)
 
 
 if __name__ == '__main__':
-    # generate test data
-    with TemporaryDirectory() as temp_directory:
-        tmpdir = Path(temp_directory)
-        for num in ["01", "02", "03"]:
-            for tile in ["EN01212", "EN01234", "EN01256"]:
-                (tmpdir/f"file_handler_test_data/temperature/{tile}").mkdir(parents=True, exist_ok=True)
-                file = Csv(tmpdir/f"file_handler_test_data/temperature/{tile}/202201{num}_ascat.csv", mode="w")
-                file_dates = [datetime.strptime(f"202201{num}", "%Y%m%d") + timedelta(seconds=(3600*i + seconds))\
-                            for i, seconds in enumerate(range(3500, 3700))]
-                file_temps = random.choices(range(20,35), k=15)
-                dtype = np.dtype([("date", "datetime64[s]"), ("temperature", "float32")])
-                write_data = np.array(list(zip(file_dates, file_temps)), dtype=dtype)
-                file.write(write_data)
-
-        for num in ["01", "02", "03"]:
-            for tile in ["EN01212", "EN01234", "EN01256"]:
-                prev_time = datetime.strptime(f"202201{num}0000", "%Y%m%d%H%M")
-                next_day = prev_time + timedelta(days=1)
-                while prev_time < next_day:
-                    (tmpdir/f"file_handler_test_data/precipitation/{tile}").mkdir(parents=True, exist_ok=True)
-                    file_dates = [prev_time + timedelta(seconds=i)\
-                                for i in range(random.randrange(120,180))\
-                                if (random.randrange(10) < 7)]
-                    for i, date in enumerate(file_dates):
-                        if date >= next_day:
-                            prev_time = date
-                            del(file_dates[i+1:])
-                    if len(file_dates) < 2:
-                        continue
-
-                    d1, d2 = file_dates[0].strftime("%Y%m%d"), file_dates[-2].strftime("%Y%m%d")
-                    t1, t2 = file_dates[0].strftime("%H%M%S"), file_dates[-2].strftime("%H%M%S")
-                    filename = tmpdir/f"file_handler_test_data/precipitation/{tile}/ascat_{d1}_{t1}-{d2}_{t2}.csv"
-                    file = Csv(filename, mode="w")
-                    file_precips = random.choices(range(0,5), k=len(file_dates)-1)
-                    dtype = np.dtype([("date", "datetime64[s]"), ("precipitation", "float32")])
-                    write_data = np.array(list(zip(file_dates[:-1], file_precips)), dtype=dtype)
-                    file.write(write_data)
-                    prev_time = file_dates[-1]
-
-        unittest.main(exit=False)
+    unittest.main()
