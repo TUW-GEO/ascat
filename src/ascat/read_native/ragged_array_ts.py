@@ -32,6 +32,7 @@ from pathlib import Path
 
 import xarray as xr
 import numpy as np
+import dask.array as da
 
 int8_nan = np.iinfo(np.int8).max
 int64_nan = np.iinfo(np.int64).min
@@ -529,62 +530,34 @@ def udunits_name_to_datetime(unit):
 
     return lookup[unit]
 
+class RACollection():
+    """
+    """
 
-def merge_netCDFs(file_list, out_format="contiguous", dupe_window=None):
-    if dupe_window is None:
-        dupe_window = np.timedelta64(10, "m")
-    location_vars = {}
-    locationIndex = np.array([], dtype=np.int64)
-    # # uncomment these to open all files at once and allow for
-    # # passing in a list of paths or a list of open datasets
-    # if isinstance(file_list[0], (str, Path)):
-    #    with contextlib.ExitStack() as stack:
-    #        datasets = [stack.enter_context(xr.open_dataset(f)) for f in file_list]
-    #        return merge_netCDFs(datasets)
-    # for ds in file_list:
-    for ncfile in file_list:
-        with xr.open_dataset(ncfile, mask_and_scale=False) as ds:
-            if dataset_ra_type(ds) != "indexed":
-                ds = contiguous_to_indexed(ds)
-            location_id = ds["location_id"].values[
-                ds["location_id"].values != int64_nan + 2
-            ]
-            index = np.arange(0, len(location_id))
-            if location_vars.get("location_id") is not None:
-                common_locations = location_vars["location_id"]
-            else:
-                common_locations = np.array([], dtype=ds["location_id"].dtype)
-            new_loc_indices = index[~np.isin(location_id, common_locations)]
+    def __init__(self, file_list):
+        self.file_list = file_list
 
-            for v in ds.variables:
-                if "locations" in ds[v].dims:
-                    if v not in location_vars:
-                        location_vars[v] = np.array([], dtype=ds[v].dtype)
-                    location_vars[v] = np.concatenate(
-                        (location_vars[v], ds[v].values[new_loc_indices])
-                    )
-            sorter = np.argsort(location_vars["location_id"])
-            locationIndex = np.concatenate(
-                (
-                    locationIndex,
-                    sorter[
-                        np.searchsorted(
-                            location_vars["location_id"],
-                            ds["location_id"].values[ds["locationIndex"]],
-                            sorter=sorter,
-                        )
-                    ],
-                )
-            )
-
-    def preprocess(dataset):
+    def preprocess(self, dataset):
         if dataset_ra_type(dataset) != "indexed":
             dataset = contiguous_to_indexed(dataset)
+
         if "time" in dataset.dims:
             dataset = dataset.rename_dims({"time": "obs"})
         dataset = dataset.dropna(dim="locations", subset=["location_id"])
+
+        dataset["locationIndex"] = (
+            "obs",
+            self.sorter[
+                np.searchsorted(
+                    self.location_vars["location_id"].values,
+                    dataset["location_id"].values[dataset["locationIndex"]],
+                    sorter=self.sorter,
+                )
+            ],
+        )
+
         dataset = dataset.drop_dims("locations")
-        for var, var_data in location_vars.items():
+        for var, var_data in self.location_vars.items():
             dataset[var] = xr.DataArray(var_data, dims="locations")
         dataset = dataset.set_coords(["lon", "lat", "alt", "time"])
         try:
@@ -594,42 +567,168 @@ def merge_netCDFs(file_list, out_format="contiguous", dupe_window=None):
             pass
         return dataset
 
-    with xr.open_mfdataset(
-        file_list,
-        concat_dim="obs",
-        data_vars="minimal",
-        coords="minimal",
-        preprocess=preprocess,
-        combine="nested",
-        mask_and_scale=False
-    ) as merged_ds:
-        merged_ds.load()
-        merged_ds["locationIndex"] = xr.DataArray(locationIndex, dims="obs")
+    def merge(self, out_format="contiguous", dupe_window=None):
+        if dupe_window is None:
+            dupe_window = np.timedelta64(10, "m")
 
-        # deduplicate
-        merged_ds = merged_ds.sortby(["sat_id", "locationIndex", "time"])
+        with xr.open_mfdataset(
+            self.file_list,
+            concat_dim="locations",
+            combine="nested",
+            preprocess=lambda ds: ds[
+                [
+                    var
+                    for var in ds.variables
+                    if ("locations" in ds[var].dims)
+                    and (var not in ["row_size", "locationIndex"])
+                ]
+            ],
+            # parallel=True,
+        ) as locs_merged:
+            all_location_ids, idxs = np.unique(
+                locs_merged["location_id"].values, return_index=True
+            )
+            self.location_vars = {
+                var: locs_merged[var][idxs] for var in locs_merged.variables
+            }
 
-        # time_units = merged_ds["time"].attrs["units"].split("since")[0].strip()
-        # time_units = udunits_name_to_datetime(time_units)
-        dupl = np.insert(
-            (
-                abs(merged_ds["time"].values[1:] - merged_ds["time"].values[:-1])
-                < dupe_window
-            ),
-            0,
-            False,
-        )
-        merged_ds = merged_ds.sel(obs=~dupl)
+            self.sorter = np.argsort(self.location_vars["location_id"].values)
 
-        if out_format == "contiguous":
-            merged_ds = indexed_to_contiguous(merged_ds)
-        # set variable order
-        merged_ds = var_order(merged_ds)
-        # set dataset ID
-        # TODO: should probably change this
-        merged_ds.attrs["id"] = ", ".join(set([f.name for f in file_list]))
-        merged_ds.encoding["unlimited_dims"] = []
-    return merged_ds
+        with xr.open_mfdataset(
+            self.file_list,
+            concat_dim="obs",
+            data_vars="minimal",
+            coords="minimal",
+            preprocess=self.preprocess,
+            combine="nested",
+            mask_and_scale=False,
+            # parallel=True,
+        ) as merged_ds:
+            # merged_ds.load()
+            # merged_ds["locationIndex"] = xr.DataArray(self.locationIndex, dims="obs")
+
+            # deduplicate
+            merged_ds = merged_ds.sortby(["sat_id", "locationIndex", "time"])
+
+            # time_units = merged_ds["time"].attrs["units"].split("since")[0].strip()
+            # time_units = udunits_name_to_datetime(time_units)
+            dupl = np.insert(
+                (
+                    abs(merged_ds["time"].values[1:] - merged_ds["time"].values[:-1])
+                    < dupe_window
+                ),
+                0,
+                False,
+            )
+            merged_ds = merged_ds.sel(obs=~dupl)
+
+            if out_format == "contiguous":
+                merged_ds = indexed_to_contiguous(merged_ds)
+            # set variable order
+            merged_ds = var_order(merged_ds)
+            # set dataset ID
+            # TODO: should probably change this
+            merged_ds.attrs["id"] = ", ".join(set([f.name for f in self.file_list]))
+            merged_ds.encoding["unlimited_dims"] = []
+        return merged_ds
+
+def merge_netCDFs(file_list, out_format="contiguous", dupe_window=None):
+    return RACollection(file_list).merge(out_format, dupe_window)
+    # if dupe_window is None:
+    #     dupe_window = np.timedelta64(10, "m")
+    # location_vars = {}
+    # locationIndex = np.array([], dtype=np.int64)
+
+    # for ncfile in file_list:
+    #     with xr.open_dataset(ncfile, mask_and_scale=False) as ds:
+    #         if dataset_ra_type(ds) != "indexed":
+    #             ds = contiguous_to_indexed(ds)
+    #         location_id = ds["location_id"].values[
+    #             ds["location_id"].values != int64_nan + 2
+    #         ]
+    #         index = np.arange(0, len(location_id))
+    #         if location_vars.get("location_id") is not None:
+    #             common_locations = location_vars["location_id"]
+    #         else:
+    #             common_locations = np.array([], dtype=ds["location_id"].dtype)
+    #         new_loc_indices = index[~np.isin(location_id, common_locations)]
+
+    #         for v in ds.variables:
+    #             if "locations" in ds[v].dims:
+    #                 if v not in location_vars:
+    #                     location_vars[v] = np.array([], dtype=ds[v].dtype)
+    #                 location_vars[v] = np.concatenate(
+    #                     (location_vars[v], ds[v].values[new_loc_indices])
+    #                 )
+    #         sorter = np.argsort(location_vars["location_id"])
+    #         locationIndex = np.concatenate(
+    #             (
+    #                 locationIndex,
+    #                 sorter[
+    #                     np.searchsorted(
+    #                         location_vars["location_id"],
+    #                         ds["location_id"].values[ds["locationIndex"]],
+    #                         sorter=sorter,
+    #                     )
+    #                 ],
+    #             )
+    #         )
+
+    # def preprocess(dataset):
+    #     if dataset_ra_type(dataset) != "indexed":
+    #         dataset = contiguous_to_indexed(dataset)
+
+    #     if "time" in dataset.dims:
+    #         dataset = dataset.rename_dims({"time": "obs"})
+    #     dataset = dataset.dropna(dim="locations", subset=["location_id"])
+    #     dataset = dataset.drop_dims("locations")
+    #     for var, var_data in location_vars.items():
+    #         dataset[var] = xr.DataArray(var_data, dims="locations")
+    #     dataset = dataset.set_coords(["lon", "lat", "alt", "time"])
+    #     try:
+    #         # not sure how to test if time is already an index except like this
+    #         dataset = dataset.reset_index("time")
+    #     except ValueError:
+    #         pass
+    #     return dataset
+
+    # with xr.open_mfdataset(
+    #     file_list,
+    #     concat_dim="obs",
+    #     data_vars="minimal",
+    #     coords="minimal",
+    #     preprocess=preprocess,
+    #     combine="nested",
+    #     mask_and_scale=False
+    # ) as merged_ds:
+    #     # merged_ds.load()
+    #     location_id = np.unique(merged_ds["location_id"].data)
+    #     merged_ds["locationIndex"] = xr.DataArray(locationIndex, dims="obs")
+
+    #     # deduplicate
+    #     merged_ds = merged_ds.sortby(["sat_id", "locationIndex", "time"])
+
+    #     # time_units = merged_ds["time"].attrs["units"].split("since")[0].strip()
+    #     # time_units = udunits_name_to_datetime(time_units)
+    #     dupl = np.insert(
+    #         (
+    #             abs(merged_ds["time"].values[1:] - merged_ds["time"].values[:-1])
+    #             < dupe_window
+    #         ),
+    #         0,
+    #         False,
+    #     )
+    #     merged_ds = merged_ds.sel(obs=~dupl)
+
+    #     if out_format == "contiguous":
+    #         merged_ds = indexed_to_contiguous(merged_ds)
+    #     # set variable order
+    #     merged_ds = var_order(merged_ds)
+    #     # set dataset ID
+    #     # TODO: should probably change this
+    #     merged_ds.attrs["id"] = ", ".join(set([f.name for f in file_list]))
+    #     merged_ds.encoding["unlimited_dims"] = []
+    # return merged_ds
 
 
 class GridCellFiles:

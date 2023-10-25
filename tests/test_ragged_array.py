@@ -42,6 +42,8 @@ from ascat.read_native.ragged_array_ts import dataset_ra_type
 from ascat.read_native.ragged_array_ts import set_attributes
 from ascat.read_native.ragged_array_ts import create_encoding
 from ascat.read_native.ragged_array_ts import merge_netCDFs
+from ascat.read_native.ragged_array_ts import RACollection
+
 
 
 def data_setup(outdir):
@@ -170,6 +172,15 @@ def data_setup(outdir):
         "location_description": ["Glacier", "White Sands", "Yellowstone"],
         "time": random_date_range("2021-06-01 00:00:00", 30 * 24 * 3600, 9),
     }
+    # new_data_indexed = {
+    #     "locationIndex": [1, 0, 1, 1, 1, 0, 0, 0, 0],
+    #     "temp": [31, 19, 32, 32, 22, 18, 16, 17, 17],
+    #     "humidity": [0, 0.33, 0, 0, 0.21, 0.97, 0.86, 0.22, 0.31],
+    #     "location_id": [1003, 1004],
+    #     "sat_id": [1, 1, 1, 1, 1, 1, 1, 1, 1],
+    #     "location_description": ["Glacier", "White Sands"],
+    #     "time": random_date_range("2021-06-01 00:00:00", 30 * 24 * 3600, 9),
+    # }
     new_data_indexed["lon"] = [
         location_info["lon"][location_info["location_id"].index(s)]
         for s in new_data_indexed["location_id"]
@@ -576,19 +587,28 @@ class TestMerge(unittest.TestCase):
         Test merging of netCDF files
         """
         # Test merging indexed with indexed
-        merged = merge_netCDFs([self.idx_old_fname, self.idx_new_fname])
+        # merged = merge_netCDFs([self.idx_old_fname, self.idx_new_fname])
+        # with xr.open_mfdataset(
+        #     [self.idx_old_fname, self.idx_new_fname],
+        #     concat_dim="locations",
+        #     combine="nested",
+        #     preprocess=lambda ds: ds[[var for var in ds.variables if "locations" in ds[var].dims]],
+        # ) as merged:
+        #     print(merged)
+        merged = RACollection([self.idx_old_fname, self.idx_new_fname]).merge()
         expected = {
-            "row_size": np.array([3, 2, 7, 4, 2]),
-            "lon": np.array([-119.59, -114.3, -106.27, -113.61, -110.61]),
-            "lat": np.array([37.75, 38.97, 32.82, 48.68, 44.44]),
+            "row_size": np.array([2, 3, 4, 7, 2]),
+            "lon": np.array([-114.3, -119.59, -113.61, -106.27, -110.61]),
+            "lat": np.array([38.97, 37.75, 48.68, 32.82, 44.44]),
             "alt": np.array([np.nan, np.nan, np.nan, np.nan, np.nan]),
-            "location_id": np.array([1002, 1001, 1004, 1003, 1005]),
-            "location_description": np.array(["Yosemite", "Great Basin", "White Sands", "Glacier", "Yellowstone"]),
+            "location_id": np.array([1001, 1002, 1003, 1004, 1005]),
+            "location_description": np.array(["Great Basin", "Yosemite", "Glacier", "White Sands", "Yellowstone"]),
             "sat_id": np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]),
-            "temp": np.array([24, 23, 23, 31, 32, 35, 34, 34, 35, 31, 32, 32, 18, 16, 17, 17, 19, 22]),
-            "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.97, 0.86, 0.22, 0.31, 0.33, 0.21 ]),
+            "temp": np.array([31, 32, 24, 23, 23, 18, 16, 17, 17, 35, 34, 34, 35, 31, 32, 32, 19, 22]),
+            "humidity": np.array([0.0, 0.0, 0.44, 0.32, 0.21, 0.97, 0.86, 0.22, 0.31, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.33, 0.21]),
         }
-        time_order = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 10, 11, 17, 12, 13, 14, 15])
+        # print(np.argsort(merged["time"].values))
+        time_order = np.array([2,  3,  4,  0,  1,  9, 10, 11, 12, 13, 16, 14, 15, 17,  5,  6,  7,  8])
         expected_times = np.concatenate((self.idx_ds_old["time"].values, self.idx_ds_new["time"].values))
         for var in expected:
             self.assertNanEqual(merged[var].values, expected[var])
@@ -598,17 +618,17 @@ class TestMerge(unittest.TestCase):
         # Test merging indexed with contiguous
         merged = merge_netCDFs([self.ctg_old_fname, self.idx_new_fname])
         expected = {
-            "row_size": np.array([3, 2, 7, 4, 2]),
-            "lon": np.array([-119.59, -114.3, -106.27, -113.61, -110.61]),
-            "lat": np.array([37.75, 38.97, 32.82, 48.68, 44.44]),
+            "row_size": np.array([2, 3, 4, 7, 2]),
+            "lon": np.array([-114.3, -119.59, -113.61, -106.27, -110.61]),
+            "lat": np.array([38.97, 37.75, 48.68, 32.82, 44.44]),
             "alt": np.array([np.nan, np.nan, np.nan, np.nan, np.nan]),
-            "location_id": np.array([1002, 1001, 1004, 1003, 1005]),
-            "location_description": np.array(["Yosemite", "Great Basin", "White Sands", "Glacier", "Yellowstone"]),
+            "location_id": np.array([1001, 1002, 1003, 1004, 1005]),
+            "location_description": np.array(["Great Basin", "Yosemite", "Glacier", "White Sands", "Yellowstone"]),
             "sat_id": np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]),
-            "temp": np.array([24, 23, 23, 31, 32, 35, 34, 34, 35, 31, 32, 32, 18, 16, 17, 17, 19, 22]),
-            "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.97, 0.86, 0.22, 0.31, 0.33, 0.21]),
+            "temp": np.array([31, 32, 24, 23, 23, 18, 16, 17, 17, 35, 34, 34, 35, 31, 32, 32, 19, 22]),
+            "humidity": np.array([0.0, 0.0, 0.44, 0.32, 0.21, 0.97, 0.86, 0.22, 0.31, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.33, 0.21]),
         }
-        time_order = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 10, 11, 17, 12, 13, 14, 15])
+        time_order = np.array([2, 3, 4, 0, 1, 9, 10, 11, 12, 13, 16, 14, 15, 17, 5, 6, 7, 8])
         expected_times = np.concatenate((self.idx_ds_old["time"].values, self.idx_ds_new["time"].values))
         for var in expected:
             self.assertNanEqual(merged[var].values, expected[var])
@@ -621,17 +641,17 @@ class TestMerge(unittest.TestCase):
         #     print(f"\"{var}\": np.array([{', '.join(merged[var].values.astype(str))}]),")
 
         expected = {
-            "row_size": np.array([3, 2, 4]),
-            "lon": np.array([-119.59, -114.3, -106.27]),
-            "lat": np.array([37.75, 38.97, 32.82]),
+            "row_size": np.array([2, 3, 4]),
+            "lon": np.array([-114.3, -119.59, -106.27]),
+            "lat": np.array([38.97, 37.75, 32.82]),
             "alt": np.array([np.nan, np.nan, np.nan]),
-            "location_id": np.array([1002, 1001, 1004]),
-            "location_description": np.array(["Yosemite", "Great Basin", "White Sands"]),
+            "location_id": np.array([1001, 1002, 1004]),
+            "location_description": np.array(["Great Basin", "Yosemite", "White Sands"]),
             "sat_id": np.array([1, 1, 1, 1, 1, 1, 1, 1, 1]),
-            "temp": np.array([24, 23, 23, 31, 32, 35, 34, 34, 35]),
-            "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            "temp": np.array([31, 32, 24, 23, 23, 35, 34, 34, 35]),
+            "humidity": np.array([0.0, 0.0, 0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0]),
         }
-        time_order = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8])
+        time_order = np.array([2, 3, 4, 0, 1, 5, 6, 7, 8])
         expected_times = self.ctg_ds_old["time"].values
         for var in expected:
             self.assertNanEqual(merged[var].values, expected[var])
@@ -647,21 +667,22 @@ class TestMerge(unittest.TestCase):
 
         # print(np.argsort(merged["time"].values))
         expected = {
-            "row_size": np.array([3, 2, 8]),
-            "lon": np.array([-119.59, -114.3, -106.27]),
-            "lat": np.array([37.75, 38.97, 32.82]),
+            "row_size": np.array([2, 3, 8]),
+            "lon": np.array([-114.3, -119.59, -106.27]),
+            "lat": np.array([38.97, 37.75, 32.82]),
             "alt": np.array([np.nan, np.nan, np.nan]),
-            "location_id": np.array([1002, 1001, 1004]),
-            "location_description": np.array(["Yosemite", "Great Basin", "White Sands"]),
+            "location_id": np.array([1001, 1002, 1004]),
+            "location_description": np.array(["Great Basin", "Yosemite", "White Sands"]),
             "sat_id": np.array([1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 2, 1, 2]),
-            "temp": np.array([24, 23, 23, 31, 32, 35, 35, 34, 34, 34, 34, 35, 35]),
-            "humidity": np.array([0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            "temp": np.array([31, 32, 24, 23, 23, 35, 35, 34, 34, 34, 34, 35, 35]),
+            "humidity": np.array([0.0, 0.0, 0.44, 0.32, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
         }
+        time_order = np.array([2, 3, 4, 0, 1, 5, 6, 7, 8, 9, 10, 11, 12])
         expected_times = np.sort(np.concatenate((self.ctg_ds_old["time"].values,
                                          self.ctg_ds_new["time"].values[-4:])))
         for var in expected:
             self.assertNanEqual(merged[var].values, expected[var])
-        self.assertNanEqual(merged["time"].values, expected_times)
+        self.assertNanEqual(merged["time"].values[time_order], expected_times)
         merged.close()
 
         # Test merging contiguous with contiguous with different satellites
@@ -673,21 +694,22 @@ class TestMerge(unittest.TestCase):
         #     print(f"\"{var}\": np.array([{', '.join(merged[var].values.astype(str))}]),")
 
         expected = {
-            "row_size": np.array([6, 4, 8]),
-            "lon": np.array([-119.59, -114.3, -106.27]),
-            "lat": np.array([37.75, 38.97, 32.82]),
+            "row_size": np.array([4, 6, 8]),
+            "lon": np.array([-114.3, -119.59, -106.27]),
+            "lat": np.array([38.97, 37.75, 32.82]),
             "alt": np.array([np.nan, np.nan, np.nan]),
-            "location_id": np.array([1002, 1001, 1004]),
-            "location_description": np.array(["Yosemite", "Great Basin", "White Sands"]),
+            "location_id": np.array([1001, 1002, 1004]),
+            "location_description": np.array(["Great Basin", "Yosemite", "White Sands"]),
             "sat_id": np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 2, 1, 2]),
-            "temp": np.array([24, 24, 23, 23, 23, 23, 31, 31, 32, 32, 35, 35, 34, 34, 34, 34, 35, 35]),
-            "humidity": np.array([0.44, 0.44, 0.32, 0.32, 0.21, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            "temp": np.array([31, 31, 32, 32, 24, 24, 23, 23, 23, 23, 35, 35, 34, 34, 34, 34, 35, 35]),
+            "humidity": np.array([0.0, 0.0, 0.0, 0.0, 0.44, 0.44, 0.32, 0.32, 0.21, 0.21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
         }
+        time_order = np.array([4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 10, 11, 12, 13, 14, 15, 16, 17])
         expected_times = np.sort(np.concatenate((self.ctg_ds_old["time"].values,
                                          self.ctg_ds_new["time"].values)))
         for var in expected:
             self.assertNanEqual(merged[var].values, expected[var])
-        self.assertNanEqual(merged["time"].values, expected_times)
+        self.assertNanEqual(merged["time"].values[time_order], expected_times)
         merged.close()
 
 if __name__ == "__main__":
