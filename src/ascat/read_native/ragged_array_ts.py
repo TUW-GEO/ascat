@@ -331,7 +331,7 @@ def indexed_to_contiguous(dataset):
     idxs, sizes = np.unique(dataset.locationIndex, return_counts=True)
     row_size = np.zeros_like(dataset.location_id.values)
     row_size[idxs] = sizes
-    dataset["row_size"] = xr.DataArray(row_size, dims=["locations"])
+    dataset["row_size"] = ("locations", row_size)
 
     dataset = dataset.drop_vars(["locationIndex"])
 
@@ -355,7 +355,7 @@ def contiguous_to_indexed(dataset):
     row_size = np.where(dataset["row_size"].values > 0, dataset["row_size"].values, 0)
 
     locationIndex = np.repeat(np.arange(len(row_size)), row_size)
-    dataset["locationIndex"] = xr.DataArray(locationIndex, dims=["obs"])
+    dataset["locationIndex"] = ("obs", locationIndex)
     dataset = dataset.drop_vars(["row_size"])
     return dataset
 
@@ -558,7 +558,7 @@ class RACollection():
 
         dataset = dataset.drop_dims("locations")
         for var, var_data in self.location_vars.items():
-            dataset[var] = xr.DataArray(var_data, dims="locations")
+            dataset[var] = ("locations", var_data.values)
         dataset = dataset.set_coords(["lon", "lat", "alt", "time"])
         try:
             # not sure how to test if time is already an index except like this
@@ -604,14 +604,11 @@ class RACollection():
             mask_and_scale=False,
             # parallel=True,
         ) as merged_ds:
-            # merged_ds.load()
-            # merged_ds["locationIndex"] = xr.DataArray(self.locationIndex, dims="obs")
+            merged_ds.load()
 
             # deduplicate
             merged_ds = merged_ds.sortby(["sat_id", "locationIndex", "time"])
 
-            # time_units = merged_ds["time"].attrs["units"].split("since")[0].strip()
-            # time_units = udunits_name_to_datetime(time_units)
             dupl = np.insert(
                 (
                     abs(merged_ds["time"].values[1:] - merged_ds["time"].values[:-1])
