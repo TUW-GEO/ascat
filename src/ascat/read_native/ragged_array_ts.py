@@ -32,7 +32,6 @@ from pathlib import Path
 
 import xarray as xr
 import numpy as np
-import dask.array as da
 
 int8_nan = np.iinfo(np.int8).max
 int64_nan = np.iinfo(np.int64).min
@@ -41,8 +40,7 @@ NC_FILL_FLOAT = np.float32(9969209968386869046778552952102584320)
 
 class RAFile:
     """
-    Ragged array representation
-
+    Base class used for Ragged Array (RA) time series data.
     """
 
     def __init__(
@@ -59,6 +57,34 @@ class RAFile:
         cache=False,
         mask_and_scale=False,
     ):
+        """
+        Initialize.
+
+        Parameters
+        ----------
+        loc_dim_name : str, optional
+            Location dimension name (default: "locations").
+        obs_dim_name : str, optional
+            Observation dimension name (default: "time").
+        loc_ids_name : str, optional
+            Location IDs name (default: "location_id").
+        loc_descr_name : str, optional
+            Location description name (default: "location_description").
+        time_units : str, optional
+            Time units definition (default: "days since 1900-01-01 00:00:00").
+        time_var : str, optional
+            Time variable name (default: "time").
+        lat_var : str, optional
+            Latitude variable name (default: "lat").
+        lon_var : str, optional
+            Latitude variable name (default: "lon").
+        alt_var : str, optional
+            Altitude variable name (default: "alt").
+        cache : boolean, optional
+            Cache flag (default: False).
+        mask_and_scale : boolean, optional
+            Mask and scale during reading (default: False).
+        """
         # dimension names
         self.dim = {"obs": obs_dim_name, "loc": loc_dim_name}
 
@@ -85,12 +111,42 @@ class IRANcFile(RAFile):
     """
 
     def __init__(self, filename, **kwargs):
+        """
+        Initialize.
+
+        Parameters
+        ----------
+        filename : str
+            Filename.
+        loc_dim_name : str, optional
+            Location dimension name (default: "locations").
+        obs_dim_name : str, optional
+            Observation dimension name (default: "time").
+        loc_ids_name : str, optional
+            Location IDs name (default: "location_id").
+        loc_descr_name : str, optional
+            Location description name (default: "location_description").
+        time_units : str, optional
+            Time units definition (default: "days since 1900-01-01 00:00:00").
+        time_var : str, optional
+            Time variable name (default: "time").
+        lat_var : str, optional
+            Latitude variable name (default: "lat").
+        lon_var : str, optional
+            Latitude variable name (default: "lon").
+        alt_var : str, optional
+            Altitude variable name (default: "alt").
+        cache : boolean, optional
+            Cache flag (default: False).
+        mask_and_scale : boolean, optional
+            Mask and scale during reading (default: False).
+        """
         super().__init__(**kwargs)
         self.filename = filename
 
-        with xr.open_dataset(
-            self.filename, mask_and_scale=self.mask_and_scale
-        ) as ncfile:
+        # read location information
+        with xr.open_dataset(self.filename,
+                             mask_and_scale=self.mask_and_scale) as ncfile:
             var_list = [self.var["lon"], self.var["lat"], self.loc["ids"]]
 
             if self.cache:
@@ -103,21 +159,36 @@ class IRANcFile(RAFile):
     @property
     def ids(self):
         """
-        Location ids.
+        Location IDs property.
+
+        Returns
+        -------
+        location_id : numpy.ndarray
+            Location IDs.
         """
         return self.locations.location_id
 
     @property
     def lons(self):
         """
-        Longitude coordinates.
+        Longitude coordinates property.
+
+        Returns
+        -------
+        lon : numpy.ndarray
+            Longitude coordinates.
         """
         return self.locations.lon
 
     @property
     def lats(self):
         """
-        Latitude coordinates.
+        Latitude coordinates property.
+
+        Returns
+        -------
+        lat : numpy.ndarray
+            Latitude coordinates.
         """
         return self.locations.lat
 
@@ -152,8 +223,8 @@ class IRANcFile(RAFile):
                 data = self.dataset.sel(locations=i, time=j)
             else:
                 with xr.open_dataset(
-                    self.filename, mask_and_scale=self.mask_and_scale
-                ) as dataset:
+                        self.filename,
+                        mask_and_scale=self.mask_and_scale) as dataset:
                     j = dataset.locationIndex.values == i
                     data = dataset.sel(locations=i, time=j)
 
@@ -178,14 +249,36 @@ class CRANcFile(RAFile):
             Filename.
         row_size : str, optional
             Row size variable name (default: "row_size")
+        loc_dim_name : str, optional
+            Location dimension name (default: "locations").
+        obs_dim_name : str, optional
+            Observation dimension name (default: "time").
+        loc_ids_name : str, optional
+            Location IDs name (default: "location_id").
+        loc_descr_name : str, optional
+            Location description name (default: "location_description").
+        time_units : str, optional
+            Time units definition (default: "days since 1900-01-01 00:00:00").
+        time_var : str, optional
+            Time variable name (default: "time").
+        lat_var : str, optional
+            Latitude variable name (default: "lat").
+        lon_var : str, optional
+            Latitude variable name (default: "lon").
+        alt_var : str, optional
+            Altitude variable name (default: "alt").
+        cache : boolean, optional
+            Cache flag (default: False).
+        mask_and_scale : boolean, optional
+            Mask and scale during reading (default: False).
         """
         super().__init__(**kwargs)
         self.var["row"] = row_var
         self.filename = filename
 
-        with xr.open_dataset(
-            self.filename, mask_and_scale=self.mask_and_scale
-        ) as ncfile:
+        # read location information
+        with xr.open_dataset(self.filename,
+                             mask_and_scale=self.mask_and_scale) as ncfile:
             var_list = [
                 self.var["lon"],
                 self.var["lat"],
@@ -198,34 +291,47 @@ class CRANcFile(RAFile):
 
                 self.locations = self.dataset[var_list].to_dataframe()
                 self.locations[self.var["row"]] = np.cumsum(
-                    self.locations[self.var["row"]]
-                )
+                    self.locations[self.var["row"]])
             else:
                 self.dataset = None
 
                 self.locations = ncfile[var_list].to_dataframe()
                 self.locations[self.var["row"]] = np.cumsum(
-                    self.locations[self.var["row"]]
-                )
+                    self.locations[self.var["row"]])
 
     @property
     def ids(self):
         """
-        Location ids.
+        Location IDs property.
+
+        Returns
+        -------
+        location_id : numpy.ndarray
+            Location IDs.
         """
         return self.locations.location_id
 
     @property
     def lons(self):
         """
-        Longitude coordinates.
+        Longitude coordinates property.
+
+        Returns
+        -------
+        lon : numpy.ndarray
+            Longitude coordinates.
         """
         return self.locations.lon
 
     @property
     def lats(self):
         """
-        Latitude coordinates.
+        Latitude coordinates property.
+
+        Returns
+        -------
+        lat : numpy.ndarray
+            Latitude coordinates.
         """
         return self.locations.lat
 
@@ -265,8 +371,8 @@ class CRANcFile(RAFile):
                 data = self.dataset.sel(locations=i, obs=slice(r_from, r_to))
             else:
                 with xr.open_dataset(
-                    self.filename, mask_and_scale=self.mask_and_scale
-                ) as dataset:
+                        self.filename,
+                        mask_and_scale=self.mask_and_scale) as dataset:
                     data = dataset.sel(locations=i, obs=slice(r_from, r_to))
 
             if variables is not None:
@@ -283,16 +389,24 @@ def var_order(dataset):
     Puts the count/index variable first depending on the ragged array type,
     then lon, lat, alt, location_id, location_description, and time,
     followed by the rest of the variables in the dataset.
+
+    Parameters
+    ----------
+    dataset : xarray.Dataset
+        Dataset.
+
+    Returns
+    -------
+    dataset : xarray.Dataset
+        Ordered dataset.
     """
     if "row_size" in dataset.data_vars:
         first_var = "row_size"
     elif "locationIndex" in dataset.data_vars:
         first_var = "locationIndex"
     else:
-        raise ValueError(
-            "No row_size or locationIndex in dataset. \
-                          Cannot determine if indexed or ragged"
-        )
+        raise ValueError("No row_size or locationIndex in dataset. \
+                          Cannot determine if indexed or ragged")
 
     order = [
         first_var,
@@ -312,13 +426,24 @@ def indexed_to_contiguous(dataset):
     """
     Convert an indexed dataset to a contiguous ragged array dataset.
     Assumes that index variable is named "locationIndex".
+
+    Parameters
+    ----------
+    dataset : xarray.Dataset, Path
+        Dataset.
+
+    Returns
+    -------
+    dataset : xarray.Dataset
+        Converted dataset.
     """
     if isinstance(dataset, (str, Path)):
         with xr.open_dataset(dataset, mask_and_scale=False) as ds:
             return indexed_to_contiguous(ds)
 
     if not isinstance(dataset, xr.Dataset):
-        raise TypeError("dataset must be an xarray Dataset or a path to a netCDF file")
+        raise TypeError(
+            "dataset must be an xarray.Dataset or a path to a netCDF file")
     if "locationIndex" not in dataset:
         raise ValueError("dataset must have a locationIndex variable")
 
@@ -342,21 +467,34 @@ def contiguous_to_indexed(dataset):
     """
     Convert a contiguous ragged array to an indexed ragged array.
     Assumes count variable is named "row_size".
+
+    Parameters
+    ----------
+    dataset : xarray.Dataset, Path
+        Dataset.
+
+    Returns
+    -------
+    dataset : xarray.Dataset
+        Converted dataset.
     """
     if isinstance(dataset, (str, Path)):
         with xr.open_dataset(dataset, mask_and_scale=False) as ds:
             return contiguous_to_indexed(ds)
 
     if not isinstance(dataset, xr.Dataset):
-        raise TypeError("dataset must be an xarray Dataset or a path to a netCDF file")
+        raise TypeError(
+            "dataset must be an xarray.Dataset or a path to a netCDF file")
     if "row_size" not in dataset:
         raise ValueError("dataset must have a row_size variable")
 
-    row_size = np.where(dataset["row_size"].values > 0, dataset["row_size"].values, 0)
+    row_size = np.where(dataset["row_size"].values > 0,
+                        dataset["row_size"].values, 0)
 
     locationIndex = np.repeat(np.arange(len(row_size)), row_size)
     dataset["locationIndex"] = ("obs", locationIndex)
     dataset = dataset.drop_vars(["row_size"])
+
     return dataset
 
 
@@ -365,18 +503,37 @@ def dataset_ra_type(dataset):
     Determine if a dataset is indexed or contiguous.
     Assumes count variable for contiguous RA is named "row_size".
     Assumes index variable for indexed RA is named "locationIndex".
+
+    Parameters
+    ----------
+    dataset : xarray.Dataset, Path
+        Dataset.
     """
     if "locationIndex" in dataset:
         return "indexed"
     if "row_size" in dataset:
         return "contiguous"
+
     raise ValueError("Dataset must have either locationIndex or row_size.\
-                     Cannot determine if ragged array is indexed or contiguous")
+                     Cannot determine if ragged array is indexed or contiguous"
+                     )
 
 
 def set_attributes(dataset, attributes=None):
     """
-    Set attributes for a contiguous or indexed ragged array.
+    Set default attributes for a contiguous or indexed ragged dataset.
+
+    Parameters
+    ----------
+    dataset : xarray.Dataset, Path
+        Dataset.
+    attributes : dict, optional
+        Attributes.
+
+    Returns
+    -------
+    dataset : xarray.Dataset
+        Dataset with attributes.
     """
     if attributes is None:
         attributes = {}
@@ -422,20 +579,23 @@ def set_attributes(dataset, attributes=None):
             "standard_name": "time",
             "long_name": "time of measurement",
         },
-        "location_id": {
-        },
-        "location_description": {
-        },
+        "location_id": {},
+        "location_description": {},
     }
 
     attributes = {**default_attrs, **attributes}
 
     for var, attrs in attributes.items():
         dataset[var] = dataset[var].assign_attrs(attrs)
-        if var in ["row_size", "locationIndex", "location_id", "location_description"]:
+        if var in [
+                "row_size", "locationIndex", "location_id",
+                "location_description"
+        ]:
             dataset[var].encoding["coordinates"] = None
 
-    dataset.attrs["date_created"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    date_created = datetime.now().isoformat(" ", timespec="milliseconds")[:-6]
+    dataset.attrs["date_created"] = date_created
+
     return dataset
 
 
@@ -450,6 +610,18 @@ def create_encoding(dataset, custom_encoding=None):
     E.g. if you want to add a "units" encoding to "lon",
     you should also pass "dtype", "zlib", "complevel",
     and "_FillValue" if you don't want to lose those.
+
+    Parameters
+    ----------
+    dataset : xarray.Dataset
+        Dataset.
+    custom_encoding : dict, optional
+        Custom encodings.
+
+    Returns
+    -------
+    dataset : xarray.Dataset
+        Dataset with encodings.
     """
     if custom_encoding is None:
         custom_encoding = {}
@@ -459,12 +631,10 @@ def create_encoding(dataset, custom_encoding=None):
     elif "locationIndex" in dataset.data_vars:
         first_var = "locationIndex"
     else:
-        raise ValueError(
-            "No row_size or locationIndex in dataset. \
-                          Cannot determine if indexed or ragged"
-        )
-    # hard code the default encodings for coordinates and
-    # row_size stuff
+        raise ValueError("No row_size or locationIndex in dataset. \
+                          Cannot determine if indexed or ragged")
+
+    # default encodings for coordinates and row_size
     default_encoding = {
         first_var: {
             "dtype": "int64",
@@ -497,17 +667,15 @@ def create_encoding(dataset, custom_encoding=None):
         var_encoding["zlib"] = True
         var_encoding["complevel"] = 4
 
-    default_encoding.update(
-        {
-            var: {
-                "dtype": dtype,
-                "zlib": bool(np.issubdtype(dtype, np.number)),
-                "complevel": 4,
-                "_FillValue": None,
-            }
-            for var, dtype in dataset.dtypes.items()
+    default_encoding.update({
+        var: {
+            "dtype": dtype,
+            "zlib": bool(np.issubdtype(dtype, np.number)),
+            "complevel": 4,
+            "_FillValue": None,
         }
-    )
+        for var, dtype in dataset.dtypes.items()
+    })
 
     encoding = {**default_encoding, **custom_encoding}
 
@@ -517,6 +685,16 @@ def create_encoding(dataset, custom_encoding=None):
 def udunits_name_to_datetime(unit):
     """
     Convert a udunits name to a datetime unit
+
+    Parameters
+    ----------
+    unit : str
+        Unit string.
+
+    Returns
+    -------
+    dt_unit : str
+        Datetime unit.
     """
     lookup = {
         "days": "D",
@@ -530,14 +708,32 @@ def udunits_name_to_datetime(unit):
 
     return lookup[unit]
 
+
 class RACollection():
     """
+    Collection of Ragged Array files.
     """
 
     def __init__(self, file_list):
+        """
+        Initialize.
+
+        Parameters
+        ----------
+        file_list : list
+            List of filenames.
+        """
         self.file_list = file_list
 
     def preprocess(self, dataset):
+        """
+        Pre-processing.
+
+        Parameters
+        ----------
+        dataset : xarray.Dataset
+            Dataset.
+        """
         if dataset_ra_type(dataset) != "indexed":
             dataset = contiguous_to_indexed(dataset)
 
@@ -547,13 +743,11 @@ class RACollection():
 
         dataset["locationIndex"] = (
             "obs",
-            self.sorter[
-                np.searchsorted(
-                    self.location_vars["location_id"].values,
-                    dataset["location_id"].values[dataset["locationIndex"]],
-                    sorter=self.sorter,
-                )
-            ],
+            self.sorter[np.searchsorted(
+                self.location_vars["location_id"].values,
+                dataset["location_id"].values[dataset["locationIndex"]],
+                sorter=self.sorter,
+            )],
         )
 
         dataset = dataset.drop_dims("locations")
@@ -565,44 +759,57 @@ class RACollection():
             dataset = dataset.reset_index("time")
         except ValueError:
             pass
+
         return dataset
 
     def merge(self, out_format="contiguous", dupe_window=None):
+        """
+        Merge files.
+
+        Parameters
+        ----------
+        out_format : str, optional
+            Output format (default: "contiguous").
+        dupe_window : numpy.timedelta64, optional
+            Check duplicates for given window (default: None).
+
+        Returns
+        -------
+        merged_ds
+            Merged dataset.
+        """
         if dupe_window is None:
             dupe_window = np.timedelta64(10, "m")
 
         with xr.open_mfdataset(
-            self.file_list,
-            concat_dim="locations",
-            combine="nested",
-            preprocess=lambda ds: ds[
-                [
-                    var
-                    for var in ds.variables
-                    if ("locations" in ds[var].dims)
-                    and (var not in ["row_size", "locationIndex"])
-                ]
-            ],
-            # parallel=True,
+                self.file_list,
+                concat_dim="locations",
+                combine="nested",
+                preprocess=lambda ds: ds[[
+                    var for var in ds.variables
+                    if ("locations" in ds[var].dims) and
+                    (var not in ["row_size", "locationIndex"])
+                ]],
+                # parallel=True,
         ) as locs_merged:
             all_location_ids, idxs = np.unique(
-                locs_merged["location_id"].values, return_index=True
-            )
+                locs_merged["location_id"].values, return_index=True)
             self.location_vars = {
-                var: locs_merged[var][idxs] for var in locs_merged.variables
+                var: locs_merged[var][idxs]
+                for var in locs_merged.variables
             }
 
             self.sorter = np.argsort(self.location_vars["location_id"].values)
 
         with xr.open_mfdataset(
-            self.file_list,
-            concat_dim="obs",
-            data_vars="minimal",
-            coords="minimal",
-            preprocess=self.preprocess,
-            combine="nested",
-            mask_and_scale=False,
-            # parallel=True,
+                self.file_list,
+                concat_dim="obs",
+                data_vars="minimal",
+                coords="minimal",
+                preprocess=self.preprocess,
+                combine="nested",
+                mask_and_scale=False,
+                # parallel=True,
         ) as merged_ds:
             merged_ds.load()
 
@@ -610,10 +817,8 @@ class RACollection():
             merged_ds = merged_ds.sortby(["sat_id", "locationIndex", "time"])
 
             dupl = np.insert(
-                (
-                    abs(merged_ds["time"].values[1:] - merged_ds["time"].values[:-1])
-                    < dupe_window
-                ),
+                (abs(merged_ds["time"].values[1:] -
+                     merged_ds["time"].values[:-1]) < dupe_window),
                 0,
                 False,
             )
@@ -625,11 +830,31 @@ class RACollection():
             merged_ds = var_order(merged_ds)
             # set dataset ID
             # TODO: should probably change this
-            merged_ds.attrs["id"] = ", ".join(set([f.name for f in self.file_list]))
+            merged_ds.attrs["id"] = ", ".join(
+                set([f.name for f in self.file_list]))
             merged_ds.encoding["unlimited_dims"] = []
+
         return merged_ds
 
+
 def merge_netCDFs(file_list, out_format="contiguous", dupe_window=None):
+    """
+    Merge netCDF files.
+
+    Parameters
+    ----------
+    file_list : list
+        List of filenames.
+    out_format : str, optional
+        Output format (default: "contiguous").
+    dupe_window : numpy.timedelta64, optional
+        Check duplicates for given window (default: None).
+
+    Returns
+    -------
+    merged_ds : xarray.Dataset
+        Merged dataset.
+    """
     return RACollection(file_list).merge(out_format, dupe_window)
     # if dupe_window is None:
     #     dupe_window = np.timedelta64(10, "m")
@@ -728,10 +953,22 @@ def merge_netCDFs(file_list, out_format="contiguous", dupe_window=None):
     # return merged_ds
 
 
-class GridCellFiles:
-    def __init__(
-        self, path, grid, ioclass, cache=False, fn_format="{:04d}.nc", ioclass_kws=None
-    ):
+class CellFileCollection:
+
+    """
+    Grid cell files.
+    """
+
+    def __init__(self,
+                 path,
+                 grid,
+                 ioclass,
+                 cache=False,
+                 fn_format="{:04d}.nc",
+                 ioclass_kws=None):
+        """
+        Initialize.
+        """
         self.path = path
         self.grid = grid
         self.ioclass = ioclass
@@ -860,8 +1097,7 @@ class GridCellFiles:
         if "ll_bbox" in kwargs:
             latmin, latmax, lonmin, lonmax = kwargs["ll_bbox"]
             location_ids = self.grid.get_bbox_grid_points(
-                latmin, latmax, lonmin, lonmax
-            )
+                latmin, latmax, lonmin, lonmax)
             kwargs.pop("ll_bbox", None)
         elif "gpis" in kwargs:
             subgrid = self.grid.subgrid_from_gpis(kwargs["gpis"])
