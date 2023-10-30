@@ -423,13 +423,13 @@ class TestHelpers(unittest.TestCase):
             # specified when actually writing the test data to file in data_setup.
             # If they were (using set_encoding), then the dtypes would be int64.
             "row_size": {
-                "dtype": np.dtype("int32"),
+                "dtype": np.dtype("int64"),
                 "zlib": True,
                 "complevel": 4,
                 "_FillValue": None,
             },
             "locationIndex": {
-                "dtype": np.dtype("int32"),
+                "dtype": np.dtype("int64"),
                 "zlib": True,
                 "complevel": 4,
                 "_FillValue": None,
@@ -453,7 +453,7 @@ class TestHelpers(unittest.TestCase):
                 "complevel": 4,
             },
             "location_id": {
-                "dtype": np.dtype("int32"),
+                "dtype": np.dtype("int64"),
                 "zlib": True,
                 "complevel": 4,
                 "_FillValue": None,
@@ -472,13 +472,13 @@ class TestHelpers(unittest.TestCase):
                 "_FillValue": None,
             },
             "sat_id": {
-                "dtype": np.dtype("int32"),
+                "dtype": np.dtype("int64"),
                 "zlib": True,
                 "complevel": 4,
                 "_FillValue": None,
             },
             "temp": {
-                "dtype": np.dtype("int32"),
+                "dtype": np.dtype("int64"),
                 "zlib": True,
                 "complevel": 4,
                 "_FillValue": None,
