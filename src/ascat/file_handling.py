@@ -741,9 +741,17 @@ class ChronFiles(MultiFileHandler):
         """
         filename = Path(filename).name
 
+        # add escape '\'
+        templ = self.ft.fn_templ.replace("+", r"\+")
+
         # Replace braces surrounding date_fields in template with characters
         # to # define a named group in a regular expression
-        pattern = braces_to_re_groups(self.ft.fn_templ)
+        pattern = braces_to_re_groups(templ)
+
+        # replace each '*' character with a (?P<placeholder_i>.+) group
+        for i in range(pattern.count("*")):
+            pattern = pattern.replace("*", f"(?P<placeholder_{i}>.+)", 1)
+
         match = re.match(pattern, filename)
 
         # Then extract the date from the filename using the named group
@@ -770,6 +778,7 @@ class ChronFiles(MultiFileHandler):
 
     def search_date(self,
                     timestamp,
+                    search_date_str="%Y%m%d*",
                     date_str="%Y%m%d",
                     date_field="date",
                     return_date=False):
@@ -780,10 +789,12 @@ class ChronFiles(MultiFileHandler):
         ----------
         timestamp : datetime
             Search date.
+        search_str : str, optional
+            Search date string used during file search (default: %Y%m%d*).
         date_str : str, optional
-            Search date string (default: %Y%m%d).
+            Date field (default: %Y%m%d).
         date_field : str, optional
-            Search field name (default: "date")
+            Date field name (default: "date")
         return_date : bool, optional
             Return date parsed from filename (default: False).
 
@@ -795,7 +806,7 @@ class ChronFiles(MultiFileHandler):
             Parsed date of filename (only returned if return_date=True).
         """
         fn_read_fmt, sf_read_fmt, _, _ = self._fmt(timestamp)
-        fn_read_fmt[date_field] = timestamp.strftime(date_str)
+        fn_read_fmt[date_field] = timestamp.strftime(search_date_str)
 
         fs = FileSearch(self.root_path, self.ft.fn_templ, self.ft.sf_templ)
         filenames = sorted(fs.search(fn_read_fmt, sf_read_fmt))
@@ -813,6 +824,7 @@ class ChronFiles(MultiFileHandler):
             dt_start,
             dt_end,
             dt_delta=timedelta(days=1),
+            search_date_str="%Y%m%d*",
             date_str="%Y%m%d",
             date_field="date",
     ):
@@ -827,10 +839,12 @@ class ChronFiles(MultiFileHandler):
             End datetime.
         dt_delta : timedelta, optional
             Time delta used to jump through search date.
+        search_str : str, optional
+            Search date string used during file search (default: %Y%m%d*).
         date_str : str, optional
-            Search date string (default: %Y%m%d).
+            Date field (default: %Y%m%d).
         date_field : str, optional
-            Search field name (default: "date")
+            Date field name (default: "date").
 
         Returns
         -------
@@ -842,6 +856,7 @@ class ChronFiles(MultiFileHandler):
         for dt_cur in np.arange(dt_start, dt_end + dt_delta,
                                 dt_delta).astype(datetime):
             files, dates = self.search_date(dt_cur,
+                                            search_date_str,
                                             date_str,
                                             date_field,
                                             return_date=True)
@@ -857,8 +872,9 @@ class ChronFiles(MultiFileHandler):
         dt_end,
         dt_delta=timedelta(days=1),
         dt_buffer=timedelta(days=1),
+        search_date_str="%Y%m%d*",
         date_str="%Y%m%d",
-        date_fields="date",
+        date_field="date",
         **kwargs,
     ):
         """
@@ -875,6 +891,12 @@ class ChronFiles(MultiFileHandler):
         dt_buffer : timedelta, optional
             Search buffer used to find files which could possibly contain
             data but would be left out because of dt_start.
+        search_str : str, optional
+            Search date string used during file search (default: %Y%m%d*).
+        date_str : str, optional
+            Date field (default: %Y%m%d).
+        date_field : str, optional
+            Date field name (default: "date").
 
         Returns
         -------
@@ -882,7 +904,7 @@ class ChronFiles(MultiFileHandler):
             Data stored in file.
         """
         filenames = self.search_period(dt_start - dt_buffer, dt_end, dt_delta,
-                                       date_str, date_fields)
+                                       search_date_str, date_str, date_field)
 
         data = []
 

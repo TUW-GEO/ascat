@@ -2,18 +2,20 @@ name: ascat_env
 channels:
   - conda-forge
 dependencies:
-- numpy==1.19.5
+- numpy
 - pandas
 - pygrib
 - netCDF4
 - pykdtree
 - h5py
 - xarray
-- pybufr-ecmwf==0.82
+- dask
+- pdbufr
 - pip
 - pip:
   - cadati
   - requests
+  - pdbufr
   - tqdm
   - lxml
   - pygeogrids

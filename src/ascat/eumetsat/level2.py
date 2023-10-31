@@ -177,7 +177,7 @@ class AscatL2BufrFileList(ChronFiles):
             filename_template = ("M0{sat}-ASCA-ASC{product}*-*-*-"
                                  "{date}.000000000Z-*-*.bfr")
 
-        super().__init__(path, AscatL2File, filename_template)
+        super().__init__(path, AscatL2File, filename_template, None)
 
     def _fmt(self, timestamp):
         """
@@ -203,22 +203,22 @@ class AscatL2BufrFileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _parse_date(self, filename):
-        """
-        Parse date from filename.
+    # def _parse_date(self, filename):
+    #     """
+    #     Parse date from filename.
 
-        Parameters
-        ----------
-        filename : str
-            Filename.
+    #     Parameters
+    #     ----------
+    #     filename : str
+    #         Filename.
 
-        Returns
-        -------
-        date : datetime
-            Parsed date.
-        """
-        return datetime.strptime(os.path.basename(filename)[25:39],
-                                 "%Y%m%d%H%M%S")
+    #     Returns
+    #     -------
+    #     date : datetime
+    #         Parsed date.
+    #     """
+    #     return datetime.strptime(os.path.basename(filename)[25:39],
+    #                              "%Y%m%d%H%M%S")
 
     def _merge_data(self, data):
         """
@@ -277,7 +277,7 @@ class AscatL2NcFileList(ChronFiles):
                 "W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOP{sat}+"
                 "ASCAT_C_EUMP_{date}_*_eps_o_{product}_ssm_l2.nc")
 
-        super().__init__(path, AscatL2File, filename_template)
+        super().__init__(path, AscatL2File, filename_template, None)
 
     def _fmt(self, timestamp):
         """
@@ -304,22 +304,22 @@ class AscatL2NcFileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _parse_date(self, filename):
-        """
-        Parse date from filename.
+    # def _parse_date(self, filename):
+    #     """
+    #     Parse date from filename.
 
-        Parameters
-        ----------
-        filename : str
-            Filename.
+    #     Parameters
+    #     ----------
+    #     filename : str
+    #         Filename.
 
-        Returns
-        -------
-        date : datetime
-            Parsed date.
-        """
-        return datetime.strptime(os.path.basename(filename)[62:76],
-                                 "%Y%m%d%H%M%S")
+    #     Returns
+    #     -------
+    #     date : datetime
+    #         Parsed date.
+    #     """
+    #     return datetime.strptime(os.path.basename(filename)[62:76],
+    #                              "%Y%m%d%H%M%S")
 
     def _merge_data(self, data):
         """
@@ -375,7 +375,7 @@ class AscatL2EpsFileList(ChronFiles):
         if filename_template is None:
             filename_template = "ASCA_{product}_02_M0{sat}_{date}Z_*_*_*_*.nat"
 
-        super().__init__(path, AscatL2File, filename_template)
+        super().__init__(path, AscatL2File, filename_template, None)
 
     def _fmt(self, timestamp):
         """
@@ -401,22 +401,22 @@ class AscatL2EpsFileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _parse_date(self, filename):
-        """
-        Parse date from filename.
+    # def _parse_date(self, filename):
+    #     """
+    #     Parse date from filename.
 
-        Parameters
-        ----------
-        filename : str
-            Filename.
+    #     Parameters
+    #     ----------
+    #     filename : str
+    #         Filename.
 
-        Returns
-        -------
-        date : datetime
-            Parsed date.
-        """
-        return datetime.strptime(os.path.basename(filename)[16:30],
-                                 "%Y%m%d%H%M%S")
+    #     Returns
+    #     -------
+    #     date : datetime
+    #         Parsed date.
+    #     """
+    #     return datetime.strptime(os.path.basename(filename)[16:30],
+    #                              "%Y%m%d%H%M%S")
 
     def _merge_data(self, data):
         """
