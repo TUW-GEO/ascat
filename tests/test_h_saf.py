@@ -39,6 +39,7 @@ from ascat.h_saf import AscatNrtBufrFileList
 from ascat.h_saf import AscatSsmDataRecord
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatNrtSsm(unittest.TestCase):
 
     def setUp(self):

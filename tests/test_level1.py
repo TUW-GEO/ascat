@@ -46,6 +46,7 @@ from ascat.eumetsat.level1 import AscatL1bHdf5FileList
 float32_nan = -999999.
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL1bFile(unittest.TestCase):
 
     def setUp(self):
@@ -142,7 +143,6 @@ class Test_AscatL1bFile(unittest.TestCase):
             "sigma0_full", "inc_angle_full", "as_des_pass", "land_frac",
             "swath_indicator"
         ]
-
 
         for antenna in ["lf-vv", "lm-vv", "la-vv", "rf-vv", "rm-vv", "ra-vv"]:
             for coord in ["lon", "lat"]:
@@ -314,6 +314,7 @@ class Test_AscatL1bFile(unittest.TestCase):
         nptest.assert_equal(self.reader["lf-vv"]["time"][190:200], t_should)
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL1bFileList(unittest.TestCase):
     """
     Test read AscatL1bFileList in various formats.

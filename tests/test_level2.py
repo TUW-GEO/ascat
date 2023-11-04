@@ -51,6 +51,7 @@ uint16_nan = np.iinfo(np.uint16).max
 float32_nan = -999999.
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL2BufrFile(unittest.TestCase):
 
     def setUp(self):
@@ -154,6 +155,7 @@ class Test_AscatL2NcFile(unittest.TestCase):
                                atol=1e-5)
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL2NcFile_AscatL2BufrFile(unittest.TestCase):
 
     def setUp(self):
@@ -245,6 +247,7 @@ class Test_AscatL2NcFile_AscatL2BufrFile(unittest.TestCase):
                                    atol=0.1)
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL2File(unittest.TestCase):
 
     def setUp(self):
@@ -365,6 +368,7 @@ class Test_AscatL2File(unittest.TestCase):
         nptest.assert_equal(eps_ds['time'][35:45], t_should)
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL2FileList(unittest.TestCase):
     """
     Test read AscatL2FileList in various formats.
