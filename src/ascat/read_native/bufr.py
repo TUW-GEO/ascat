@@ -32,8 +32,12 @@ import os
 
 import numpy as np
 import xarray as xr
-import pdbufr
 from cadati.cal_date import cal2dt
+
+try:
+    import pdbufr
+except ImportError:
+    pass
 
 from ascat.utils import tmp_unzip
 
