@@ -4,9 +4,8 @@ channels:
 dependencies:
 - numpy
 - pandas
-- pygrib
 - pykdtree
-- h5py==3.6.0
+- h5py
 - netCDF4
 - pip
 - pip:
@@ -15,5 +14,5 @@ dependencies:
   - requests
   - tqdm
   - lxml
-  - pygeogrids>=0.3.0
-  - pynetcf>=0.2.2
+  - pygeogrids
+  - pynetcf

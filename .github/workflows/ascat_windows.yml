@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ['3.8', '3.9', '3.10']
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
         os: ['windows-latest']
 
     steps:
@@ -27,7 +27,7 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v2.0.1
         with:
           miniconda-version: "latest"
-          auto-update-conda: true
+          auto-update-conda: false
           python-version: ${{ matrix.python-version }}
           environment-file: environment_win.yml
           activate-environment: ascat_env

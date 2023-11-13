@@ -50,7 +50,6 @@ long_nan = np.iinfo(np.int32).min
 ulong_nan = np.iinfo(np.uint32).max
 int_nan = np.iinfo(np.int16).min
 uint_nan = np.iinfo(np.uint16).max
-byte_nan = np.iinfo(np.byte).min
 int8_nan = np.iinfo(np.int8).max
 uint8_nan = np.iinfo(np.uint8).max
 int32_nan = np.iinfo(np.int32).max
@@ -1304,7 +1303,7 @@ def read_szx_fmv_11(eps_file):
         data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
     fields = [("longitude", long_nan), ("latitude", long_nan),
-              ("swath_indicator", byte_nan)]
+              ("swath_indicator", int8_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].flatten()
@@ -1313,7 +1312,7 @@ def read_szx_fmv_11(eps_file):
 
     fields = [("sigma0_trip", long_nan), ("inc_angle_trip", uint_nan),
               ("azi_angle_trip", int_nan), ("kp", uint_nan),
-              ("f_kp", byte_nan), ("f_usable", byte_nan), ("f_f", uint_nan),
+              ("f_kp", int8_nan), ("f_usable", int8_nan), ("f_f", uint_nan),
               ("f_v", uint_nan), ("f_oa", uint_nan), ("f_sa", uint_nan),
               ("f_tel", uint_nan), ("f_land", uint_nan)]
 
@@ -1389,7 +1388,7 @@ def read_szx_fmv_12(eps_file):
         data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
     fields = [("longitude", long_nan), ("latitude", long_nan),
-              ("swath indicator", byte_nan)]
+              ("swath indicator", int8_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].flatten()
@@ -1398,8 +1397,8 @@ def read_szx_fmv_12(eps_file):
 
     fields = [("sigma0_trip", long_nan), ("inc_angle_trip", uint_nan),
               ("azi_angle_trip", int_nan), ("kp", uint_nan),
-              ("num_val_trip", ulong_nan), ("f_kp", byte_nan),
-              ("f_usable", byte_nan), ("f_f", uint_nan), ("f_v", uint_nan),
+              ("num_val_trip", ulong_nan), ("f_kp", int8_nan),
+              ("f_usable", int8_nan), ("f_f", uint_nan), ("f_v", uint_nan),
               ("f_oa", uint_nan), ("f_sa", uint_nan), ("f_tel", uint_nan),
               ("f_ref", uint_nan), ("f_land", uint_nan)]
 
@@ -1527,7 +1526,7 @@ def read_szf_fmv_12(eps_file):
     fields = [("longitude_full", long_nan), ("latitude_full", long_nan),
               ("sigma0_full", long_nan), ("inc_angle_full", uint_nan),
               ("azi_angle_full", int_nan), ("land_frac", uint_nan),
-              ("flagfield_gen2", byte_nan)]
+              ("flagfield_gen2", int8_nan)]
 
     for f, nan_val in fields:
         data[f] = eps_file.mdr[f.upper()].flatten()
@@ -1600,7 +1599,7 @@ def read_smx_fmv_12(eps_file):
 
     fields = [("longitude", long_nan, long_nan),
               ("latitude", long_nan, long_nan),
-              ("swath_indicator", byte_nan, byte_nan),
+              ("swath_indicator", int8_nan, int8_nan),
               ("soil_moisture", uint_nan, uint_nan),
               ("soil_moisture_error", uint_nan, uint_nan),
               ("sigma40", long_nan, long_nan),
@@ -1828,7 +1827,7 @@ def read_szx_fmv_13(eps_file):
         data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
     fields = [("longitude", long_nan), ("latitude", long_nan),
-              ("swath indicator", byte_nan)]
+              ("swath indicator", int8_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].flatten()
@@ -1837,8 +1836,8 @@ def read_szx_fmv_13(eps_file):
 
     fields = [("sigma0_trip", long_nan), ("inc_angle_trip", uint_nan),
               ("azi_angle_trip", int_nan), ("kp", uint_nan),
-              ("num_val_trip", ulong_nan), ("f_kp", byte_nan),
-              ("f_usable", byte_nan), ("land_frac", uint_nan)]
+              ("num_val_trip", ulong_nan), ("f_kp", int8_nan),
+              ("f_usable", int8_nan), ("land_frac", uint_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].reshape(n_records, 3)

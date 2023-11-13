@@ -1,4 +1,4 @@
-# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2023, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,6 @@ Readers for ASCAT Level 1b data for various file formats.
 """
 
 import os
-from datetime import datetime
 from collections import defaultdict
 
 import numpy as np
@@ -196,7 +195,7 @@ class AscatL1bBufrFileList(ChronFiles):
             filename_template = ("M0{sat}-ASCA-ASC{product}1B0200-NA-9.1-"
                                  "{date}.000000000Z-*-*.bfr")
 
-        super().__init__(path, AscatL1bFile, filename_template)
+        super().__init__(path, AscatL1bFile, filename_template, None)
 
     def _fmt(self, timestamp):
         """
@@ -222,22 +221,22 @@ class AscatL1bBufrFileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _parse_date(self, filename):
-        """
-        Parse date from filename.
+    # def _parse_date(self, filename):
+    #     """
+    #     Parse date from filename.
 
-        Parameters
-        ----------
-        filename : str
-            Filename.
+    #     Parameters
+    #     ----------
+    #     filename : str
+    #         Filename.
 
-        Returns
-        -------
-        date : datetime
-            Parsed date.
-        """
-        return datetime.strptime(os.path.basename(filename)[29:43],
-                                 "%Y%m%d%H%M%S")
+    #     Returns
+    #     -------
+    #     date : datetime
+    #         Parsed date.
+    #     """
+    #     return datetime.strptime(os.path.basename(filename)[29:43],
+    #                              "%Y%m%d%H%M%S")
 
     def _merge_data(self, data):
         """
@@ -250,8 +249,8 @@ class AscatL1bBufrFileList(ChronFiles):
 
         Returns
         -------
-        data : numpy.ndarray
-            Data.
+        data : numpy.ndarray or tuple
+            Data (and Metdata).
         """
         if type(data) == list:
             if type(data[0]) == tuple:
@@ -296,7 +295,7 @@ class AscatL1bNcFileList(ChronFiles):
                 "W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOP{sat}+"
                 "ASCAT_C_EUMP_{date}_*_eps_o_{product}_l1.nc")
 
-        super().__init__(path, AscatL1bFile, filename_template)
+        super().__init__(path, AscatL1bFile, filename_template, None)
 
     def _fmt(self, timestamp):
         """
@@ -323,22 +322,22 @@ class AscatL1bNcFileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _parse_date(self, filename):
-        """
-        Parse date from filename.
+    # def _parse_date(self, filename):
+    #     """
+    #     Parse date from filename.
 
-        Parameters
-        ----------
-        filename : str
-            Filename.
+    #     Parameters
+    #     ----------
+    #     filename : str
+    #         Filename.
 
-        Returns
-        -------
-        date : datetime
-            Parsed date.
-        """
-        return datetime.strptime(os.path.basename(filename)[62:76],
-                                 "%Y%m%d%H%M%S")
+    #     Returns
+    #     -------
+    #     date : datetime
+    #         Parsed date.
+    #     """
+    #     return datetime.strptime(os.path.basename(filename)[62:76],
+    #                              "%Y%m%d%H%M%S")
 
     def _merge_data(self, data):
         """
@@ -394,7 +393,7 @@ class AscatL1bEpsFileList(ChronFiles):
         if filename_template is None:
             filename_template = "ASCA_{product}_1B_M0{sat}_{date}Z_*_*_*_*.nat"
 
-        super().__init__(path, AscatL1bFile, filename_template)
+        super().__init__(path, AscatL1bFile, filename_template, None)
 
     def _fmt(self, timestamp):
         """
@@ -420,22 +419,22 @@ class AscatL1bEpsFileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _parse_date(self, filename):
-        """
-        Parse date from filename.
+    # def _parse_date(self, filename):
+    #     """
+    #     Parse date from filename.
 
-        Parameters
-        ----------
-        filename : str
-            Filename.
+    #     Parameters
+    #     ----------
+    #     filename : str
+    #         Filename.
 
-        Returns
-        -------
-        date : datetime
-            Parsed date.
-        """
-        return datetime.strptime(os.path.basename(filename)[16:30],
-                                 "%Y%m%d%H%M%S")
+    #     Returns
+    #     -------
+    #     date : datetime
+    #         Parsed date.
+    #     """
+    #     return datetime.strptime(os.path.basename(filename)[16:30],
+    #                              "%Y%m%d%H%M%S")
 
     def _merge_data(self, data):
         """
@@ -514,7 +513,7 @@ class AscatL1bHdf5FileList(ChronFiles):
         if filename_template is None:
             filename_template = "ASCA_{product}_1B_M0{sat}_{date}Z_*_*_*_*.h5"
 
-        super().__init__(path, AscatL1bFile, filename_template)
+        super().__init__(path, AscatL1bFile, filename_template, None)
 
     def _fmt(self, timestamp):
         """
@@ -540,22 +539,22 @@ class AscatL1bHdf5FileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _parse_date(self, filename):
-        """
-        Parse date from filename.
+    # def _parse_date(self, filename):
+    #     """
+    #     Parse date from filename.
 
-        Parameters
-        ----------
-        filename : str
-            Filename.
+    #     Parameters
+    #     ----------
+    #     filename : str
+    #         Filename.
 
-        Returns
-        -------
-        date : datetime
-            Parsed date.
-        """
-        return datetime.strptime(os.path.basename(filename)[16:30],
-                                 "%Y%m%d%H%M%S")
+    #     Returns
+    #     -------
+    #     date : datetime
+    #         Parsed date.
+    #     """
+    #     return datetime.strptime(os.path.basename(filename)[16:30],
+    #                              "%Y%m%d%H%M%S")
 
     def _merge_data(self, data):
         """
