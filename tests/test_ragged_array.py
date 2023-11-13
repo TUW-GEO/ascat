@@ -419,9 +419,6 @@ class TestHelpers(unittest.TestCase):
         Test create_encoding
         """
         expected = {
-            # we expect int32 dtypes below rather than int64 because no dtypes were
-            # specified when actually writing the test data to file in data_setup.
-            # If they were (using set_encoding), then the dtypes would be int64.
             "row_size": {
                 "dtype": np.dtype("int64"),
                 "zlib": True,
