@@ -27,11 +27,19 @@
 
 import os
 import warnings
+import multiprocessing as mp
 from datetime import datetime
 from pathlib import Path
+from functools import partial
 
 import xarray as xr
 import numpy as np
+
+import tqdm
+import dask
+import dask.bag as db
+from dask.distributed import Client
+from fibgrid.realization import FibGrid
 
 int8_nan = np.iinfo(np.int8).max
 int64_nan = np.iinfo(np.int64).min
@@ -537,7 +545,7 @@ def contiguous_to_indexed(dataset):
     row_size = np.where(dataset["row_size"].values > 0,
                         dataset["row_size"].values, 0)
 
-    locationIndex = np.repeat(np.arange(len(row_size)), row_size)
+    locationIndex = np.repeat(np.arange(row_size.size), row_size)
     dataset["locationIndex"] = ("obs", locationIndex)
     dataset = dataset.drop_vars(["row_size"])
 
@@ -999,7 +1007,664 @@ def merge_netCDFs(file_list, out_format="contiguous", dupe_window=None):
     # return merged_ds
 
 
+class CellFileCollectionTimeSeries():
+    """
+    Collection of grid cell file collections
+    """
+
+    def __init__(
+            self,
+            collections,
+            ascat_id=None,
+            ioclass=None,
+            common_grid=None,
+            dask_scheduler="threads",
+            **kwargs
+    ):
+        """
+        Initialize.
+
+        Parameters
+        ----------
+        collections: list of str or CellFileCollection
+        """
+
+        if isinstance(collections, (str, Path)):
+            collections = [collections]
+        if isinstance(collections[0], (str, Path)):
+            # all_subdirs = [subdir for c in collections for subdir in Path(c).glob("**/**/")]
+            # all_subdirs = {file.parent for c in collections for file in Path(c).glob("**/*.nc")}
+            all_subdirs = [
+                Path(r) for c in collections for (r, d, f) in os.walk(c) if not d
+            ]
+            self.collections = [
+                CellFileCollection(subdir, ascat_id, ioclass, ioclass_kws=kwargs)
+                for subdir in all_subdirs
+            ]
+        else:
+            self.collections = collections
+        self.common_grid = common_grid
+
+        self.grids = []
+        for c in self.collections:
+            if c.grid not in self.grids:
+                self.grids.append(c.grid)
+
+        if dask_scheduler is not None:
+            dask.config.set(scheduler=dask_scheduler)
+        # self._client = Client(n_workers=1, threads_per_worker=16)
+
+
+    def _preprocess(self, dataset):
+        """
+        Pre-processing.
+
+        Parameters
+        ----------
+        dataset : xarray.Dataset
+            Dataset.
+        """
+        if dataset_ra_type(dataset) != "indexed":
+            dataset = contiguous_to_indexed(dataset)
+
+        # if "time" in dataset.dims:
+        #     dataset = dataset.rename_dims({"time": "obs"})
+        # if "locations" is in the dimensions, then we have
+        # a multi-location dataset.
+        if "locations" in dataset.dims:
+            dataset = dataset.dropna(dim="locations", subset=["location_id"])
+
+            try:
+                dataset["locationIndex"] = (
+                    "obs",
+                    self.sorter[np.searchsorted(
+                        self.location_vars["location_id"].values,
+                        dataset["location_id"].values[dataset["locationIndex"]],
+                        sorter=self.sorter,
+                    )],
+                )
+                # print(f"{random_int} sorter size:", self.sorter.size)
+                # print(f"{random_int}:", self.location_vars["location_id"].values.size)
+                # print(f"{random_int}:", dataset["location_id"].values[dataset["locationIndex"]].size)
+            except:
+                random_int = np.random.randint(0, 100)
+                if self.sorter.size != self.location_vars["location_id"].values.size:
+                    print(f"{random_int} sorter size:", self.sorter.size)
+                    print(f"{random_int}:", self.location_vars["location_id"].values.size)
+                    print(f"{random_int}:", dataset["location_id"].values[dataset["locationIndex"]].size)
+                #
+                # print(np.searchsorted(
+                #     self.location_vars["location_id"].values,
+                #     dataset["location_id"].values[dataset["locationIndex"]],
+                #     sorter=self.sorter,
+                # ))
+                raise
+
+            dataset = dataset.drop_dims("locations")
+
+        # if not, we just have a single location, and logic is different
+        else:
+            dataset["locationIndex"] = (
+                "obs",
+                self.sorter[np.searchsorted(
+                    self.location_vars["location_id"].values,
+                    np.repeat(dataset["location_id"].values, dataset["locationIndex"].size),
+                    sorter=self.sorter,
+                )],
+            )
+
+        for var, var_data in self.location_vars.items():
+            dataset[var] = ("locations", var_data.values)
+        dataset = dataset.set_coords(["lon", "lat", "alt", "time"])
+        try:
+            # can't figure out how to test if time is already an index except like this
+            dataset = dataset.reset_index("time")
+        except ValueError:
+            pass
+
+        return dataset
+
+    def _only_locations(self, ds):
+        return ds[[
+            var
+            for var in ds.variables
+            if ("obs" not in ds[var].dims)
+            and var not in ["row_size", "locationIndex"]
+        ]]
+
+    def _subcollection_cells(self):
+        return {c for coll in self.collections for c in coll.cells_in_collection}
+    # def _merge_ds(self, ds_list):
+    #     locs_merged = xr.combine_nested(
+    #         [self._only_locations(ds) for ds in ds_list], concat_dim="locations"
+    #     )
+    #     all_location_ids, idxs = np.unique(
+    #         locs_merged["location_id"].values, return_index=True)
+    #     self.location_vars = {
+    #         var: locs_merged[var][idxs]
+    #         for var in locs_merged.variables
+    #     }
+
+    #     self.sorter = np.argsort(self.location_vars["location_id"].values)
+
+    #     locs_merged.close()
+
+    def _read_cells(self, cells, out_grid=None, out_format="contiguous", dupe_window=None,
+                    **kwargs):
+        cells = cells if isinstance(cells, list) else [cells]
+
+        if dupe_window is None:
+            dupe_window = np.timedelta64(10, "m")
+
+        data = [coll.read(cell=cell,
+                          new_grid=out_grid,
+                          mask_and_scale=False,
+                          **kwargs)
+                for coll in self.collections
+                for cell in cells]
+
+        data = [ds for ds in data if ds is not None]
+        # print([self._only_locations(ds) for ds in data])
+        locs_merged = xr.combine_nested(
+            [self._only_locations(ds) for ds in data], concat_dim="locations"
+        )
+
+        all_location_ids, idxs = np.unique(
+            locs_merged["location_id"].values, return_index=True)
+
+        self.location_vars = {
+            var: locs_merged[var][idxs]
+            for var in locs_merged.variables
+        }
+
+        self.sorter = np.argsort(self.location_vars["location_id"].values)
+
+        locs_merged.close()
+
+        merged_ds = xr.combine_nested(
+            [self._preprocess(ds) for ds in data],
+            concat_dim="obs",
+            data_vars="minimal",
+            coords="minimal",
+        )
+
+        return merged_ds
+
+    def _read_locations(self, location_ids, out_grid=None, out_format="contiguous", dupe_window=None,
+                        **kwargs):
+        location_ids = location_ids if isinstance(location_ids, list) else [location_ids]
+
+        if dupe_window is None:
+            dupe_window = np.timedelta64(10, "m")
+
+        # all data here is converted to the SAME GRID within coll.read()
+        # before being merged later
+        data = [d for d in (coll.read(location_id=location_id,
+                                      new_grid=out_grid,
+                                      mask_and_scale=False,
+                                      **kwargs)
+                for coll in self.collections
+                            for location_id in location_ids) if d is not None]
+
+        # coords="all" is necessary in case one of the coords has nan values
+        # (e.g. altitude, in the case of ASCAT H129)
+        locs_merged = xr.combine_nested(
+            [self._only_locations(ds) for ds in data], concat_dim="locations",
+            coords="all",
+        )
+        all_location_ids, idxs = np.unique(
+            locs_merged["location_id"].values, return_index=True)
+
+        # maybe pass these as args to preprocess instead of setting them as attributes?
+        self.location_vars = {
+            var: locs_merged[var][idxs]
+            for var in locs_merged.variables
+        }
+        self.sorter = np.argsort(self.location_vars["location_id"].values)
+
+        locs_merged.close()
+
+        merged_ds = xr.combine_nested(
+            [self._preprocess(ds) for ds in data],
+            concat_dim="obs",
+            data_vars="minimal",
+            coords="minimal",
+        )
+
+        return merged_ds
+
+    def read(self, cell=None, location_id=None, bbox=None, out_grid=None, **kwargs):
+        out_grid = out_grid or self.common_grid
+        if (len(self.grids) > 1) and out_grid is None:
+            raise ValueError("Multiple grids found, need to specify out_grid\
+                            as argument to read function or common_grid as\
+                            argument to __init__")
+
+        if cell is not None:
+            data = self._read_cells(cell, out_grid, **kwargs)
+        elif location_id is not None:
+            data = self._read_locations(location_id, out_grid, **kwargs)
+        elif bbox is not None:
+            raise NotImplementedError
+        else:
+            raise ValueError("Need to specify either cell, location_id or bbox")
+
+        # check if we have multiple grid systems and run regrid function on whole
+        # dataset if so
+        # grids = []
+        # for c in self.collections:
+        #     if c.grid not in grids:
+        #         grids.append(c.grid)
+
+        # if len(grids) > 1:
+        #     out_grid = (out_grid or self.common_grid)
+        #     if out_grid is None:
+        #         raise ValueError("Multiple grids found, need to specify out_grid\
+        #                         as argument to read function or common_grid as\
+        #                         argument to __init__")
+        #     data = self._regrid(data, out_grid)
+
+        return data
+
+    # def write(self, cell=None, location_id=None, bbox=None, **kwargs):
+    #     if cell == "all":
+    #         cells = self.get_cells()
+    #     elif cell is not None:
+    #         cells = cell
+    #     data = self.read(cell=cells, location_id=location_id, bbox=bbox, **kwargs)
+
+    def _write_single_cell(self,out_dir, ioclass, cell, out_grid, **kwargs):
+        data = self.read(cell=cell)
+        writer = ioclass(data)
+        writer.write(out_dir/writer.fn_format.format(cell), **kwargs)
+        data.close()
+        writer.close()
+
+    def _read_single_cell(self, cell, **kwargs):
+        data = self.read(cell=cell)
+        return data
+
+    def write_cells(self, out_dir, ioclass, cells=None, out_grid=None, **kwargs):
+        from time import time
+        out_grid = out_grid or self.common_grid
+        if (len(self.grids) > 1) and out_grid is None:
+            raise ValueError("Multiple grids found, need to specify out_grid\
+                            as argument to read function or common_grid as\
+                            argument to __init__")
+
+        out_dir = Path(out_dir)
+        out_dir.mkdir(exist_ok=True, parents=True)
+        cells = self._subcollection_cells()
+
+        for cell in tqdm.tqdm(cells):
+            self._write_single_cell(out_dir, ioclass, cell, out_grid, **kwargs)
+
+    def add_collection(self, collections, ascat_id=None, ioclass=None):
+        """
+        Add a cell file collection to the collection,
+        based on file path.
+        """
+        new_idx = len(self.collections)
+        if isinstance(collections[0], str):
+            self.collections.extend(CellFileCollection(c, ascat_id, ioclass) for c in collections)
+        else:
+            self.collections.extend(collections)
+
+        for c in self.collections[new_idx:]:
+            if c.grid not in self.grids:
+                self.grids.append(c.grid)
+
+
+ascat_id_dict = {
+    "H129": {
+        "fn_pattern": "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP?-6.25-H129_C_LIIB_{date}*.nc",
+        "sf_pattern": {"year_folder": "{year}"},
+        "date_format": "%Y%m%d%H%M%S",
+        "grid": FibGrid(6.25),
+        "cell_fn_format": "{:04d}.nc",
+    }
+
+}
+
+
+class ASCAT_ID_Metadata():
+    def __init__(self,
+                 ascat_id
+                 ):
+        ascat_id = ascat_id.upper()
+        self.fn_pattern = ascat_id_dict[ascat_id]["fn_pattern"]
+        self.sf_pattern = ascat_id_dict[ascat_id]["sf_pattern"]
+        self.cell_fn_format = ascat_id_dict[ascat_id]["cell_fn_format"]
+        self.date_format = ascat_id_dict[ascat_id]["date_format"]
+        self.grid = ascat_id_dict[ascat_id]["grid"]
+        possible_cells = self.grid.get_cells()
+        self.max_cell = possible_cells.max()
+        self.min_cell = possible_cells.min()
+
+
 class CellFileCollection:
+
+    """
+    Grid cell files.
+    """
+
+    def __init__(self,
+                 path,
+                 ascat_id,
+                 ioclass,
+                 cache=False,
+                 # fn_format="{:04d}.nc",
+                 ioclass_kws=None,
+                 ):
+        """
+        Initialize.
+        """
+        self.path = path
+        self.ascat_id = ASCAT_ID_Metadata(ascat_id)
+        self.grid = self.ascat_id.grid
+
+        possible_cells = self.grid.get_cells()
+        self.cell_max = possible_cells.max()
+        self.cell_min = possible_cells.min()
+
+        self.fn_format = self.ascat_id.cell_fn_format
+        # ASSUME THE IOCLASS RETURNS XARRAY
+        self.ioclass = ioclass
+        # self.fn_format = fn_format
+        self.previous_cell = None
+        self.fid = None
+        self.min_time = None
+        self.max_time = None
+
+        if ioclass_kws is None:
+            self.ioclass_kws = {}
+        else:
+            self.ioclass_kws = ioclass_kws
+
+    @property
+    def cells_in_collection(self):
+        return [int(p.stem) for p in self.path.glob("*")]
+
+    def __enter__(self):
+        """
+        Context manager initialization.
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Exit the runtime context related to this object.
+        """
+        self.close()
+
+    def _open(self, location_id=None, cell=None):
+        """
+        Open cell file.
+
+        Parameters
+        ----------
+        location_id : int
+            Location identifier.
+
+        Returns
+        -------
+        success : boolean
+            Flag if opening the file was successful.
+        """
+        success = True
+        if location_id is not None:
+            cell = self.grid.gpi2cell(location_id)
+        filename = self._get_cell_path(cell)
+
+        if self.previous_cell != cell:
+            self.close()
+
+            try:
+                self.fid = self.ioclass(filename, **self.ioclass_kws)
+            except IOError as e:
+                success = False
+                self.fid = None
+                msg = f"I/O error({e.errno}): {e.strerror}, {filename}"
+                warnings.warn(msg, RuntimeWarning)
+                self.previous_cell = None
+            else:
+                self.previous_cell = cell
+
+        return success
+
+    def _read_cell(self, cell=None, **kwargs):
+        """
+        Read data from the entire cell.
+        """
+        # if there are kwargs, use them instead of self.ioclass_kws
+
+        data = None
+        if self._open(cell=cell):
+            data = self.fid.read(**kwargs)
+
+        return data
+
+    def _read_lonlat(self, lon, lat, **kwargs):
+        """
+        Reading data for given longitude and latitude coordinate.
+
+        Parameters
+        ----------
+        lon : float
+            Longitude coordinate.
+        lat : float
+            Latitude coordinate.
+
+        Returns
+        -------
+        data : dict of values
+            data record.
+        """
+        location_id, _ = self.grid.find_nearest_gpi(lon, lat)
+
+        return self._read_location_id(location_id, **kwargs)
+
+    def _read_location_id(self, location_id, **kwargs):
+        """
+        Read data for given grid point.
+
+        Parameters
+        ----------
+        location_id : int
+            Location identifier.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            Data.
+        """
+        data = None
+
+        if self._open(location_id=location_id):
+            data = self.fid.read(location_id=location_id, **kwargs)
+
+        return data
+
+    def _index_time(self):
+        # open just the time var as mf dataset to get min/max time
+        # with self.ioclass(list(self.path.glob("*")),
+        #                   concat_dim="time",
+        #                   combine="nested",
+        #                   data_vars="minimal",
+        #                   preprocess=lambda ds: xr.decode_cf(ds[["time"]]),
+        #                   # drop_vars=
+        #                   # keep_vars=["time"]
+        #                   decode_cf=False,
+        #                   ) as f:
+        #     self.min_time, self.max_time = f.date_range()
+        for f in self.path.glob("*"):
+            with self.ioclass(f, **self.ioclass_kws) as f:
+                # print(self.min_time, self.max_time)
+                if self.min_time is None:
+                    (self.min_time, self.max_time) = f.date_range
+                else:
+                    (min_time, max_time) = f.date_range
+                    self.min_time = min(self.min_time, min_time)
+                    self.max_time = max(self.max_time, max_time)
+
+        return self.min_time, self.max_time
+
+    def _get_cell_path(self, cell=None, location_id=None):
+        """
+        Get path to cell file given cell number or location id.
+        Returns a path whether the file exists or not, as long
+        as the cell number or location id is within the grid.
+        """
+        if location_id is not None:
+            cell = self.grid.gpi2cell(location_id)
+        elif cell is None:
+            raise ValueError("Either location_id or cell must be given")
+
+        if (cell > self.ascat_id.max_cell) or (cell < self.ascat_id.min_cell):
+            raise ValueError(f"Cell {cell} is not in grid")
+
+        return self.path / self.fn_format.format(cell)
+
+    def _convert_to_grid(self, data, new_grid, old_grid=None):
+        """
+        Convert the data to a new grid.
+        ACTUALLY YOU DON'T NEED THIS JUST DO IT WHEN MERGING
+        ALL YOU NEED IS THE LONS AND LATS
+        """
+        if old_grid is None:
+            old_grid = self.grid
+        if (new_grid == old_grid) or (data is None):
+            return data
+        # old_lon = np.atleast_1d(data["lon"].values)
+        # old_lat = np.atleast_1d(data["lat"].values)
+        # lookup = grids.BasicGrid(old_lon, old_lat).calc_lut(new_grid)
+        # new_loc_ids, _ = np.unique(lookup, return_inverse=True)
+        # perhaps this could be cached to prevent calculating each time
+        lookup = old_grid.calc_lut(new_grid)
+        # if self.fid.ra_type == "contiguous":
+        #     all_lids = np.repeat(data["location_id"].values, data["row_size"].values)
+        #     new_lids = lookup[all_lids]
+        #     location_id, row_size = np.unique(new_lids, return_counts=True)
+        #     lon, lat = new_grid.gpi2lonlat(location_id)
+        #     data["new_lids"] = ("obs", new_lids)
+        #     data = data.sortby(["new_lids", "time"])
+        #     data["row_size"] = ("obs", row_size)
+        #     #### needs more
+        #     #### possibly drop this and just assume indexed
+        #     #### or rather
+        #     #### ask if I can get rid of altitude and location_description
+        #     data = data.drop_vars("new_lids")
+
+        # elif self.fid.ra_type == "indexed":
+        if "locations" in data.dims:
+            all_lids = data["location_id"].values[data["locationIndex"].values]
+            new_lids = lookup[all_lids]
+            location_id, locationIndex = np.unique(new_lids, return_inverse=True)
+            lon, lat = new_grid.gpi2lonlat(location_id)
+            alt = np.repeat(np.atleast_1d(data["alt"].values)[0], location_id.size)
+            location_description = np.repeat(
+                np.atleast_1d(data["location_description"].values)[0], location_id.size
+            )
+            data = data.drop_dims("locations")
+            # no need to overwrite these in the single-lcoation case
+            data["alt"] = ("locations", alt)
+            data["location_description"] = ("locations", location_description)
+        else:
+            # case when data is just a single location (won't have a locations dim)
+            all_lids = np.repeat(data["location_id"].values, data["locationIndex"].size)
+            new_lids = lookup[all_lids]
+            # the below will be a tuple of the single new location id and the index
+            # 0 repeated as many times as there are observations
+            location_id, locationIndex = np.unique(new_lids, return_inverse=True)
+            lon, lat = new_grid.gpi2lonlat(location_id)
+            # alt = data["alt"].values
+            # location_description = data["location_description"].values
+        data["lon"] = ("locations", lon)
+        data["lat"] = ("locations", lat)
+        data["location_id"] = ("locations", location_id)
+        data["locationIndex"] = ("obs", locationIndex)
+        data = data.set_coords(["lon", "lat", "alt", "location_id"])
+
+        return data
+
+    def read(self, cell=None, location_id=None, coords=None, new_grid=None, **kwargs):
+        """
+        Takes either 1 or 2 arguments and calls the correct function
+        which is either reading the gpi directly or finding
+        the nearest gpi from given lat,lon coordinates and then reading it
+        """
+        # new_grid = kwargs.pop("new_grid", False)
+        kwargs = {**self.ioclass_kws, **kwargs}
+        if cell is not None:
+            data = self._read_cell(cell, **kwargs)
+        elif location_id is not None:
+            if new_grid is not False:
+                warnings.warn("You have specified a new_grid but are searching for a location_id.\
+                Currently, the location_id argument searches the original grid. The returned data\
+                will be converted to the new grid and will probably have different location_id values\
+                from those you searched for.")
+            data = self._read_location_id(location_id, **kwargs)
+        elif coords is not None:
+            data = self._read_lonlat(coords[0], coords[1], **kwargs)
+        else:
+            raise ValueError("Either cell, location_id or coords (lon, lat) must be given")
+
+        if new_grid is not None:
+            data = self._convert_to_grid(data, new_grid)
+
+        return data
+
+    # def iter_locations(self, **kwargs):
+    #     """
+    #     Yield all values for all locations.
+
+    #     Yields
+    #     ------
+    #     data : numpy.ndarray
+    #         Data
+    #     location_id : int
+    #         Location identifier.
+    #     """
+    #     if "ll_bbox" in kwargs:
+    #         latmin, latmax, lonmin, lonmax = kwargs["ll_bbox"]
+    #         location_ids = self.grid.get_bbox_grid_points(
+    #             latmin, latmax, lonmin, lonmax)
+    #         kwargs.pop("ll_bbox", None)
+    #     elif "gpis" in kwargs:
+    #         subgrid = self.grid.subgrid_from_gpis(kwargs["gpis"])
+    #         gp_info = list(subgrid.grid_points())
+    #         location_ids = np.array(gp_info, dtype=np.int32)[:, 0]
+    #         kwargs.pop("gpis", None)
+    #     else:
+    #         gp_info = list(self.grid.grid_points())
+    #         location_ids = np.array(gp_info, dtype=np.int32)[:, 0]
+
+    #     for location_id in location_ids:
+    #         try:
+    #             data = self._read_location_id(location_id, **kwargs)
+    #         except IOError as e:
+    #             msg = f"I/O error({e.errno}): {e.strerror}, {location_id}"
+    #             warnings.warn(msg, RuntimeWarning)
+    #             data = None
+
+    #         yield data, location_id
+
+    # def flush(self):
+    #     """
+    #     Flush data.
+    #     """
+    #     if self.fid is not None:
+    #         self.fid.flush()
+
+    def close(self):
+        """
+        Close file.
+        """
+        if self.fid is not None:
+            self.fid.close()
+            self.fid = None
+
+class CellFileCollection_old:
 
     """
     Grid cell files.

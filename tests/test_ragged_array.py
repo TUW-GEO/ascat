@@ -34,6 +34,8 @@ from copy import deepcopy
 import numpy as np
 import xarray as xr
 
+from fibgrid.realization import FibGrid
+
 from ascat.read_native.ragged_array_ts import var_order
 from ascat.read_native.ragged_array_ts import indexed_to_contiguous
 from ascat.read_native.ragged_array_ts import contiguous_to_indexed
@@ -42,6 +44,9 @@ from ascat.read_native.ragged_array_ts import set_attributes
 from ascat.read_native.ragged_array_ts import create_encoding
 from ascat.read_native.ragged_array_ts import merge_netCDFs
 from ascat.read_native.ragged_array_ts import RACollection
+from ascat.read_native.ragged_array_ts import CellFileCollection
+from ascat.read_native.ragged_array_ts import CellFileCollectionTimeSeries
+from ascat.read_native.xarray_io import ASCAT_NetCDF4
 
 
 def data_setup(outdir):
@@ -802,6 +807,106 @@ class TestMerge(unittest.TestCase):
         self.assertNanEqual(merged["time"].values[time_order], expected_times)
         merged.close()
 
+class TestCellFileCollection(unittest.TestCase):
+    """
+    Test the merge function
+    """
+
+    def assertNanEqual(self, d1, d2):
+        try:
+            np.testing.assert_equal(d1, d2)
+        except AssertionError as e:
+            raise self.failureException(e)
+
+    # @classmethod
+    # def setUpClass(cls):
+    #     cls.ctg_old_fname = self.tmpdir / "contiguous_RA_old.nc"
+    #     cls.idx_new_fname = self.tmpdir / "indexed_RA_new.nc"
+    #     cls.idx_old_fname = self.tmpdir / "indexed_RA_old.nc"
+    #     cls.ctg_new_fname = self.tmpdir / "contiguous_RA_new.nc"
+
+    def setUp(self):
+        self.temporary_directory = TemporaryDirectory()
+        self.tmpdir = Path(self.temporary_directory.name)
+        self.idx_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_new/metop_a")
+        self.ctg_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_merged_new/metop_a")
+        self.ctg_coll = CellFileCollection(self.ctg_data,
+                               ascat_id = "h129",
+                               ioclass = ASCAT_NetCDF4)
+        self.idx_coll = CellFileCollection(next(self.idx_data.glob("*/")),
+                                           ascat_id = "h129",
+                                           ioclass = ASCAT_NetCDF4)
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+        self.ctg_coll.close()
+        self.idx_coll.close()
+
+
+    # def test_get_cell_path(self):
+    #     """
+    #     Test that we can get the correct cell path from a location_id or cell
+    #     """
+    #     coll = self.ctg_coll
+    #     self.assertEqual(coll._get_cell_path(cell=1001), self.ctg_data / "1001.nc")
+    #     self.assertEqual(coll._get_cell_path(location_id=160390), self.ctg_data / "2502.nc")
+    #     self.assertEqual(coll._get_cell_path(location_id=13200000), self.ctg_data / "2285.nc")
+    #     # assert that we get errors if we try to get a cell that doesn't exist
+    #     with self.assertRaises(IndexError):
+    #         coll._get_cell_path(location_id=13200001)
+    #     with self.assertRaises(ValueError):
+    #         coll._get_cell_path(cell=3000)
+    #     with self.assertRaises(ValueError):
+    #         coll._get_cell_path(cell=-1)
+    #     # with self.assertRaises(IndexError):
+    #     #     coll.get_cell_path(location_id=0)
+    #     # coll.close()
+
+
+    def test_read_cell(self):
+        coll = self.idx_coll
+        # print(coll._index_time())
+        cell = coll.read(cell=1001)
+        # cell = coll.read(location_id=5689572)
+        # cell = coll.read(location_id=5691169)
+        # print(cell.location_id.values)
+        # print(cell)
+
+
+class TestCellFileCollectionTimeSeries(unittest.TestCase):
+
+    def assertNanEqual(self, d1, d2):
+        try:
+            np.testing.assert_equal(d1, d2)
+        except AssertionError as e:
+            raise self.failureException(e)
+
+    def setUp(self):
+        self.temporary_directory = TemporaryDirectory()
+        self.tmpdir = Path(self.temporary_directory.name)
+        self.idx_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_new/metop_a")
+        self.ctg_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_merged_new/metop_a")
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+        # self.ctg_coll.close()
+        # self.idx_coll.close()
+
+    def test_init(self):
+        from time import time
+        a = CellFileCollectionTimeSeries([self.idx_data], ascat_id = "h129", ioclass = ASCAT_NetCDF4)
+        # a.write_cells("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a",
+        #               ASCAT_NetCDF4, out_grid=FibGrid(12.5))
+        # a.read(location_id=[5689572, 5691169], out_grid=FibGrid(12.5))
+        print(a.read(cell=[0, 9, 13], out_grid=FibGrid(12.5)))
+        # print(a.read(location_id=[5689572, 5691169]))
+        # print(a.merged(13))
+
+    def test_add_collection(self):
+        return
+
+    def test_different_grids(self):
+        return
 
 if __name__ == "__main__":
     unittest.main()
