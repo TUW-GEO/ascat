@@ -40,6 +40,8 @@ import dask
 import dask.bag as db
 from dask.distributed import Client
 from fibgrid.realization import FibGrid
+from ascat.read_native.xarray_io import ASCAT_NetCDF4
+from ascat.file_handling import ChronFiles
 
 int8_nan = np.iinfo(np.int8).max
 int64_nan = np.iinfo(np.int64).min
@@ -1016,7 +1018,7 @@ class CellFileCollectionTimeSeries():
             self,
             collections,
             ascat_id=None,
-            ioclass=None,
+            # ioclass=None,
             common_grid=None,
             dask_scheduler="threads",
             **kwargs
@@ -1038,7 +1040,7 @@ class CellFileCollectionTimeSeries():
                 Path(r) for c in collections for (r, d, f) in os.walk(c) if not d
             ]
             self.collections = [
-                CellFileCollection(subdir, ascat_id, ioclass, ioclass_kws=kwargs)
+                CellFileCollection(subdir, ascat_id, ioclass_kws=kwargs)
                 for subdir in all_subdirs
             ]
         else:
@@ -1306,7 +1308,7 @@ class CellFileCollectionTimeSeries():
         """
         new_idx = len(self.collections)
         if isinstance(collections[0], str):
-            self.collections.extend(CellFileCollection(c, ascat_id, ioclass) for c in collections)
+            self.collections.extend(CellFileCollection(c, ascat_id) for c in collections)
         else:
             self.collections.extend(collections)
 
@@ -1317,13 +1319,15 @@ class CellFileCollectionTimeSeries():
 
 ascat_id_dict = {
     "H129": {
-        "fn_pattern": "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP?-6.25-H129_C_LIIB_{date}*.nc",
+        "ioclass": ASCAT_NetCDF4,
+        "fn_pattern": "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-6.25-H129_C_LIIB_{date}_*_*____.nc",
+        "fn_read_fmt": lambda timestamp: {"date": timestamp.strftime("%Y%m%d*")},
         "sf_pattern": {"year_folder": "{year}"},
+        "sf_read_fmt": lambda timestamp: {"year_folder": {"year": f"{timestamp.year}"}},
         "date_format": "%Y%m%d%H%M%S",
         "grid": FibGrid(6.25),
         "cell_fn_format": "{:04d}.nc",
     }
-
 }
 
 
@@ -1332,8 +1336,11 @@ class ASCAT_ID_Metadata():
                  ascat_id
                  ):
         ascat_id = ascat_id.upper()
+        self.ioclass = ascat_id_dict[ascat_id]["ioclass"]
         self.fn_pattern = ascat_id_dict[ascat_id]["fn_pattern"]
+        self.fn_read_fmt = ascat_id_dict[ascat_id]["fn_read_fmt"]
         self.sf_pattern = ascat_id_dict[ascat_id]["sf_pattern"]
+        self.sf_read_fmt = ascat_id_dict[ascat_id]["sf_read_fmt"]
         self.cell_fn_format = ascat_id_dict[ascat_id]["cell_fn_format"]
         self.date_format = ascat_id_dict[ascat_id]["date_format"]
         self.grid = ascat_id_dict[ascat_id]["grid"]
@@ -1351,7 +1358,7 @@ class CellFileCollection:
     def __init__(self,
                  path,
                  ascat_id,
-                 ioclass,
+                 # ioclass,
                  cache=False,
                  # fn_format="{:04d}.nc",
                  ioclass_kws=None,
@@ -1361,15 +1368,16 @@ class CellFileCollection:
         """
         self.path = path
         self.ascat_id = ASCAT_ID_Metadata(ascat_id)
+        self.ioclass = self.ascat_id.ioclass
         self.grid = self.ascat_id.grid
 
-        possible_cells = self.grid.get_cells()
-        self.cell_max = possible_cells.max()
-        self.cell_min = possible_cells.min()
+        # possible_cells = self.grid.get_cells()
+        # self.cell_max = possible_cells.max()
+        # self.cell_min = possible_cells.min()
 
         self.fn_format = self.ascat_id.cell_fn_format
         # ASSUME THE IOCLASS RETURNS XARRAY
-        self.ioclass = ioclass
+        # self.ioclass = ioclass
         # self.fn_format = fn_format
         self.previous_cell = None
         self.fid = None
@@ -1664,33 +1672,73 @@ class CellFileCollection:
             self.fid.close()
             self.fid = None
 
-class CellFileCollection_old:
 
+
+class SwathFileCollection:
     """
-    Grid cell files.
+    Swath file collection.
     """
 
     def __init__(self,
                  path,
-                 grid,
-                 ioclass,
+                 ascat_id,
+                 # ioclass,
+                 # start_dt=None,
+                 # end_dt=None,
+                 # delta_dt=None,
+                 # dtype_dt="datetime64[ns]",
                  cache=False,
-                 fn_format="{:04d}.nc",
-                 ioclass_kws=None):
-        """
-        Initialize.
-        """
+                 # fn_format="{:04d}.nc",
+                 ioclass_kws=None,
+                 ):
         self.path = path
-        self.grid = grid
-        self.ioclass = ioclass
-        self.fn_format = fn_format
+        self.ascat_id = ASCAT_ID_Metadata(ascat_id)
+        self.ioclass = self.ascat_id.ioclass
+        self.grid = self.ascat_id.grid
+
+        # possible_cells = self.grid.get_cells()
+        # self.cell_max = possible_cells.max()
+        # self.cell_min = possible_cells.min()
+
+        self.fn_pattern = self.ascat_id.fn_pattern
+        self.sf_pattern = self.ascat_id.sf_pattern
+        self.fn_read_fmt = self.ascat_id.fn_read_fmt
+        self.sf_read_fmt = self.ascat_id.sf_read_fmt
+        self.date_format = self.ascat_id.date_format
+        self.chron_files = ChronFiles(self.path,
+                                      dummy_filesearch,
+                                      self.fn_pattern,
+                                      self.sf_pattern,
+                                      None,
+                                      True,
+                                      self.fn_read_fmt,
+                                      self.sf_read_fmt,)
+
+        # self._start_dt = start_dt or np.datetime64("1970-01-01")
+        # self._end_dt = end_dt or np.datetime64("2100-01-01")
+        # self._delta_dt = delta_dt or np.timedelta64(7, "D")
+        # self._time_array = np.arange(self._start_dt, self._end_dt, self._delta_dt, dtype=dtype_dt)
+        # # the last datetime may be before the end of the period depending on delta_dt,
+        # # so we adjust it to the end of the period. Therefore the last set of files may cover
+        # # an interval longer than delta_dt.
+        # self._time_array[-1] = self._end_dt
+
+
+        # self.fn_format = fn_format
         self.previous_cell = None
         self.fid = None
+        self.min_time = None
+        self.max_time = None
 
         if ioclass_kws is None:
             self.ioclass_kws = {}
         else:
             self.ioclass_kws = ioclass_kws
+
+    @property
+    def cells_in_collection(self):
+        # return [int(p.stem) for p in self.path.glob("*")]
+        pass
 
     def __enter__(self):
         """
@@ -1704,9 +1752,29 @@ class CellFileCollection_old:
         """
         self.close()
 
-    def _open(self, location_id):
+    def _get_filenames(self, start_dt, end_dt):
         """
-        Open cell file.
+        Get filenames for the given time range.
+
+        Parameters
+        ----------
+        start_dt : datetime.datetime
+            Start time.
+        end_dt : datetime.datetime
+            End time.
+
+        Returns
+        -------
+        fnames : list of pathlib.Path
+            List of filenames.
+        """
+
+        fnames = self.chron_files.search_period(start_dt, end_dt, date_str=self.date_format)
+        return fnames
+
+    def _open(self, location_id=None, cell=None):
+        """
+        Open swath file.
 
         Parameters
         ----------
@@ -1718,25 +1786,20 @@ class CellFileCollection_old:
         success : boolean
             Flag if opening the file was successful.
         """
-        success = True
-        cell = self.grid.gpi2cell(location_id)
-        filename = os.path.join(self.path, self.fn_format.format(cell))
-
-        if self.previous_cell != cell:
-            self.close()
-
-            try:
-                self.fid = self.ioclass(filename, **self.ioclass_kws)
-            except IOError as e:
-                success = False
-                self.fid = None
-                msg = f"I/O error({e.errno}): {e.strerror}, {filename}"
-                warnings.warn(msg, RuntimeWarning)
-                self.previous_cell = None
-            else:
-                self.previous_cell = cell
-
+        success = False
         return success
+
+    def _read_cell(self, cell=None, **kwargs):
+        """
+        Read data from the entire cell.
+        """
+        # if there are kwargs, use them instead of self.ioclass_kws
+
+        data = None
+        if self._open(cell=cell):
+            data = self.fid.read(**kwargs)
+
+        return data
 
     def _read_lonlat(self, lon, lat, **kwargs):
         """
@@ -1774,67 +1837,107 @@ class CellFileCollection_old:
         """
         data = None
 
-        if self._open(location_id):
-            data = self.fid.read(location_id, **kwargs)
+        if self._open(location_id=location_id):
+            data = self.fid.read(location_id=location_id, **kwargs)
 
         return data
 
-    def read(self, *args, **kwargs):
+    def _get_cell_path(self, cell=None, location_id=None):
+        """
+        Get path to cell file given cell number or location id.
+        Returns a path whether the file exists or not, as long
+        as the cell number or location id is within the grid.
+        """
+        if location_id is not None:
+            cell = self.grid.gpi2cell(location_id)
+        elif cell is None:
+            raise ValueError("Either location_id or cell must be given")
+
+        if (cell > self.ascat_id.max_cell) or (cell < self.ascat_id.min_cell):
+            raise ValueError(f"Cell {cell} is not in grid")
+
+        return self.path / self.fn_format.format(cell)
+
+    def _convert_to_grid(self, data, new_grid, old_grid=None):
+        """
+        Convert the data to a new grid.
+        """
+        # if old_grid is None:
+        #     old_grid = self.grid
+        # if (new_grid == old_grid) or (data is None):
+        #     return data
+        # lookup = old_grid.calc_lut(new_grid)
+
+        # if "locations" in data.dims:
+        #     all_lids = data["location_id"].values[data["locationIndex"].values]
+        #     new_lids = lookup[all_lids]
+        #     location_id, locationIndex = np.unique(new_lids, return_inverse=True)
+        #     lon, lat = new_grid.gpi2lonlat(location_id)
+        #     alt = np.repeat(np.atleast_1d(data["alt"].values)[0], location_id.size)
+        #     location_description = np.repeat(
+        #         np.atleast_1d(data["location_description"].values)[0], location_id.size
+        #     )
+        #     data = data.drop_dims("locations")
+        #     # no need to overwrite these in the single-lcoation case
+        #     data["alt"] = ("locations", alt)
+        #     data["location_description"] = ("locations", location_description)
+        # else:
+        #     # case when data is just a single location (won't have a locations dim)
+        #     all_lids = np.repeat(data["location_id"].values, data["locationIndex"].size)
+        #     new_lids = lookup[all_lids]
+        #     # the below will be a tuple of the single new location id and the index
+        #     # 0 repeated as many times as there are observations
+        #     location_id, locationIndex = np.unique(new_lids, return_inverse=True)
+        #     lon, lat = new_grid.gpi2lonlat(location_id)
+
+        # data["lon"] = ("locations", lon)
+        # data["lat"] = ("locations", lat)
+        # data["location_id"] = ("locations", location_id)
+        # data["locationIndex"] = ("obs", locationIndex)
+        # data = data.set_coords(["lon", "lat", "alt", "location_id"])
+
+        return data
+
+    def read(self, cell=None, location_id=None, coords=None, new_grid=None, **kwargs):
         """
         Takes either 1 or 2 arguments and calls the correct function
         which is either reading the gpi directly or finding
         the nearest gpi from given lat,lon coordinates and then reading it
         """
-        if len(args) == 1:
-            data = self._read_location_id(args[0], **kwargs)
-        if len(args) == 2:
-            data = self._read_lonlat(args[0], args[1], **kwargs)
-        if len(args) < 1 or len(args) > 2:
-            raise ValueError(f"Wrong number of arguments: {len(args)}")
+        # new_grid = kwargs.pop("new_grid", False)
+        # kwargs = {**self.ioclass_kws, **kwargs}
+        # if cell is not None:
+        #     data = self._read_cell(cell, **kwargs)
+        # elif location_id is not None:
+        #     if new_grid is not False:
+        #         warnings.warn("You have specified a new_grid but are searching for a location_id.\
+        #         Currently, the location_id argument searches the original grid. The returned data\
+        #         will be converted to the new grid and will probably have different location_id values\
+        #         from those you searched for.")
+        #     data = self._read_location_id(location_id, **kwargs)
+        # elif coords is not None:
+        #     data = self._read_lonlat(coords[0], coords[1], **kwargs)
+        # else:
+        #     raise ValueError("Either cell, location_id or coords (lon, lat) must be given")
+
+        # if new_grid is not None:
+        #     data = self._convert_to_grid(data, new_grid)
 
         return data
 
-    def iter_locations(self, **kwargs):
+    def stack_cells(self, cells):
         """
-        Yield all values for all locations.
-
-        Yields
-        ------
-        data : numpy.ndarray
-            Data
-        location_id : int
-            Location identifier.
+        Stack data from a list of cells into one dataset for
+        each cell.
         """
-        if "ll_bbox" in kwargs:
-            latmin, latmax, lonmin, lonmax = kwargs["ll_bbox"]
-            location_ids = self.grid.get_bbox_grid_points(
-                latmin, latmax, lonmin, lonmax)
-            kwargs.pop("ll_bbox", None)
-        elif "gpis" in kwargs:
-            subgrid = self.grid.subgrid_from_gpis(kwargs["gpis"])
-            gp_info = list(subgrid.grid_points())
-            location_ids = np.array(gp_info, dtype=np.int32)[:, 0]
-            kwargs.pop("gpis", None)
-        else:
-            gp_info = list(self.grid.grid_points())
-            location_ids = np.array(gp_info, dtype=np.int32)[:, 0]
+        pass
 
-        for location_id in location_ids:
-            try:
-                data = self._read_location_id(location_id, **kwargs)
-            except IOError as e:
-                msg = f"I/O error({e.errno}): {e.strerror}, {location_id}"
-                warnings.warn(msg, RuntimeWarning)
-                data = None
-
-            yield data, location_id
-
-    def flush(self):
-        """
-        Flush data.
-        """
-        if self.fid is not None:
-            self.fid.flush()
+    # def flush(self):
+    #     """
+    #     Flush data.
+    #     """
+    #     if self.fid is not None:
+    #         self.fid.flush()
 
     def close(self):
         """
@@ -1843,3 +1946,25 @@ class CellFileCollection_old:
         if self.fid is not None:
             self.fid.close()
             self.fid = None
+
+class dummy_filesearch:
+    """
+    dummy class for ChronFiles
+    """
+
+    def __init__(self, filename, mode="r"):
+        pass
+
+
+    def read(self):
+        return None
+
+    def read_period(self, dt_start, dt_end):
+        return None
+
+    def write(self, data):
+        pass
+
+    @staticmethod
+    def merge(data):
+        return None

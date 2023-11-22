@@ -113,14 +113,15 @@ class RaggedXArrayIOBase:
         return ds
 
     def read(self, location_id=None, **kwargs):
-        if location_id is not None:
-            if isinstance(location_id, int):
-                return self._ensure_indexed(self._read_location_id(location_id))
-            elif isinstance(location_id, list):
-                return self._ensure_indexed(self._read_location_ids(location_id))
-            else:
-                raise ValueError("location_id must be int or list of ints")
-        return xr.decode_cf(self._ds)
+        raise NotImplementedError
+        # if location_id is not None:
+        #     if isinstance(location_id, int):
+        #         return self._ensure_indexed(self._read_location_id(location_id))
+        #     elif isinstance(location_id, list):
+        #         return self._ensure_indexed(self._read_location_ids(location_id))
+        #     else:
+        #         raise ValueError("location_id must be int or list of ints")
+        # return xr.decode_cf(self._ds)
 
     def write(self, filename, **kwargs):
         raise NotImplementedError
@@ -200,3 +201,112 @@ class ASCAT_NetCDF4(RaggedXArrayIOBase):
     #         print(f"location_id: {location_id}")
     #         print(self._ds.location_id)
     #     return self._ds
+
+class SwathIOBase:
+    """
+    Base class for reading swath data.
+    Writes ragged array cell data in indexed or contiguous format.
+    """
+
+    def __init__(self, source, engine, **kwargs):
+        self.source = source
+        self.engine = engine
+        # if filename is a generator, use open_mfdataset
+        # else use open_dataset
+        chunks = kwargs.pop("chunks", None)
+        if isinstance(source, list):
+            self._ds = xr.open_mfdataset(source,
+                                         engine=engine,
+                                         decode_cf=False,
+                                         preprocess=self._preprocess,
+                                         concat_dim="obs",
+                                         combine="nested",
+                                         chunks=(chunks or "auto"),
+                                         **kwargs)
+            chunks = None
+
+        elif isinstance(source, (str, Path)):
+            self._ds = xr.open_dataset(source, engine=engine, **kwargs, decode_cf=False)
+
+        elif isinstance(source, xr.Dataset):
+            self._ds = source
+
+        self._kwargs = kwargs
+
+        # if "time" in self._ds.dims:
+        #     self._ds = self._ds.rename_dims({"time": "obs"})
+
+        if chunks is not None:
+            self._ds = self._ds.chunk(chunks)
+
+        # if "row_size" in self._ds.data_vars:
+        #     self._ds = self._ensure_indexed(self._ds)
+        # else:
+            # self.ra_type = "indexed"
+
+
+    def __enter__(self):
+        """
+        Context manager initialization.
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Exit the runtime context related to this object.
+        """
+        self.close()
+
+class ASCAT_Swath(SwathIOBase):
+    def __init__(self, filename, **kwargs):
+        super().__init__(filename, "netcdf4", **kwargs)
+
+    def _preprocess(self, ds):
+        """
+        Preprocessing function for opening multifile datasets
+        """
+        return ds
+
+    def _read_location_id(self, location_id):
+        """
+        Read data for a single location_id
+        """
+        if location_id not in self._ds.location_id.values:
+            return None
+
+        # if self.ra_type == "contiguous":
+        #     idx = np.where(self._ds.location_id.values == location_id)[0][0]
+        #     row_start = self._ds.row_size.values[:idx].sum()
+        #     row_end = row_start + self._ds.row_size.values[idx]
+        #     ds = self._ds.isel(obs=slice(row_start, row_end), locations=idx)
+
+        idx = np.where(self._ds.location_id.values == location_id)[0]
+        # locationIndex = np.where(self._ds.locationIndex.values == idx)[0]
+        ds = self._ds.isel(obs=idx)
+        # ds = self._ds.sel(location_id=location_id)
+
+        return ds
+
+    def _read_location_ids(self, location_ids):
+        """
+        Read data for a list of location_ids
+        """
+        idxs = np.isin(self._ds.location_id.values, location_ids)
+        if not np.any(idxs):
+            return None
+        ds = self._ds.isel(obs=idxs)
+
+        return ds
+
+    def read(self, location_id=None, **kwargs):
+        if location_id is not None:
+            if isinstance(location_id, int):
+                return self._read_location_id(location_id)
+            elif isinstance(location_id, list):
+                return self._read_location_ids(location_id)
+            else:
+                raise ValueError("location_id must be int or list of ints")
+        return xr.decode_cf(self._ds)
+
+    def write(self, filename, **kwargs):
+        self._ds.to_netcdf(filename, **kwargs)
