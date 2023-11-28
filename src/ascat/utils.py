@@ -238,19 +238,25 @@ def get_toi_subset(ds, toi):
     """
     if isinstance(ds, dict):
         for key in ds.keys():
-            subset = ((ds[key]['time'] > np.datetime64(toi[0])) &
-                      (ds[key]['time'] < np.datetime64(toi[1])))
-            if isinstance(ds[key], xr.Dataset):
-                ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
-            elif isinstance(ds[key], np.ndarray):
-                ds[key] = ds[key][subset]
+            subset = np.where((ds[key]['time'] > np.datetime64(toi[0]))
+                              & (ds[key]['time'] < np.datetime64(toi[1])))[0]
+            if subset.size == 0:
+                ds[key] = None
+            else:
+                if isinstance(ds[key], xr.Dataset):
+                    ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
+                elif isinstance(ds[key], np.ndarray):
+                    ds[key] = ds[key][subset]
     else:
-        subset = ((ds['time'] > np.datetime64(toi[0])) &
-                  (ds['time'] < np.datetime64(toi[1])))
-        if isinstance(ds, xr.Dataset):
-            ds = ds.sel(obs=np.nonzero(subset.values)[0])
-        elif isinstance(ds, np.ndarray):
-            ds = ds[subset]
+        subset = np.where((ds['time'] > np.datetime64(toi[0])) &
+                          (ds['time'] < np.datetime64(toi[1])))[0]
+        if subset.size == 0:
+            ds = None
+        else:
+            if isinstance(ds, xr.Dataset):
+                ds = ds.sel(obs=np.nonzero(subset.values)[0])
+            elif isinstance(ds, np.ndarray):
+                ds = ds[subset]
 
     return ds
 
@@ -273,18 +279,24 @@ def get_roi_subset(ds, roi):
     """
     if isinstance(ds, dict):
         for key in ds.keys():
-            subset = ((ds[key]['lat'] > roi[0]) & (ds[key]['lat'] < roi[2]) &
-                      (ds[key]['lon'] > roi[1]) & (ds[key]['lon'] < roi[3]))
-            if isinstance(ds[key], xr.Dataset):
-                ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
-            elif isinstance(ds[key], np.ndarray):
-                ds[key] = ds[key][subset]
+            subset = np.where((ds[key]['lat'] > roi[0]) & (ds[key]['lat'] < roi[2]) &
+                      (ds[key]['lon'] > roi[1]) & (ds[key]['lon'] < roi[3]))[0]
+            if subset.size == 0:
+                ds[key] = None
+            else:
+                if isinstance(ds[key], xr.Dataset):
+                    ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
+                elif isinstance(ds[key], np.ndarray):
+                    ds[key] = ds[key][subset]
     else:
-        subset = ((ds['lat'] > roi[0]) & (ds['lat'] < roi[2]) &
-                  (ds['lon'] > roi[1]) & (ds['lon'] < roi[3]))
-        if isinstance(ds, xr.Dataset):
-            ds = ds.sel(obs=np.nonzero(subset.values)[0])
-        elif isinstance(ds, np.ndarray):
-            ds = ds[subset]
+        subset = np.where((ds['lat'] > roi[0]) & (ds['lat'] < roi[2]) &
+                  (ds['lon'] > roi[1]) & (ds['lon'] < roi[3]))[0]
+        if subset.size == 0:
+            ds = None
+        else:
+            if isinstance(ds, xr.Dataset):
+                ds = ds.sel(obs=np.nonzero(subset.values)[0])
+            elif isinstance(ds, np.ndarray):
+                ds = ds[subset]
 
     return ds
