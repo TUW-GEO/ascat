@@ -44,13 +44,12 @@ from ascat.read_native.ragged_array_ts import contiguous_to_indexed
 from ascat.read_native.ragged_array_ts import dataset_ra_type
 from ascat.read_native.ragged_array_ts import set_attributes
 from ascat.read_native.ragged_array_ts import create_encoding
-from ascat.read_native.ragged_array_ts import merge_netCDFs
-from ascat.read_native.ragged_array_ts import RACollection
+# from ascat.read_native.ragged_array_ts import merge_netCDFs
+# from ascat.read_native.ragged_array_ts import RACollection
 from ascat.read_native.ragged_array_ts import CellFileCollection
 from ascat.read_native.ragged_array_ts import SwathFileCollection
-from ascat.read_native.ragged_array_ts import CellFileCollectionTimeSeries
-from ascat.read_native.xarray_io import ASCAT_NetCDF4
-from ascat.read_native.xarray_io import ASCAT_Swath
+from ascat.read_native.ragged_array_ts import CellFileCollectionStack
+from ascat.read_native.xarray_io import ASCAT_H129_Cell
 
 
 def data_setup(outdir):
@@ -567,7 +566,7 @@ class TestConversion(unittest.TestCase):
     #     cls.idx_old.close()
 
 
-class TestMerge(unittest.TestCase):
+class TestMerge():#unittest.TestCase):
     """
     Test the merge function
     """
@@ -875,7 +874,7 @@ class TestCellFileCollection():#unittest.TestCase):
         # print(cell)
 
 
-class TestCellFileCollectionTimeSeries():#unittest.TestCase):
+class TestCellFileCollectionStack(unittest.TestCase):
 
     def assertNanEqual(self, d1, d2):
         try:
@@ -896,12 +895,21 @@ class TestCellFileCollectionTimeSeries():#unittest.TestCase):
 
     def test_init(self):
         pass
-        # a = CellFileCollectionTimeSeries([self.ctg_data], ascat_id = "h129")
-        # a.write_cells("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a",
-        #               ASCAT_NetCDF4, out_grid=FibGrid(12.5))
+        # gr = FibGrid(6.25)
+        # pts = [int(p) for p in gr.grid_points_for_cell(0)[0].compressed()]
+        a = CellFileCollectionStack([self.idx_data], ascat_id = "h129")
+
+        # print(a._different_cell_sizes)
+        # from time import time
+        # st = time()
+        a.write_cells("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a", ASCAT_H129_Cell)#, out_cell_size=10)
+
+
+
+        # print(time() - st)
         # a.read(location_id=[5689572, 5691169], out_grid=FibGrid(12.5))
         # print(a.read(cell=[0, 9, 13], out_grid=FibGrid(12.5)))
-        # print(a.read(location_id=[5689572, 5691169]))
+        # print(a.read(location_id=pts))
         # print(a.merged(13))
 
     def test_add_collection(self):
@@ -910,7 +918,7 @@ class TestCellFileCollectionTimeSeries():#unittest.TestCase):
     def test_different_grids(self):
         return
 
-class TestSwathFileCollection(unittest.TestCase):
+class TestSwathFileCollection():#unittest.TestCase):
     def assertNanEqual(self, d1, d2):
         try:
             np.testing.assert_equal(d1, d2)
@@ -931,14 +939,54 @@ class TestSwathFileCollection(unittest.TestCase):
 
     def test_init(self):
         a = SwathFileCollection(self.swath_data,
-                                ascat_id="h129")
+                                ascat_id="h129",
+                                dask_scheduler="processes",
+                                # ioclass_kws={"chunks": {"obs": 100000}} #DONT DO THIS! leaving it as a warning
+                                )
         start = datetime(2021, 1, 1)
-        end = datetime(2021, 1, 30)
+        end = datetime(2021, 1, 7)
         fname = a._get_filenames(start, end)
-        b = ASCAT_Swath(fname)
-        print(1)
-        data = b._read_location_ids(range(20,50))
-        print(data)
+        outdir = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a")
+        from time import time
+
+        #########################################################
+        st_time = time()
+        a.stack(fname, outdir)
+        print(time() - st_time, "seconds to stack a week of swaths")
+
+        #########################################################
+        # st_time = time()
+        # a._open(fname)
+        # b = a.fid.read()
+
+        # print(time() - st_time, "seconds to stack a week of swaths")
+
+        #########################################################
+        # from time import time
+        # st_time = time()
+        # b = a.process(start, end)
+        # print(time() - st_time, "seconds to process a week of swaths")
+        # print(b.sel({"cell": 13}))
+        # print(b.sel({"cell": 9}))
+        # for cell, data in b.groupby("cell"):
+        #     print(cell)
+        #     if cell > 50:
+        #         break
+        # for cell in range(0, 5):
+        #     st_time = time()
+        #     print(a.read(start, end, cell=cell))
+        # print(time() - st_time, "seconds to read 50 cell direct from collection")
+            # try:
+            #     b.sel({"cell": cell})
+
+            #     pass
+            # except KeyError:
+        # print(time() - st_time, "seconds to read 50 cells after initial processing")
+
+        # b = ASCAT_Swath(fname)
+        # print(1)
+        # data = b._read_location_ids(range(20,50))
+        # print(data)
 
 
 if __name__ == "__main__":
