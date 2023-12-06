@@ -44,7 +44,7 @@ import dask.bag as db
 from dask.distributed import Client
 from fibgrid.realization import FibGrid
 from ascat.file_handling import ChronFiles
-from ascat.read_native.xarray_io import ascat_io_metadata
+from ascat.read_native.xarray_io import ascat_io_classes
 
 # int8_nan = np.iinfo(np.int8).max
 # int64_nan = np.iinfo(np.int64).min
@@ -60,7 +60,7 @@ class CellFileCollectionStack():
             self,
             collections,
             ascat_id=None,
-            # ioclass=None,
+            ioclass=None,
             common_grid=None,
             dupe_window=None,
             dask_scheduler="threads",
@@ -74,7 +74,7 @@ class CellFileCollectionStack():
         collections: list of str or CellFileCollection
         """
 
-        metadata = ascat_io_metadata(ascat_id)
+        self.ioclass = ioclass or ascat_io_classes[ascat_id.upper()]["cell"]
         if isinstance(collections, (str, Path)):
             collections = [collections]
 
@@ -83,7 +83,7 @@ class CellFileCollectionStack():
                 Path(r) for c in collections for (r, d, f) in os.walk(c) if not d
             ]
             self.collections = [
-                CellFileCollection(subdir, metadata=metadata, ioclass_kws=kwargs)
+                CellFileCollection(subdir, ioclass=self.ioclass, ioclass_kws=kwargs)
                 for subdir in all_subdirs
             ]
         else:
@@ -234,12 +234,12 @@ class CellFileCollectionStack():
                              + " as argument to write_cells function")
         out_dir = Path(out_dir)
         out_dir.mkdir(exist_ok=True, parents=True)
-        cells = self._subcollection_cells(out_cell_size)
+        cells = self._subcollection_cells(cells, out_cell_size)
 
         for cell in tqdm.tqdm(cells):
             self._write_single_cell(out_dir, ioclass, cell, out_cell_size, **kwargs)
 
-    def _subcollection_cells(self, out_cell_size=None):
+    def _subcollection_cells(self, cells=None, out_cell_size=None):
         """
         Get the cells that are covered by all the subcollections.
         If out_cell_size is passed, then it returns the cells in the new
@@ -252,11 +252,15 @@ class CellFileCollectionStack():
 
         Returns
         -------
-        cells : set
+        new_cells : set
             Cells covered by all subcollections.
         """
         if out_cell_size is None:
-            return {c for coll in self.collections for c in coll.cells_in_collection}
+            new_cells= {c
+                        for coll in self.collections
+                        for c in coll.cells_in_collection
+                        if (cells is None or c in cells)}
+            return new_cells
 
         new_cells = set()
         # if we assume the collections all have the same grid etc then we only
@@ -268,6 +272,7 @@ class CellFileCollectionStack():
             coll.create_cell_lookup(out_cell_size)
             new_cells.update(k for k,v in coll.cell_lut.items()
                              if np.any(np.isin(v, coll.cells_in_collection)))
+
         return new_cells
 
     def _read_cells(
@@ -484,28 +489,22 @@ class CellFileCollectionStack():
         # a multi-location dataset.
         if "locations" in ds.dims:
             ds = ds.dropna(dim="locations", subset=["location_id"])
-
-            ds["locationIndex"] = (
-                "obs",
-                location_sorter[np.searchsorted(
-                    location_vars["location_id"].values,
-                    ds["location_id"].values[ds["locationIndex"]],
-                    sorter=location_sorter,
-                )],
-            )
-
-            ds = ds.drop_dims("locations")
+            locationIndex = location_sorter[np.searchsorted(
+                location_vars["location_id"].values,
+                ds["location_id"].values[ds["locationIndex"]],
+                sorter=location_sorter,
+            )]
 
         # if not, we just have a single location, and logic is different
         else:
-            ds["locationIndex"] = (
-                "obs",
-                location_sorter[np.searchsorted(
-                    location_vars["location_id"].values,
-                    np.repeat(ds["location_id"].values, ds["locationIndex"].size),
-                    sorter=location_sorter,
-                )],
-            )
+            locationIndex = location_sorter[np.searchsorted(
+                location_vars["location_id"].values,
+                np.repeat(ds["location_id"].values, ds["locationIndex"].size),
+                sorter=location_sorter,
+            )],
+
+        ds["locationIndex"] = ("obs", locationIndex)
+        ds = ds.drop_dims("locations")
 
         # Next, we put the locations-dimensional variables on the dataset,
         # and set them as coordinates.
@@ -585,8 +584,8 @@ class CellFileCollection:
     def __init__(self,
                  path,
                  ascat_id=None,
-                 metadata=None,
-                 # ioclass,
+                 # metadata=None,
+                 ioclass=None,
                  cache=False,
                  # fn_format="{:04d}.nc",
                  ioclass_kws=None,
@@ -595,20 +594,18 @@ class CellFileCollection:
         Initialize.
         """
         self.path = path
-        self.metadata = metadata or ascat_io_metadata(ascat_id)
-        if self.metadata is None:
-            raise ValueError("Either ascat_id or metadata must be given")
-        self.ioclass = self.metadata.cell_ioclass
-        self.grid = self.metadata.grid
-        self.grid_cell_size = self.metadata.grid_cell_size
+        self.ioclass = ioclass or ascat_io_classes[ascat_id.upper()]["cell"]
+        if self.ioclass is None:
+            raise ValueError("Either ascat_id or ioclass must be given")
+        self.grid = self.ioclass.grid
+        self.grid_cell_size = self.ioclass.grid_cell_size
 
         # possible_cells = self.grid.get_cells()
         # self.cell_max = possible_cells.max()
         # self.cell_min = possible_cells.min()
 
-        self.fn_format = self.metadata.cell_fn_format
+        self.fn_format = self.ioclass.fn_format
         # ASSUME THE IOCLASS RETURNS XARRAY
-        # self.ioclass = ioclass
         # self.fn_format = fn_format
         self.previous_cell = None
         self.fid = None
@@ -816,7 +813,7 @@ class CellFileCollection:
         elif cell is None:
             raise ValueError("Either location_id or cell must be given")
 
-        if (cell > self.metadata.max_cell) or (cell < self.metadata.min_cell):
+        if (cell > self.ioclass.max_cell) or (cell < self.ioclass.min_cell):
             raise ValueError(f"Cell {cell} is not in grid")
 
         return self.path / self.fn_format.format(cell)
@@ -857,7 +854,7 @@ class SwathFileCollection:
     def __init__(self,
                  path,
                  ascat_id,
-                 # ioclass,
+                 ioclass=None,
                  # start_dt=None,
                  # end_dt=None,
                  # delta_dt=None,
@@ -869,8 +866,7 @@ class SwathFileCollection:
                  dask_scheduler=None,
                  ):
         self.path = path
-        self.metadata = metadata or ascat_io_metadata(ascat_id)
-        self.ioclass = self.metadata.swath_ioclass
+        self.ioclass = ioclass or ascat_io_classes[ascat_id.upper()]["swath"]
         self.grid = self.ioclass.grid
         self.ts_dtype = self.ioclass.ts_dtype
 
@@ -960,7 +956,7 @@ class SwathFileCollection:
 
         if self.fid is None:
             try:
-                self.fid = self.ioclass(fnames, self.grid, **self.ioclass_kws)
+                self.fid = self.ioclass(fnames, **self.ioclass_kws)
             except IOError as e:
                 success = False
                 self.fid = None
@@ -987,35 +983,37 @@ class SwathFileCollection:
             Output dataset.
         """
         ds = ds.drop_vars(["latitude", "longitude", "cell"], errors="ignore")
-        location_id, locationIndex = np.unique(ds.location_id.values,
-                                               return_inverse=True)
-        lon, lat = self.grid.gpi2lonlat(location_id)
-        ds = ds.assign_coords({"lon": ("locations", lon),
-                               "lat": ("locations", lat),
-                               "alt": ("locations", np.repeat(np.nan, len(location_id)))})
+        location_id, idxs, locationIndex = np.unique(ds.location_id.values,
+                                                     return_index=True,
+                                                     return_inverse=True)
+        # lon, lat = self.grid.gpi2lonlat(location_id)
+        ds = ds.assign_coords({"lon": ("locations", ds["lon"].values[idxs]),
+                               "lat": ("locations", ds["lat"].values[idxs]),
+                               "alt": ("locations", np.repeat(np.nan,
+                                                              len(location_id)))})
         ds = ds.set_coords(["time"])
         ds["location_id"] = ("locations", location_id)
         ds["location_description"] = ("locations", np.repeat("", len(location_id)))
         return ds
 
     def write_cell_ds(self, ds, out_path):
-        print(ds)
-        # writer = self.ioclass(self.convert_to_indexed_ra(ds), self.grid)
-        # writer.write(out_path)
-        # writer.close()
+        # print(ds)
+        print(out_path)
+        writer = self.ioclass(self._convert_to_indexed_ra(ds))
+        writer.write(out_path)
+        writer.close()
 
     def stack(self, fnames, out_path, chunks=None):
         buffer = []
         buffer_size = 0
-        process = psutil.Process()
-        print(len(fnames))
+        # process = psutil.Process()
         for iter, f in enumerate(fnames):
             try:
                 self._open(f)
             except:
                 # print warning?
-                continue
-            ds = self.fid.read(chunks=chunks).load()
+                raise
+            ds = self.fid.read().load()
             buffer.append(ds)
             buffer_size += ds.nbytes / 1e6
             # buffer_size  = process.memory_info().rss / 1e6
@@ -1032,13 +1030,13 @@ class SwathFileCollection:
                 print(combined_ds)
                 # for cell in np.unique(combined_ds.cell.values):
                 #     cell_ds = combined_ds.sel(cell=cell)
-                with mp.Pool(processes=8) as pool:
-                    pool.starmap(self.write_cell_ds,
-                                 [(cell_ds.to_dataframe(), out_dir / self.fn_format.format(cell))
-                                  for cell, cell_ds
-                                  in combined_ds.groupby("cell")])
-                # for cell, cell_ds in combined_ds.groupby("cell"):
-                #     self.write_cell_ds(cell_ds, out_dir / self.fn_format.format(cell))
+                # with mp.Pool(processes=8) as pool:
+                #     pool.starmap(self.write_cell_ds,
+                #                  [(cell_ds, out_dir / self.fn_format.format(cell))
+                #                   for cell, cell_ds
+                #                   in combined_ds.groupby("cell")])
+                for cell, cell_ds in combined_ds.groupby("cell"):
+                    self.write_cell_ds(cell_ds, out_dir / self.fn_format.format(cell))
                     # writer = self.ioclass(self._convert_to_indexed_ra(cell_ds), self.grid)
                     # writer.write(out_dir / self.fn_format.format(cell))
                     # writer.close()
@@ -1051,12 +1049,19 @@ class SwathFileCollection:
             iter += len(buffer)
             out_dir = out_path / f"{iter:05d}"
             out_dir.mkdir(parents=True, exist_ok=True)
-            for cell, cell_ds in self.process(
+
+            combined_ds = self.process(
                     xr.combine_nested(buffer,
                                       concat_dim="obs",
                                       combine_attrs="drop_conflicts")
-            ).groupby("cell"):
-                writer = self.ioclass(self._convert_to_indexed_ra(cell_ds), self.grid)
+            )
+            print(combined_ds)
+            for cell in np.unique(combined_ds.cell.values):
+                cell_ds = combined_ds.isel(obs=np.where(combined_ds.cell.values==cell)[0])
+                # cell_ds = combined_ds.sel(cell=cell)
+            # for cell, cell_ds in combined_ds.groupby("cell"):
+                self.write_cell_ds(cell_ds, out_dir / self.fn_format.format(cell))
+                writer = self.ioclass(self._convert_to_indexed_ra(cell_ds))
                 writer.write(out_dir / self.fn_format.format(cell))
                 writer.close()
             # self.process(xr.combine_nested(buffer, dim="obs"))
@@ -1110,13 +1115,18 @@ class SwathFileCollection:
             print("adding sat_id")
             data["sat_id"] = ("obs", np.repeat(sat_id[sat], data["location_id"].size))
 
+        print("calculating lonlat")
+        lon, lat = self.grid.gpi2lonlat(data.location_id.values)
+        print("adding lonlat")
+        data["lon"] = ("obs", lon)
+        data["lat"] = ("obs", lat)
+
         print("adding cells")
         data = data.assign_coords({"cell": ("obs", self.grid.gpi2cell(data["location_id"].values))})
         # data["cell"] = ("obs", self.grid.gpi2cell(data["location_id"].values))
         print("setting xindex")
         data = data.set_xindex("cell")
 
-        print("selecting valid obs")
         # data = data.isel(obs=valid)
         # data = data.sel(valid=True)
         # print("valid obs selected")

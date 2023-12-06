@@ -25,8 +25,6 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
-import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -214,51 +212,6 @@ class RaggedXArrayIOBase:
 class ASCAT_NetCDF4(RaggedXArrayIOBase):
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
-        self.fn_format = "{:04d}.nc"
-
-    def _read_location_id(self, location_id):
-        """
-        Read data for a single location_id
-        """
-        if location_id not in self._ds.location_id.values:
-            return None
-
-        # if self.ra_type == "contiguous":
-        #     idx = np.where(self._ds.location_id.values == location_id)[0][0]
-        #     row_start = self._ds.row_size.values[:idx].sum()
-        #     row_end = row_start + self._ds.row_size.values[idx]
-        #     ds = self._ds.isel(obs=slice(row_start, row_end), locations=idx)
-
-        idx = np.where(self._ds.location_id.values == location_id)[0][0]
-        locationIndex = np.where(self._ds.locationIndex.values == idx)[0]
-        ds = self._ds.isel(obs=np.where(self._ds.locationIndex.values==idx)[0], locations=idx)
-
-        return ds
-
-    def _read_location_ids(self, location_ids):
-        """
-        Read data for a list of location_ids
-        """
-        if location_id not in self._ds.location_id.values:
-            return None
-
-        # if self.ra_type == "contiguous":
-        #     idxs = np.where(self._ds.location_id.values in location_ids)[0]
-        #     row_starts = self._ds.row_size.values[:idxs].sum()
-        #     row_ends = row_start + self._ds.row_size.values[idx]
-        #     ds = self._ds.isel(obs=slice(row_start, row_end), locations=idx)
-
-        idxs = np.where(self._ds.location_id.values == location_ids)[0]
-        locationIndex = np.where(self._ds.locationIndex.values in idxs)[0]
-        ds = self._ds.isel(obs=np.where(self._ds.locationIndex.values==idxs)[0], locations=idxs)
-
-        return ds
-
-    def _var_order(self, ds):
-        raise NotImplementedError
-
-    def _set_attributes(self, ds):
-        raise NotImplementedError
 
     def read(self, location_id=None, **kwargs):
         if location_id is not None:
@@ -270,27 +223,6 @@ class ASCAT_NetCDF4(RaggedXArrayIOBase):
                 raise ValueError("location_id must be int or list of ints")
 
         return xr.decode_cf(self._ds, mask_and_scale=False)
-        # return self._ds
-
-    # def write(self, filename, **kwargs):
-    #     raise NotImplementedError
-
-
-    # def read_indexed(self, location_id=None, **kwargs):
-    #     if location_id is not None:
-    #         print(f"location_id: {location_id}")
-    #         print(self._ds.location_id)
-    #     return self._ds
-
-    # def read_contiguous(self, location_id=None, **kwargs):
-    #     if location_id is not None:
-    #         print(f"location_id: {location_id}")
-    #         print(self._ds.location_id)
-    #     return self._ds
-
-class ASCAT_H129_Cell(ASCAT_NetCDF4):
-    def __init__(self, filename, **kwargs):
-        super().__init__(filename, **kwargs)
 
     def write(self, filename, ra_type="contiguous", **kwargs):
         """
@@ -317,6 +249,31 @@ class ASCAT_H129_Cell(ASCAT_NetCDF4):
         out_ds.encoding["unlimited_dims"] = []
 
         out_ds.to_netcdf(filename, encoding=encoding, **kwargs)
+
+    def _read_location_id(self, location_id):
+        """
+        Read data for a single location_id
+        """
+        if location_id not in self._ds.location_id.values:
+            return None
+
+        idx = np.where(self._ds.location_id.values == location_id)[0][0]
+        locationIndex = np.where(self._ds.locationIndex.values == idx)[0]
+        ds = self._ds.isel(obs=locationIndex, locations=idx)
+
+        return ds
+
+    def _read_location_ids(self, location_ids):
+        """
+        Read data for a list of location_ids.
+        If there are location_ids not in the dataset,
+        they are ignored.
+        """
+        idxs = np.where(np.isin(self._ds.location_id.values, location_ids))[0]
+        locationIndex = np.where(self._ds.locationIndex.values in idxs)[0]
+        ds = self._ds.isel(obs=locationIndex, locations=idxs)
+
+        return ds
 
     def _var_order(self, ds):
         """
@@ -529,85 +486,63 @@ class ASCAT_H129_Cell(ASCAT_NetCDF4):
 
         return encoding
 
-class ASCAT_Metadata():
-    def __init__(self):
-        pass
 
-class ASCAT_H129_Metadata(ASCAT_Metadata):
-    def __init__(self):
-        self.cell_ioclass = ASCAT_H129_Cell
-        self.swath_ioclass = ASCAT_H129_Swath
-        self.fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-6.25-H129_C_LIIB_{date}_*_*____.nc"
-        self.fn_read_fmt = lambda timestamp: {"date": timestamp.strftime("%Y%m%d*")}
-        self.sf_pattern = {"year_folder": "{year}"}
-        self.sf_read_fmt = lambda timestamp: {"year_folder": {"year": f"{timestamp.year}"}}
-        self.date_format = "%Y%m%d%H%M%S"
-        self.grid = FibGrid(6.25)
-        self.grid_cell_size = 5
-        self.cell_fn_format = "{:04d}.nc"
-        possible_cells = self.grid.get_cells()
-        self.max_cell = possible_cells.max()
-        self.min_cell = possible_cells.min()
-        self.ts_dtype = np.dtype([
-                    ("sat_id", np.int8),
-                    ("as_des_pass", np.int8),
-                    ("swath_indicator", np.int8),
-                    ("backscatter_for", np.float32),
-                    ("backscatter_mid", np.float32),
-                    ("backscatter_aft", np.float32),
-                    ("incidence_angle_for", np.float32),
-                    ("incidence_angle_mid", np.float32),
-                    ("incidence_angle_aft", np.float32),
-                    ("azimuth_angle_for", np.float32),
-                    ("azimuth_angle_mid", np.float32),
-                    ("azimuth_angle_aft", np.float32),
-                    ("kp_for", np.float32),
-                    ("kp_mid", np.float32),
-                    ("kp_aft", np.float32),
-                    ("surface_soil_moisture", np.float32),
-                    ("surface_soil_moisture_noise", np.float32),
-                    ("backscatter40", np.float32),
-                    ("slope40", np.float32),
-                    ("curvature40", np.float32),
-                    ("surface_soil_moisture_sensitivity", np.float32),
-                    ("correction_flag", np.uint8),
-                    ("processing_flag", np.uint8),
-                    ("surface_flag", np.uint8),
-                    ("snow_cover_probability", np.int8),
-                    ("frozen_soil_probability", np.int8),
-                    ("wetland_fraction", np.int8),
-                    ("topographic_complexity", np.int8),
-                    ])
+# nice to define these outside the classes so there's no need to create multiple
+grid_6_25 = FibGrid(6.25)
+grid_12_5 = FibGrid(12.5)
+
+class ASCAT_H129_Cell(ASCAT_NetCDF4):
+    grid = grid_6_25
+    grid_cell_size = 5
+    fn_format = "{:04d}.nc"
+    possible_cells = grid.get_cells()
+    max_cell = possible_cells.max()
+    min_cell = possible_cells.min()
+
+    def __init__(self, filename, **kwargs):
+        super().__init__(filename, **kwargs)
+        self.grid = ASCAT_H129_Cell.grid
+        self.grid_cell_size = ASCAT_H129_Cell.grid_cell_size
+        self.fn_format = ASCAT_H129_Cell.fn_format
+        self.possible_cells = ASCAT_H129_Cell.possible_cells
+        self.max_cell = ASCAT_H129_Cell.max_cell
+        self.min_cell = ASCAT_H129_Cell.min_cell
 
 
-def ascat_io_metadata(id):
-    """
-    Return metadata for a given ASCAT swath id.
+class ASCAT_SIG0_6_25_Cell(ASCAT_NetCDF4):
+    grid = grid_6_25
+    grid_cell_size = 5
+    fn_format = "{:04d}.nc"
+    possible_cells = grid.get_cells()
+    max_cell = possible_cells.max()
+    min_cell = possible_cells.min()
 
-    Parameters
-    ----------
-    id : str
-        ASCAT swath id.
+    def __init__(self, filename, **kwargs):
+        super().__init__(filename, **kwargs)
+        self.grid = ASCAT_SIG0_6_25_Cell.grid
+        self.grid_cell_size = ASCAT_SIG0_6_25_Cell.grid_cell_size
+        self.fn_format = ASCAT_SIG0_6_25_Cell.fn_format
+        self.possible_cells = ASCAT_SIG0_6_25_Cell.possible_cells
+        self.max_cell = ASCAT_SIG0_6_25_Cell.max_cell
+        self.min_cell = ASCAT_SIG0_6_25_Cell.min_cell
 
-    Returns
-    -------
-    metadata : Cell_Metadata object
-        Metadata for the given swath id.
-    """
-    if id is None:
-        return None
-    lookup = {
-        "H129": ASCAT_H129_Metadata(),
-        }
-    return lookup[id.upper()]
 
-# def ascat_swath_io(id):
-#     if isinstance(id, SwathIOBase):
-#         return id
-#     lookup = {
-#         "H129": ASCAT_H129_Swath,
-#         }
-#     return lookup[id]
+class ASCAT_SIG0_12_5_Cell(ASCAT_NetCDF4):
+    grid = grid_12_5
+    grid_cell_size = 5
+    fn_format = "{:04d}.nc"
+    possible_cells = grid.get_cells()
+    max_cell = possible_cells.max()
+    min_cell = possible_cells.min()
+
+    def __init__(self, filename, **kwargs):
+        super().__init__(filename, **kwargs)
+        self.grid = ASCAT_SIG0_12_5_Cell.grid
+        self.grid_cell_size = ASCAT_SIG0_12_5_Cell.grid_cell_size
+        self.fn_format = ASCAT_SIG0_12_5_Cell.fn_format
+        self.possible_cells = ASCAT_SIG0_12_5_Cell.possible_cells
+        self.max_cell = ASCAT_SIG0_12_5_Cell.max_cell
+        self.min_cell = ASCAT_SIG0_12_5_Cell.min_cell
 
 class SwathIOBase:
     """
@@ -630,7 +565,7 @@ class SwathIOBase:
                                          combine="nested",
                                          chunks=(chunks or "auto"),
                                          **kwargs)
-            print(self._ds.chunks)
+            # print(self._ds.chunks)
 
             chunks = None
 
@@ -672,10 +607,57 @@ class SwathIOBase:
         """
         self._ds.close()
 
+
 class ASCAT_H129_Swath(SwathIOBase):
-    def __init__(self, filename, grid, **kwargs):
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-6.25-H129_C_LIIB_{date}_*_*____.nc"
+    fn_read_fmt = lambda timestamp: {"date": timestamp.strftime("%Y%m%d*")}
+    sf_pattern = {"year_folder": "{year}"}
+    sf_read_fmt = lambda timestamp: {"year_folder": {"year": f"{timestamp.year}"}}
+    date_format = "%Y%m%d%H%M%S"
+    grid = grid_6_25
+    grid_cell_size = 5
+    cell_fn_format = "{:04d}.nc"
+    ts_dtype = np.dtype([
+                ("sat_id", np.int8),
+                ("as_des_pass", np.int8),
+                ("swath_indicator", np.int8),
+                ("backscatter_for", np.float32),
+                ("backscatter_mid", np.float32),
+                ("backscatter_aft", np.float32),
+                ("incidence_angle_for", np.float32),
+                ("incidence_angle_mid", np.float32),
+                ("incidence_angle_aft", np.float32),
+                ("azimuth_angle_for", np.float32),
+                ("azimuth_angle_mid", np.float32),
+                ("azimuth_angle_aft", np.float32),
+                ("kp_for", np.float32),
+                ("kp_mid", np.float32),
+                ("kp_aft", np.float32),
+                ("surface_soil_moisture", np.float32),
+                ("surface_soil_moisture_noise", np.float32),
+                ("backscatter40", np.float32),
+                ("slope40", np.float32),
+                ("curvature40", np.float32),
+                ("surface_soil_moisture_sensitivity", np.float32),
+                ("correction_flag", np.uint8),
+                ("processing_flag", np.uint8),
+                ("surface_flag", np.uint8),
+                ("snow_cover_probability", np.int8),
+                ("frozen_soil_probability", np.int8),
+                ("wetland_fraction", np.int8),
+                ("topographic_complexity", np.int8),
+                ])
+
+    def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
-        self.grid = grid
+        self.fn_pattern = ASCAT_H129_Swath.fn_pattern
+        self.fn_read_fmt = ASCAT_H129_Swath.fn_read_fmt
+        self.sf_pattern = ASCAT_H129_Swath.sf_pattern
+        self.sf_read_fmt = ASCAT_H129_Swath.sf_read_fmt
+        self.date_format = ASCAT_H129_Swath.date_format
+        self.grid = ASCAT_H129_Swath.grid
+        self.grid_cell_size = ASCAT_H129_Swath.grid_cell_size
+        self.ts_dtype = ASCAT_H129_Swath.ts_dtype
         # self.cell_vals = self.grid.gpi2cell(self._ds.location_id.values)
 
     def _preprocess(self, ds):
@@ -720,3 +702,10 @@ class ASCAT_H129_Swath(SwathIOBase):
 
     def write(self, filename, **kwargs):
         self._ds.to_netcdf(filename, **kwargs)
+
+ascat_io_classes = {
+    "H129": {
+        "cell": ASCAT_H129_Cell,
+        "swath": ASCAT_H129_Swath,
+    }
+}
