@@ -382,6 +382,11 @@ class EumConnector(HttpConnector):
         dataset_parameters['si'] = 0
         items_per_page = 10
 
+        if "type" in found_data_sets:
+            if found_data_sets["type"] == "ExceptionReport":
+                msg = found_data_sets["exceptions"][0]["exceptionText"]
+                raise RuntimeError(msg)
+
         all_found_data_sets = []
         while dataset_parameters['si'] < found_data_sets['totalResults']:
             response = requests.get(url, dataset_parameters)
