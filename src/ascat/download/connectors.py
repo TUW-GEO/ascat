@@ -383,7 +383,7 @@ class EumConnector(HttpConnector):
         items_per_page = 10
 
         all_found_data_sets = []
-        while dataset_parameters['si'] < found_data_sets['properties']['totalResults']:
+        while dataset_parameters['si'] < found_data_sets['totalResults']:
             response = requests.get(url, dataset_parameters)
             found_data_sets = response.json()
             all_found_data_sets.append(found_data_sets)
@@ -397,7 +397,7 @@ class EumConnector(HttpConnector):
         count = 0
         if all_found_data_sets:
             print('Found {} data sets'.format(
-                found_data_sets['properties']['totalResults']))
+                found_data_sets['totalResults']))
 
             for found_data_sets in all_found_data_sets:
                 for selected_data_set in found_data_sets['features']:
