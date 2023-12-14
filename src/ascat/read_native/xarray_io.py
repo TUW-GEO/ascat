@@ -26,6 +26,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
+from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 
@@ -537,11 +538,51 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         return encoding
 
 
-class SwathIOBase:
+class SwathIOBase(ABC):
     """
     Base class for reading swath data.
     Writes ragged array cell data in indexed or contiguous format.
     """
+
+    @classmethod
+    def __init_subclass__(cls):
+        required_class_attrs = [
+            "fn_pattern",
+            "sf_pattern",
+            "date_format",
+            "grid",
+            "grid_cell_size",
+            "cell_fn_format",
+            "beams_vars",
+            "ts_dtype",
+        ]
+        for var in required_class_attrs:
+            if not hasattr(cls, var):
+                raise NotImplementedError(
+                    f"{cls.__name__} must define required class attribute {var}"
+                )
+
+    @staticmethod
+    @abstractmethod
+    def fn_read_fmt():
+        """
+        TODO: figure out a sane way to describe what this does.
+        Also decide if this /needs/ to be enforced. If the user
+        doesn't want to use all the filesearch functionality (or
+        if they want to use their own filesearch logic), then
+        they should still be able to use this class. They could
+        of course override this and just return None, but that
+        seems like a hack.
+        """
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def sf_read_fmt():
+        """
+        TODO: same as above
+        """
+        pass
 
     def __init__(self, source, engine, **kwargs):
         self.source = source
@@ -630,6 +671,7 @@ class SwathIOBase:
         self._ds.close()
 
 
+
 class CellGridCache:
     """
     Cache for CellGrid objects.
@@ -695,12 +737,6 @@ class AscatSIG0Cell12500m(AscatNetCDFCellBase):
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, **kwargs)
-        # self.grid = ASCAT_SIG0_12_5_Cell.grid
-        # self.grid_cell_size = ASCAT_SIG0_12_5_Cell.grid_cell_size
-        # self.fn_format = ASCAT_SIG0_12_5_Cell.fn_format
-        # self.possible_cells = ASCAT_SIG0_12_5_Cell.possible_cells
-        # self.max_cell = ASCAT_SIG0_12_5_Cell.max_cell
-        # self.min_cell = ASCAT_SIG0_12_5_Cell.min_cell
 
 
 class AscatH129Swath(SwathIOBase):
@@ -742,48 +778,6 @@ class AscatH129Swath(SwathIOBase):
         ("topographic_complexity", np.int8),
     ])
 
-    # @staticmethod
-    # def metadata(resolution):
-    #     return {
-    #         "fn_pattern": f"W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-{resolution:g}"+"-H129_C_LIIB_{date}_*_*____.nc",
-    #         "sf_pattern": {"year_folder": "{year}"},
-    #         "date_format": "%Y%m%d%H%M%S",
-    #         "grid": grid_cache[resolution]["grid"],
-    #         "grid_cell_size": 5,
-    #         "cell_fn_format": "{:04d}.nc",
-    #         "beams_vars": ["backscatter", "incidence_angle", "azimuth_angle", "kp"],
-    #         "ts_dtype": np.dtype([
-    #             ("sat_id", np.int8),
-    #             ("as_des_pass", np.int8),
-    #             ("swath_indicator", np.int8),
-    #             ("backscatter_for", np.float32),
-    #             ("backscatter_mid", np.float32),
-    #             ("backscatter_aft", np.float32),
-    #             ("incidence_angle_for", np.float32),
-    #             ("incidence_angle_mid", np.float32),
-    #             ("incidence_angle_aft", np.float32),
-    #             ("azimuth_angle_for", np.float32),
-    #             ("azimuth_angle_mid", np.float32),
-    #             ("azimuth_angle_aft", np.float32),
-    #             ("kp_for", np.float32),
-    #             ("kp_mid", np.float32),
-    #             ("kp_aft", np.float32),
-    #             ("surface_soil_moisture", np.float32),
-    #             ("surface_soil_moisture_noise", np.float32),
-    #             ("backscatter40", np.float32),
-    #             ("slope40", np.float32),
-    #             ("curvature40", np.float32),
-    #             ("surface_soil_moisture_sensitivity", np.float32),
-    #             ("correction_flag", np.uint8),
-    #             ("processing_flag", np.uint8),
-    #             ("surface_flag", np.uint8),
-    #             ("snow_cover_probability", np.int8),
-    #             ("frozen_soil_probability", np.int8),
-    #             ("wetland_fraction", np.int8),
-    #             ("topographic_complexity", np.int8),
-    #         ]),
-    #     }
-
     @staticmethod
     def fn_read_fmt(timestamp):
         return {"date": timestamp.strftime("%Y%m%d*")}
@@ -794,14 +788,6 @@ class AscatH129Swath(SwathIOBase):
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
-        # metadata = self.metadata(resolution)
-        # self.resolution = resolution
-        # self.fn_pattern = metadata["fn_pattern"]
-        # self.sf_pattern = metadata["sf_pattern"]
-        # self.date_format = metadata["date_format"]
-        # self.grid = metadata["grid"]
-        # self.grid_cell_size = metadata["grid_cell_size"]
-        # self.ts_dtype = metadata["ts_dtype"]
 
 
 class AscatSIG0Swath6250m(SwathIOBase):

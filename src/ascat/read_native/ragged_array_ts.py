@@ -903,15 +903,18 @@ class SwathFileCollection:
         self.fn_read_fmt = self.ioclass.fn_read_fmt
         self.sf_read_fmt = self.ioclass.sf_read_fmt
         self.date_format = self.ioclass.date_format
-        self.fn_format = self.ioclass.cell_fn_format
-        self.chron_files = ChronFiles(self.path,
-                                      dummy_filesearch,
-                                      self.fn_pattern,
-                                      self.sf_pattern,
-                                      None,
-                                      True,
-                                      self.fn_read_fmt,
-                                      self.sf_read_fmt,)
+        self.cell_fn_format = self.ioclass.cell_fn_format
+        if self.fn_pattern and self.sf_pattern:
+            self.chron_files = ChronFiles(self.path,
+                                          dummy_filesearch,
+                                          self.fn_pattern,
+                                          self.sf_pattern,
+                                          None,
+                                          True,
+                                          self.fn_read_fmt,
+                                          self.sf_read_fmt,)
+        else:
+            self.chron_files = None
 
         # self._start_dt = start_dt or np.datetime64("1970-01-01")
         # self._end_dt = end_dt or np.datetime64("2100-01-01")
@@ -922,7 +925,7 @@ class SwathFileCollection:
         # # an interval longer than delta_dt.
         # self._time_array[-1] = self._end_dt
 
-        # self.fn_format = fn_format
+        # self.cell_fn_format = fn_format
         self.previous_cell = None
         self._open_fnames = None
         self.fid = None
@@ -955,9 +958,15 @@ class SwathFileCollection:
             List of filenames.
         """
 
-        fnames = self.chron_files.search_period(start_dt,
-                                                end_dt,
-                                                date_str=self.date_format)
+        if self.chron_files:
+            fnames = self.chron_files.search_period(start_dt,
+                                                    end_dt,
+                                                    date_str=self.date_format)
+        else:
+            raise NotImplementedError("File search not implemented for this product."
+                                      " Check if fn_pattern and sf_pattern are defined"
+                                      f" in ioclass {self.ioclass.__name__}")
+
         return fnames
 
     def _open(self, fnames):
@@ -1053,20 +1062,11 @@ class SwathFileCollection:
         """
         Write a stacked dataset to a set of cell files in parallel.
         """
-        # with mp.Pool(processes=processes) as pool:
-        #     pool.starmap(self._write_cell_ds,
-        #                     [(ds.isel(obs=np.where(ds.cell.values==cell)[0]),
-        #                     out_dir / self.fn_format.format(cell),
-        #                     cell)
-        #                     for cell
-        #                      in np.unique(ds.cell.values)],
-        #                  )
-
         cells = np.unique(ds.cell.values)
         args = [
             (
                 ds.isel(obs=np.where(ds.cell.values == cell)[0]),
-                out_dir / self.fn_format.format(cell),
+                out_dir / self.cell_fn_format.format(cell),
                 cell,
             )
             for cell in cells
@@ -1079,7 +1079,7 @@ class SwathFileCollection:
                                total=len(cells)):
                 pass
 
-    def stack(self, fnames, out_dir, mode="w"):
+    def stack(self, fnames, out_dir, mode="w", processes=8):
         """
         Stack swath files and split them into cell timeseries files. Reads swath files
         into memory, stacking their datasets in a buffer until the sum of their sizes
@@ -1120,7 +1120,7 @@ class SwathFileCollection:
                                                 concat_dim="obs",
                                                 combine_attrs="drop_conflicts"))
                 print(f"Processed {iter}/{total_swaths} swath files. Dumping to cell files...")
-                self._parallel_write_cells(combined_ds, out_dir)
+                self._parallel_write_cells(combined_ds, out_dir, processes=processes)
                 print("Finished dumping buffer to cell files.")
                 combined_ds.close()
                 buffer = []
