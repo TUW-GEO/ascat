@@ -337,9 +337,8 @@ class HsafConnector(FtpConnector):
             # inner loop was broken, break the outer
             break
 
-        download_url_list = sorted(download_url_list)
-        local_file_list = sorted(local_file_list,
-                                 key=lambda x: download_url_list.index(x))
+        download_url_list, local_file_list = zip(*sorted(zip(
+            download_url_list, local_file_list)))
 
         with tqdm(desc="Downloads", total=len(download_url_list)) as pbar:
             for download_url, local_file in zip(download_url_list,
@@ -499,9 +498,8 @@ class EumConnector(HttpConnector):
                 download_url_list = download_url_list[:limit]
                 local_file_list = local_file_list[:limit]
 
-            download_url_list = sorted(download_url_list)
-            local_file_list = sorted(local_file_list,
-                                     key=lambda x: download_url_list.index(x))
+            download_url_list, local_file_list = zip(*sorted(zip(
+                download_url_list, local_file_list)))
 
             concurrent_download(self.download_file, download_url_list,
                                 local_file_list, max_workers)
