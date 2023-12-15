@@ -209,7 +209,6 @@ def parse_args_eumetsat_download(args):
     parser.add_argument('-mw',
                         '--max_workers',
                         type=int,
-                        const=1,
                         help='Number of parallel downloads')
 
     parser.add_argument(
