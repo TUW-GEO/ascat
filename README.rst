@@ -2,30 +2,37 @@
 ascat
 =====
 
-.. image::
-   https://github.com/TUW-GEO/ascat/actions/workflows/ascat_ubuntu.yml/badge.svg
-   :target: https://github.com/TUW-GEO/ascat/actions/workflows/ascat_ubuntu.yml
+.. image:: https://github.com/TUW-GEO/ascat/actions/workflows/ascat_ubuntu.yml/badge.svg
+    :alt: Linux Built Status
+    :target: https://github.com/TUW-GEO/ascat/actions/workflows/ascat_ubuntu.yml
 
 .. image:: https://github.com/TUW-GEO/ascat/actions/workflows/ascat_windows.yml/badge.svg
-   :target: https://github.com/TUW-GEO/ascat/actions/workflows/ascat_windows.yml
+    :alt: Windows Built Status
+    :target: https://github.com/TUW-GEO/ascat/actions/workflows/ascat_windows.yml
 
 .. image:: https://coveralls.io/repos/github/TUW-GEO/ascat/badge.svg?branch=master
-   :target: https://coveralls.io/github/TUW-GEO/ascat?branch=master
+    :alt: Coveralls
+    :target: https://coveralls.io/github/TUW-GEO/ascat?branch=master
 
 .. image:: https://badge.fury.io/py/ascat.svg
+    :alt: PyPI-Server
     :target: http://badge.fury.io/py/ascat
 
 .. image:: https://readthedocs.org/projects/ascat/badge/?version=latest
-   :target: http://ascat.readthedocs.org/
+    :alt: ReadTheDocs
+    :target: http://ascat.readthedocs.org/
 
-Read and convert data acquired by ASCAT on-board the series of Metop satellites.
+.. image:: https://pepy.tech/badge/ascat/month
+    :alt: Monthly Downloads
+    :target: https://pepy.tech/project/ascat
 
-Works great in combination with `pytesmo <https://github.com/TUW-GEO/pytesmo>`_.
+Read and visualize data from the Advanced Scatterometer (ASCAT) on-board the series of Metop satellites.
 
 Citation
 ========
 
 .. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.4610836.svg
+   :alt: Zenodo
    :target: https://doi.org/10.5281/zenodo.4610836
 
 If you use the software in a publication then please cite it using the Zenodo DOI.
@@ -71,8 +78,8 @@ Read ASCAT data from different sources into a common format supported by pytesmo
 - `EUMETSAT <https://navigator.eumetsat.int/search?query=ascat/>`_
     - ASCAT Soil Moisture at 12.5 km Swath Grid - Metop
     - ASCAT Soil Moisture at 25 km Swath Grid - Metop
-    - ASCAT GDS Level 1 Sigma0 resampled at 12.5 km Swath Grid - Metop 
-    - ASCAT GDS Level 1 Sigma0 resampled at 25 km Swath Grid - Metop 
+    - ASCAT GDS Level 1 Sigma0 resampled at 12.5 km Swath Grid - Metop
+    - ASCAT GDS Level 1 Sigma0 resampled at 25 km Swath Grid - Metop
 
 Contribute
 ==========
@@ -91,8 +98,11 @@ If you want to contribute please follow these steps:
 - Please include tests for your contributions in one of the test directories
 - Submit a pull request
 
+
+.. _pyscaffold-notes:
+
 Note
 ====
 
-This project has been set up using PyScaffold 3.2.3. For details and usage
+This project has been set up using PyScaffold 4.5. For details and usage
 information on PyScaffold see https://pyscaffold.org/.
