@@ -122,7 +122,7 @@ class HttpConnector(Connector):
         """
         self.base_url = base_url
 
-    def download_file(self, file_remote, file_local, overwrite=False):
+    def download_file(self, file_remote, file_local, overwrite=False, n_retry=5):
         """
         Download single file from passed url to local file.
 
@@ -135,52 +135,67 @@ class HttpConnector(Connector):
         overwrite : bool, optional
             If True, existing files will be overwritten.
         """
-        logging.debug("Send request")
-        stream_response = requests.get(
-            file_remote,
-            params={"format": "json"},
-            stream=True,
-            headers={"Authorization": f"Bearer {self.access_token}"})
+        request_flag = False
 
-        self._assert_response(stream_response)
-        logging.debug("Request received")
+        i = 0
+        while i < n_retry:
+            logging.debug("Send request")
 
-        total = int(stream_response.headers["content-length"])
+            try:
+                stream_response = requests.get(
+                    file_remote,
+                    params={"format": "json"},
+                    stream=True,
+                    headers={"Authorization": f"Bearer {self.access_token}"})
 
-        suffix = ""
-        if stream_response.headers["Content-Type"] == "application/zip":
-            suffix = ".zip"
-
-        filename = file_local.parent / (file_local.name + suffix)
-
-        if not overwrite and filename.exists():
-            lstat = filename.lstat()
-            if lstat.st_size == total:
-                logging.info("Skip download. File exits.")
+                self._assert_response(stream_response)
+            except AssertionError:
+                i += 1
+                logging.debug(f"API Request failed - retry #{i}")
+            else:
+                logging.debug("API Request successful")
+                request_flag = True
+                break
         else:
-            pbar = tqdm(desc=file_local.name,
-                        total=total,
-                        unit="B",
-                        unit_divisor=1024,
-                        unit_scale=True,
-                        leave=False)
+            logging.debug("Maximum number of API requests failed. Abort.")
 
-            with open(filename, "wb") as fp:
-                for chunk in stream_response.iter_content(chunk_size=1024):
-                    if chunk:
-                        fp.write(chunk)
-                        fp.flush()
-                        pbar.update(len(chunk))
-            pbar.close()
+        if request_flag:
+            total = int(stream_response.headers["content-length"])
 
-            if filename.exists():
+            suffix = ""
+            if stream_response.headers["Content-Type"] == "application/zip":
+                suffix = ".zip"
+
+            filename = file_local.parent / (file_local.name + suffix)
+
+            if not overwrite and filename.exists():
                 lstat = filename.lstat()
                 if lstat.st_size == total:
-                    logging.debug("Download successful")
-                else:
-                    logging.error("Download unsuccessful (file size mismatch)")
+                    logging.info("Skip download. File exits.")
             else:
-                logging.error("Downloaded file not found")
+                pbar = tqdm(desc=file_local.name,
+                            total=total,
+                            unit="B",
+                            unit_divisor=1024,
+                            unit_scale=True,
+                            leave=False)
+
+                with open(filename, "wb") as fp:
+                    for chunk in stream_response.iter_content(chunk_size=1024):
+                        if chunk:
+                            fp.write(chunk)
+                            fp.flush()
+                            pbar.update(len(chunk))
+                pbar.close()
+
+                if filename.exists():
+                    lstat = filename.lstat()
+                    if lstat.st_size == total:
+                        logging.debug("Download successful")
+                    else:
+                        logging.error("Download unsuccessful (file size mismatch)")
+                else:
+                    logging.error("Downloaded file not found")
 
 
 class FtpConnector(Connector):
