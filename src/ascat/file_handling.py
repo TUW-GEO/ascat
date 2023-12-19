@@ -210,8 +210,9 @@ class FileSearch:
         filenames : list of str
             Return a possibly-empty list of path/file names that match.
         """
-        return glob.glob(self.file_templ.build_filename(fn_fmt, sf_fmt),
-                         recursive=recursive)
+        return glob.glob(
+            self.file_templ.build_filename(fn_fmt, sf_fmt),
+            recursive=recursive)
 
     def isearch(self, fn_fmt, sf_fmt=None, recursive=False):
         """
@@ -234,8 +235,9 @@ class FileSearch:
             Iterator which yields the same values as search() without
             actually storing them all simultaneously.
         """
-        return glob.iglob(self.file_templ.build_filename(fn_fmt, sf_fmt),
-                          recursive=recursive)
+        return glob.iglob(
+            self.file_templ.build_filename(fn_fmt, sf_fmt),
+            recursive=recursive)
 
     def create_search_func(self, func, recursive=False):
         """
@@ -543,105 +545,6 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
         return sorted(filenames, reverse=True)
 
 
-def braces_to_re_groups(string):
-    """
-    Convert braces to character patterns defining regular expression groups.
-    If any group name is repeated in the template string, a backreference
-    is used for subsequent appearances.
-
-    Parameters
-    ----------
-    string : str
-        String with braces.
-
-    Returns
-    -------
-    string : str
-        String with regular expression groups.
-
-    Examples
-    --------
-    >>> braces_to_re_groups("{year}-{month}-{day}")
-    "(?P<year>.+)-(?P<month>.+)-(?P<day>.+)"
-    >>> braces_to_re_groups("{year}-{month}-{day}_{year}-{month}-{day2}")
-    "(?P<year>.+)-(?P<month>.+)-(?P<day>.+)_(?P=year)-(?P=month)-(?P<day2>.+)"
-    """
-
-    pattern = re.compile(r"{(.+?)}")
-    seen = set()
-    parts = pattern.split(string)
-
-    for i in range(1, len(parts), 2):
-        content = parts[i]
-
-        if content in seen:
-            parts[i] = f"(?P={content})"
-        else:
-            parts[i] = f"(?P<{content}>.+)"
-            seen.add(content)
-
-    return "".join(parts)
-
-
-def datetime_wildcardify(
-    dt,
-    fmt,
-    year=True,
-    month=True,
-    day=True,
-    hour=True,
-    minute=True,
-    second=True,
-    microsecond=True,
-):
-    """
-    Convert datetime object to string following given format, but with
-    wildcards for the user-defined timesteps.
-
-    Parameters
-    ----------
-    dt : datetime.datetime
-        Datetime object.
-    fmt : str
-        Format string.
-    year : bool, optional
-        Format the year as a wildcard (Default: True).
-    month : bool, optional
-        Format the month as a wildcard (Default: True).
-    day : bool, optional
-        Format the day as a wildcard (Default: True).
-    hour : bool, optional
-        Format the hour as a wildcard (Default: True).
-    minute : bool, optional
-        Format the minute as a wildcard (Default: True).
-    second : bool, optional
-        Format the second as a wildcard (Default: True).
-    microsecond : bool, optional
-        Format the microsecond as a wildcard (Default: True).
-
-    Returns
-    -------
-    string : str
-        String with wildcards.
-    """
-    if year:
-        fmt = fmt.replace("%Y", "*").replace("%y", "*")
-    if month:
-        fmt = fmt.replace("%m", "*").replace("%b", "*").replace("%B", "*")
-    if day:
-        fmt = fmt.replace("%d", "*").replace("%j", "*")
-    if hour:
-        fmt = fmt.replace("%H", "*").replace("%I", "*").replace("%p", "*")
-    if minute:
-        fmt = fmt.replace("%M", "*")
-    if second:
-        fmt = fmt.replace("%S", "*")
-    if microsecond:
-        fmt = fmt.replace("%f", "*")
-
-    return dt.strftime(fmt)
-
-
 class ChronFiles(MultiFileHandler):
     """
     Managing chronological files with a date field in the filename.
@@ -725,7 +628,7 @@ class ChronFiles(MultiFileHandler):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _parse_date(self, filename, date_str, date_field):
+    def _parse_date(self, filename, date_field, date_field_fmt):
         """
         Parse datetime from filename.
 
@@ -739,25 +642,17 @@ class ChronFiles(MultiFileHandler):
         timestamp : datetime
             File timestamp.
         """
-        filename = Path(filename).name
+        # escape special characters in the template string
+        escaped_template = re.escape(self.ft.fn_templ)
 
-        # add escape '\'
-        templ = self.ft.fn_templ.replace("+", r"\+")
+        # replace escaped curly braces with capturing groups
+        pattern = re.sub(r'\\{(.*?)\\}', r'(?P<\1>.*?)', escaped_template)
 
-        # Replace braces surrounding date_fields in template with characters
-        # to # define a named group in a regular expression
-        pattern = braces_to_re_groups(templ)
+        match = re.match(pattern, Path(filename).name)
+        date_substring = match.group(date_field)
+        date = datetime.strptime(date_substring, date_field_fmt)
 
-        # replace each '*' character with a (?P<placeholder_i>.+) group
-        for i in range(pattern.count("*")):
-            pattern = pattern.replace("*", f"(?P<placeholder_{i}>.+)", 1)
-
-        match = re.match(pattern, filename)
-
-        # Then extract the date from the filename using the named group
-        date = match.group(date_field)
-
-        return datetime.strptime(date, date_str)
+        return date
 
     def _merge_data(self, data):
         """
@@ -778,9 +673,9 @@ class ChronFiles(MultiFileHandler):
 
     def search_date(self,
                     timestamp,
-                    search_date_str="%Y%m%d*",
-                    date_str="%Y%m%d",
+                    search_date_fmt="%Y%m%d*",
                     date_field="date",
+                    date_field_fmt="%Y%m%d",
                     return_date=False):
         """
         Search files for given date.
@@ -789,12 +684,12 @@ class ChronFiles(MultiFileHandler):
         ----------
         timestamp : datetime
             Search date.
-        search_str : str, optional
-            Search date string used during file search (default: %Y%m%d*).
-        date_str : str, optional
-            Date field (default: %Y%m%d).
+        search_date_fmt : str, optional
+            Search date string format used during file search (default: %Y%m%d*).
         date_field : str, optional
             Date field name (default: "date")
+        date_field_format : str, optional
+            Date field string format (default: %Y%m%d).
         return_date : bool, optional
             Return date parsed from filename (default: False).
 
@@ -806,7 +701,7 @@ class ChronFiles(MultiFileHandler):
             Parsed date of filename (only returned if return_date=True).
         """
         fn_read_fmt, sf_read_fmt, _, _ = self._fmt(timestamp)
-        fn_read_fmt[date_field] = timestamp.strftime(search_date_str)
+        fn_read_fmt[date_field] = timestamp.strftime(search_date_fmt)
 
         fs = FileSearch(self.root_path, self.ft.fn_templ, self.ft.sf_templ)
         filenames = sorted(fs.search(fn_read_fmt, sf_read_fmt))
@@ -814,19 +709,20 @@ class ChronFiles(MultiFileHandler):
         if return_date:
             dates = []
             for filename in filenames:
-                dates.append(self._parse_date(filename, date_str, date_field))
+                dates.append(
+                    self._parse_date(filename, date_field, date_field_fmt))
             return filenames, dates
         else:
             return filenames
 
     def search_period(
-            self,
-            dt_start,
-            dt_end,
-            dt_delta=timedelta(days=1),
-            search_date_str="%Y%m%d*",
-            date_str="%Y%m%d",
-            date_field="date",
+        self,
+        dt_start,
+        dt_end,
+        dt_delta=timedelta(days=1),
+        search_date_fmt="%Y%m%d*",
+        date_field="date",
+        date_field_fmt="%Y%m%d",
     ):
         """
         Search files for time period.
@@ -839,12 +735,12 @@ class ChronFiles(MultiFileHandler):
             End datetime.
         dt_delta : timedelta, optional
             Time delta used to jump through search date.
-        search_str : str, optional
-            Search date string used during file search (default: %Y%m%d*).
-        date_str : str, optional
-            Date field (default: %Y%m%d).
+        search_fmt : str, optional
+            Search date string format used during file search (default: %Y%m%d*).
         date_field : str, optional
             Date field name (default: "date").
+        date_field_fmt : str, optional
+            Date field string format (default: %Y%m%d).
 
         Returns
         -------
@@ -855,11 +751,12 @@ class ChronFiles(MultiFileHandler):
 
         for dt_cur in np.arange(dt_start, dt_end + dt_delta,
                                 dt_delta).astype(datetime):
-            files, dates = self.search_date(dt_cur,
-                                            search_date_str,
-                                            date_str,
-                                            date_field,
-                                            return_date=True)
+            files, dates = self.search_date(
+                dt_cur,
+                search_date_fmt,
+                date_field,
+                date_field_fmt,
+                return_date=True)
             for f, dt in zip(files, dates):
                 if f not in filenames and dt >= dt_start and dt < dt_end + dt_delta:
                     filenames.append(f)
@@ -872,9 +769,9 @@ class ChronFiles(MultiFileHandler):
         dt_end,
         dt_delta=timedelta(days=1),
         dt_buffer=timedelta(days=1),
-        search_date_str="%Y%m%d*",
-        date_str="%Y%m%d",
+        search_date_fmt="%Y%m%d*",
         date_field="date",
+        date_field_fmt="%Y%m%d",
         **kwargs,
     ):
         """
@@ -891,12 +788,12 @@ class ChronFiles(MultiFileHandler):
         dt_buffer : timedelta, optional
             Search buffer used to find files which could possibly contain
             data but would be left out because of dt_start.
-        search_str : str, optional
-            Search date string used during file search (default: %Y%m%d*).
-        date_str : str, optional
-            Date field (default: %Y%m%d).
+        search_date_fmt : str, optional
+            Search date string format used during file search (default: %Y%m%d*).
         date_field : str, optional
             Date field name (default: "date").
+        date_field_fmt : str, optional
+            Date field string format (default: %Y%m%d).
 
         Returns
         -------
@@ -904,7 +801,8 @@ class ChronFiles(MultiFileHandler):
             Data stored in file.
         """
         filenames = self.search_period(dt_start - dt_buffer, dt_end, dt_delta,
-                                       search_date_str, date_str, date_field)
+                                       search_date_fmt, date_field,
+                                       date_field_fmt)
 
         data = []
 
