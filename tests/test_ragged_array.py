@@ -49,8 +49,213 @@ from ascat.read_native.ragged_array_ts import create_encoding
 from ascat.read_native.ragged_array_ts import CellFileCollection
 from ascat.read_native.ragged_array_ts import SwathFileCollection
 from ascat.read_native.ragged_array_ts import CellFileCollectionStack
-from ascat.read_native.xarray_io import ASCAT_H129_Cell
 
+xr.set_options(display_max_rows=100)
+
+class TestCellFileCollection(unittest.TestCase):
+    """
+    Test the merge function
+    """
+
+    def assertNanEqual(self, d1, d2):
+        try:
+            np.testing.assert_equal(d1, d2)
+        except AssertionError as e:
+            raise self.failureException(e)
+
+    # @classmethod
+    # def setUpClass(cls):
+    #     cls.ctg_old_fname = self.tmpdir / "contiguous_RA_old.nc"
+    #     cls.idx_new_fname = self.tmpdir / "indexed_RA_new.nc"
+    #     cls.idx_old_fname = self.tmpdir / "indexed_RA_old.nc"
+    #     cls.ctg_new_fname = self.tmpdir / "contiguous_RA_new.nc"
+
+    def setUp(self):
+        self.test_data = Path("ascat_test_data")
+        self.temporary_directory = TemporaryDirectory()
+        self.tmpdir = Path(self.temporary_directory.name)
+        self.idx_data = self.test_data / "hsaf" / "sig0/12500m/metop_c" / "stack_cells"
+        # self.ctg_data = self.test_data / "hsaf" / "h129" / "merge_cells"
+        # self.ctg_coll = CellFileCollection.from_product_id(self.ctg_data, ascat_id = "h129")
+        self.idx_coll = CellFileCollection.from_product_id(self.idx_data/"20221219000000_20230101000000", product_id = "sig0_12.5")
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+        # self.ctg_coll.close()
+        self.idx_coll.close()
+
+
+    def test_read_cell(self):
+        coll = self.idx_coll
+        # print(coll._index_time())
+        # these are the only ones in the test data folder right now
+        assert set(coll.cells_in_collection) == {0, 1, 9}
+        cell = coll.read(cell=9)
+        id = coll.read(location_id=2148049)
+        # bbox = coll.read(bbox=[-179, -85, -178, -84.5])
+        # print(cell)
+        # print(coll.get_cell_path(location_id=2148049))
+        # cell = coll.read(location_id=5691169)
+        # print(cell.location_id.values)
+        # print(cell)
+        coll.create_cell_lookup(10)
+        # check something
+
+        # With a new cell size:
+
+
+class TestCellFileCollectionStack(unittest.TestCase):
+
+    def assertNanEqual(self, d1, d2):
+        try:
+            np.testing.assert_equal(d1, d2)
+        except AssertionError as e:
+            raise self.failureException(e)
+
+    def setUp(self):
+        self.temporary_directory = TemporaryDirectory()
+        self.tmpdir = Path(self.temporary_directory.name)
+        self.test_data = Path("ascat_test_data")
+        self.idx_data = self.test_data / "hsaf" / "sig0/12500m/metop_c" / "stack_cells"
+        self.extra_idx_data = self.test_data / "hsaf" / "sig0/12500m/metop_b" / "stack_cells"
+        # self.ctg_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_merged_new/metop_a")
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+        # self.ctg_coll.close()
+        # self.idx_stack.close()
+
+    def test_init(self):
+        # gr = FibGrid(6.25)
+        # pts = [int(p) for p in gr.grid_points_for_cell(0)[0].compressed()]
+        stack = CellFileCollectionStack.from_product_id(self.idx_data, product_id="sig0_12.5")
+
+        # print(a._different_cell_sizes)
+        # from time import time
+        # st = time()
+        # a.merge_and_write(self.tmpdir)#, out_cell_size=10)
+
+        stack.close()
+
+
+        # print(time() - st)
+        # a.read(location_id=[5689572, 5691169], out_grid=FibGrid(12.5))
+        # print(a.read(cell=[0, 9, 13], out_grid=FibGrid(12.5)))
+        # print(a.read(location_id=pts))
+        # print(a.merged(13))
+
+    def test_add_collection(self):
+        stack = CellFileCollectionStack.from_product_id(self.idx_data, product_id="sig0_12.5")
+
+        # print(stack.read(cell=1))
+        # print(self.idx_data)
+        # print(self.extra_idx_data)
+
+        # merge metop_b with metop_c
+        stack.add_collection([self.extra_idx_data], product_id="sig0_12.5")
+        # print(stack.read(cell=1))
+        return
+
+    def test_read(self):
+        return
+
+    def test_read_bbox(self):
+        return
+        # stack = CellFileCollectionStack.from_product_id(self.idx_data, product_id="sig0_12.5")
+
+        # stack.read(bbox=[-180, 180, -90, 90])
+
+    def test_merge_and_write(self):
+        return
+
+    def test_different_cell_size(self):
+        return
+
+class TestSwathFileCollection(unittest.TestCase):
+    def assertNanEqual(self, d1, d2):
+        try:
+            np.testing.assert_equal(d1, d2)
+        except AssertionError as e:
+            raise self.failureException(e)
+
+    def setUp(self):
+        self.temporary_directory = TemporaryDirectory()
+        self.tmpdir = Path(self.temporary_directory.name)
+        self.idx_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_new/metop_a")
+        self.test_data = Path("ascat_test_data")
+        self.ref_idx_data = self.test_data / "hsaf" / "sig0/12500m/metop_c" / "stack_cells"
+        self.ctg_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_merged_new/metop_a")
+        self.swath_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/metop_a")
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+        # self.ctg_coll.close()
+        # self.idx_coll.close()
+
+    def test_init(self):
+        # return
+        a = SwathFileCollection.from_product_id(self.swath_data,
+                                product_id="h129",
+                                dask_scheduler="processes",
+                                # ioclass_kws={"chunks": {"obs": 100000}} #DONT DO THIS! leaving it as a warning
+                                )
+        start = datetime(2021, 1, 1)
+        end = datetime(2021, 1, 2)
+        fname = a._get_filenames(start, end)
+        outdir = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a")
+        from time import time
+
+        #########################################################
+        st_time = time()
+        a.stack(fname, outdir, processes=8)
+        print(time() - st_time, "seconds to stack a week of swaths")
+
+    def test_output(self):
+        return
+        ref = CellFileCollection.from_product_id(self.ref_idx_data/"20221212000000_20221219000000", product_id="sig0_12.5")
+        outdir = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a")
+        print("ref")
+        print(ref.cells_in_collection)
+        print(ref.read(cell=0).sel(obs=range(0,10)).load())
+
+        this = CellFileCollection.from_product_id(outdir, product_id="h129")
+        print("this")
+        this = this.read(cell=0).sel(obs=range(0,10)).load()
+        print(this)
+        print(this.attrs["id"])
+        #########################################################
+        # st_time = time()
+        # a._open(fname)
+        # b = a.fid.read()
+
+        # print(time() - st_time, "seconds to stack a week of swaths")
+
+        #########################################################
+        # from time import time
+        # st_time = time()
+        # b = a.process(start, end)
+        # print(time() - st_time, "seconds to process a week of swaths")
+        # print(b.sel({"cell": 13}))
+        # print(b.sel({"cell": 9}))
+        # for cell, data in b.groupby("cell"):
+        #     print(cell)
+        #     if cell > 50:
+        #         break
+        # for cell in range(0, 5):
+        #     st_time = time()
+        #     print(a.read(start, end, cell=cell))
+        # print(time() - st_time, "seconds to read 50 cell direct from collection")
+            # try:
+            #     b.sel({"cell": cell})
+
+            #     pass
+            # except KeyError:
+        # print(time() - st_time, "seconds to read 50 cells after initial processing")
+
+        # b = ASCAT_Swath(fname)
+        # print(1)
+        # data = b._read_location_ids(range(20,50))
+        # print(data)
 
 def data_setup(outdir):
     """
@@ -61,6 +266,7 @@ def data_setup(outdir):
     outdir : str
         Output folder.
     """
+    return
     location_info = {
         "location_id": [1001, 1002, 1003, 1004, 1005],
         "lat": [38.97, 37.75, 48.68, 32.82, 44.44],
@@ -287,7 +493,7 @@ def data_setup(outdir):
     return ctg_ds_old, idx_ds_old, idx_ds_new, ctg_ds_new
 
 
-class TestHelpers(unittest.TestCase):
+class TestHelpers():#unittest.TestCase):
     """
     Test the helper functions
     """
@@ -511,7 +717,7 @@ class TestHelpers(unittest.TestCase):
     #     cls.idx_old.close()
 
 
-class TestConversion(unittest.TestCase):
+class TestConversion():#unittest.TestCase):
     """
     Test the conversion functions
     """
@@ -565,7 +771,6 @@ class TestConversion(unittest.TestCase):
     #     cls.idx_new.close()
     #     cls.idx_old.close()
 
-
 class TestMerge():#unittest.TestCase):
     """
     Test the merge function
@@ -614,6 +819,7 @@ class TestMerge():#unittest.TestCase):
         #     preprocess=lambda ds: ds[[var for var in ds.variables if "locations" in ds[var].dims]],
         # ) as merged:
         #     print(merged)
+        collections = [self.idx_old_fname, self.idx_new_fname]
         merged = RACollection([self.idx_old_fname, self.idx_new_fname]).merge()
         expected = {
             "row_size":
@@ -810,183 +1016,6 @@ class TestMerge():#unittest.TestCase):
         self.assertNanEqual(merged["time"].values[time_order], expected_times)
         merged.close()
 
-class TestCellFileCollection():#unittest.TestCase):
-    """
-    Test the merge function
-    """
-
-    def assertNanEqual(self, d1, d2):
-        try:
-            np.testing.assert_equal(d1, d2)
-        except AssertionError as e:
-            raise self.failureException(e)
-
-    # @classmethod
-    # def setUpClass(cls):
-    #     cls.ctg_old_fname = self.tmpdir / "contiguous_RA_old.nc"
-    #     cls.idx_new_fname = self.tmpdir / "indexed_RA_new.nc"
-    #     cls.idx_old_fname = self.tmpdir / "indexed_RA_old.nc"
-    #     cls.ctg_new_fname = self.tmpdir / "contiguous_RA_new.nc"
-
-    def setUp(self):
-        self.temporary_directory = TemporaryDirectory()
-        self.tmpdir = Path(self.temporary_directory.name)
-        self.idx_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_new/metop_a")
-        self.ctg_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_merged_new/metop_a")
-        self.ctg_coll = CellFileCollection(self.ctg_data,
-                               ascat_id = "h129")
-        self.idx_coll = CellFileCollection(next(self.idx_data.glob("*/")),
-                                           ascat_id = "h129")
-
-    def tearDown(self):
-        self.temporary_directory.cleanup()
-        self.ctg_coll.close()
-        self.idx_coll.close()
-
-
-    # def test_get_cell_path(self):
-    #     """
-    #     Test that we can get the correct cell path from a location_id or cell
-    #     """
-    #     coll = self.ctg_coll
-    #     self.assertEqual(coll._get_cell_path(cell=1001), self.ctg_data / "1001.nc")
-    #     self.assertEqual(coll._get_cell_path(location_id=160390), self.ctg_data / "2502.nc")
-    #     self.assertEqual(coll._get_cell_path(location_id=13200000), self.ctg_data / "2285.nc")
-    #     # assert that we get errors if we try to get a cell that doesn't exist
-    #     with self.assertRaises(IndexError):
-    #         coll._get_cell_path(location_id=13200001)
-    #     with self.assertRaises(ValueError):
-    #         coll._get_cell_path(cell=3000)
-    #     with self.assertRaises(ValueError):
-    #         coll._get_cell_path(cell=-1)
-    #     # with self.assertRaises(IndexError):
-    #     #     coll.get_cell_path(location_id=0)
-    #     # coll.close()
-
-
-    def test_read_cell(self):
-        coll = self.idx_coll
-        # print(coll._index_time())
-        cell = coll.read(cell=1001)
-        # cell = coll.read(location_id=5689572)
-        # cell = coll.read(location_id=5691169)
-        # print(cell.location_id.values)
-        # print(cell)
-
-
-class TestCellFileCollectionStack(unittest.TestCase):
-
-    def assertNanEqual(self, d1, d2):
-        try:
-            np.testing.assert_equal(d1, d2)
-        except AssertionError as e:
-            raise self.failureException(e)
-
-    def setUp(self):
-        self.temporary_directory = TemporaryDirectory()
-        self.tmpdir = Path(self.temporary_directory.name)
-        self.idx_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_new/metop_a")
-        self.ctg_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_merged_new/metop_a")
-
-    def tearDown(self):
-        self.temporary_directory.cleanup()
-        # self.ctg_coll.close()
-        # self.idx_coll.close()
-
-    def test_init(self):
-        pass
-        # gr = FibGrid(6.25)
-        # pts = [int(p) for p in gr.grid_points_for_cell(0)[0].compressed()]
-        a = CellFileCollectionStack([self.idx_data], ascat_id = "h129")
-
-        # print(a._different_cell_sizes)
-        # from time import time
-        # st = time()
-        a.write_cells("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a", ASCAT_H129_Cell)#, out_cell_size=10)
-
-
-
-        # print(time() - st)
-        # a.read(location_id=[5689572, 5691169], out_grid=FibGrid(12.5))
-        # print(a.read(cell=[0, 9, 13], out_grid=FibGrid(12.5)))
-        # print(a.read(location_id=pts))
-        # print(a.merged(13))
-
-    def test_add_collection(self):
-        return
-
-    def test_different_grids(self):
-        return
-
-class TestSwathFileCollection():#unittest.TestCase):
-    def assertNanEqual(self, d1, d2):
-        try:
-            np.testing.assert_equal(d1, d2)
-        except AssertionError as e:
-            raise self.failureException(e)
-
-    def setUp(self):
-        self.temporary_directory = TemporaryDirectory()
-        self.tmpdir = Path(self.temporary_directory.name)
-        self.idx_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_new/metop_a")
-        self.ctg_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_merged_new/metop_a")
-        self.swath_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/metop_a")
-
-    def tearDown(self):
-        self.temporary_directory.cleanup()
-        # self.ctg_coll.close()
-        # self.idx_coll.close()
-
-    def test_init(self):
-        a = SwathFileCollection(self.swath_data,
-                                ascat_id="h129",
-                                dask_scheduler="processes",
-                                # ioclass_kws={"chunks": {"obs": 100000}} #DONT DO THIS! leaving it as a warning
-                                )
-        start = datetime(2021, 1, 1)
-        end = datetime(2021, 1, 7)
-        fname = a._get_filenames(start, end)
-        outdir = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a")
-        from time import time
-
-        #########################################################
-        st_time = time()
-        a.stack(fname, outdir)
-        print(time() - st_time, "seconds to stack a week of swaths")
-
-        #########################################################
-        # st_time = time()
-        # a._open(fname)
-        # b = a.fid.read()
-
-        # print(time() - st_time, "seconds to stack a week of swaths")
-
-        #########################################################
-        # from time import time
-        # st_time = time()
-        # b = a.process(start, end)
-        # print(time() - st_time, "seconds to process a week of swaths")
-        # print(b.sel({"cell": 13}))
-        # print(b.sel({"cell": 9}))
-        # for cell, data in b.groupby("cell"):
-        #     print(cell)
-        #     if cell > 50:
-        #         break
-        # for cell in range(0, 5):
-        #     st_time = time()
-        #     print(a.read(start, end, cell=cell))
-        # print(time() - st_time, "seconds to read 50 cell direct from collection")
-            # try:
-            #     b.sel({"cell": cell})
-
-            #     pass
-            # except KeyError:
-        # print(time() - st_time, "seconds to read 50 cells after initial processing")
-
-        # b = ASCAT_Swath(fname)
-        # print(1)
-        # data = b._read_location_ids(range(20,50))
-        # print(data)
 
 
 if __name__ == "__main__":

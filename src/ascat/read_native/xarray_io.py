@@ -30,11 +30,13 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 
+import netCDF4
 import xarray as xr
 import numpy as np
 
 from fibgrid.realization import FibGrid
-import netCDF4
+from ascat.file_handling import ChronFiles
+
 
 # By @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
 def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
@@ -43,10 +45,14 @@ def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
     # We likely need to do this as well for variables that had custom
     # encodings too
     if hasattr(nc_variable, 'calendar'):
-
         data.encoding = {
             'units': nc_variable.units,
             'calendar': nc_variable.calendar,
+        }
+    if hasattr(nc_variable, 'calender'):
+        data.encoding = {
+            'units': nc_variable.units,
+            'calendar': nc_variable.calender
         }
     data_encoded = xr.conventions.encode_cf_variable(data) # , name=name)
     left_slices = data.dims.index(expanding_dim)
@@ -85,10 +91,231 @@ def append_to_netcdf(filename, ds_to_append, unlimited_dims):
             nc_variable = nc[name]
             _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size)
 
-class RaggedXArrayCellIOBase:
+def var_order(ds):
+    """
+    Returns a reasonable variable order for a ragged array dataset,
+    based on that used in existing datasets.
+
+    Puts the count/index variable first depending on the ragged array type,
+    then lon, lat, alt, location_id, location_description, and time,
+    followed by the rest of the variables in the dataset.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset.
+
+    Returns
+    -------
+    order : list of str
+        List of dataset variable names in the determined order.
+    """
+    if "row_size" in ds.data_vars:
+        first_var = "row_size"
+    elif "locationIndex" in ds.data_vars:
+        first_var = "locationIndex"
+    else:
+        raise ValueError("No row_size or locationIndex in ds."
+                            + "Cannot determine if indexed or ragged")
+    order = [
+        first_var,
+        "lon",
+        "lat",
+        "alt",
+        "location_id",
+        "location_description",
+        "time",
+    ]
+    order.extend([v for v in ds.data_vars if v not in order])
+
+    return order
+
+def set_attributes(ds, variable_attributes=None, global_attributes=None):
+    """
+    Parameters
+    ----------
+    ds : xarray.Dataset, Path
+        Dataset.
+    variable_attributes : dict, optional
+        variable_attributes.
+
+    Returns
+    -------
+    ds : xarray.Dataset
+        Dataset with variable_attributes.
+    """
+    # needed to set custom variable_attributes
+    variable_attributes = variable_attributes or {}
+
+    if "row_size" in ds.data_vars:
+        first_var = "row_size"
+    elif "locationIndex" in ds.data_vars:
+        first_var = "locationIndex"
+
+    first_var_attrs = {
+        "row_size": {
+            "long_name": "number of observations at this location",
+            "sample_dimension": "obs",
+        },
+        "locationIndex": {
+            "long_name": "which location this observation is for",
+            "sample_dimension": "locations",
+        },
+    }
+
+    default_variable_attributes = {
+        first_var: first_var_attrs[first_var],
+        "lon": {
+            "standard_name": "longitude",
+            "long_name": "location longitude",
+            "units": "degrees_east",
+            "valid_range": np.array([-180, 180], dtype=float),
+        },
+        "lat": {
+            "standard_name": "latitude",
+            "long_name": "location latitude",
+            "units": "degrees_north",
+            "valid_range": np.array([-90, 90], dtype=float),
+        },
+        "alt": {
+            "standard_name": "height",
+            "long_name": "vertical distance above the surface",
+            "units": "m",
+            "positive": "up",
+            "axis": "Z",
+        },
+        "time": {
+            "standard_name": "time",
+            "long_name": "time of measurement",
+        },
+        "location_id": {},
+        "location_description": {},
+    }
+
+    variable_attributes = {**default_variable_attributes, **variable_attributes}
+
+    for var, attrs in variable_attributes.items():
+        ds[var] = ds[var].assign_attrs(attrs)
+        if var in [
+                "row_size", "locationIndex", "location_id",
+                "location_description"
+        ]:
+            ds[var].encoding["coordinates"] = None
+
+    global_attributes = global_attributes or {}
+
+    date_created = datetime.now().isoformat(" ", timespec="seconds")
+    default_global_attributes = {
+        "date_created": date_created,
+        "featureType": "timeSeries",
+    }
+    global_attributes = {**default_global_attributes, **global_attributes}
+    for key, item in global_attributes.items():
+        ds.attrs[key] = item
+
+    return ds
+
+
+def create_variable_encodings(ds, custom_variable_encodings=None):
+    """
+    Create an encoding dictionary for a dataset, optionally
+    overriding the default encoding or adding additional
+    encoding parameters.
+    New parameters cannot be added to default encoding for
+    a variable, only overridden.
+
+    E.g. if you want to add a "units" encoding to "lon",
+    you should also pass "dtype", "zlib", "complevel",
+    and "_FillValue" if you don't want to lose those.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset.
+    custom_variable_encodings : dict, optional
+        Custom encodings.
+
+    Returns
+    -------
+    ds : xarray.Dataset
+        Dataset with encodings.
+    """
+    if custom_variable_encodings is None:
+        custom_variable_encodings = {}
+
+    if "row_size" in ds.data_vars:
+        first_var = "row_size"
+    elif "locationIndex" in ds.data_vars:
+        first_var = "locationIndex"
+    else:
+        raise ValueError("No row_size or locationIndex in ds."
+                         " Cannot determine if indexed or ragged")
+
+    # default encodings for coordinates and row_size
+    default_encoding = {
+        first_var: {
+            "dtype": "int64",
+        },
+        "lon": {
+            "dtype": "float32",
+        },
+        "lat": {
+            "dtype": "float32",
+        },
+        "alt": {
+            "dtype": "float32",
+        },
+        "location_id": {
+            "dtype": "int64",
+        },
+        # # for some reason setting this throws an error but
+        # # it gets handled properly automatically when left out
+        # "location_description": {
+        #     "dtype": "str",
+        # },
+        "time": {
+            "dtype": "float64",
+            "units": "days since 1900-01-01 00:00:00",
+        },
+    }
+
+    for _, var_encoding in default_encoding.items():
+        var_encoding["_FillValue"] = None
+        var_encoding["zlib"] = True
+        var_encoding["complevel"] = 4
+
+    default_encoding.update({
+        var: {
+            "dtype": dtype,
+            "zlib": bool(np.issubdtype(dtype, np.number)),
+            "complevel": 4,
+            "_FillValue": None,
+        }
+        for var, dtype in ds.dtypes.items()
+    })
+
+    encoding = {**default_encoding, **custom_variable_encodings}
+
+    return encoding
+
+class RaggedXArrayCellIOBase(ABC):
     """
     Base class for ascat xarray IO classes
     """
+
+    # @classmethod
+    # def __init_subclass__(cls):
+    #     required_class_attrs = [
+    #         "grid_info",
+    #         "grid",
+    #         "grid_cell_size",
+    #         "fn_format",
+    #     ]
+    #     for var in required_class_attrs:
+    #         if not hasattr(cls, var):
+    #             raise NotImplementedError(
+    #                 f"{cls.__name__} must define required class attribute {var}"
+    #             )
 
     def __init__(self, source, engine, **kwargs):
         self.source = source
@@ -96,10 +323,14 @@ class RaggedXArrayCellIOBase:
         # if filename is a generator, use open_mfdataset
         # else use open_dataset
         if isinstance(source, list):
+            # TODO concat_dim should probably be determined in child class
+            # In fact, all the dim names should
             self._ds = xr.open_mfdataset(source,
                                          engine=engine,
                                          decode_cf=False,
                                          mask_and_scale=False,
+                                         concat_dim="time",
+                                         combine="nested",
                                          **kwargs)
         elif isinstance(source, (str, Path)):
             self._ds = xr.open_dataset(source,
@@ -136,6 +367,7 @@ class RaggedXArrayCellIOBase:
         dates = xr.decode_cf(self._ds[["time"]], mask_and_scale=False)
         return dates.time.min().values, dates.time.max().values
 
+    @abstractmethod
     def read(self, location_id=None, **kwargs):
         """
         Read data from file. Should be implemented by subclasses.
@@ -153,8 +385,9 @@ class RaggedXArrayCellIOBase:
             Dataset containing the data for any specified location_id(s),
             or all location_ids in the file if none are specified.
         """
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def write(self, filename, **kwargs):
         """
         Write data to file. Should be implemented by subclasses.
@@ -166,7 +399,7 @@ class RaggedXArrayCellIOBase:
         **kwargs
             Additional keyword arguments passed to the write method.
         """
-        raise NotImplementedError
+        pass
 
     def _ensure_indexed(self, ds):
         """
@@ -268,7 +501,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         if location_id is not None:
             if isinstance(location_id, (int, np.int64, np.int32)):
                 return self._ensure_indexed(self._read_location_id(location_id))
-            elif isinstance(location_id, list):
+            elif isinstance(location_id, (list, np.ndarray)):
                 return self._ensure_indexed(self._read_location_ids(location_id))
             else:
                 raise ValueError("location_id must be int or list of ints")
@@ -294,9 +527,15 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         out_ds = self._ds
         if ra_type == "contiguous":
             out_ds = self._ensure_contiguous(out_ds)
+
         out_ds = out_ds[self._var_order(out_ds)]
-        out_ds = self._set_attributes(out_ds)
-        encoding = self._create_encoding(out_ds)
+
+        custom_variable_attrs = self._kwargs.get("attributes", None) or self.custom_variable_attrs
+        custom_global_attrs = self._kwargs.get("global_attributes", None) or self.custom_global_attrs
+        out_ds = self._set_attributes(out_ds, custom_variable_attrs, custom_global_attrs)
+
+        custom_variable_encodings = self._kwargs.get("encoding", None) or self.custom_variable_encodings
+        encoding = self._create_variable_encodings(out_ds, custom_variable_encodings)
         out_ds.encoding["unlimited_dims"] = []
 
         out_ds.to_netcdf(filename, encoding=encoding, **kwargs)
@@ -326,18 +565,11 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
 
         return ds
 
-    def _var_order(self, ds):
+    @staticmethod
+    def _var_order(ds):
         """
-        Returns a reasonable variable order for a ragged array dataset,
-        based on that used in existing datasets.
-
-        Puts the count/index variable first depending on the ragged array type,
-        then lon, lat, alt, location_id, location_description, and time,
-        followed by the rest of the variables in the dataset.
-
-        If this order is not appropriate for a particular dataset,
-        the user can always reorder the variables manually or override
-        this method in a child class specific to their dataset.
+        A wrapper for var_order, which can be overridden in a child class
+        if different logic for this function is needed.
 
         Parameters
         ----------
@@ -346,132 +578,42 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
 
         Returns
         -------
-        order : list of str
-            List of dataset variable names in the determined order.
+        list of str
+            List of dataset variable names in the determined order (result of var_order)
         """
-        if "row_size" in ds.data_vars:
-            first_var = "row_size"
-        elif "locationIndex" in ds.data_vars:
-            first_var = "locationIndex"
-        else:
-            raise ValueError("No row_size or locationIndex in ds."
-                             + "Cannot determine if indexed or ragged")
-        order = [
-            first_var,
-            "lon",
-            "lat",
-            "alt",
-            "location_id",
-            "location_description",
-            "time",
-        ]
-        order.extend([v for v in ds.data_vars if v not in order])
 
-        return order
+        return var_order(ds)
 
     @staticmethod
-    def _set_attributes(ds, attributes=None):
+    def _set_attributes(ds,variable_attributes=None):
         """
-        TODO: ideally this should be gotten from the ioclass used to write the dataset (or performed there)
-        Set default attributes for a contiguous or indexed ragged dataset.
-
+        A wrapper for xarray_io.set_attributes, which can be overriden in a child class
+        if different logic for this function is needed.
         Parameters
         ----------
         ds : xarray.Dataset, Path
             Dataset.
-        attributes : dict, optional
-            Attributes.
+       variable_attributes : dict, optional
+           variable_attributes.
 
         Returns
         -------
         ds : xarray.Dataset
-            Dataset with attributes.
+            Dataset withvariable_attributes.
         """
-        # needed to set custom attributes - but do we need that here?
-        attributes = attributes or {}
-        # attributes = {}
-
-        if "row_size" in ds.data_vars:
-            first_var = "row_size"
-        elif "locationIndex" in ds.data_vars:
-            first_var = "locationIndex"
-
-        first_var_attrs = {
-            "row_size": {
-                "long_name": "number of observations at this location",
-                "sample_dimension": "obs",
-            },
-            "locationIndex": {
-                "long_name": "which location this observation is for",
-                "sample_dimension": "locations",
-            },
-        }
-
-        default_attrs = {
-            first_var: first_var_attrs[first_var],
-            "lon": {
-                "standard_name": "longitude",
-                "long_name": "location longitude",
-                "units": "degrees_east",
-                "valid_range": np.array([-180, 180], dtype=float),
-            },
-            "lat": {
-                "standard_name": "latitude",
-                "long_name": "location latitude",
-                "units": "degrees_north",
-                "valid_range": np.array([-90, 90], dtype=float),
-            },
-            "alt": {
-                "standard_name": "height",
-                "long_name": "vertical distance above the surface",
-                "units": "m",
-                "positive": "up",
-                "axis": "Z",
-            },
-            "time": {
-                "standard_name": "time",
-                "long_name": "time of measurement",
-            },
-            "location_id": {},
-            "location_description": {},
-        }
-
-        attributes = {**default_attrs, **attributes}
-
-        for var, attrs in attributes.items():
-            ds[var] = ds[var].assign_attrs(attrs)
-            if var in [
-                    "row_size", "locationIndex", "location_id",
-                    "location_description"
-            ]:
-                ds[var].encoding["coordinates"] = None
-
-        date_created = datetime.now().isoformat(" ", timespec="seconds")
-        ds.attrs["date_created"] = date_created
-
-        return ds
+        return set_attributes(ds,variable_attributes)
 
     @staticmethod
-    def _create_encoding(ds, custom_encoding=None):
+    def _create_variable_encodings(ds, custom_variable_encodings=None):
         """
-        TODO: ideally this should be defined in one of the levels of parent class,
-        and then passed a custom encoding from the metadata... or something
-
-        Create an encoding dictionary for a dataset, optionally
-        overriding the default encoding or adding additional
-        encoding parameters.
-        New parameters cannot be added to default encoding for
-        a variable, only overridden.
-
-        E.g. if you want to add a "units" encoding to "lon",
-        you should also pass "dtype", "zlib", "complevel",
-        and "_FillValue" if you don't want to lose those.
+        A wrapper for xarray_io.create_variable_encodings. This can be overridden in a child class
+        if different logic for this function is needed.
 
         Parameters
         ----------
         ds : xarray.Dataset
             Dataset.
-        custom_encoding : dict, optional
+        custom_variable_encodings : dict, optional
             Custom encodings.
 
         Returns
@@ -479,63 +621,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         ds : xarray.Dataset
             Dataset with encodings.
         """
-        if custom_encoding is None:
-            custom_encoding = {}
-
-        if "row_size" in ds.data_vars:
-            first_var = "row_size"
-        elif "locationIndex" in ds.data_vars:
-            first_var = "locationIndex"
-        else:
-            raise ValueError("No row_size or locationIndex in ds."
-                             " Cannot determine if indexed or ragged")
-
-        # default encodings for coordinates and row_size
-        default_encoding = {
-            first_var: {
-                "dtype": "int64",
-            },
-            "lon": {
-                "dtype": "float32",
-            },
-            "lat": {
-                "dtype": "float32",
-            },
-            "alt": {
-                "dtype": "float32",
-            },
-            "location_id": {
-                "dtype": "int64",
-            },
-            # # for some reason setting this throws an error but
-            # # it gets handled properly automatically when left out
-            # "location_description": {
-            #     "dtype": "str",
-            # },
-            "time": {
-                "dtype": "float64",
-                "units": "days since 1900-01-01 00:00:00",
-            },
-        }
-
-        for _, var_encoding in default_encoding.items():
-            var_encoding["_FillValue"] = None
-            var_encoding["zlib"] = True
-            var_encoding["complevel"] = 4
-
-        default_encoding.update({
-            var: {
-                "dtype": dtype,
-                "zlib": bool(np.issubdtype(dtype, np.number)),
-                "complevel": 4,
-                "_FillValue": None,
-            }
-            for var, dtype in ds.dtypes.items()
-        })
-
-        encoding = {**default_encoding, **custom_encoding}
-
-        return encoding
+        return create_variable_encodings(ds, custom_variable_encodings)
 
 
 class SwathIOBase(ABC):
@@ -561,6 +647,22 @@ class SwathIOBase(ABC):
                 raise NotImplementedError(
                     f"{cls.__name__} must define required class attribute {var}"
                 )
+
+    @classmethod
+    def chron_files(cls, path):
+        """
+        Return a ChronFiles object for this class type based on a path.
+        """
+        return ChronFiles(
+            path,
+            cls,
+            cls.fn_pattern,
+            cls.sf_pattern,
+            None,
+            True,
+            cls.fn_read_fmt,
+            cls.sf_read_fmt,
+        )
 
     @staticmethod
     @abstractmethod
@@ -588,14 +690,14 @@ class SwathIOBase(ABC):
         self.source = source
         self.engine = engine
         self._cell_vals = None
-        # if filename is a generator, use open_mfdataset
+
+        # if filename is an iterable, use open_mfdataset
         # else use open_dataset
         chunks = kwargs.pop("chunks", None)
         if isinstance(source, list):
             self._ds = xr.open_mfdataset(source,
                                          engine=engine,
                                          decode_cf=False,
-                                         # preprocess=self._preprocess,
                                          concat_dim="obs",
                                          combine="nested",
                                          chunks=(chunks or "auto"),
@@ -603,7 +705,7 @@ class SwathIOBase(ABC):
             chunks = None
 
         elif isinstance(source, (str, Path)):
-            self._ds = xr.open_dataset(source, engine=engine, **kwargs, decode_cf=False)
+            self._ds = xr.open_dataset(source, engine=engine, **kwargs, decode_cf=False, mask_and_scale=False)
 
         elif isinstance(source, xr.Dataset):
             self._ds = source
@@ -621,11 +723,17 @@ class SwathIOBase(ABC):
         return xr.decode_cf(self._ds, mask_and_scale=False)
 
     def write(self, filename, mode="w", **kwargs):
+        out_ds = self._ds
+        out_ds = out_ds[self._var_order(out_ds)]
+        out_ds = self._set_attributes(out_ds)
+        out_encoding = self._create_variable_encodings(out_ds)
+        # out_ds.encoding["unlimited_dims"] = ["obs"]
+
         if mode == "a":
             if os.path.exists(filename):
-                append_to_netcdf(filename, self._ds, unlimited_dims=["obs"])
+                append_to_netcdf(filename, out_ds, unlimited_dims=["obs"])
                 return
-        self._ds.to_netcdf(filename, unlimited_dims=["obs"], **kwargs)
+        out_ds.to_netcdf(filename, unlimited_dims=["obs"], encoding=out_encoding, **kwargs)
 
     def _read_location_ids(self, location_ids):
         """
@@ -645,12 +753,70 @@ class SwathIOBase(ABC):
         """
         if self._cell_vals is None:
             self._cell_vals = self.grid.gpi2cell(self._ds.location_id.values)
-        idxs = np.where(self.cell_vals == cell)[0]
+        idxs = np.where(self._cell_vals == cell)[0]
         if not np.any(idxs):
             return None
 
         ds = self._ds.isel(obs=idxs)
         return ds
+
+    @staticmethod
+    def _var_order(ds):
+        """
+        A wrapper for var_order, which can be overridden in a child class
+        if different logic for this function is needed.
+
+        Parameters
+        ----------
+        ds : xarray.Dataset
+            Dataset.
+
+        Returns
+        -------
+        list of str
+            List of dataset variable names in the determined order (result of var_order)
+        """
+
+        return var_order(ds)
+
+    @staticmethod
+    def _set_attributes(ds, variable_attributes=None, global_attributes=None):
+        """
+        A wrapper for xarray_io.set_attributes, which can be overriden in a child class
+        if different logic for this function is needed.
+        Parameters
+        ----------
+        ds : xarray.Dataset, Path
+            Dataset.
+        variable_attributes : dict, optional
+           variable_attributes.
+
+        Returns
+        -------
+        ds : xarray.Dataset
+            Dataset with variable_attributes and global_attributes.
+        """
+        return set_attributes(ds,variable_attributes, global_attributes)
+
+    @staticmethod
+    def _create_variable_encodings(ds, custom_variable_encodings=None):
+        """
+        A wrapper for xarray_io.create_variable_encodings. This can be overridden in a child class
+        if different logic for this function is needed.
+
+        Parameters
+        ----------
+        ds : xarray.Dataset
+            Dataset.
+        custom_variable_encodings : dict, optional
+            Custom encodings.
+
+        Returns
+        -------
+        ds : xarray.Dataset
+            Dataset with encodings.
+        """
+        return create_variable_encodings(ds, custom_variable_encodings)
 
     def __enter__(self):
         """
@@ -679,14 +845,19 @@ class CellGridCache:
     def __init__(self):
         self.grids = {}
 
-    def fetch_or_store(self, key, cell_grid_type, *args):
+    def fetch_or_store(self, key, cell_grid_type=None, *args):
         """
-        Get a CellGrid object with the specified arguments.
+        Fetch a CellGrid object from the cache given a key,
+        or store a new one.
 
         Parameters
         ----------
         """
         if key not in self.grids:
+            if cell_grid_type is None:
+                raise ValueError("Key not in cache, please specify cell_grid_type and arguments"
+                                 " to create a new CellGrid object and add it to the cache under"
+                                 " the given key.")
             self.grids[key] = dict()
             self.grids[key]["grid"] = cell_grid_type(*args)
             self.grids[key]["possible_cells"] = self.grids[key]["grid"].get_cells()
@@ -711,6 +882,9 @@ class AscatH129Cell(AscatNetCDFCellBase):
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, **kwargs)
+        self.custom_variable_attrs = None
+        self.custom_global_attrs = None
+        self.custom_variable_encodings = None
 
 
 class AscatSIG0Cell6250m(AscatNetCDFCellBase):
@@ -724,10 +898,13 @@ class AscatSIG0Cell6250m(AscatNetCDFCellBase):
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, **kwargs)
+        self.custom_variable_attrs = None
+        self.custom_global_attrs = None
+        self.custom_variable_encodings = None
 
 
 class AscatSIG0Cell12500m(AscatNetCDFCellBase):
-    grid_info = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)
+    grid_info = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)
     grid = grid_info["grid"]
     grid_cell_size = 5
     fn_format = "{:04d}.nc"
@@ -737,6 +914,9 @@ class AscatSIG0Cell12500m(AscatNetCDFCellBase):
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, **kwargs)
+        self.custom_variable_attrs = None
+        self.custom_global_attrs = None
+        self.custom_variable_encodings = None
 
 
 class AscatH129Swath(SwathIOBase):
@@ -792,7 +972,7 @@ class AscatH129Swath(SwathIOBase):
 
 class AscatSIG0Swath6250m(SwathIOBase):
     """
-    Class for reading and writing ASCAT sigma0 swath data.
+    Class for reading ASCAT sigma0 swath data and writing it to cells.
     """
     fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-6.25_C_LIIB_*_*_{date}____*.nc"
     sf_pattern = {"year_folder": "{year}"}
@@ -973,18 +1153,18 @@ class AscatSIG0Swath12500m(SwathIOBase):
         super().__init__(filename, "netcdf4", **kwargs)
 
 
-ascat_io_classes = {
-    "H129": {
-        # "cell": ASCAT_H129_Cell,
-        "cell": AscatH129Cell,
-        "swath": AscatH129Swath,
-    },
-    "SIG0_6.25": {
-        "cell": AscatSIG0Cell6250m,
-        "swath": AscatSIG0Swath6250m,
-    },
-    "SIG0_12.5": {
-        "cell": AscatSIG0Cell12500m,
-        "swath": AscatSIG0Swath12500m,
-    },
-}
+# ascat_io_classes = {
+#     "H129": {
+#         # "cell": ASCAT_H129_Cell,
+#         "cell": AscatH129Cell,
+#         "swath": AscatH129Swath,
+#     },
+#     "SIG0_6.25": {
+#         "cell": AscatSIG0Cell6250m,
+#         "swath": AscatSIG0Swath6250m,
+#     },
+#     "SIG0_12.5": {
+#         "cell": AscatSIG0Cell12500m,
+#         "swath": AscatSIG0Swath12500m,
+#     },
+# }
