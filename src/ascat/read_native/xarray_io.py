@@ -37,6 +37,22 @@ import numpy as np
 from fibgrid.realization import FibGrid
 from ascat.file_handling import ChronFiles
 
+int8_nan = np.iinfo(np.int8).max
+uint8_nan = np.iinfo(np.uint8).max
+int16_nan = np.iinfo(np.int16).max
+uint8_nan = np.iinfo(np.uint8).max
+int32_nan = np.iinfo(np.int32).max
+int64_nan = np.iinfo(np.int64).max
+float32_nan = -999999.
+dtype_to_nan = {np.dtype('int8'): int8_nan,
+                np.dtype('uint8'): uint8_nan,
+                np.dtype('float32'): float32_nan,
+                np.dtype('int16'): int16_nan,
+                np.dtype('uint16'): uint8_nan,
+                np.dtype('int32'): int32_nan,
+                np.dtype('int64'): int64_nan,
+                np.dtype('<U1'): None,
+                np.dtype('O'): None,}
 
 # By @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
 def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
@@ -280,7 +296,8 @@ def create_variable_encodings(ds, custom_variable_encodings=None):
     }
 
     for _, var_encoding in default_encoding.items():
-        var_encoding["_FillValue"] = None
+        if var_encoding["dtype"] != "int64":
+            var_encoding["_FillValue"] = None
         var_encoding["zlib"] = True
         var_encoding["complevel"] = 4
 
@@ -289,9 +306,10 @@ def create_variable_encodings(ds, custom_variable_encodings=None):
             "dtype": dtype,
             "zlib": bool(np.issubdtype(dtype, np.number)),
             "complevel": 4,
-            "_FillValue": None,
+            "_FillValue": dtype_to_nan[dtype],
         }
         for var, dtype in ds.dtypes.items()
+        if var not in default_encoding
     })
 
     encoding = {**default_encoding, **custom_variable_encodings}
@@ -498,15 +516,23 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         super().__init__(filename, "netcdf4", **kwargs)
 
     def read(self, location_id=None, **kwargs):
+        mask_and_scale = kwargs.pop("mask_and_scale", True)
+
         if location_id is not None:
             if isinstance(location_id, (int, np.int64, np.int32)):
-                return self._ensure_indexed(self._read_location_id(location_id))
+                return xr.decode_cf(
+                    self._ensure_indexed(self._read_location_id(location_id)),
+                    mask_and_scale=mask_and_scale,
+                )
             elif isinstance(location_id, (list, np.ndarray)):
-                return self._ensure_indexed(self._read_location_ids(location_id))
+                return xr.decode_cf(
+                    self._ensure_indexed(self._read_location_ids(location_id)),
+                    mask_and_scale=mask_and_scale,
+                )
             else:
                 raise ValueError("location_id must be int or list of ints")
 
-        return xr.decode_cf(self._ds, mask_and_scale=False)
+        return xr.decode_cf(self._ds, mask_and_scale=mask_and_scale)
 
     def write(self, filename, ra_type="contiguous", **kwargs):
         """
@@ -538,7 +564,12 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         encoding = self._create_variable_encodings(out_ds, custom_variable_encodings)
         out_ds.encoding["unlimited_dims"] = []
 
+        for var, var_encoding in encoding.items():
+            if "_FillValue" in var_encoding and "_FillValue" in out_ds[var].attrs:
+                del out_ds[var].attrs["_FillValue"]
+
         out_ds.to_netcdf(filename, encoding=encoding, **kwargs)
+        # out_ds.to_netcdf(filename,  **kwargs)
 
     def _read_location_id(self, location_id):
         """
@@ -585,7 +616,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         return var_order(ds)
 
     @staticmethod
-    def _set_attributes(ds,variable_attributes=None):
+    def _set_attributes(ds, variable_attributes=None, global_attributes=None):
         """
         A wrapper for xarray_io.set_attributes, which can be overriden in a child class
         if different logic for this function is needed.
@@ -601,7 +632,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         ds : xarray.Dataset
             Dataset withvariable_attributes.
         """
-        return set_attributes(ds,variable_attributes)
+        return set_attributes(ds, variable_attributes, global_attributes)
 
     @staticmethod
     def _create_variable_encodings(ds, custom_variable_encodings=None):
@@ -697,30 +728,47 @@ class SwathIOBase(ABC):
         if isinstance(source, list):
             self._ds = xr.open_mfdataset(source,
                                          engine=engine,
+                                         preprocess=self._preprocess,
                                          decode_cf=False,
                                          concat_dim="obs",
                                          combine="nested",
                                          chunks=(chunks or "auto"),
+                                         combine_attrs=self.combine_attributes,
                                          **kwargs)
             chunks = None
 
         elif isinstance(source, (str, Path)):
             self._ds = xr.open_dataset(source, engine=engine, **kwargs, decode_cf=False, mask_and_scale=False)
+            self._ds["global_attributes_flag"] = 1
 
         elif isinstance(source, xr.Dataset):
             self._ds = source
+            self._ds["global_attributes_flag"] = 1
 
         self._kwargs = kwargs
 
         if chunks is not None:
             self._ds = self._ds.chunk(chunks)
 
-    def read(self, cell=None, location_id=None):
+    def read(self, cell=None, location_id=None, mask_and_scale=True):
+        """
+        Returns data for a cell or location_id if specified, or for the entire
+        swath file if not specified.
+
+        Parameters
+        ----------
+        cell : int, optional
+            Cell to read data for.
+        location_id : int, optional
+            Location id to read data for.
+        mask_and_scale : bool, optional
+            Whether to mask and scale the data. Default is True.
+        """
         if location_id is not None:
             return self._read_location_ids(location_id)
         if cell is not None:
             return self._read_cell(cell)
-        return xr.decode_cf(self._ds, mask_and_scale=False)
+        return xr.decode_cf(self._ds, mask_and_scale=mask_and_scale)
 
     def write(self, filename, mode="w", **kwargs):
         out_ds = self._ds
@@ -818,6 +866,79 @@ class SwathIOBase(ABC):
         """
         return create_variable_encodings(ds, custom_variable_encodings)
 
+    @staticmethod
+    def _preprocess(ds):
+        """
+        To use custom logic for combining attributes in xarray, you need to write a function
+        that takes a list of attribute dictionaries as an argument.
+        """
+        ds.attrs["global_attributes_flag"] = 1
+        return ds
+
+    @staticmethod
+    def combine_attributes(attrs_list, context):
+        """
+        Decides which attributes to keep when merging swath files.
+
+        Parameters
+        ----------
+        attrs_list : list of dict
+            List of attributes dictionaries.
+        context : None
+            This currently is None, but will eventually be passed information about
+            the context in which this was called.
+            (see https://github.com/pydata/xarray/issues/6679#issuecomment-1150946521)
+
+        Returns
+        -------
+        """
+        out_attrs = dict()
+
+        # we only really want to pass spacecraft from global attributes
+        if "global_attributes_flag" in attrs_list[0].keys():
+            spacecraft = None
+            for i, attrs in enumerate(attrs_list):
+            # we just grab the first matching value here, no need to iterate through the entire list
+            # Spacecraft is totally separate from missing_value since it's a global attribute
+            # Eventually if this needs to do more, this logic will need to be reconsidered
+                if "spacecraft" in attrs.keys():
+                    if spacecraft is None:
+                        spacecraft = attrs["spacecraft"]
+                        continue
+                    elif spacecraft == attrs["spacecraft"]:
+                        continue
+                    else:
+                        raise ValueError("Spacecraft mismatch in swath files. Cannot stack."
+                                        f"\n(file index {i} in list of swath files being"
+                                        " processed did not match previous swath files)")
+            if spacecraft is not None:
+                out_attrs["spacecraft"] = spacecraft
+                return out_attrs
+            return None
+
+        else:
+            variable_attrs = attrs_list
+            # this code taken straight from xarray/core/merge.py
+            # Replicates the functionality of "drop_conflicts"
+            # but just for variable attributes
+            result = {}
+            dropped_keys = set()
+            for attrs in variable_attrs:
+                result.update(
+                    {
+                        key: value
+                        for key, value in attrs.items()
+                        if key not in result and key not in dropped_keys
+                    }
+                )
+                result = {
+                    key: value
+                    for key, value in result.items()
+                    if key not in attrs or xr.core.utils.equivalent(attrs[key], value)
+                }
+                dropped_keys |= {key for key in attrs if key not in result}
+            return result
+
     def __enter__(self):
         """
         Context manager initialization.
@@ -829,6 +950,7 @@ class SwathIOBase(ABC):
         Exit the runtime context related to this object.
         """
         self.close()
+
 
     def close(self):
         """

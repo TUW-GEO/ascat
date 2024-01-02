@@ -46,10 +46,6 @@ from ascat.read_native.xarray_io import AscatH129Swath
 from ascat.read_native.xarray_io import AscatSIG0Swath6250m
 from ascat.read_native.xarray_io import AscatSIG0Swath12500m
 
-# int8_nan = np.iinfo(np.int8).max
-# int64_nan = np.iinfo(np.int64).min
-# NC_FILL_FLOAT = np.float32(9969209968386869046778552952102584320)
-
 
 class CellFileCollectionStack():
     """
@@ -217,7 +213,7 @@ class CellFileCollectionStack():
 
     def merge_and_write(self, out_dir, cells=None, out_cell_size=None, processes=8, **kwargs):
         """
-        Merge the data in all the collection by cell, and write each cell to disk.
+        Merge the data in all the collections by cell, and write each cell to disk.
 
         Parameters
         ----------
@@ -342,7 +338,7 @@ class CellFileCollectionStack():
                     for cell in search_cells]
 
         data = [ds for ds in data if ds is not None]
-        # print([self._only_locations(ds) for ds in data])
+
         if data == []:
             return None
 
@@ -369,7 +365,6 @@ class CellFileCollectionStack():
             coords="minimal",
             combine_attrs="drop_conflicts",
         )
-
 
         return merged_ds
 
@@ -500,6 +495,7 @@ class CellFileCollectionStack():
                 ds["location_id"].values[ds["locationIndex"]],
                 sorter=location_sorter,
             )]
+            ds = ds.drop_dims("locations")
 
         # if not, we just have a single location, and logic is different
         else:
@@ -507,10 +503,9 @@ class CellFileCollectionStack():
                 location_vars["location_id"].values,
                 np.repeat(ds["location_id"].values, ds["locationIndex"].size),
                 sorter=location_sorter,
-            )],
+            )]
 
         ds["locationIndex"] = ("obs", locationIndex)
-        ds = ds.drop_dims("locations")
 
         # Next, we put the locations-dimensional variables on the dataset,
         # and set them as coordinates.
@@ -676,7 +671,11 @@ class CellFileCollection:
     def create_cell_lookup(self, out_cell_size):
         """
         Create a lookup table to map the new cell grid to the old cell grid,
-        and store it in self.cell_lut
+        and store it in self.cell_lut.
+
+        Format of the table is a dictionary, where the keys are the cell numbers
+        in the new cell-size grid, and the values are the cell numbers in the
+        old cell-size grid which the new cell overlaps.
 
         Parameters
         ----------
@@ -688,6 +687,9 @@ class CellFileCollection:
             new_grid = self.grid.to_cell_grid(out_cell_size)
             old_cells = self.grid.arrcell
             new_cells = new_grid.arrcell
+            # old_cells and new_cells are arrays of the same length, with each element
+            # corresponding to a grid point in self.grid, its value representing the
+            # cell that grid point is in.
             self.cell_lut = {new_cell:
                              np.unique(old_cells[np.where(new_cells == new_cell)[0]])
                              for new_cell in np.unique(new_cells)}
@@ -1046,6 +1048,7 @@ class SwathFileCollection:
             if "missing_value" in ds[var].attrs and "_FillValue" not in ds[var].attrs:
                 ds[var].attrs["_FillValue"] = ds[var].attrs.get("missing_value")
 
+        ds = ds.sortby(["locationIndex", "time"])
         # dedupe
         dupl = np.insert(
             (abs(ds["time"].values[1:] -
@@ -1059,11 +1062,16 @@ class SwathFileCollection:
 
     def _write_cell_ds(self, ds, out_dir, cell, dupe_window=None):
         """
-        Write a cell dataset to a file.
+        Write a cell out_dsset to a file.
         """
         fname = self.ioclass.cell_fn_format.format(cell)
 
         out_ds = xr.decode_cf(self._cell_data_as_indexed_ra(ds, cell, dupe_window))
+        for var in self.ts_dtype.names:
+            if var in out_ds.variables:
+                if out_ds[var].dtype != self.ts_dtype[var]:
+                    out_ds[var] = out_ds[var].astype(self.ts_dtype[var])
+
         out_ds.attrs["id"] = fname
 
         writer = self.ioclass(out_ds)
@@ -1102,69 +1110,68 @@ class SwathFileCollection:
             for arguments in tqdm.tqdm(args):
                 self._write_cell_ds(*arguments)
 
-    def _combine_attributes(self, attrs_list, context):
-        """
-        Decides which attributes to keep when merging swath files.
+    # def _combine_attributes(self, attrs_list, context):
+    #     """
+    #     Decides which attributes to keep when merging swath files.
 
-        Parameters
-        ----------
-        attrs_list : list of dict
-            List of attributes dictionaries.
-        context : None
-            This currently is None, but will eventually be passed information about
-            the context in which this was called.
-            (see https://github.com/pydata/xarray/issues/6679#issuecomment-1150946521)
+    #     Parameters
+    #     ----------
+    #     attrs_list : list of dict
+    #         List of attributes dictionaries.
+    #     context : None
+    #         This currently is None, but will eventually be passed information about
+    #         the context in which this was called.
+    #         (see https://github.com/pydata/xarray/issues/6679#issuecomment-1150946521)
 
-        Returns
-        -------
-        """
-        out_attrs = dict()
+    #     Returns
+    #     -------
+    #     """
+    #     out_attrs = dict()
 
-        # we only really want to pass spacecraft from global attributes
-        if "global_attributes_flag" in attrs_list[0].keys():
-            spacecraft = None
-            for i, attrs in enumerate(attrs_list):
-            # we just grab the first matching value here, no need to iterate through the entire list
-            # Spacecraft is totally separate from missing_value since it's a global attribute
-            # Eventually if this needs to do more, this logic will need to be reconsidered
-                if "spacecraft" in attrs.keys():
-                    if spacecraft is None:
-                        spacecraft = attrs["spacecraft"]
-                        continue
-                    elif spacecraft == attrs["spacecraft"]:
-                        continue
-                    else:
-                        raise ValueError("Spacecraft mismatch in swath files. Cannot stack."
-                                        f"\n(file index {i} in list of swath files being"
-                                        " processed did not match previous swath files)")
-            self.handled_global_attrs = 1
-            if spacecraft is not None:
-                out_attrs["spacecraft"] = spacecraft
-                return out_attrs
-            return None
+    #     # we only really want to pass spacecraft from global attributes
+    #     if "global_attributes_flag" in attrs_list[0].keys():
+    #         spacecraft = None
+    #         for i, attrs in enumerate(attrs_list):
+    #         # we just grab the first matching value here, no need to iterate through the entire list
+    #         # Spacecraft is totally separate from missing_value since it's a global attribute
+    #         # Eventually if this needs to do more, this logic will need to be reconsidered
+    #             if "spacecraft" in attrs.keys():
+    #                 if spacecraft is None:
+    #                     spacecraft = attrs["spacecraft"]
+    #                     continue
+    #                 elif spacecraft == attrs["spacecraft"]:
+    #                     continue
+    #                 else:
+    #                     raise ValueError("Spacecraft mismatch in swath files. Cannot stack."
+    #                                     f"\n(file index {i} in list of swath files being"
+    #                                     " processed did not match previous swath files)")
+    #         if spacecraft is not None:
+    #             out_attrs["spacecraft"] = spacecraft
+    #             return out_attrs
+    #         return None
 
-        else:
-            variable_attrs = attrs_list
-            # this code taken straight from xarray/core/merge.py
-            # Replicates the functionality of "drop_conflicts"
-            # but just for variable attributes
-            result = {}
-            dropped_keys = set()
-            for attrs in variable_attrs:
-                result.update(
-                    {
-                        key: value
-                        for key, value in attrs.items()
-                        if key not in result and key not in dropped_keys
-                    }
-                )
-                result = {
-                    key: value
-                    for key, value in result.items()
-                    if key not in attrs or xr.core.utils.equivalent(attrs[key], value)
-                }
-                dropped_keys |= {key for key in attrs if key not in result}
-            return result
+    #     else:
+    #         variable_attrs = attrs_list
+    #         # this code taken straight from xarray/core/merge.py
+    #         # Replicates the functionality of "drop_conflicts"
+    #         # but just for variable attributes
+    #         result = {}
+    #         dropped_keys = set()
+    #         for attrs in variable_attrs:
+    #             result.update(
+    #                 {
+    #                     key: value
+    #                     for key, value in attrs.items()
+    #                     if key not in result and key not in dropped_keys
+    #                 }
+    #             )
+    #             result = {
+    #                 key: value
+    #                 for key, value in result.items()
+    #                 if key not in attrs or xr.core.utils.equivalent(attrs[key], value)
+    #             }
+    #             dropped_keys |= {key for key in attrs if key not in result}
+    #         return result
 
     def stack(self, fnames, out_dir, mode="w", processes=1, buffer_memory_mb=None, dupe_window=None):
         """
@@ -1214,8 +1221,7 @@ class SwathFileCollection:
         total_swaths = len(fnames)
         for iter, f in enumerate(fnames):
             self._open(f)
-            ds = self.fid.read()
-            ds.attrs["global_attributes_flag"] = 1
+            ds = self.fid.read(mask_and_scale=False)
             # buffer_size  = process.memory_info().rss / 1e6
             print(f"Filling swaths buffer... {buffer_size:.2f}MB/{self.max_buffer_memory_mb:.2f}MB", end="\r")
             buffer_size += ds.nbytes / 1e6
@@ -1225,7 +1231,7 @@ class SwathFileCollection:
                 combined_ds = self.process(xr.combine_nested(buffer,
                                                              concat_dim="obs",
                                                              # combine_attrs="drop_conflicts",
-                                                             combine_attrs=self._combine_attributes
+                                                             combine_attrs=self.ioclass.combine_attributes
                                                              ))
                 print(f"Processed {iter}/{total_swaths} swath files. Dumping to cell files...")
                 self._parallel_write_cells(combined_ds, out_dir, processes=processes, dupe_window=dupe_window)
@@ -1242,7 +1248,7 @@ class SwathFileCollection:
                 xr.combine_nested(buffer,
                                   concat_dim="obs",
                                   # combine_attrs="drop_conflicts"
-                                  combine_attrs=self._combine_attributes
+                                  combine_attrs=self.ioclass.combine_attributes
                                   )
             )
             print(f"Processed {total_swaths}/{total_swaths} swath files. Dumping to cell files...")
@@ -1269,12 +1275,10 @@ class SwathFileCollection:
         # if any beam has backscatter data for a record, the record is valid. Drop
         # observations that don't have any backscatter data.
         if data["obs"].size > 0:
-            # # you can use dropna if you are doing mask_and_scale at an earlier point.
-            # # otherwise, you need to use sel and compare to the missing_value
-            # data = data.dropna(dim="obs", how="all", subset=["backscatter"])
             data = data.sel(
                 obs=~np.all(
                     data["backscatter"] == data["backscatter"].attrs["missing_value"],
+                    # np.isnan(data["backscatter"]),
                     axis=1
                 )
             )
@@ -1286,13 +1290,14 @@ class SwathFileCollection:
                 if var[:-4] in self.beams_vars:
                     ending = var[-3:]
                     data[var] = data.sel(beams=beam_idx[ending])[var[:-4]]
-                # if data[var].dtype != ts_dtypes[var]:
-                #     data[var] = data[var].astype(ts_dtypes[var])
-                #     data[var].attrs["dtype"] = ts_dtypes[var]
-                #     data[var].attrs["_FillValue"] = dtype_to_nan(ts_dtypes[var])
+                # if var in data.variables:
+                #     if data[var].dtype != self.ts_dtype[var]:
+                #         data[var] = data[var].astype(self.ts_dtype[var])
+                    # data[var].attrs["dtype"] = self.ts_dtype[var]
+                    # data[var].attrs["_FillValue"] = dtype_to_nan[self.ts_dtype[var]]
+                    # data[var].attrs["missing_value"] = data[var].attrs["_FillValue"]
 
             # drop the variables on the beams dimension
-            # data = data.drop_vars(["backscatter", "incidence_angle", "azimuth_angle", "kp"])
             data = data.drop_dims("beams")
             # add a variable for the satellite id
             sat = data.attrs["spacecraft"][-1].lower()
@@ -1361,8 +1366,7 @@ class SwathFileCollection:
 
         return data
 
-
-    def read(self, start_dt, end_dt, cell=None, location_id=None, coords=None, **kwargs):
+    def read(self, start_dt, end_dt, cell=None, location_id=None, coords=None, dupe_window=None, **kwargs):
         """
         Takes either 1 or 2 arguments and calls the correct function
         which is either reading the gpi directly or finding
@@ -1374,16 +1378,22 @@ class SwathFileCollection:
         """
         fnames = self._get_filenames(start_dt, end_dt)
         if cell is not None:
-            data = self._read_cell(fnames, cell)
+            data = self._read_cell(fnames, cell, **kwargs)
+        elif location_id is not None:
+            data = self._read_location_id(location_id, **kwargs)
+        elif coords is not None:
+            pass
+            # data = self._read_lonlat(coords[0], coords[1], **kwargs)
+        elif self._open(fnames):
+            data = self.fid.read(mask_and_scale=False, **kwargs)
+        else:
+            raise ValueError(f"No swath files found in directory {self.path} for the"
+                             f" passed date range: {start_dt} - {end_dt}")
 
+        data = data.set_xindex("time")
+        data = data.sel(time=slice(start_dt, end_dt))
+        data = data.reset_index("time", drop=False)
         return data
-
-    # def flush(self):
-    #     """
-    #     Flush data.
-    #     """
-    #     if self.fid is not None:
-    #         self.fid.flush()
 
     def close(self):
         """
@@ -1818,304 +1828,3 @@ def vrange(starts, stops):
     stops = np.asarray(stops)
     l = stops - starts # Lengths of each range.
     return np.repeat(stops - l.cumsum(), l) + np.arange(l.sum())
-
-
-def var_order(dataset):
-    """
-    Returns a reasonable variable order for a ragged array dataset,
-    based on that used in existing datasets.
-
-    Puts the count/index variable first depending on the ragged array type,
-    then lon, lat, alt, location_id, location_description, and time,
-    followed by the rest of the variables in the dataset.
-
-    Parameters
-    ----------
-    dataset : xarray.Dataset
-        Dataset.
-
-    Returns
-    -------
-    dataset : xarray.Dataset
-        Ordered dataset.
-    """
-    if "row_size" in dataset.data_vars:
-        first_var = "row_size"
-    elif "locationIndex" in dataset.data_vars:
-        first_var = "locationIndex"
-    else:
-        raise ValueError("No row_size or locationIndex in dataset."
-                          + "Cannot determine if indexed or ragged")
-
-    order = [
-        first_var,
-        "lon",
-        "lat",
-        "alt",
-        "location_id",
-        "location_description",
-        "time",
-    ]
-    order.extend([v for v in dataset.data_vars if v not in order])
-
-    return dataset[order]
-
-
-def indexed_to_contiguous(dataset):
-    """
-    Convert an indexed dataset to a contiguous ragged array dataset.
-    Assumes that index variable is named "locationIndex".
-
-    Parameters
-    ----------
-    dataset : xarray.Dataset, Path
-        Dataset.
-
-    Returns
-    -------
-    dataset : xarray.Dataset
-        Converted dataset.
-    """
-    if isinstance(dataset, (str, Path)):
-        with xr.open_dataset(dataset, mask_and_scale=False) as ds:
-            return indexed_to_contiguous(ds)
-
-    if not isinstance(dataset, xr.Dataset):
-        raise TypeError(
-            "dataset must be an xarray.Dataset or a path to a netCDF file")
-    if "locationIndex" not in dataset:
-        raise ValueError("dataset must have a locationIndex variable")
-
-    dataset = dataset.sortby(["locationIndex", "time"])
-
-    # # this alone is simpler than what follows if one can assume that the locationIndex
-    # # is an integer sequence with no gaps
-    # dataset["row_size"] = np.unique(dataset["locationIndex"], return_counts=True)[1]
-
-    idxs, sizes = np.unique(dataset["locationIndex"], return_counts=True)
-    row_size = np.zeros_like(dataset["location_id"].values)
-    row_size[idxs] = sizes
-    dataset["row_size"] = ("locations", row_size)
-
-    dataset = dataset.drop_vars(["locationIndex"])
-
-    return var_order(dataset)
-
-
-def contiguous_to_indexed(dataset):
-    """
-    Convert a contiguous ragged array to an indexed ragged array.
-    Assumes count variable is named "row_size".
-
-    Parameters
-    ----------
-    dataset : xarray.Dataset, Path
-        Dataset.
-
-    Returns
-    -------
-    dataset : xarray.Dataset
-        Converted dataset.
-    """
-    if isinstance(dataset, (str, Path)):
-        with xr.open_dataset(dataset, mask_and_scale=False) as ds:
-            return contiguous_to_indexed(ds)
-
-    if not isinstance(dataset, xr.Dataset):
-        raise TypeError(
-            "dataset must be an xarray.Dataset or a path to a netCDF file")
-    if "row_size" not in dataset:
-        raise ValueError("dataset must have a row_size variable")
-
-    row_size = np.where(dataset["row_size"].values > 0,
-                        dataset["row_size"].values, 0)
-
-    locationIndex = np.repeat(np.arange(row_size.size), row_size)
-    dataset["locationIndex"] = ("obs", locationIndex)
-    dataset = dataset.drop_vars(["row_size"])
-
-    return dataset
-
-
-def dataset_ra_type(dataset):
-    """
-    Determine if a dataset is indexed or contiguous.
-    Assumes count variable for contiguous RA is named "row_size".
-    Assumes index variable for indexed RA is named "locationIndex".
-
-    Parameters
-    ----------
-    dataset : xarray.Dataset, Path
-        Dataset.
-    """
-    if "locationIndex" in dataset:
-        return "indexed"
-    if "row_size" in dataset:
-        return "contiguous"
-
-    raise ValueError("Dataset must have either locationIndex or row_size."
-                     + "Cannot determine if ragged array is indexed or contiguous"
-                     )
-
-
-def set_attributes(dataset, attributes=None):
-    """
-    Set default attributes for a contiguous or indexed ragged dataset.
-
-    Parameters
-    ----------
-    dataset : xarray.Dataset, Path
-        Dataset.
-    attributes : dict, optional
-        Attributes.
-
-    Returns
-    -------
-    dataset : xarray.Dataset
-        Dataset with attributes.
-    """
-    if attributes is None:
-        attributes = {}
-
-    if dataset_ra_type(dataset) == "contiguous":
-        first_var = "row_size"
-    elif dataset_ra_type(dataset) == "indexed":
-        first_var = "locationIndex"
-
-    first_var_attrs = {
-        "row_size": {
-            "long_name": "number of observations at this location",
-            "sample_dimension": "obs",
-        },
-        "locationIndex": {
-            "long_name": "which location this observation is for",
-            "sample_dimension": "locations",
-        },
-    }
-
-    default_attrs = {
-        first_var: first_var_attrs[first_var],
-        "lon": {
-            "standard_name": "longitude",
-            "long_name": "location longitude",
-            "units": "degrees_east",
-            "valid_range": np.array([-180, 180], dtype=float),
-        },
-        "lat": {
-            "standard_name": "latitude",
-            "long_name": "location latitude",
-            "units": "degrees_north",
-            "valid_range": np.array([-90, 90], dtype=float),
-        },
-        "alt": {
-            "standard_name": "height",
-            "long_name": "vertical distance above the surface",
-            "units": "m",
-            "positive": "up",
-            "axis": "Z",
-        },
-        "time": {
-            "standard_name": "time",
-            "long_name": "time of measurement",
-        },
-        "location_id": {},
-        "location_description": {},
-    }
-
-    attributes = {**default_attrs, **attributes}
-
-    for var, attrs in attributes.items():
-        dataset[var] = dataset[var].assign_attrs(attrs)
-        if var in [
-                "row_size", "locationIndex", "location_id",
-                "location_description"
-        ]:
-            dataset[var].encoding["coordinates"] = None
-
-    date_created = datetime.now().isoformat(" ", timespec="milliseconds")[:-6]
-    dataset.attrs["date_created"] = date_created
-
-    return dataset
-
-
-def create_encoding(dataset, custom_encoding=None):
-    """
-    Create an encoding dictionary for a dataset, optionally
-    overriding the default encoding or adding additional
-    encoding parameters.
-    New parameters cannot be added to default encoding for
-    a variable, only overridden.
-
-    E.g. if you want to add a "units" encoding to "lon",
-    you should also pass "dtype", "zlib", "complevel",
-    and "_FillValue" if you don't want to lose those.
-
-    Parameters
-    ----------
-    dataset : xarray.Dataset
-        Dataset.
-    custom_encoding : dict, optional
-        Custom encodings.
-
-    Returns
-    -------
-    dataset : xarray.Dataset
-        Dataset with encodings.
-    """
-    if custom_encoding is None:
-        custom_encoding = {}
-
-    if "row_size" in dataset.data_vars:
-        first_var = "row_size"
-    elif "locationIndex" in dataset.data_vars:
-        first_var = "locationIndex"
-    else:
-        raise ValueError("No row_size or locationIndex in dataset."
-                          + "Cannot determine if indexed or ragged")
-
-    # default encodings for coordinates and row_size
-    default_encoding = {
-        first_var: {
-            "dtype": "int64",
-        },
-        "lon": {
-            "dtype": "float32",
-        },
-        "lat": {
-            "dtype": "float32",
-        },
-        "alt": {
-            "dtype": "float32",
-        },
-        "location_id": {
-            "dtype": "int64",
-        },
-        # # for some reason setting this throws an error but
-        # # it gets handled properly automatically when left out
-        # "location_description": {
-        #     "dtype": "str",
-        # },
-        "time": {
-            "dtype": "float64",
-            "units": "days since 1900-01-01 00:00:00",
-        },
-    }
-
-    for _, var_encoding in default_encoding.items():
-        var_encoding["_FillValue"] = None
-        var_encoding["zlib"] = True
-        var_encoding["complevel"] = 4
-
-    default_encoding.update({
-        var: {
-            "dtype": dtype,
-            "zlib": bool(np.issubdtype(dtype, np.number)),
-            "complevel": 4,
-            "_FillValue": None,
-        }
-        for var, dtype in dataset.dtypes.items()
-    })
-
-    encoding = {**default_encoding, **custom_encoding}
-
-    return encoding
