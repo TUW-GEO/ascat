@@ -54,8 +54,9 @@ dtype_to_nan = {np.dtype('int8'): int8_nan,
                 np.dtype('<U1'): None,
                 np.dtype('O'): None,}
 
-# By @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
+
 def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
+    # By @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
     # For time deltas, we must ensure that we use the same encoding as
     # what was previously stored.
     # We likely need to do this as well for variables that had custom
@@ -70,42 +71,50 @@ def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
             'units': nc_variable.units,
             'calendar': nc_variable.calender
         }
-    data_encoded = xr.conventions.encode_cf_variable(data) # , name=name)
+    data_encoded = xr.conventions.encode_cf_variable(data)
     left_slices = data.dims.index(expanding_dim)
     right_slices = data.ndim - left_slices - 1
-    nc_slice   = (slice(None),) * left_slices + (slice(nc_shape, nc_shape + added_size),) + (slice(None),) * (right_slices)
+    nc_slice = ((slice(None),) * left_slices
+                + (slice(nc_shape, nc_shape + added_size),)
+                + (slice(None),) * (right_slices))
     nc_variable[nc_slice] = data_encoded.data
 
-# By @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
-def append_to_netcdf(filename, ds_to_append, unlimited_dims):
-    if isinstance(unlimited_dims, str):
-        unlimited_dims = [unlimited_dims]
 
-    if len(unlimited_dims) != 1:
-        # TODO: change this so it can support multiple expanding dims
-        raise ValueError(
-            "We only support one unlimited dim for now, "
-            f"got {len(unlimited_dims)}.")
+def append_to_netcdf(filename, ds_to_append, unlimited_dim):
+    """Appends an xarray dataset to an existing netCDF file along a given unlimited dim.
 
-    unlimited_dims = list(set(unlimited_dims))
-    expanding_dim = unlimited_dims[0]
+    Parameters
+    ----------
+    filename : str or Path
+        Filename of netCDF file to append to.
+    ds_to_append : xarray.Dataset
+        Dataset to append.
+    unlimited_dim : str or list of str
+        Name of the unlimited dimension to append along.
 
+    Raises
+    ------
+    ValueError
+        If more than one unlimited dim is given.
+    """
+    # By @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
     with netCDF4.Dataset(filename, mode='a') as nc:
         nc.set_auto_maskandscale(False)
         # nc_dims = set(nc.dimensions.keys())
-        nc_coord = nc.dimensions[expanding_dim]
+        nc_coord = nc.dimensions[unlimited_dim]
         nc_shape = len(nc_coord)
 
-        added_size = ds_to_append.dims[expanding_dim]
-        variables, attrs = xr.conventions.encode_dataset_coordinates(ds_to_append)
+        added_size = ds_to_append.dims[unlimited_dim]
+        variables, _ = xr.conventions.encode_dataset_coordinates(ds_to_append)
 
         for name, data in variables.items():
-            if expanding_dim not in data.dims:
+            if unlimited_dim not in data.dims:
                 # Nothing to do, data assumed to the identical
                 continue
 
             nc_variable = nc[name]
-            _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size)
+            _expand_variable(nc_variable, data, unlimited_dim, nc_shape, added_size)
+
 
 def var_order(ds):
     """
@@ -132,7 +141,7 @@ def var_order(ds):
         first_var = "locationIndex"
     else:
         raise ValueError("No row_size or locationIndex in ds."
-                            + "Cannot determine if indexed or ragged")
+                         " Cannot determine if indexed or ragged")
     order = [
         first_var,
         "lon",
@@ -146,6 +155,7 @@ def var_order(ds):
 
     return order
 
+
 def set_attributes(ds, variable_attributes=None, global_attributes=None):
     """
     Parameters
@@ -153,7 +163,11 @@ def set_attributes(ds, variable_attributes=None, global_attributes=None):
     ds : xarray.Dataset, Path
         Dataset.
     variable_attributes : dict, optional
-        variable_attributes.
+        User-defined variable attributes to set. Should be a dictionary with format
+        `{"varname": {"attr1": "value1", "attr2": "value2"}, "varname2": {"attr1": "value1"}}`
+    global_attributes : dict, optional
+        User-defined global attributes to set. Should be a dictionary with format
+        `{"attr1": "value1", "attr2": "value2"}`
 
     Returns
     -------
@@ -317,8 +331,14 @@ def create_variable_encodings(ds, custom_variable_encodings=None):
     return encoding
 
 class RaggedXArrayCellIOBase(ABC):
-    """
-    Base class for ascat xarray IO classes
+    """Base class for ascat xarray IO classes
+
+    Attributes
+    ----------
+    source : str, Path, list
+        Input filename(s).
+    engine : str
+        Engine to use for reading/writing files.
     """
 
     # @classmethod

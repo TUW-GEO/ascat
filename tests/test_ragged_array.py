@@ -116,7 +116,6 @@ class TestCellFileCollection(unittest.TestCase):
                 incorrect.read(start_dt=datetime(2021, 1, 1),
                                end_dt=datetime(2021, 1, 2))
 
-        pass
 
     def test_cells_in_collection(self):
         sig0_12_5 = CellFileCollection.from_product_id(
@@ -262,6 +261,9 @@ class TestCellFileCollectionStack(unittest.TestCase):
         self.assertEqual(written_files_5m, {0, 1, 9})
         self.assertEqual(written_files_10m, {0, 4})
 
+        # test merge_and_write without multiprocessing
+        stack.merge_and_write(self.tmpdir/"5m", cells=[0,1,9], processes=1)
+
 class TestSwathFileCollection(unittest.TestCase):
     def assertNanEqual(self, d1, d2):
         try:
@@ -345,7 +347,7 @@ class TestSwathFileCollection(unittest.TestCase):
         # for the requested names, then an AttributeError since it tries to read a None object.
         with self.assertRaises(ValueError):
             with self.assertWarns(RuntimeWarning):
-                incorrect.read(start_dt=datetime(2021, 1, 12), end_dt=datetime(2021, 1, 13))
+                incorrect.read((datetime(2021, 1, 12), datetime(2021, 1, 13)))
 
     def test_read_and_process(self):
         swaths = SwathFileCollection.from_product_id(self.swath_data,
@@ -354,9 +356,8 @@ class TestSwathFileCollection(unittest.TestCase):
                                                      )
         start_p1 = datetime(2021, 1, 12)#, 0, 0, 0)
         end_p1 = datetime(2021, 1, 13)#, 0, 3, 0)
-        ds = swaths.read(start_p1, end_p1).load()
-        print(ds)
-        # processed_ds = swaths.process(ds)
+        ds = swaths.read((start_p1, end_p1)).load()
+        processed_ds = swaths.process(ds)
 
     def test_continuity(self, run_test=False):
         # testing "stack"
