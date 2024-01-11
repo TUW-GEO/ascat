@@ -37,6 +37,7 @@ import numpy as np
 from fibgrid.realization import FibGrid
 from ascat.file_handling import ChronFiles
 
+
 int8_nan = np.iinfo(np.int8).max
 uint8_nan = np.iinfo(np.uint8).max
 int16_nan = np.iinfo(np.int16).max
@@ -369,6 +370,7 @@ class RaggedXArrayCellIOBase(ABC):
                                          mask_and_scale=False,
                                          concat_dim="time",
                                          combine="nested",
+                                         data_vars="minimal",
                                          **kwargs)
         elif isinstance(source, (str, Path)):
             self._ds = xr.open_dataset(source,
@@ -611,7 +613,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         they are ignored.
         """
         idxs = np.where(np.isin(self._ds.location_id.values, location_ids))[0]
-        locationIndex = np.where(self._ds.locationIndex.values in idxs)[0]
+        locationIndex = np.where(np.isin(self._ds.locationIndex.values, idxs))[0]
         ds = self._ds.isel(obs=locationIndex, locations=idxs)
 
         return ds

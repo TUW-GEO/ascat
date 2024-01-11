@@ -231,7 +231,7 @@ class CellFileCollectionStack():
         elif location_id is not None:
             data = self._read_locations(location_id, **kwargs)
         elif bbox is not None:
-            raise NotImplementedError
+            data = self._read_bbox(bbox, **kwargs)
         else:
             raise ValueError("Need to specify either cell, location_id or bbox")
 
@@ -443,6 +443,18 @@ class CellFileCollectionStack():
         )
 
         return merged_ds
+
+    def _read_bbox(
+            self,
+            bbox,
+            dupe_window=None,
+            **kwargs
+    ):
+        location_ids = np.unique(
+            [coll.grid.get_bbox_grid_points(*bbox) for coll in self.collections]
+        )
+        return self._read_locations(location_ids, dupe_window=dupe_window, **kwargs)
+
 
     def _read_locations(
         self,
@@ -681,7 +693,7 @@ class CellFileCollection:
         self.min_cell = self.ioclass.min_cell
 
         self.fn_format = self.ioclass.fn_format
-        self.previous_cell = None
+        self.previous_cells = None
         self.fid = None
         self.out_cell_size = None
         self.cell_lut = None
@@ -801,7 +813,7 @@ class CellFileCollection:
                              np.unique(old_cells[np.where(new_cells == new_cell)[0]])
                              for new_cell in np.unique(new_cells)}
 
-    def _open(self, location_id=None, cell=None, grid=None):
+    def _open(self, location_id=None, cells=None, grid=None):
         """Open cell file using the given location_id (will open the cell file containing
         the location_id) or cell number. Sets self.fid to an xarray dataset representing
         the open cell file.
@@ -823,17 +835,17 @@ class CellFileCollection:
         success = True
         if location_id is not None:
             grid = grid or self.grid
-            cell = grid.gpi2cell(location_id)
+            cells = grid.gpi2cell(location_id)
 
-        if not isinstance(cell, (list, np.ndarray)):
-            cell = [cell]
+        if not isinstance(cells, (list, np.ndarray)):
+            cells = [cells]
 
-        filenames = [self.get_cell_path(c) for c in cell]
+        filenames = [self.get_cell_path(c) for c in cells]
 
         if len(filenames) == 1:
             filenames = filenames[0]
 
-        if (self.previous_cell is None) or set(self.previous_cell) != set(cell):
+        if (self.previous_cells is None) or set(self.previous_cells) != set(cells):
             self.close()
 
             try:
@@ -843,9 +855,9 @@ class CellFileCollection:
                 self.fid = None
                 msg = f"I/O error({e.errno}): {e.strerror}, {filenames}"
                 warnings.warn(msg, RuntimeWarning, stacklevel=2)
-                self.previous_cell = None
+                self.previous_cells = None
             else:
-                self.previous_cell = cell
+                self.previous_cells = cells
 
         return success
 
@@ -896,19 +908,8 @@ class CellFileCollection:
         return self._read_location_id(location_id, **kwargs)
 
     def _read_bbox(self, bbox, **kwargs):
-        raise NotImplementedError
-        # lonmin, latmin, lonmax, latmax = bbox
-        # bbox_grid_idxs = ((self.grid.arrlon <= lonmax)
-        #                   & (self.grid.arrlon >= lonmin)
-        #                   & (self.grid.arrlat <= latmax)
-        #                   & (self.grid.arrlat >= latmin))
-
-        # ids_in_bbox = self.grid.gpis[bbox_grid_idxs]
-        # if len(ids_in_bbox) == 0:
-        #     # warn that no location ids in bbox
-        #     warnings.warn(f"No location ids in bbox {bbox}", RuntimeWarning)
-        #     return None
-        # return self._read_location_ids(ids_in_bbox, **kwargs)
+        location_ids = self.grid.get_bbox_grid_points(*bbox)
+        return self._read_location_ids(location_ids, **kwargs)
 
     def _read_location_id(self, location_id, **kwargs):
         """Read data for given grid point.
@@ -948,7 +949,6 @@ class CellFileCollection:
             Data for the given grid point.
         """
         data = None
-
         if self._open(location_id=location_id):
             data = self.fid.read(location_id=location_id, **kwargs)
 
