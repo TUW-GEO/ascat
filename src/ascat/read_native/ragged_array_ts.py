@@ -345,6 +345,7 @@ class CellFileCollectionStack():
         cells,
         dupe_window=None,
         search_cell_size=None,
+        valid_gpis=None,
         **kwargs
     ):
         """Read data for a list of cells.
@@ -396,20 +397,25 @@ class CellFileCollectionStack():
                 data.extend(
                     [
                         self._trim_to_gpis(
+                            self._trim_to_gpis(
                             coll.read(
                                 cell=cell,
                                 **kwargs
                             ),
                             coll.grid.grid_points_for_cell(cell)[0].compressed(),
-                        )
+                            ),
+                            valid_gpis)
                         for cell in old_cells
                     ]
                 )
 
         else:
             data = [
-                coll.read(cell=cell,
-                          **kwargs)
+                self._trim_to_gpis(
+                    coll.read(cell=cell,
+                              **kwargs),
+                    valid_gpis
+                )
                 for coll in self.collections
                 for cell in search_cells
             ]
@@ -454,7 +460,6 @@ class CellFileCollectionStack():
             [coll.grid.get_bbox_grid_points(*bbox) for coll in self.collections]
         )
         return self._read_locations(location_ids, dupe_window=dupe_window, **kwargs)
-
 
     def _read_locations(
         self,
@@ -656,6 +661,8 @@ class CellFileCollectionStack():
         """
         if ds is None:
             return None
+        if gpis is None:
+            return ds
 
         # first trim out any gpis not in the dataset from the gpi list
         gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
@@ -759,7 +766,9 @@ class CellFileCollection:
         location_id : int
             Location id.
         coords : tuple
-            Tuple of (lon, lat) coordinates.
+            Tuple of (lat, lon) coordinates.
+        bbox : tuple
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
         **kwargs : dict
             Keyword arguments passed to the ioclass.
 
@@ -779,7 +788,7 @@ class CellFileCollection:
         elif location_id is not None:
             data = self._read_location_id(location_id, **kwargs)
         elif coords is not None:
-            data = self._read_lonlat(coords[0], coords[1], **kwargs)
+            data = self._read_latlon(coords[0], coords[1], **kwargs)
         elif bbox is not None:
             data = self._read_bbox(bbox, **kwargs)
 
@@ -879,22 +888,22 @@ class CellFileCollection:
         # if there are kwargs, use them instead of self.ioclass_kws
 
         data = None
-        if self._open(cell=cell):
+        if self._open(cells=cell):
             data = self.fid.read(**kwargs)
 
         return data
 
-    def _read_lonlat(self, lon, lat, **kwargs):
+    def _read_latlon(self, lat, lon, **kwargs):
         """Read data for the nearest grid point to the given coordinate.
 
         Converts lon/lat pair to a location_id, then reads data for that location_id.
 
         Parameters
         ----------
-        lon : float
-            Longitude coordinate.
         lat : float
             Latitude coordinate.
+        lon : float
+            Longitude coordinate.
         **kwargs : dict
             Keyword arguments passed to the ioclass `read` method.
 
@@ -909,7 +918,7 @@ class CellFileCollection:
 
     def _read_bbox(self, bbox, **kwargs):
         location_ids = self.grid.get_bbox_grid_points(*bbox)
-        return self._read_location_ids(location_ids, **kwargs)
+        return self._read_location_id(location_ids, **kwargs)
 
     def _read_location_id(self, location_id, **kwargs):
         """Read data for given grid point.
@@ -933,26 +942,26 @@ class CellFileCollection:
 
         return data
 
-    def _read_location_ids(self, location_id, **kwargs):
-        """Read data for given grid points.
+    # def _read_location_ids(self, location_id, **kwargs):
+    #     """Read data for given grid points.
 
-        Parameters
-        ----------
-        location_id : int
-            Location identifier.
-        **kwargs : dict
-            Keyword arguments passed to the ioclass `read` method.
+    #     Parameters
+    #     ----------
+    #     location_id : int
+    #         Location identifier.
+    #     **kwargs : dict
+    #         Keyword arguments passed to the ioclass `read` method.
 
-        Returns
-        -------
-        data : xarray.Dataset
-            Data for the given grid point.
-        """
-        data = None
-        if self._open(location_id=location_id):
-            data = self.fid.read(location_id=location_id, **kwargs)
+    #     Returns
+    #     -------
+    #     data : xarray.Dataset
+    #         Data for the given grid point.
+    #     """
+    #     data = None
+    #     if self._open(location_id=location_id):
+    #         data = self.fid.read(location_id=location_id, **kwargs)
 
-        return data
+    #     return data
 
     def get_cell_path(self, cell=None, location_id=None):
         """Get path to cell file given cell number or location id.
@@ -1443,15 +1452,15 @@ class SwathFileCollection:
 
         return data
 
-    def _read_lonlat(self, fnames, lon, lat, **kwargs):
+    def _read_latlon(self, fnames, lat, lon, **kwargs):
         """Reading data for given longitude and latitude coordinate.
 
         Parameters
         ----------
-        lon : float
-            Longitude coordinate.
         lat : float
             Latitude coordinate.
+        lon : float
+            Longitude coordinate.
 
         Returns
         -------
@@ -1497,6 +1506,17 @@ class SwathFileCollection:
         If the time range is large, this can be slow. It may make more sense to
         convert to cell files first and access that data from disk using
         a `CellFileCollection` or `CellFileCollectionStack`.
+
+        Parameters
+        ----------
+        date_range : tuple of datetime.datetime
+            Start and end dates.
+        cell : int, optional
+            Grid cell number to read.
+        location_id : int, optional
+            Location id.
+        coords : tuple, optional
+            Tuple of (lat, lon) coordinates.
         """
         start_dt, end_dt = date_range
         fnames = self._get_filenames(start_dt, end_dt)
@@ -1505,8 +1525,7 @@ class SwathFileCollection:
         elif location_id is not None:
             data = self._read_location_id(location_id, **kwargs)
         elif coords is not None:
-            pass
-            # data = self._read_lonlat(coords[0], coords[1], **kwargs)
+            data = self._read_latlon(coords[0], coords[1], **kwargs)
         elif self._open(fnames):
             data = self.fid.read(mask_and_scale=False, **kwargs)
         else:
