@@ -356,7 +356,7 @@ class RaggedXArrayCellIOBase(ABC):
     #                 f"{cls.__name__} must define required class attribute {var}"
     #             )
 
-    def __init__(self, source, engine, **kwargs):
+    def __init__(self, source, engine, obs_dim="time", **kwargs):
         self.source = source
         self.engine = engine
         # if filename is a generator, use open_mfdataset
@@ -368,7 +368,7 @@ class RaggedXArrayCellIOBase(ABC):
                                          engine=engine,
                                          decode_cf=False,
                                          mask_and_scale=False,
-                                         concat_dim="time",
+                                         concat_dim=obs_dim,
                                          combine="nested",
                                          data_vars="minimal",
                                          **kwargs)
@@ -383,12 +383,15 @@ class RaggedXArrayCellIOBase(ABC):
 
         self._kwargs = kwargs
 
-        if "time" in self._ds.dims:
-            self._ds = self._ds.rename_dims({"time": "obs"})
+        if obs_dim in self._ds.dims:
+            if obs_dim != "obs":
+                self._ds = self._ds.rename_dims({obs_dim: "obs"})
+        else:
+            raise ValueError(f"obs_dim '{obs_dim}' not found in dataset")
 
-        chunks = kwargs.pop("chunks", None)
-        if chunks is not None:
-            self._ds = self._ds.chunk(chunks)
+        # chunks = kwargs.pop("chunks", None)
+        # if chunks is not None:
+        #     self._ds = self._ds.chunk(chunks)
 
         if "row_size" in self._ds.data_vars:
             self._ds = self._ensure_indexed(self._ds)
