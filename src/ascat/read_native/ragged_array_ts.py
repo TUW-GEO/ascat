@@ -30,6 +30,7 @@ import re
 import warnings
 import multiprocessing as mp
 from pathlib import Path
+from datetime import datetime as dt
 
 import dask
 import xarray as xr
@@ -250,9 +251,7 @@ class CellFileCollectionStack():
         else:
             raise ValueError("Need to specify either cell, location_id or bbox")
 
-        print("stacker read cells")
         data = data.sortby(["sat_id", "locationIndex", "time"])
-        print("stacker sorted data")
 
         # Deduplicate data
         dupl = np.insert(
@@ -261,9 +260,7 @@ class CellFileCollectionStack():
             0,
             False,
         )
-        print("stacker prepared dupes")
         data = data.sel(obs=~dupl)
-        print("stacker deduped")
 
         if mask_and_scale:
             return xr.decode_cf(data, mask_and_scale=True)
@@ -319,7 +316,7 @@ class CellFileCollectionStack():
             ):
                 pass
 
-    def _collections_within_date_range(self, date_range):
+    def _collections_in_date_range(self, date_range):
         if date_range is None:
             return self.collections
 
@@ -328,7 +325,7 @@ class CellFileCollectionStack():
         return [
             coll
             for coll in self.collections
-            if coll.min_datetime >= start_date and coll.max_datetime < end_date
+            if (coll.min_datetime >= start_date and coll.max_datetime < end_date)
         ]
 
 
@@ -352,7 +349,7 @@ class CellFileCollectionStack():
         if out_cell_size is None:
             covered_cells = {
                 c
-                for coll in self._collections_within_date_range(date_range)
+                for coll in self._collections_in_date_range(date_range)
                 for c in coll.cells_in_collection
                 if (cells is None or c in cells)
             }
@@ -364,7 +361,7 @@ class CellFileCollectionStack():
         # Or return a list for each collection... but then the reading logic should
         # be different.
         new_cells = set()
-        for coll in self._collections_within_date_range(date_range):
+        for coll in self._collections_in_date_range(date_range):
             coll.create_cell_lookup(out_cell_size)
             # add each new cell to the set if any of the old cells that overlap it are
             # in the cells list
@@ -377,7 +374,6 @@ class CellFileCollectionStack():
     def _read_cells(
         self,
         cells,
-        dupe_window=None,
         search_cell_size=None,
         valid_gpis=None,
         date_range=None,
@@ -393,14 +389,15 @@ class CellFileCollectionStack():
         ----------
         cells : int or list of int
             The cell or list of cells to read.
-        dupe_window : numpy.timedelta64
-            Time difference between two observations at the same location_id below which
-            the second observation will be considered a duplicate. Will be set to
         search_cell_size : numeric
             The side length, in degrees, of the cell-scheme that the input passed to
             `cells` refers to. That is, if the data is in a 10 degree grid, but
             `search_cell_size` is 5, then passing `cells=13` will result in the function
             returning data from cell 13 of the 5-degree grid, NOT the 10-degree grid.
+        valid_gpis : list of int, optional
+            List of gpis to keep. If None, keep all gpis.
+        date_range : tuple of numpy.datetime64, optional
+            Start and end dates to read data for.
         **kwargs
             Keyword arguments to pass to a `CellFileCollection`'s `read` method.
 
@@ -414,7 +411,7 @@ class CellFileCollectionStack():
 
         if search_cell_size is not None:
             data = []
-            for coll in self._collections_within_date_range(date_range):
+            for coll in self._collections_in_date_range(date_range):
                 coll.create_cell_lookup(search_cell_size)
                 old_cells = [
                     c
@@ -427,13 +424,13 @@ class CellFileCollectionStack():
                     [
                         self._trim_to_gpis(
                             self._trim_to_gpis(
-                            coll.read(
-                                cell=cell,
-                                mask_and_scale=False,
-                                date_range=date_range,
-                                **kwargs
-                            ),
-                            coll.grid.grid_points_for_cell(cell)[0].compressed(),
+                                coll.read(
+                                    cell=cell,
+                                    mask_and_scale=False,
+                                    date_range=date_range,
+                                    **kwargs
+                                ),
+                                coll.grid.grid_points_for_cell(cell)[0].compressed(),
                             ),
                             valid_gpis)
                         for cell in old_cells
@@ -449,7 +446,7 @@ class CellFileCollectionStack():
                               **kwargs),
                     valid_gpis
                 )
-                for coll in self._collections_within_date_range(date_range)
+                for coll in self._collections_in_date_range(date_range)
                 for cell in search_cells
             ]
 
@@ -486,75 +483,81 @@ class CellFileCollectionStack():
     def _read_bbox(
             self,
             bbox,
-            dupe_window=None,
             date_range=None,
             **kwargs
     ):
         location_ids = np.unique(
             [coll.grid.get_bbox_grid_points(*bbox)
-             for coll in self._collections_within_date_range(date_range)]
+             for coll in self._collections_in_date_range(date_range)]
         )
-        return self._read_locations(location_ids, dupe_window=dupe_window, **kwargs)
+        cells = self.ioclass.grid.gpi2cell(location_ids)
+
+        return self._read_cells(cells, valid_gpis=location_ids, date_range=date_range, **kwargs)
 
     def _read_locations(
         self,
         location_ids,
-        dupe_window=None,
         date_range=None,
         **kwargs
     ):
-        location_ids = (
-            location_ids
-            if isinstance(location_ids, (list, np.ndarray))
-            else [location_ids]
-        )
+        cells = self.ioclass.grid.gpi2cell(location_ids)
+        return self._read_cells(cells, valid_gpis=location_ids, date_range=date_range, **kwargs)
 
-        if dupe_window is None:
-            dupe_window = np.timedelta64(10, "m")
+    # def _read_locations(
+    #     self,
+    #     location_ids,
+    #     date_range=None,
+    #     **kwargs
+    # ):
+    #     location_ids = (
+    #         location_ids
+    #         if isinstance(location_ids, (list, np.ndarray))
+    #         else [location_ids]
+    #     )
 
-        # all data here is converted to the SAME GRID CELL SIZE within coll.read()
-        # before being merged later
-        data = [d for d in
-                (coll.read(
-                    location_id=location_id,
-                    mask_and_scale=False,
-                    date_range=date_range,
-                    **kwargs)
-                 for coll in self._collections_within_date_range(date_range)
-                 for location_id in location_ids)
-                if d is not None]
+    #     # all data here is converted to the SAME GRID CELL SIZE within coll.read()
+    #     # before being merged later
+    #     data = [d for d in
+    #             (coll.read(
+    #                 location_id=location_id,
+    #                 mask_and_scale=False,
+    #                 date_range=date_range,
+    #                 **kwargs)
+    #              for coll in self._collections_in_date_range(date_range)
+    #              for location_id in location_ids)
+    #             if d is not None]
 
-        # merge all the locations-dimensional data vars into one dataset,
-        # in order to determine the grid points and indexing for the locations
-        # dimension of the merged dataset.
+    #     # merge all the locations-dimensional data vars into one dataset,
+    #     # in order to determine the grid points and indexing for the locations
+    #     # dimension of the merged dataset.
 
-        # coords="all" is necessary in case one of the coords has nan values
-        # (e.g. altitude, in the case of ASCAT H129)
-        locs_merged = xr.combine_nested(
-            [self._only_locations(ds) for ds in data], concat_dim="locations",
-            coords="all",
-        )
+    #     # coords="all" is necessary in case one of the coords has nan values
+    #     # (e.g. altitude, in the case of ASCAT H129)
+    #     locs_merged = xr.combine_nested(
+    #         [self._only_locations(ds) for ds in data], concat_dim="locations",
+    #         coords="all",
+    #     )
 
-        _, idxs = np.unique(locs_merged["location_id"].values, return_index=True)
+    #     _, idxs = np.unique(locs_merged["location_id"].values, return_index=True)
 
-        location_vars = {
-            var: locs_merged[var][idxs]
-            for var in locs_merged.variables
-        }
+    #     location_vars = {
+    #         var: locs_merged[var][idxs]
+    #         for var in locs_merged.variables
+    #     }
 
-        location_sorter = np.argsort(location_vars["location_id"].values)
+    #     location_sorter = np.argsort(location_vars["location_id"].values)
 
-        locs_merged.close()
+    #     locs_merged.close()
 
-        # merge the data variables
-        merged_ds = xr.combine_nested(
-            [self._preprocess(ds, location_vars, location_sorter) for ds in data],
-            concat_dim="obs",
-            data_vars="minimal",
-            coords="minimal",
-        )
+    #     # merge the data variables
+    #     merged_ds = xr.combine_nested(
+    #         [self._preprocess(ds, location_vars, location_sorter) for ds in data],
+    #         concat_dim="obs",
+    #         data_vars="minimal",
+    #         coords="minimal",
+    #     )
 
-        return merged_ds
+    #     return merged_ds
 
     def _write_single_cell(self, out_dir, ioclass, cell, out_cell_size, **kwargs):
         """Write data for a single cell from the stack to disk.
@@ -693,6 +696,11 @@ class CellFileCollectionStack():
         -------
         xarray.Dataset
             Dataset with only the gpis in the list.
+
+        Notes
+        -----
+        Does NOT trim the locations dimension, only the obs dimension. There may then
+        be empty locations in the dataset.
         """
         if ds is None:
             return None
@@ -704,8 +712,9 @@ class CellFileCollectionStack():
         # then trim out any gpis in the dataset not in gpis
         locations_idx = np.searchsorted(ds["location_id"].values, gpis)
         obs_idx = np.in1d(ds["locationIndex"], locations_idx)
+        # ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
 
-        return ds.isel({"obs": obs_idx, "locations": locations_idx})
+        return ds.isel({"obs": obs_idx})#, "locations": locations_idx})
 
     def close(self):
         """Close all the collections."""
@@ -724,7 +733,8 @@ class CellFileCollection:
                  path,
                  ioclass,
                  ioclass_kws=None,
-                 dir_date_format="{date1}_{date2}",
+                 dir_name_format="{date1}_{date2}",
+                 dir_date_format="%Y%m%d%H%M%S",
                  ):
         """Initialize."""
         self.path = Path(path)
@@ -734,6 +744,7 @@ class CellFileCollection:
 
         self.max_cell = self.ioclass.max_cell
         self.min_cell = self.ioclass.min_cell
+        self.dir_name_format = dir_name_format
         self.dir_date_format = dir_date_format
         self.min_datetime, self.max_datetime = self.date_range
 
@@ -751,11 +762,11 @@ class CellFileCollection:
     @property
     def date_range(self):
         """Return the start and end date of the collection based on its dir name"""
-        pattern = braces_to_re_groups(self.dir_date_format)
+        pattern = braces_to_re_groups(self.dir_name_format)
         match = re.match(pattern, self.path.stem)
-        start_date = np.datetime64(match.group("date1"), "ns")
-        end_date = np.datetime64(match.group("date2"), "ns")
-        return start_date, end_date
+        start_date = dt.strptime(match.group("date1"), self.dir_date_format)
+        end_date = dt.strptime(match.group("date2"), self.dir_date_format)
+        return np.datetime64(start_date, "ns"), np.datetime64(end_date, "ns")
 
     @classmethod
     def from_product_id(cls, collections, product_id, ioclass_kws=None):
