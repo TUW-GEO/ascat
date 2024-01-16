@@ -428,10 +428,10 @@ class RaggedXArrayCellIOBase(ABC):
             Dataset containing the data for any specified location_id(s),
             or all location_ids in the file if none are specified.
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
-    def write(self, filename, **kwargs):
+    def write(self, filename, ra_type, **kwargs):
         """
         Write data to file. Should be implemented by subclasses.
 
@@ -439,10 +439,12 @@ class RaggedXArrayCellIOBase(ABC):
         ----------
         filename : str, Path
             Filename to write data to.
+        ra_type : str, optional
+            Type of ragged array to write.
         **kwargs
             Additional keyword arguments passed to the write method.
         """
-        pass
+        raise NotImplementedError
 
     def _ensure_indexed(self, ds):
         """
@@ -516,33 +518,42 @@ class RaggedXArrayCellIOBase(ABC):
         return ds[self._var_order(ds)]
 
     def close(self):
-        """
-        Close file.
-        """
+        """Close file."""
         if self._ds is not None:
             self._ds.close()
             self._ds = None
 
     def __enter__(self):
-        """
-        Context manager initialization.
-        """
+        """Context manager initialization."""
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """
-        Exit the runtime context related to this object.
-        """
+        """Exit the runtime context related to this object."""
         self.close()
 
 
 class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
+        self.custom_variable_attrs = None
+        self.custom_global_attrs = None
+        self.custom_variable_encodings = None
 
-    def read(self, location_id=None, **kwargs):
-        mask_and_scale = kwargs.pop("mask_and_scale", True)
+    def read(self, location_id=None, mask_and_scale=True):
+        """Read data from netCDF4 file.
 
+        Read all or a subset of data from a netCDF4 file, with subset specified by the
+        `location_id` argument.
+
+        Parameters
+        ----------
+        location_id : int or list of int.
+            The location_id(s) to read data for. If None, all data is read.
+            Default is None.
+        mask_and_scale : bool, optional
+            If True, mask and scale the data according to its `scale_factor` and
+            `_FillValue`/`missing_value` before returning. Default: True.
+        """
         if location_id is not None:
             if isinstance(location_id, (int, np.int64, np.int32)):
                 return xr.decode_cf(

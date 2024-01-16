@@ -203,7 +203,14 @@ class CellFileCollectionStack():
             elif coll.grid_cell_size != common_cell_size:
                 self._different_cell_sizes = True
 
-    def read(self, cell=None, location_id=None, bbox=None, **kwargs):
+    def read(
+            self,
+            cell=None,
+            location_id=None,
+            bbox=None,
+            mask_and_scale=True,
+            **kwargs
+    ):
         """Read data for a cell or location_id.
 
         Parameters
@@ -212,6 +219,11 @@ class CellFileCollectionStack():
             Cell number to read data for.
         location_id : int
             Location ID to read data for.
+        bbox : tuple
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates to read data within.
+        mask_and_scale : bool, optional
+            If True, mask and scale the data according to its `scale_factor` and
+            `_FillValue`/`missing_value` before returning. Default: True.
         **kwargs : dict
             Keyword arguments to pass to the read function of the collection
 
@@ -246,6 +258,8 @@ class CellFileCollectionStack():
         )
         data = data.sel(obs=~dupl)
 
+        if mask_and_scale:
+            return xr.decode_cf(data, mask_and_scale=True)
         return data
 
     def merge_and_write(self, out_dir, cells=None, out_cell_size=None, processes=8):
@@ -377,9 +391,6 @@ class CellFileCollectionStack():
         """
         search_cells = cells if isinstance(cells, list) else [cells]
 
-        if "mask_and_scale" not in kwargs:
-            kwargs["mask_and_scale"] = False
-
         if dupe_window is None:
             dupe_window = np.timedelta64(10, "m")
 
@@ -400,6 +411,7 @@ class CellFileCollectionStack():
                             self._trim_to_gpis(
                             coll.read(
                                 cell=cell,
+                                mask_and_scale=False,
                                 **kwargs
                             ),
                             coll.grid.grid_points_for_cell(cell)[0].compressed(),
@@ -413,6 +425,7 @@ class CellFileCollectionStack():
             data = [
                 self._trim_to_gpis(
                     coll.read(cell=cell,
+                              mask_and_scale=False,
                               **kwargs),
                     valid_gpis
                 )
@@ -467,9 +480,6 @@ class CellFileCollectionStack():
         dupe_window=None,
         **kwargs
     ):
-        if "mask_and_scale" not in kwargs:
-            kwargs["mask_and_scale"] = False
-
         location_ids = (
             location_ids
             if isinstance(location_ids, (list, np.ndarray))
@@ -484,6 +494,7 @@ class CellFileCollectionStack():
         data = [d for d in
                 (coll.read(
                     location_id=location_id,
+                    mask_and_scale=False,
                     **kwargs)
                  for coll in self.collections
                  for location_id in location_ids)
@@ -537,7 +548,7 @@ class CellFileCollectionStack():
         **kwargs
             Keyword arguments to pass to the ioclass write function.
         """
-        data = self.read(cell=cell, search_cell_size=out_cell_size)
+        data = self.read(cell=cell, search_cell_size=out_cell_size, mask_and_scale=False)
         fname = ioclass.fn_format.format(cell)
         data.attrs["id"] = fname
         writer = ioclass(data)
@@ -756,7 +767,15 @@ class CellFileCollection:
         """
         return [int(p.stem) for p in self.path.glob("*")]
 
-    def read(self, cell=None, location_id=None, coords=None, bbox=None, **kwargs):
+    def read(
+            self,
+            cell=None,
+            location_id=None,
+            coords=None,
+            bbox=None,
+            mask_and_scale=True,
+            **kwargs
+    ):
         """Read data from the collection for a cell, location_id, or set of coordinates.
 
         Parameters
@@ -769,6 +788,9 @@ class CellFileCollection:
             Tuple of (lat, lon) coordinates.
         bbox : tuple
             Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        mask_and_scale : bool, optional
+            If True, mask and scale the data according to its `scale_factor` and
+            `_FillValue`/`missing_value` before returning. Default: True.
         **kwargs : dict
             Keyword arguments passed to the ioclass.
 
@@ -795,6 +817,9 @@ class CellFileCollection:
         else:
             raise ValueError("Either cell, location_id or coords (lon, lat)"
                              " must be given")
+
+        if mask_and_scale:
+            return xr.decode_cf(data, mask_and_scale=True)
 
         return data
 
@@ -889,7 +914,7 @@ class CellFileCollection:
 
         data = None
         if self._open(cells=cell):
-            data = self.fid.read(**kwargs)
+            data = self.fid.read(mask_and_scale=False, **kwargs)
 
         return data
 
@@ -938,7 +963,7 @@ class CellFileCollection:
         data = None
 
         if self._open(location_id=location_id):
-            data = self.fid.read(location_id=location_id, **kwargs)
+            data = self.fid.read(location_id=location_id, mask_and_scale=False, **kwargs)
 
         return data
 
