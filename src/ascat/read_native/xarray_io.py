@@ -539,7 +539,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         self.custom_global_attrs = None
         self.custom_variable_encodings = None
 
-    def read(self, location_id=None, mask_and_scale=True):
+    def read(self, date_range=None, location_id=None, mask_and_scale=True):
         """Read data from netCDF4 file.
 
         Read all or a subset of data from a netCDF4 file, with subset specified by the
@@ -547,6 +547,8 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
 
         Parameters
         ----------
+        date_range : tuple of datetime.datetime, optional
+            Date range to read data for. If None, all data is read.
         location_id : int or list of int.
             The location_id(s) to read data for. If None, all data is read.
             Default is None.
@@ -556,19 +558,21 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         """
         if location_id is not None:
             if isinstance(location_id, (int, np.int64, np.int32)):
-                return xr.decode_cf(
-                    self._ensure_indexed(self._read_location_id(location_id)),
-                    mask_and_scale=mask_and_scale,
-                )
+                ds = self._read_location_id(location_id)
             elif isinstance(location_id, (list, np.ndarray)):
-                return xr.decode_cf(
-                    self._ensure_indexed(self._read_location_ids(location_id)),
-                    mask_and_scale=mask_and_scale,
-                )
+                ds = self._read_location_ids(location_id)
             else:
                 raise ValueError("location_id must be int or list of ints")
+        else:
+            ds = self._ds
 
-        return xr.decode_cf(self._ds, mask_and_scale=mask_and_scale)
+        return self._trim_dates(
+            xr.decode_cf(
+                ds,
+                mask_and_scale=mask_and_scale
+            ),
+            date_range
+        )
 
     def write(self, filename, ra_type="contiguous", **kwargs):
         """
@@ -613,10 +617,10 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         """
         if location_id not in self._ds.location_id.values:
             return None
-
-        idx = np.where(self._ds.location_id.values == location_id)[0][0]
-        locationIndex = np.where(self._ds.locationIndex.values == idx)[0]
-        ds = self._ds.isel(obs=locationIndex, locations=idx)
+        ds = self._ds
+        idx = np.where(ds.location_id.values == location_id)[0][0]
+        locationIndex = np.where(ds.locationIndex.values == idx)[0]
+        ds = ds.isel(obs=locationIndex, locations=idx)
 
         return ds
 
@@ -626,11 +630,41 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         If there are location_ids not in the dataset,
         they are ignored.
         """
-        idxs = np.where(np.isin(self._ds.location_id.values, location_ids))[0]
-        locationIndex = np.where(np.isin(self._ds.locationIndex.values, idxs))[0]
-        ds = self._ds.isel(obs=locationIndex, locations=idxs)
+        if not np.any(np.isin(location_ids, self._ds.location_id.values)):
+            return None
+        ds = self._ds
+        idxs = np.where(np.isin(ds.location_id.values, location_ids))[0]
+        locationIndex = np.where(np.isin(ds.locationIndex.values, idxs))[0]
+        ds = ds.isel(obs=locationIndex, locations=idxs)
 
         return ds
+
+    @staticmethod
+    def _trim_dates(ds, date_range):
+        """
+        Trim dates of dataset to a given date range. Assumes the time variable is named
+        "time".
+
+        Parameters
+        ----------
+        ds : xarray.Dataset
+            Dataset.
+        date_range : tuple of datetime.datetime
+            Date range to trim to.
+
+        Returns
+        -------
+        xarray.Dataset
+            Dataset with trimmed dates.
+        """
+        if date_range is None:
+            return ds
+        start_date = np.datetime64(date_range[0])
+        end_date = np.datetime64(date_range[1])
+        return ds.isel(
+            obs=(ds.time >= start_date) & (ds.time <= end_date)
+        )
+
 
     @staticmethod
     def _var_order(ds):

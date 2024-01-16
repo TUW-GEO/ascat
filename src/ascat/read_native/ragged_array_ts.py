@@ -26,6 +26,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
+import re
 import warnings
 import multiprocessing as mp
 from pathlib import Path
@@ -34,6 +35,7 @@ import dask
 import xarray as xr
 import numpy as np
 from tqdm import tqdm
+from ascat.file_handling import braces_to_re_groups
 
 from ascat.read_native.xarray_io import AscatH129Cell
 from ascat.read_native.xarray_io import AscatSIG0Cell6250m
@@ -209,6 +211,7 @@ class CellFileCollectionStack():
             location_id=None,
             bbox=None,
             mask_and_scale=True,
+            date_range=None,
             **kwargs
     ):
         """Read data for a cell or location_id.
@@ -239,15 +242,17 @@ class CellFileCollectionStack():
             If neither cell nor location_id is given.
         """
         if cell is not None:
-            data = self._read_cells(cell, **kwargs)
+            data = self._read_cells(cell, date_range=date_range, **kwargs)
         elif location_id is not None:
-            data = self._read_locations(location_id, **kwargs)
+            data = self._read_locations(location_id, date_range=date_range, **kwargs)
         elif bbox is not None:
-            data = self._read_bbox(bbox, **kwargs)
+            data = self._read_bbox(bbox, date_range=date_range, **kwargs)
         else:
             raise ValueError("Need to specify either cell, location_id or bbox")
 
+        print("stacker read cells")
         data = data.sortby(["sat_id", "locationIndex", "time"])
+        print("stacker sorted data")
 
         # Deduplicate data
         dupl = np.insert(
@@ -256,7 +261,9 @@ class CellFileCollectionStack():
             0,
             False,
         )
+        print("stacker prepared dupes")
         data = data.sel(obs=~dupl)
+        print("stacker deduped")
 
         if mask_and_scale:
             return xr.decode_cf(data, mask_and_scale=True)
@@ -312,7 +319,20 @@ class CellFileCollectionStack():
             ):
                 pass
 
-    def subcollection_cells(self, cells=None, out_cell_size=None):
+    def _collections_within_date_range(self, date_range):
+        if date_range is None:
+            return self.collections
+
+        start_date = np.datetime64(date_range[0], "ns")
+        end_date = np.datetime64(date_range[1], "ns")
+        return [
+            coll
+            for coll in self.collections
+            if coll.min_datetime >= start_date and coll.max_datetime < end_date
+        ]
+
+
+    def subcollection_cells(self, cells=None, out_cell_size=None, date_range=None):
         """Get the cells that are covered by all the subcollections. If out_cell_size is
         passed, then it returns the cells in the new cell-scheme that are covered by the
         subcollections.
@@ -332,7 +352,7 @@ class CellFileCollectionStack():
         if out_cell_size is None:
             covered_cells = {
                 c
-                for coll in self.collections
+                for coll in self._collections_within_date_range(date_range)
                 for c in coll.cells_in_collection
                 if (cells is None or c in cells)
             }
@@ -344,7 +364,7 @@ class CellFileCollectionStack():
         # Or return a list for each collection... but then the reading logic should
         # be different.
         new_cells = set()
-        for coll in self.collections:
+        for coll in self._collections_within_date_range(date_range):
             coll.create_cell_lookup(out_cell_size)
             # add each new cell to the set if any of the old cells that overlap it are
             # in the cells list
@@ -360,6 +380,7 @@ class CellFileCollectionStack():
         dupe_window=None,
         search_cell_size=None,
         valid_gpis=None,
+        date_range=None,
         **kwargs
     ):
         """Read data for a list of cells.
@@ -391,12 +412,9 @@ class CellFileCollectionStack():
         """
         search_cells = cells if isinstance(cells, list) else [cells]
 
-        if dupe_window is None:
-            dupe_window = np.timedelta64(10, "m")
-
         if search_cell_size is not None:
             data = []
-            for coll in self.collections:
+            for coll in self._collections_within_date_range(date_range):
                 coll.create_cell_lookup(search_cell_size)
                 old_cells = [
                     c
@@ -412,6 +430,7 @@ class CellFileCollectionStack():
                             coll.read(
                                 cell=cell,
                                 mask_and_scale=False,
+                                date_range=date_range,
                                 **kwargs
                             ),
                             coll.grid.grid_points_for_cell(cell)[0].compressed(),
@@ -426,10 +445,11 @@ class CellFileCollectionStack():
                 self._trim_to_gpis(
                     coll.read(cell=cell,
                               mask_and_scale=False,
+                              date_range=date_range,
                               **kwargs),
                     valid_gpis
                 )
-                for coll in self.collections
+                for coll in self._collections_within_date_range(date_range)
                 for cell in search_cells
             ]
 
@@ -467,10 +487,12 @@ class CellFileCollectionStack():
             self,
             bbox,
             dupe_window=None,
+            date_range=None,
             **kwargs
     ):
         location_ids = np.unique(
-            [coll.grid.get_bbox_grid_points(*bbox) for coll in self.collections]
+            [coll.grid.get_bbox_grid_points(*bbox)
+             for coll in self._collections_within_date_range(date_range)]
         )
         return self._read_locations(location_ids, dupe_window=dupe_window, **kwargs)
 
@@ -478,6 +500,7 @@ class CellFileCollectionStack():
         self,
         location_ids,
         dupe_window=None,
+        date_range=None,
         **kwargs
     ):
         location_ids = (
@@ -495,8 +518,9 @@ class CellFileCollectionStack():
                 (coll.read(
                     location_id=location_id,
                     mask_and_scale=False,
+                    date_range=date_range,
                     **kwargs)
-                 for coll in self.collections
+                 for coll in self._collections_within_date_range(date_range)
                  for location_id in location_ids)
                 if d is not None]
 
@@ -700,6 +724,7 @@ class CellFileCollection:
                  path,
                  ioclass,
                  ioclass_kws=None,
+                 dir_date_format="{date1}_{date2}",
                  ):
         """Initialize."""
         self.path = Path(path)
@@ -709,6 +734,8 @@ class CellFileCollection:
 
         self.max_cell = self.ioclass.max_cell
         self.min_cell = self.ioclass.min_cell
+        self.dir_date_format = dir_date_format
+        self.min_datetime, self.max_datetime = self.date_range
 
         self.fn_format = self.ioclass.fn_format
         self.previous_cells = None
@@ -720,6 +747,15 @@ class CellFileCollection:
             self.ioclass_kws = {}
         else:
             self.ioclass_kws = ioclass_kws
+
+    @property
+    def date_range(self):
+        """Return the start and end date of the collection based on its dir name"""
+        pattern = braces_to_re_groups(self.dir_date_format)
+        match = re.match(pattern, self.path.stem)
+        start_date = np.datetime64(match.group("date1"), "ns")
+        end_date = np.datetime64(match.group("date2"), "ns")
+        return start_date, end_date
 
     @classmethod
     def from_product_id(cls, collections, product_id, ioclass_kws=None):
@@ -774,6 +810,7 @@ class CellFileCollection:
             coords=None,
             bbox=None,
             mask_and_scale=True,
+            date_range=None,
             **kwargs
     ):
         """Read data from the collection for a cell, location_id, or set of coordinates.
@@ -806,13 +843,13 @@ class CellFileCollection:
         """
         kwargs = {**self.ioclass_kws, **kwargs}
         if cell is not None:
-            data = self._read_cell(cell, **kwargs)
+            data = self._read_cell(cell, date_range=date_range, **kwargs)
         elif location_id is not None:
-            data = self._read_location_id(location_id, **kwargs)
+            data = self._read_location_id(location_id, date_range=date_range, **kwargs)
         elif coords is not None:
-            data = self._read_latlon(coords[0], coords[1], **kwargs)
+            data = self._read_latlon(coords[0], coords[1], date_range=date_range, **kwargs)
         elif bbox is not None:
-            data = self._read_bbox(bbox, **kwargs)
+            data = self._read_bbox(bbox, date_range=date_range, **kwargs)
 
         else:
             raise ValueError("Either cell, location_id or coords (lon, lat)"
@@ -895,7 +932,7 @@ class CellFileCollection:
 
         return success
 
-    def _read_cell(self, cell, **kwargs):
+    def _read_cell(self, cell, date_range, **kwargs):
         """Read data from the entire cell.
 
         Parameters
@@ -914,11 +951,13 @@ class CellFileCollection:
 
         data = None
         if self._open(cells=cell):
-            data = self.fid.read(mask_and_scale=False, **kwargs)
+            data = self.fid.read(mask_and_scale=False,
+                                 date_range=date_range,
+                                 **kwargs)
 
         return data
 
-    def _read_latlon(self, lat, lon, **kwargs):
+    def _read_latlon(self, lat, lon, date_range, **kwargs):
         """Read data for the nearest grid point to the given coordinate.
 
         Converts lon/lat pair to a location_id, then reads data for that location_id.
@@ -939,13 +978,15 @@ class CellFileCollection:
         """
         location_id, _ = self.grid.find_nearest_gpi(lon, lat)
 
-        return self._read_location_id(location_id, **kwargs)
+        return self._read_location_id(location_id,
+                                      date_range=date_range,
+                                      **kwargs)
 
-    def _read_bbox(self, bbox, **kwargs):
+    def _read_bbox(self, bbox, date_range, **kwargs):
         location_ids = self.grid.get_bbox_grid_points(*bbox)
         return self._read_location_id(location_ids, **kwargs)
 
-    def _read_location_id(self, location_id, **kwargs):
+    def _read_location_id(self, location_id, date_range, **kwargs):
         """Read data for given grid point.
 
         Parameters
@@ -963,7 +1004,10 @@ class CellFileCollection:
         data = None
 
         if self._open(location_id=location_id):
-            data = self.fid.read(location_id=location_id, mask_and_scale=False, **kwargs)
+            data = self.fid.read(location_id=location_id,
+                                 mask_and_scale=False,
+                                 date_range=date_range,
+                                 **kwargs)
 
         return data
 
