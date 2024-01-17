@@ -251,6 +251,9 @@ class CellFileCollectionStack():
         else:
             raise ValueError("Need to specify either cell, location_id or bbox")
 
+        if data is None:
+            return data
+
         data = data.sortby(["sat_id", "locationIndex", "time"])
 
         # Deduplicate data
@@ -325,7 +328,8 @@ class CellFileCollectionStack():
         return [
             coll
             for coll in self.collections
-            if (coll.min_datetime >= start_date and coll.max_datetime < end_date)
+            if ((coll.min_datetime < end_date)
+                and (coll.max_datetime > start_date))
         ]
 
 
