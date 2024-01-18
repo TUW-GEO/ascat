@@ -56,6 +56,31 @@ dtype_to_nan = {np.dtype('int8'): int8_nan,
                 np.dtype('O'): None,}
 
 
+def trim_dates(ds, date_range):
+    """
+    Trim dates of dataset to a given date range. Assumes the time variable is named
+    "time", and observation dimension is named "obs"
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset.
+    date_range : tuple of datetime.datetime
+        Date range to trim to.
+
+    Returns
+    -------
+    xarray.Dataset
+        Dataset with trimmed dates.
+    """
+    if date_range is None:
+        return ds
+    start_date = np.datetime64(date_range[0])
+    end_date = np.datetime64(date_range[1])
+    return ds.isel(
+        obs=(ds.time >= start_date) & (ds.time <= end_date)
+    )
+
 def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
     # By @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
     # For time deltas, we must ensure that we use the same encoding as
@@ -361,11 +386,11 @@ class RaggedXArrayCellIOBase(ABC):
         self.engine = engine
         # if filename is a generator, use open_mfdataset
         # else use open_dataset
+        self.expected_obs_dim = obs_dim
         if isinstance(source, list):
-            # TODO concat_dim should probably be determined in child class
-            # In fact, all the dim names should
             self._ds = xr.open_mfdataset(source,
                                          engine=engine,
+                                         preprocess=self._preprocess,
                                          decode_cf=False,
                                          mask_and_scale=False,
                                          concat_dim=obs_dim,
@@ -373,21 +398,23 @@ class RaggedXArrayCellIOBase(ABC):
                                          data_vars="minimal",
                                          **kwargs)
         elif isinstance(source, (str, Path)):
-            self._ds = xr.open_dataset(source,
-                                       engine=engine,
-                                       decode_cf=False,
-                                       mask_and_scale=False,
-                                       **kwargs)
+            self._ds = self._ensure_obs_dim(
+                xr.open_dataset(source,
+                                engine=engine,
+                                decode_cf=False,
+                                mask_and_scale=False,
+                                **kwargs)
+            )
         elif isinstance(source, xr.Dataset):
-            self._ds = source
+            self._ds = self._ensure_obs_dim(source)
 
         self._kwargs = kwargs
 
-        if obs_dim in self._ds.dims:
-            if obs_dim != "obs":
-                self._ds = self._ds.rename_dims({obs_dim: "obs"})
-        else:
-            raise ValueError(f"obs_dim '{obs_dim}' not found in dataset")
+        # if obs_dim in self._ds.dims:
+        #     if obs_dim != "obs":
+        #         self._ds = self._ds.rename_dims({obs_dim: "obs"})
+        # else:
+        #     raise ValueError(f"obs_dim '{obs_dim}' not found in dataset")
 
         # chunks = kwargs.pop("chunks", None)
         # if chunks is not None:
@@ -395,6 +422,20 @@ class RaggedXArrayCellIOBase(ABC):
 
         if "row_size" in self._ds.data_vars:
             self._ds = self._ensure_indexed(self._ds)
+
+    def _preprocess(self, ds):
+        return self._ensure_obs_dim(ds)
+
+    def _ensure_obs_dim(self, ds, preferred_obs_dim="obs"):
+        """Rename the observations dimension of a DataSet if necessary."""
+        if preferred_obs_dim in ds.dims:
+            return ds
+        if self.expected_obs_dim in ds.dims:
+            if self.expected_obs_dim != preferred_obs_dim:
+                ds = ds.rename_dims({self.expected_obs_dim: preferred_obs_dim})
+            return ds
+        raise ValueError(f"obs_dim '{self.expected_obs_dim}' not found in dataset")
+
 
     @property
     def date_range(self):
@@ -566,7 +607,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         else:
             ds = self._ds
 
-        return self._trim_dates(
+        return trim_dates(
             xr.decode_cf(
                 ds,
                 mask_and_scale=mask_and_scale
@@ -638,33 +679,6 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         ds = ds.isel(obs=locationIndex, locations=idxs)
 
         return ds
-
-    @staticmethod
-    def _trim_dates(ds, date_range):
-        """
-        Trim dates of dataset to a given date range. Assumes the time variable is named
-        "time".
-
-        Parameters
-        ----------
-        ds : xarray.Dataset
-            Dataset.
-        date_range : tuple of datetime.datetime
-            Date range to trim to.
-
-        Returns
-        -------
-        xarray.Dataset
-            Dataset with trimmed dates.
-        """
-        if date_range is None:
-            return ds
-        start_date = np.datetime64(date_range[0])
-        end_date = np.datetime64(date_range[1])
-        return ds.isel(
-            obs=(ds.time >= start_date) & (ds.time <= end_date)
-        )
-
 
     @staticmethod
     def _var_order(ds):

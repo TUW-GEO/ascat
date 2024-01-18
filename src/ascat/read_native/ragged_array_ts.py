@@ -46,6 +46,7 @@ from ascat.read_native.xarray_io import AscatH129Swath
 from ascat.read_native.xarray_io import AscatSIG0Swath6250m
 from ascat.read_native.xarray_io import AscatSIG0Swath12500m
 
+from ascat.read_native.xarray_io import trim_dates
 
 class CellFileCollectionStack():
     """Collection of grid cell file collections."""
@@ -319,6 +320,28 @@ class CellFileCollectionStack():
             ):
                 pass
 
+    def append_to_collection_on_disk(self, disk_collection):
+        """Append data from the stack to a collection that already exists on disk.
+
+        If there is an existing collection on disk with a locations dimension that includes
+        all the locations in the stack (or the specified selection from the stack), then
+        data can be appended to that collection without actually reading it into memory.
+
+        This is especially useful if a very large collection is used as an archive and
+        needs to be expanded with new data periodically.
+
+        Currently the only supported file format is netCDF4.
+
+        Notes
+        -----
+        Should take a disk_collection as argument, as well as all the possible arguments
+        to self.read(), except for .
+
+        Can't check for duplicates with already-existing data, so this should only be
+
+        """
+        raise NotImplementedError
+
     def _collections_in_date_range(self, date_range):
         if date_range is None:
             return self.collections
@@ -328,8 +351,10 @@ class CellFileCollectionStack():
         return [
             coll
             for coll in self.collections
-            if ((coll.min_datetime < end_date)
-                and (coll.max_datetime > start_date))
+            if (
+                    (coll.min_datetime is None and coll.max_datetime is None)
+                    or ((coll.min_datetime < end_date) and (coll.max_datetime > start_date))
+            )
         ]
 
 
@@ -412,6 +437,7 @@ class CellFileCollectionStack():
             format.
         """
         search_cells = cells if isinstance(cells, list) else [cells]
+        search_cells = np.unique(search_cells)
 
         if search_cell_size is not None:
             data = []
@@ -427,29 +453,26 @@ class CellFileCollectionStack():
                 data.extend(
                     [
                         self._trim_to_gpis(
-                            self._trim_to_gpis(
-                                coll.read(
-                                    cell=cell,
-                                    mask_and_scale=False,
-                                    date_range=date_range,
-                                    **kwargs
-                                ),
-                                coll.grid.grid_points_for_cell(cell)[0].compressed(),
+                            coll.read(
+                                cell=cell,
+                                mask_and_scale=False,
+                                # date_range=date_range,
+                                **kwargs
                             ),
-                            valid_gpis)
+                            coll.grid.grid_points_for_cell(cell)[0].compressed(),
+                        )
                         for cell in old_cells
                     ]
                 )
 
         else:
+            # NOTE might be better here to actually group by cells first? then you could do openmfdataset with the ioclass...
+            # wouldn't work if there are any cell members with different location dimensions though
             data = [
-                self._trim_to_gpis(
-                    coll.read(cell=cell,
-                              mask_and_scale=False,
-                              date_range=date_range,
-                              **kwargs),
-                    valid_gpis
-                )
+                coll.read(cell=cell,
+                            mask_and_scale=False,
+                            # date_range=date_range,
+                            **kwargs)
                 for coll in self._collections_in_date_range(date_range)
                 for cell in search_cells
             ]
@@ -481,6 +504,9 @@ class CellFileCollectionStack():
             coords="minimal",
             combine_attrs="drop_conflicts",
         )
+
+        merged_ds = trim_dates(merged_ds, date_range)
+        merged_ds = self._trim_to_gpis(merged_ds, valid_gpis)
 
         return merged_ds
 
@@ -713,12 +739,26 @@ class CellFileCollectionStack():
 
         # first trim out any gpis not in the dataset from the gpi list
         gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
-        # then trim out any gpis in the dataset not in gpis
-        locations_idx = np.searchsorted(ds["location_id"].values, gpis)
-        obs_idx = np.in1d(ds["locationIndex"], locations_idx)
-        # ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
 
-        return ds.isel({"obs": obs_idx})#, "locations": locations_idx})
+        # this is a list of the locationIndex values that correspond to the gpis we're keeping
+        locations_idx = np.searchsorted(ds["location_id"].values, gpis)
+        # this is the indices of the observations that have any of those locationIndex values
+        obs_idx = np.in1d(ds["locationIndex"], locations_idx)
+
+        # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
+        old_locationIndex = ds["locationIndex"].values
+        new_locationIndex = np.searchsorted(
+            locations_idx,
+            old_locationIndex[np.isin(old_locationIndex, locations_idx)]
+        )
+
+
+        # then trim out any gpis in the dataset not in gpis
+        ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
+        # and add the new locationIndex
+        ds["locationIndex"] = ("obs", new_locationIndex)
+
+        return ds
 
     def close(self):
         """Close all the collections."""
@@ -766,11 +806,18 @@ class CellFileCollection:
     @property
     def date_range(self):
         """Return the start and end date of the collection based on its dir name"""
-        pattern = braces_to_re_groups(self.dir_name_format)
-        match = re.match(pattern, self.path.stem)
-        start_date = dt.strptime(match.group("date1"), self.dir_date_format)
-        end_date = dt.strptime(match.group("date2"), self.dir_date_format)
-        return np.datetime64(start_date, "ns"), np.datetime64(end_date, "ns")
+        try:
+            pattern = braces_to_re_groups(self.dir_name_format)
+            match = re.match(pattern, self.path.stem)
+            start_date = dt.strptime(match.group("date1"), self.dir_date_format)
+            end_date = dt.strptime(match.group("date2"), self.dir_date_format)
+            return np.datetime64(start_date, "ns"), np.datetime64(end_date, "ns")
+        except ValueError:
+            warnings.warn(
+                f"Could not determine date range for collection '{self.path.stem}'. "
+                "Using min/max datetime from files instead."
+            )
+            return None, None
 
     @classmethod
     def from_product_id(cls, collections, product_id, ioclass_kws=None):
@@ -926,7 +973,7 @@ class CellFileCollection:
         if not isinstance(cells, (list, np.ndarray)):
             cells = [cells]
 
-        filenames = [self.get_cell_path(c) for c in cells]
+        filenames = [self.get_cell_path(c) for c in np.unique(cells)]
 
         if len(filenames) == 1:
             filenames = filenames[0]
