@@ -335,6 +335,8 @@ class HsafConnector(FtpConnector):
         download_url_list = []
         local_file_list = []
 
+        local_path = str2path(local_path)
+
         i = 0
         for daily_files in self.files(remote_path, start_date, end_date):
             for file_remote in daily_files:

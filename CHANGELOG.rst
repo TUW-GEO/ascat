@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.3.1
+=============
+
+- Add str to path conversion for H SAF FTP download
+
 Version 2.3.0
 =============
 
