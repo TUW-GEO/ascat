@@ -33,6 +33,7 @@ from __future__ import division
 
 import os
 import fnmatch
+import zipfile
 import lxml.etree as etree
 from tempfile import NamedTemporaryFile
 from gzip import GzipFile
@@ -662,16 +663,24 @@ def read_eps(filename):
     """
     Read EPS file.
     """
-    zipped = False
     if os.path.splitext(filename)[1] == '.gz':
         zipped = True
 
-    # for zipped files use an unzipped temporary copy
-    if zipped:
         with NamedTemporaryFile(delete=False) as tmp_fid:
             with GzipFile(filename) as gz_fid:
                 tmp_fid.write(gz_fid.read())
             filename = tmp_fid.name
+    elif os.path.splitext(filename)[1] == '.zip':
+        zipped = True
+
+        with NamedTemporaryFile(delete=False) as tmp_fid:
+            extract_to_dir = os.path.dirname(tmp_fid.name)
+            fn_to_extract = os.path.splitext(os.path.basename(filename))[0] + ".nat"
+            with zipfile.ZipFile(filename, "r") as zip_ref:
+                zip_ref.extract(fn_to_extract, extract_to_dir)
+            filename = os.path.join(extract_to_dir, fn_to_extract)
+    else:
+        zipped = False
 
     # create the eps object with the filename and read it
     prod = EPSProduct(filename)

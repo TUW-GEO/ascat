@@ -89,7 +89,7 @@ class AscatL1Image(ImageBase):
         if file_format is None:
             file_format = get_file_format(self.filename)
 
-        if file_format in [".nat", ".nat.gz"]:
+        if file_format in [".nat", ".nat.gz", ".zip"]:
             img = eps_native.AscatL1bEPSImage(self.filename).read(timestamp)
             if not native:
                 img = eps2generic(img)
