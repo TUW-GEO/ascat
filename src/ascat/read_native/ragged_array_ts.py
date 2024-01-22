@@ -47,6 +47,7 @@ from ascat.read_native.xarray_io import AscatSIG0Swath6250m
 from ascat.read_native.xarray_io import AscatSIG0Swath12500m
 
 from ascat.read_native.xarray_io import trim_dates
+from ascat.read_native.xarray_io import append_to_netcdf
 
 class CellFileCollectionStack():
     """Collection of grid cell file collections."""
@@ -229,6 +230,8 @@ class CellFileCollectionStack():
         mask_and_scale : bool, optional
             If True, mask and scale the data according to its `scale_factor` and
             `_FillValue`/`missing_value` before returning. Default: True.
+        date_range : tuple of numpy.datetime64, optional
+            Start and end dates to read data for.
         **kwargs : dict
             Keyword arguments to pass to the read function of the collection
 
@@ -270,7 +273,14 @@ class CellFileCollectionStack():
             return xr.decode_cf(data, mask_and_scale=True)
         return data
 
-    def merge_and_write(self, out_dir, cells=None, out_cell_size=None, processes=8):
+    def merge_and_write(
+            self,
+            out_dir,
+            cells=None,
+            date_range = None,
+            out_cell_size=None,
+            processes=8
+    ):
         """Merge the data in all the collections by cell, and write each cell to disk.
 
         Parameters
@@ -279,6 +289,8 @@ class CellFileCollectionStack():
             Path to output directory.
         cells : list of int, optional
             Cells to write. If None, write all cells.
+        date_range : tuple of numpy.datetime64, optional
+            Start and end dates to read data for before writing.
         out_cell_size : tuple, optional
             Size of the output cells in degrees (assumes they are square).
             If None, and the component collections all have the same cell size,
@@ -297,17 +309,17 @@ class CellFileCollectionStack():
                              + " as argument to write_cells function")
         out_dir = Path(out_dir)
         out_dir.mkdir(exist_ok=True, parents=True)
-        cells = self.subcollection_cells(cells, out_cell_size)
+        cells = self.subcollection_cells(cells, out_cell_size, date_range=date_range)
 
         if processes < 2:
             for cell in tqdm(cells):
-                self._write_single_cell(out_dir, self.ioclass, cell, out_cell_size)
+                self._write_single_cell(out_dir, self.ioclass, cell, date_range, out_cell_size)
             return
 
         with mp.Pool(processes=processes) as pool:
             chunksize_heuristic = (len(cells)//processes)+1
             args_list = [
-                (out_dir, self.ioclass, cell, out_cell_size) for cell in cells
+                (out_dir, self.ioclass, cell, date_range, out_cell_size) for cell in cells
             ]
 
             for _ in tqdm(
@@ -320,7 +332,14 @@ class CellFileCollectionStack():
             ):
                 pass
 
-    def append_to_collection_on_disk(self, disk_collection):
+    def append_to_collection_on_disk(
+            self,
+            disk_collection,
+            cells=None,
+            date_range = None,
+            out_cell_size=None,
+            processes=8
+    ):
         """Append data from the stack to a collection that already exists on disk.
 
         If there is an existing collection on disk with a locations dimension that includes
@@ -335,12 +354,81 @@ class CellFileCollectionStack():
         Notes
         -----
         Should take a disk_collection as argument, as well as all the possible arguments
-        to self.read(), except for .
+        to self.read(), except for (?)
 
-        Can't check for duplicates with already-existing data, so this should only be
+        Can't check for duplicates with already-existing data, need to get a max date from
+        the disk_collection and ensure that only new data is appended.
 
         """
-        raise NotImplementedError
+        disk_path = disk_collection.path
+        # should parallelize this
+        for cell in cells:
+            # IF cell is not in the disk collection, then just write a new file (but warn)
+            print(disk_collection.cells_in_collection)
+            disk_data = disk_collection.read(cell=cell)
+            disk_location_ids = disk_data["location_id"].values
+            stack_data = self.read(
+                cell=cell,
+                mask_and_scale=False,
+                date_range=date_range,
+                # out_cell_size=out_cell_size
+            )
+            stack_location_ids = stack_data["location_id"].values
+            output_location_ids = disk_location_ids
+            cell_fname = disk_collection.ioclass.fn_format.format(cell)
+            print(cell_fname)
+
+
+            # if there are any new locations in the stack that aren't on disk...
+            if ~np.all(stack_location_ids == disk_location_ids):
+                print("ALERT")
+                if ~np.all(np.isin(stack_location_ids, disk_location_ids)):
+                    # output_location_ids will now be all unique location_ids in the
+                    # stack and disk collections combined
+
+                    stack_locationIndex = stack_data["locationIndex"].values
+                    output_location_ids = np.unique(np.append(stack_location_ids, disk_location_ids))
+                    all_stack_location_ids = stack_location_ids[stack_locationIndex]
+
+                    # recalculate disk locationIndex
+                    disk_locationIndex = disk_data["locationIndex"].values
+                    all_disk_location_ids = disk_location_ids[disk_locationIndex]
+                    new_disk_locationIndex = np.searchsorted(
+                        output_location_ids,
+                        all_disk_location_ids
+                    )
+
+                # recalculate stack locationIndex
+                new_stack_locationIndex = np.searchsorted(
+                    output_location_ids,
+                    all_stack_location_ids
+                )
+
+                # these new locationIndex arrays have been calculated with respect to a
+                # sorted location_id array, but there's no guarantee that the location_id
+                # array on disk or in the stack is actually sorted.
+
+                # get the locations from the stack that aren't already in the disk collection
+                new_locations = stack_data.isel(
+                    locations=(~np.isin(stack_location_ids, disk_location_ids))
+                )
+                # append the new locations dim data
+                append_to_netcdf(
+                    disk_path / cell_fname,
+                    new_locations,
+                    "locations"
+                )
+
+            # next need to sort the locations dimension, rewrite the locationIndex,
+            # and then append the new obs dim data
+
+            else:
+                disk_collection.close()
+                append_to_netcdf(
+                    disk_path / cell_fname,
+                    stack_data,
+                    "obs"
+                )
 
     def _collections_in_date_range(self, date_range):
         if date_range is None:
@@ -469,10 +557,14 @@ class CellFileCollectionStack():
             # NOTE might be better here to actually group by cells first? then you could do openmfdataset with the ioclass...
             # wouldn't work if there are any cell members with different location dimensions though
             data = [
-                coll.read(cell=cell,
-                            mask_and_scale=False,
-                            # date_range=date_range,
-                            **kwargs)
+                # self._trim_to_gpis(
+                coll.read(
+                    cell=cell,
+                    mask_and_scale=False,
+                    # date_range=date_range,
+                    **kwargs
+                )
+                # , valid_gpis)
                 for coll in self._collections_in_date_range(date_range)
                 for cell in search_cells
             ]
@@ -497,14 +589,18 @@ class CellFileCollectionStack():
 
         locs_merged.close()
 
+        # print("merging")
+        # print("len data:", len(data))
         merged_ds = xr.combine_nested(
-            [self._preprocess(ds, location_vars, location_sorter) for ds in data],
+            [self._preprocess(ds, location_vars, location_sorter, date_range)
+             for ds in data],
             concat_dim="obs",
             data_vars="minimal",
             coords="minimal",
             combine_attrs="drop_conflicts",
         )
 
+        # print("merged")
         merged_ds = trim_dates(merged_ds, date_range)
         merged_ds = self._trim_to_gpis(merged_ds, valid_gpis)
 
@@ -589,7 +685,7 @@ class CellFileCollectionStack():
 
     #     return merged_ds
 
-    def _write_single_cell(self, out_dir, ioclass, cell, out_cell_size, **kwargs):
+    def _write_single_cell(self, out_dir, ioclass, cell, date_range, out_cell_size, **kwargs):
         """Write data for a single cell from the stack to disk.
 
         Parameters
@@ -600,12 +696,19 @@ class CellFileCollectionStack():
             IO class to use for the writer.
         cell : tuple
             Cell to write.
+        date_range : tuple of numpy.datetime64
+            Start and end dates to read data for before writing.
         out_cell_size : tuple
             Size of the output cell.
         **kwargs
             Keyword arguments to pass to the ioclass write function.
         """
-        data = self.read(cell=cell, search_cell_size=out_cell_size, mask_and_scale=False)
+        data = self.read(
+            cell=cell,
+            date_range=date_range,
+            search_cell_size=out_cell_size,
+            mask_and_scale=False
+        )
         fname = ioclass.fn_format.format(cell)
         data.attrs["id"] = fname
         writer = ioclass(data)
@@ -624,7 +727,7 @@ class CellFileCollectionStack():
         self._write_single_cell(*args)
 
     @staticmethod
-    def _preprocess(ds, location_vars, location_sorter):
+    def _preprocess(ds, location_vars, location_sorter, date_range=None):
         """Pre-processing to be done on a component dataset so it can be merged with others.
 
         Assumes `ds` is an indexed ragged array. (Re)-calculates the `locationIndex`
@@ -647,6 +750,8 @@ class CellFileCollectionStack():
         xarray.Dataset
             Dataset with pre-processing applied.
         """
+        print("preprocessing")
+        print(ds.time.values.min(), ds.time.values.max(), ds.id)
         # First, we need to calculate the locationIndex variable, based
         # on the location_id variable that will go on the final merged dataset.
         # This should have been stored in self.location_vars["location_id"] at some
@@ -686,6 +791,9 @@ class CellFileCollectionStack():
             ds = ds.reset_index("time")
         except ValueError:
             pass
+
+        # finally trim to date_range
+        # ds = trim_dates(ds, date_range)
 
         return ds
 
@@ -814,8 +922,9 @@ class CellFileCollection:
             return np.datetime64(start_date, "ns"), np.datetime64(end_date, "ns")
         except ValueError:
             warnings.warn(
-                f"Could not determine date range for collection '{self.path.stem}'. "
-                "Using min/max datetime from files instead."
+                f"Could not determine date range for collection '{self.path.stem}'"
+                " from directory name."
+                " Using min/max datetime from files instead."
             )
             return None, None
 
@@ -994,7 +1103,7 @@ class CellFileCollection:
 
         return success
 
-    def _read_cell(self, cell, date_range, **kwargs):
+    def _read_cell(self, cell, date_range=None, **kwargs):
         """Read data from the entire cell.
 
         Parameters
@@ -1019,7 +1128,7 @@ class CellFileCollection:
 
         return data
 
-    def _read_latlon(self, lat, lon, date_range, **kwargs):
+    def _read_latlon(self, lat, lon, date_range=None, **kwargs):
         """Read data for the nearest grid point to the given coordinate.
 
         Converts lon/lat pair to a location_id, then reads data for that location_id.
@@ -1044,11 +1153,11 @@ class CellFileCollection:
                                       date_range=date_range,
                                       **kwargs)
 
-    def _read_bbox(self, bbox, date_range, **kwargs):
+    def _read_bbox(self, bbox, date_range=None, **kwargs):
         location_ids = self.grid.get_bbox_grid_points(*bbox)
-        return self._read_location_id(location_ids, **kwargs)
+        return self._read_location_id(location_ids, date_range=date_range, **kwargs)
 
-    def _read_location_id(self, location_id, date_range, **kwargs):
+    def _read_location_id(self, location_id, date_range=None, **kwargs):
         """Read data for given grid point.
 
         Parameters
