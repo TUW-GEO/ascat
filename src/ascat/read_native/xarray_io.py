@@ -130,7 +130,7 @@ def append_to_netcdf(filename, ds_to_append, unlimited_dim):
         nc_coord = nc.dimensions[unlimited_dim]
         nc_shape = len(nc_coord)
 
-        added_size = ds_to_append.dims[unlimited_dim]
+        added_size = ds_to_append.sizes[unlimited_dim]
         variables, _ = xr.conventions.encode_dataset_coordinates(ds_to_append)
 
         for name, data in variables.items():
@@ -388,22 +388,26 @@ class RaggedXArrayCellIOBase(ABC):
         # else use open_dataset
         self.expected_obs_dim = obs_dim
         if isinstance(source, list):
-            self._ds = xr.open_mfdataset(source,
-                                         engine=engine,
-                                         preprocess=self._preprocess,
-                                         decode_cf=False,
-                                         mask_and_scale=False,
-                                         concat_dim=obs_dim,
-                                         combine="nested",
-                                         data_vars="minimal",
-                                         **kwargs)
+            self._ds = xr.open_mfdataset(
+                source,
+                engine=engine,
+                preprocess=self._preprocess,
+                decode_cf=False,
+                mask_and_scale=False,
+                concat_dim=obs_dim,
+                combine="nested",
+                data_vars="minimal",
+                **kwargs
+            )
         elif isinstance(source, (str, Path)):
             self._ds = self._ensure_obs_dim(
-                xr.open_dataset(source,
-                                engine=engine,
-                                decode_cf=False,
-                                mask_and_scale=False,
-                                **kwargs)
+                xr.open_dataset(
+                    source,
+                    engine=engine,
+                    decode_cf=False,
+                    mask_and_scale=False,
+                    **kwargs
+                )
             )
         elif isinstance(source, xr.Dataset):
             self._ds = self._ensure_obs_dim(source)
@@ -615,7 +619,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
             date_range
         )
 
-    def write(self, filename, ra_type="contiguous", **kwargs):
+    def write(self, filename, ra_type="indexed", **kwargs):
         """
         Write data to a netCDF file.
 
@@ -643,7 +647,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
 
         custom_variable_encodings = self._kwargs.get("encoding", None) or self.custom_variable_encodings
         encoding = self._create_variable_encodings(out_ds, custom_variable_encodings)
-        out_ds.encoding["unlimited_dims"] = []
+        out_ds.encoding["unlimited_dims"] = ["obs"]
 
         for var, var_encoding in encoding.items():
             if "_FillValue" in var_encoding and "_FillValue" in out_ds[var].attrs:
