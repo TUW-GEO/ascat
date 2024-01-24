@@ -45,9 +45,11 @@ uint8_nan = np.iinfo(np.uint8).max
 int32_nan = np.iinfo(np.int32).max
 int64_nan = np.iinfo(np.int64).max
 float32_nan = -999999.
+float64_nan = -999999.
 dtype_to_nan = {np.dtype('int8'): int8_nan,
                 np.dtype('uint8'): uint8_nan,
                 np.dtype('float32'): float32_nan,
+                np.dtype('float64'): float64_nan,
                 np.dtype('int16'): int16_nan,
                 np.dtype('uint16'): uint8_nan,
                 np.dtype('int32'): int32_nan,
@@ -82,22 +84,26 @@ def trim_dates(ds, date_range):
     )
 
 def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
-    # By @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
+    # Adapted from @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
     # For time deltas, we must ensure that we use the same encoding as
     # what was previously stored.
     # We likely need to do this as well for variables that had custom
     # encodings too
+    data.encoding = dict()
     if hasattr(nc_variable, 'calendar'):
-        data.encoding = {
-            'units': nc_variable.units,
-            'calendar': nc_variable.calendar,
-        }
+        data.encoding['calendar']= nc_variable.calendar
     if hasattr(nc_variable, 'calender'):
-        data.encoding = {
-            'units': nc_variable.units,
-            'calendar': nc_variable.calender
-        }
+        data.encoding['calendar']= nc_variable.calender
+
+    if hasattr(nc_variable, 'dtype'):
+        data.encoding['dtype'] = nc_variable.dtype
+    if hasattr(nc_variable, 'units'):
+        data.encoding['units'] = nc_variable.units
+    if hasattr(nc_variable, '_FillValue'):
+        data.encoding['_FillValue'] = nc_variable._FillValue
+
     data_encoded = xr.conventions.encode_cf_variable(data)
+
     left_slices = data.dims.index(expanding_dim)
     right_slices = data.ndim - left_slices - 1
     nc_slice = ((slice(None),) * left_slices
@@ -126,7 +132,6 @@ def append_to_netcdf(filename, ds_to_append, unlimited_dim):
     # By @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
     with netCDF4.Dataset(filename, mode='a') as nc:
         nc.set_auto_maskandscale(False)
-        # nc_dims = set(nc.dimensions.keys())
         nc_coord = nc.dimensions[unlimited_dim]
         nc_shape = len(nc_coord)
 
@@ -200,7 +205,6 @@ def set_attributes(ds, variable_attributes=None, global_attributes=None):
     ds : xarray.Dataset
         Dataset with variable_attributes.
     """
-    # needed to set custom variable_attributes
     variable_attributes = variable_attributes or {}
 
     if "row_size" in ds.data_vars:
@@ -272,7 +276,7 @@ def set_attributes(ds, variable_attributes=None, global_attributes=None):
     return ds
 
 
-def create_variable_encodings(ds, custom_variable_encodings=None):
+def create_variable_encodings(ds, custom_variable_encodings=None, custom_dtypes=None):
     """
     Create an encoding dictionary for a dataset, optionally
     overriding the default encoding or adding additional
@@ -324,11 +328,6 @@ def create_variable_encodings(ds, custom_variable_encodings=None):
         "location_id": {
             "dtype": "int64",
         },
-        # # for some reason setting this throws an error but
-        # # it gets handled properly automatically when left out
-        # "location_description": {
-        #     "dtype": "str",
-        # },
         "time": {
             "dtype": "float64",
             "units": "days since 1900-01-01 00:00:00",
@@ -351,6 +350,18 @@ def create_variable_encodings(ds, custom_variable_encodings=None):
         for var, dtype in ds.dtypes.items()
         if var not in default_encoding
     })
+
+    if custom_dtypes is not None:
+        custom_variable_encodings = {
+            var: {
+                "dtype": custom_dtypes[var],
+                "zlib": bool(np.issubdtype(custom_dtypes[var], np.number)),
+                "complevel": 4,
+                "_FillValue": dtype_to_nan[custom_dtypes[var]],
+            }
+            for var in custom_dtypes.names
+            if var in ds.data_vars
+        }
 
     encoding = {**default_encoding, **custom_variable_encodings}
 
@@ -384,10 +395,10 @@ class RaggedXArrayCellIOBase(ABC):
     def __init__(self, source, engine, obs_dim="time", **kwargs):
         self.source = source
         self.engine = engine
-        # if filename is a generator, use open_mfdataset
-        # else use open_dataset
         self.expected_obs_dim = obs_dim
         if isinstance(source, list):
+            # intended for opening multiple files from the /same cell/.
+            # Won't work if two files have different locations dimension.
             self._ds = xr.open_mfdataset(
                 source,
                 engine=engine,
@@ -510,9 +521,6 @@ class RaggedXArrayCellIOBase(ABC):
         xarray.Dataset
             Dataset in indexed ragged array format.
         """
-        # if "time" in ds.dims:
-        #     ds = ds.rename_dims({"time": "obs"})
-
         if ds is None or "locationIndex" in ds.data_vars:
             return ds
 
@@ -522,13 +530,6 @@ class RaggedXArrayCellIOBase(ABC):
         locationIndex = np.repeat(np.arange(row_size.size), row_size)
         ds["locationIndex"] = ("obs", locationIndex)
         ds = ds.drop_vars(["row_size"])
-        # if self.ra_type == "contiguous":
-        #     row_size = np.where(ds["row_size"].values > 0,
-        #                         ds["row_size"].values, 0)
-
-        #     locationIndex = np.repeat(np.arange(row_size.size), row_size)
-        #     ds["locationIndex"] = ("obs", locationIndex)
-        #     ds = ds.drop_vars(["row_size"])
 
         return ds[self._var_order(ds)]
 
@@ -654,7 +655,6 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
                 del out_ds[var].attrs["_FillValue"]
 
         out_ds.to_netcdf(filename, encoding=encoding, **kwargs)
-        # out_ds.to_netcdf(filename,  **kwargs)
 
     def _read_location_id(self, location_id):
         """
@@ -822,6 +822,7 @@ class SwathIOBase(ABC):
                                          combine="nested",
                                          chunks=(chunks or "auto"),
                                          combine_attrs=self.combine_attributes,
+                                         mask_and_scale=False,
                                          **kwargs)
             chunks = None
 
@@ -838,6 +839,12 @@ class SwathIOBase(ABC):
         if chunks is not None:
             self._ds = self._ds.chunk(chunks)
 
+        # the swath files have a typo in the calendar attribute
+        # this fixes that and lets xarray pick it up when decoding the time variable
+        # I'm not sure if it really makes a difference but this is more correct.
+        if "calender" in self._ds.time.attrs:
+            self._ds.time.attrs["calendar"] = self._ds.time.attrs.pop("calender")
+
     def read(self, cell=None, location_id=None, mask_and_scale=True):
         """
         Returns data for a cell or location_id if specified, or for the entire
@@ -853,22 +860,25 @@ class SwathIOBase(ABC):
             Whether to mask and scale the data. Default is True.
         """
         if location_id is not None:
-            return self._read_location_ids(location_id)
-        if cell is not None:
-            return self._read_cell(cell)
-        return xr.decode_cf(self._ds, mask_and_scale=mask_and_scale)
+            out_data = self._read_location_ids(location_id)
+        elif cell is not None:
+            out_data = self._read_cell(cell)
+        else:
+            out_data = self._ds
+        return xr.decode_cf(out_data, mask_and_scale=mask_and_scale)
 
     def write(self, filename, mode="w", **kwargs):
         out_ds = self._ds
         out_ds = out_ds[self._var_order(out_ds)]
         out_ds = self._set_attributes(out_ds)
-        out_encoding = self._create_variable_encodings(out_ds)
-        # out_ds.encoding["unlimited_dims"] = ["obs"]
+        # out_encoding = self._create_variable_encodings(out_ds, custom_dtypes = self.ts_dtype)
 
         if mode == "a":
             if os.path.exists(filename):
-                append_to_netcdf(filename, out_ds, unlimited_dims=["obs"])
+                append_to_netcdf(filename, out_ds, unlimited_dim="obs")
                 return
+
+        out_encoding = self._create_variable_encodings(out_ds, custom_dtypes = self.ts_dtype)
         out_ds.to_netcdf(filename, unlimited_dims=["obs"], encoding=out_encoding, **kwargs)
 
     def _read_location_ids(self, location_ids):
@@ -887,9 +897,16 @@ class SwathIOBase(ABC):
         """
         Read data for a single cell
         """
+
         if self._cell_vals is None:
             self._cell_vals = self.grid.gpi2cell(self._ds.location_id.values)
-        idxs = np.where(self._cell_vals == cell)[0]
+
+        if isinstance(cell, (list, np.ndarray)):
+            idxs = np.in1d(self._cell_vals, cell)
+        elif isinstance(cell, (int, np.int64, np.int32)):
+            idxs = np.where(self._cell_vals == cell)[0]
+        else:
+            raise ValueError("cell must be int or list of ints")
         if not np.any(idxs):
             return None
 
@@ -935,7 +952,7 @@ class SwathIOBase(ABC):
         return set_attributes(ds,variable_attributes, global_attributes)
 
     @staticmethod
-    def _create_variable_encodings(ds, custom_variable_encodings=None):
+    def _create_variable_encodings(ds, custom_variable_encodings=None, custom_dtypes=None):
         """
         A wrapper for xarray_io.create_variable_encodings. This can be overridden in a child class
         if different logic for this function is needed.
@@ -952,7 +969,7 @@ class SwathIOBase(ABC):
         ds : xarray.Dataset
             Dataset with encodings.
         """
-        return create_variable_encodings(ds, custom_variable_encodings)
+        return create_variable_encodings(ds, custom_variable_encodings, custom_dtypes)
 
     @staticmethod
     def _preprocess(ds):
@@ -1091,7 +1108,7 @@ class AscatH129Cell(AscatNetCDFCellBase):
     min_cell = grid_info["min_cell"]
 
     def __init__(self, filename, **kwargs):
-        super().__init__(filename, **kwargs)
+        super().__init__(filename, obs_dim="obs", **kwargs)
         self.custom_variable_attrs = None
         self.custom_global_attrs = None
         self.custom_variable_encodings = None
@@ -1107,7 +1124,7 @@ class AscatSIG0Cell6250m(AscatNetCDFCellBase):
     min_cell = grid_info["min_cell"]
 
     def __init__(self, filename, **kwargs):
-        super().__init__(filename, **kwargs)
+        super().__init__(filename, obs_dim="obs", **kwargs)
         self.custom_variable_attrs = None
         self.custom_global_attrs = None
         self.custom_variable_encodings = None
@@ -1123,7 +1140,7 @@ class AscatSIG0Cell12500m(AscatNetCDFCellBase):
     min_cell = grid_info["min_cell"]
 
     def __init__(self, filename, **kwargs):
-        super().__init__(filename, **kwargs)
+        super().__init__(filename, obs_dim="obs", **kwargs)
         self.custom_variable_attrs = None
         self.custom_global_attrs = None
         self.custom_variable_encodings = None
@@ -1184,7 +1201,7 @@ class AscatSIG0Swath6250m(SwathIOBase):
     """
     Class for reading ASCAT sigma0 swath data and writing it to cells.
     """
-    fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-6.25_C_LIIB_*_*_{date}____*.nc"
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-6.25_C_LIIB_*_*_{date}____.nc"
     sf_pattern = {"year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
@@ -1203,7 +1220,7 @@ class AscatSIG0Swath6250m(SwathIOBase):
         "all_azimuth_angle",
         "all_kp",
         "all_n_echos",
-    ],
+    ]
     ts_dtype = np.dtype([
         ("sat_id", np.int8),
         ("as_des_pass", np.int8),
@@ -1275,7 +1292,7 @@ class AscatSIG0Swath12500m(SwathIOBase):
     """
     Class for reading and writing ASCAT sigma0 swath data.
     """
-    fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-12.5_C_LIIB_*_*_{date}____*.nc"
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-12.5_C_LIIB_*_*_{date}____.nc"
     sf_pattern = {"year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)["grid"]
@@ -1294,7 +1311,7 @@ class AscatSIG0Swath12500m(SwathIOBase):
         "all_azimuth_angle",
         "all_kp",
         "all_n_echos",
-    ],
+    ]
     ts_dtype = np.dtype([
         ("sat_id", np.int8),
         ("as_des_pass", np.int8),
@@ -1361,20 +1378,3 @@ class AscatSIG0Swath12500m(SwathIOBase):
 
     def __init__(self, filename,  **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
-
-
-# ascat_io_classes = {
-#     "H129": {
-#         # "cell": ASCAT_H129_Cell,
-#         "cell": AscatH129Cell,
-#         "swath": AscatH129Swath,
-#     },
-#     "SIG0_6.25": {
-#         "cell": AscatSIG0Cell6250m,
-#         "swath": AscatSIG0Swath6250m,
-#     },
-#     "SIG0_12.5": {
-#         "cell": AscatSIG0Cell12500m,
-#         "swath": AscatSIG0Swath12500m,
-#     },
-# }

@@ -332,103 +332,102 @@ class CellFileCollectionStack():
             ):
                 pass
 
-    def append_to_collection_on_disk(
-            self,
-            disk_collection,
-            cells=None,
-            date_range = None,
-            out_cell_size=None,
-            processes=8
-    ):
-        """Append data from the stack to a collection that already exists on disk.
+    # def append_to_collection_on_disk(
+    #         self,
+    #         disk_collection,
+    #         cells=None,
+    #         date_range = None,
+    #         out_cell_size=None,
+    #         processes=8
+    # ):
+    #     """Append data from the stack to a collection that already exists on disk.
 
-        If there is an existing collection on disk with a locations dimension that includes
-        all the locations in the stack (or the specified selection from the stack), then
-        data can be appended to that collection without actually reading it into memory.
+    #     If there is an existing collection on disk with a locations dimension that includes
+    #     all the locations in the stack (or the specified selection from the stack), then
+    #     data can be appended to that collection without actually reading it into memory.
 
-        This is especially useful if a very large collection is used as an archive and
-        needs to be expanded with new data periodically.
+    #     This is especially useful if a very large collection is used as an archive and
+    #     needs to be expanded with new data periodically.
 
-        Currently the only supported file format is netCDF4.
+    #     Currently the only supported file format is netCDF4.
 
-        Notes
-        -----
-        Should take a disk_collection as argument, as well as all the possible arguments
-        to self.read(), except for (?)
+    #     You would probably be better served by appending directly from swath files...
 
-        Can't check for duplicates with already-existing data, need to get a max date from
-        the disk_collection and ensure that only new data is appended.
+    #     Notes
+    #     -----
+    #     Should take a disk_collection as argument, as well as all the possible arguments
+    #     to self.read(), except for (?)
 
-        """
-        disk_path = disk_collection.path
-        # should parallelize this
-        for cell in cells:
-            # IF cell is not in the disk collection, then just write a new file (but warn)
-            print(disk_collection.cells_in_collection)
-            disk_data = disk_collection.read(cell=cell)
-            disk_location_ids = disk_data["location_id"].values
-            stack_data = self.read(
-                cell=cell,
-                mask_and_scale=False,
-                date_range=date_range,
-                # out_cell_size=out_cell_size
-            )
-            stack_location_ids = stack_data["location_id"].values
-            output_location_ids = disk_location_ids
-            cell_fname = disk_collection.ioclass.fn_format.format(cell)
-            print(cell_fname)
+    #     Can't check for duplicates with already-existing data, need to get a max date from
+    #     the disk_collection and ensure that only new data is appended.
+
+    #     """
+    #     disk_path = disk_collection.path
+    #     # should parallelize this
+    #     for cell in cells:
+    #         # IF cell is not in the disk collection, then just write a new file (but warn)
+    #         disk_data = disk_collection.read(cell=cell)
+    #         disk_location_ids = disk_data["location_id"].values
+    #         stack_data = self.read(
+    #             cell=cell,
+    #             mask_and_scale=False,
+    #             date_range=date_range,
+    #             # out_cell_size=out_cell_size
+    #         )
+    #         stack_location_ids = stack_data["location_id"].values
+    #         output_location_ids = disk_location_ids
+    #         cell_fname = disk_collection.ioclass.fn_format.format(cell)
 
 
-            # if there are any new locations in the stack that aren't on disk...
-            if ~np.all(stack_location_ids == disk_location_ids):
-                print("ALERT")
-                if ~np.all(np.isin(stack_location_ids, disk_location_ids)):
-                    # output_location_ids will now be all unique location_ids in the
-                    # stack and disk collections combined
+    #         # if there are any new locations in the stack that aren't on disk...
+    #         if ~np.all(stack_location_ids == disk_location_ids):
+    #             if ~np.all(np.isin(stack_location_ids, disk_location_ids)):
+    #                 # output_location_ids will now be all unique location_ids in the
+    #                 # stack and disk collections combined
 
-                    stack_locationIndex = stack_data["locationIndex"].values
-                    output_location_ids = np.unique(np.append(stack_location_ids, disk_location_ids))
-                    all_stack_location_ids = stack_location_ids[stack_locationIndex]
+    #                 stack_locationIndex = stack_data["locationIndex"].values
+    #                 output_location_ids = np.unique(np.append(stack_location_ids, disk_location_ids))
+    #                 all_stack_location_ids = stack_location_ids[stack_locationIndex]
 
-                    # recalculate disk locationIndex
-                    disk_locationIndex = disk_data["locationIndex"].values
-                    all_disk_location_ids = disk_location_ids[disk_locationIndex]
-                    new_disk_locationIndex = np.searchsorted(
-                        output_location_ids,
-                        all_disk_location_ids
-                    )
+    #                 # recalculate disk locationIndex
+    #                 disk_locationIndex = disk_data["locationIndex"].values
+    #                 all_disk_location_ids = disk_location_ids[disk_locationIndex]
+    #                 new_disk_locationIndex = np.searchsorted(
+    #                     output_location_ids,
+    #                     all_disk_location_ids
+    #                 )
 
-                # recalculate stack locationIndex
-                new_stack_locationIndex = np.searchsorted(
-                    output_location_ids,
-                    all_stack_location_ids
-                )
+    #             # recalculate stack locationIndex
+    #             new_stack_locationIndex = np.searchsorted(
+    #                 output_location_ids,
+    #                 all_stack_location_ids
+    #             )
 
-                # these new locationIndex arrays have been calculated with respect to a
-                # sorted location_id array, but there's no guarantee that the location_id
-                # array on disk or in the stack is actually sorted.
+    #             # these new locationIndex arrays have been calculated with respect to a
+    #             # sorted location_id array, but there's no guarantee that the location_id
+    #             # array on disk or in the stack is actually sorted.
 
-                # get the locations from the stack that aren't already in the disk collection
-                new_locations = stack_data.isel(
-                    locations=(~np.isin(stack_location_ids, disk_location_ids))
-                )
-                # append the new locations dim data
-                append_to_netcdf(
-                    disk_path / cell_fname,
-                    new_locations,
-                    "locations"
-                )
+    #             # get the locations from the stack that aren't already in the disk collection
+    #             new_locations = stack_data.isel(
+    #                 locations=(~np.isin(stack_location_ids, disk_location_ids))
+    #             )
+    #             # append the new locations dim data
+    #             append_to_netcdf(
+    #                 disk_path / cell_fname,
+    #                 new_locations,
+    #                 "locations"
+    #             )
 
-            # next need to sort the locations dimension, rewrite the locationIndex,
-            # and then append the new obs dim data
+    #         # next need to sort the locations dimension, rewrite the locationIndex,
+    #         # and then append the new obs dim data
 
-            else:
-                disk_collection.close()
-                append_to_netcdf(
-                    disk_path / cell_fname,
-                    stack_data,
-                    "obs"
-                )
+    #         else:
+    #             disk_collection.close()
+    #             append_to_netcdf(
+    #                 disk_path / cell_fname,
+    #                 stack_data,
+    #                 "obs"
+    #             )
 
     def _collections_in_date_range(self, date_range):
         if date_range is None:
@@ -544,7 +543,6 @@ class CellFileCollectionStack():
                             coll.read(
                                 cell=cell,
                                 mask_and_scale=False,
-                                # date_range=date_range,
                                 **kwargs
                             ),
                             coll.grid.grid_points_for_cell(cell)[0].compressed(),
@@ -554,17 +552,12 @@ class CellFileCollectionStack():
                 )
 
         else:
-            # NOTE might be better here to actually group by cells first? then you could do openmfdataset with the ioclass...
-            # wouldn't work if there are any cell members with different location dimensions though
             data = [
-                # self._trim_to_gpis(
                 coll.read(
                     cell=cell,
                     mask_and_scale=False,
-                    # date_range=date_range,
                     **kwargs
                 )
-                # , valid_gpis)
                 for coll in self._collections_in_date_range(date_range)
                 for cell in search_cells
             ]
@@ -589,10 +582,8 @@ class CellFileCollectionStack():
 
         locs_merged.close()
 
-        # print("merging")
-        # print("len data:", len(data))
         merged_ds = xr.combine_nested(
-            [self._preprocess(ds, location_vars, location_sorter, date_range)
+            [self._preprocess(ds, location_vars, location_sorter)
              for ds in data],
             concat_dim="obs",
             data_vars="minimal",
@@ -600,7 +591,6 @@ class CellFileCollectionStack():
             combine_attrs="drop_conflicts",
         )
 
-        # print("merged")
         merged_ds = trim_dates(merged_ds, date_range)
         merged_ds = self._trim_to_gpis(merged_ds, valid_gpis)
 
@@ -727,7 +717,7 @@ class CellFileCollectionStack():
         self._write_single_cell(*args)
 
     @staticmethod
-    def _preprocess(ds, location_vars, location_sorter, date_range=None):
+    def _preprocess(ds, location_vars, location_sorter):
         """Pre-processing to be done on a component dataset so it can be merged with others.
 
         Assumes `ds` is an indexed ragged array. (Re)-calculates the `locationIndex`
@@ -750,8 +740,6 @@ class CellFileCollectionStack():
         xarray.Dataset
             Dataset with pre-processing applied.
         """
-        print("preprocessing")
-        print(ds.time.values.min(), ds.time.values.max(), ds.id)
         # First, we need to calculate the locationIndex variable, based
         # on the location_id variable that will go on the final merged dataset.
         # This should have been stored in self.location_vars["location_id"] at some
@@ -791,9 +779,6 @@ class CellFileCollectionStack():
             ds = ds.reset_index("time")
         except ValueError:
             pass
-
-        # finally trim to date_range
-        # ds = trim_dates(ds, date_range)
 
         return ds
 
@@ -1104,7 +1089,7 @@ class CellFileCollection:
         return success
 
     def _read_cell(self, cell, date_range=None, **kwargs):
-        """Read data from the entire cell.
+        """Read data from one entire cell.
 
         Parameters
         ----------
@@ -1118,8 +1103,29 @@ class CellFileCollection:
         data : xarray.Dataset
             Data for the cell.
         """
-        # if there are kwargs, use them instead of self.ioclass_kws
+        data = None
+        if self._open(cells=cell):
+            data = self.fid.read(mask_and_scale=False,
+                                 date_range=date_range,
+                                 **kwargs)
 
+        return data
+
+    def _read_cells(self, cell, date_range=None, **kwargs):
+        """Read data from several entire cells.
+
+        Parameters
+        ----------
+        cell : int
+            Cell number.
+        **kwargs : dict
+            Keyword arguments passed to the ioclass.
+
+        Returns
+        -------
+        data : xarray.Dataset
+            Data for the cell.
+        """
         data = None
         if self._open(cells=cell):
             data = self.fid.read(mask_and_scale=False,
@@ -1182,27 +1188,6 @@ class CellFileCollection:
 
         return data
 
-    # def _read_location_ids(self, location_id, **kwargs):
-    #     """Read data for given grid points.
-
-    #     Parameters
-    #     ----------
-    #     location_id : int
-    #         Location identifier.
-    #     **kwargs : dict
-    #         Keyword arguments passed to the ioclass `read` method.
-
-    #     Returns
-    #     -------
-    #     data : xarray.Dataset
-    #         Data for the given grid point.
-    #     """
-    #     data = None
-    #     if self._open(location_id=location_id):
-    #         data = self.fid.read(location_id=location_id, **kwargs)
-
-    #     return data
-
     def get_cell_path(self, cell=None, location_id=None):
         """Get path to cell file given cell number or location id.
 
@@ -1254,12 +1239,47 @@ class CellFileCollection:
 
 
 class SwathFileCollection:
-    """FIXME: Short description.
+    """ Collection of time-series swath files.
 
-    FIXME: Long description.
+    Parameters
+    ----------
+    path : str or Path
+        Path to the swath file collection.
+    ioclass : ascat.read_native.xarray_io.SwathIOBase
+        IO class to use for reading the data.
+    ioclass_kws : dict, optional
+        Keyword arguments to pass to the ioclass initialization. Default: None
+    dask_scheduler : str, optional
+        Dask scheduler to use for parallel processing in xarray. In testing this just
+        made most things slower, but it may be useful in some cases. Default: None
+
 
     Attributes
     ----------
+    path : Path
+        Path to the swath file collection.
+    ioclass : class
+        IO class to use for reading the data.
+    ioclass_kws : dict
+        Keyword arguments to pass to the ioclass initialization. May include ioclass
+        attributes that will override any that are set in the current ioclass.
+    grid : pygeogrids.CellGrid object
+        Grid object defining the grid the data is on.
+    ts_dtype : numpy.dtype
+        Data types to encode the time series data as when writing.
+    beams_vars : list of str
+        List of names of the variables that have a beams dimension.
+    date_format : str
+        Format of the date in the filename.
+    cell_fn_format : str
+        Format for the names of the cell files that will be written out.
+    chron_files : function
+        Function to search for files in the collection based on their date.
+    previous_cell : int or list of int
+    fid : ascat.read_native.xarray_io.SwathIOBase object
+        The currently open instance of self.ioclass.
+    max_buffer_memory_mb : int
+        Maximum amount of memory to use for buffering data when stacking to disk.
 
     Methods
     -------
@@ -1273,6 +1293,28 @@ class SwathFileCollection:
                  ):
         self.path = Path(path)
         self.ioclass = ioclass
+
+        if ioclass_kws is None:
+            self.ioclass_kws = {}
+        else:
+            self.ioclass_kws = ioclass_kws
+            for k in list(ioclass_kws.keys()):
+                # allow user to override individual ioclass attributes if they want
+                if k in [
+                        "fn_pattern",
+                        "sf_pattern",
+                        "date_format",
+                        "grid",
+                        "grid_cell_size",
+                        "cell_fn_format",
+                        "beams_vars",
+                        "ts_dtype",
+                        "fn_read_fmt",
+                        "sf_read_fmt",
+                ]:
+                    v = ioclass_kws.pop(k)
+                    setattr(self.ioclass, k, v)
+
         self.grid = self.ioclass.grid
         self.ts_dtype = self.ioclass.ts_dtype
         self.beams_vars = self.ioclass.beams_vars
@@ -1285,14 +1327,8 @@ class SwathFileCollection:
         self.previous_cell = None
         self._open_fnames = None
         self.fid = None
-        self.min_time = None
-        self.max_time = None
         self.max_buffer_memory_mb = 6*1024
 
-        if ioclass_kws is None:
-            self.ioclass_kws = {}
-        else:
-            self.ioclass_kws = ioclass_kws
 
         if dask_scheduler is not None:
             dask.config.set(scheduler=dask_scheduler)
@@ -1347,7 +1383,253 @@ class SwathFileCollection:
             dask_scheduler=dask_scheduler
         )
 
-    def _get_filenames(self, start_dt, end_dt):
+    def stack(
+            self,
+            out_dir,
+            fnames=None,
+            date_range=None,
+            mode="w",
+            processes=1,
+            buffer_memory_mb=None,
+            dupe_window=None
+    ):
+        """Stack swath files and split them into cell timeseries files.
+
+        Reads swath files into memory, stacking their datasets in a buffer until the sum
+        of their sizes exceeds self.max_buffer_memory_mb. Then, splits the buffer into
+        cell timeseries datasets, writes them to disk in parallel, and clears the
+        buffer. This process repeats until all files have been processed, with
+        subsequent writes appending new data to existing cell files when appropriate.
+
+        Parameters
+        ----------
+        out_dir : pathlib.Path
+            Output directory to write the stacked files to.
+        fnames : list of pathlib.Path, optional
+            List of swath filenames to stack.
+        date_range : tuple of datetime.datetime
+            Start and end dates to read data for before writing.
+        mode : str, optional
+            Write mode. Default is "w", which will clear all files from out_dir before
+            processing. Use "a" to append data to existing files (only if those have
+            also been produced by this function).
+        processes : int, optional
+            Number of processes to use for parallel writing. Default is 1.
+        buffer_memory_mb : numeric, optional
+            Maximum amount of memory to use for the buffer, in megabytes. Will be set to
+            `self.max_buffer_memory_mb` if None. Default is None.
+        dupe_window : numpy.timedelta64, optional
+            Time window within which duplicate observations will be removed. Default is
+            `None`.
+
+        Raises
+        ------
+        ValueError
+            If mode is not "w" or "a".
+        """
+        if mode == "w":
+            input(f"Calling ragged_array_ts.stack with mode='w' will clear all files"
+                  f" from {out_dir}.\nPress enter to continue, or ctrl+c to cancel. ")
+            for f in out_dir.glob("*.nc"):
+                f.unlink()
+        elif mode == "a":
+            input(f"Calling ragged_array_ts.stack with mode='a' will append data to"
+                  f" existing files in `out_dir`:\n{out_dir}\nIf it is important to"
+                  " preserve the data in this directory it its current state, please"
+                  " save a backup elsewhere before continuing, or choose a different"
+                  " 'out_dir' for this function and combine the results afterwards"
+                  " using a CellFileCollectionStack.\nPress enter to continue, or"
+                  " ctrl+c to cancel. ")
+        else:
+            raise ValueError(f"Invalid mode {mode} for 'SwathFileCollection.stack'."
+                             " Valid modes are 'w' and 'a'.")
+
+        if date_range is not None:
+            start_dt, end_dt = date_range
+            range_fnames = self._get_filenames(start_dt=start_dt, end_dt=end_dt)
+            if fnames is not None:
+                fnames = list(set(fnames).intersection(set(range_fnames)))
+                warnings.warn("Both `fnames` and `date_range` were passed. `fnames`"
+                              " will be filtered to only include files within the"
+                              " passed `date_range`.\n")
+            else:
+                fnames = range_fnames
+        elif fnames is None:
+            fnames = self._get_filenames()
+
+        self.max_buffer_memory_mb = buffer_memory_mb or self.max_buffer_memory_mb
+        buffer = []
+        buffer_size = 0
+        # process = psutil.Process()
+        total_swaths = len(fnames)
+        for iteration, f in enumerate(fnames):
+            self._open(f)
+            ds = self.fid.read(mask_and_scale=False)
+            # buffer_size  = process.memory_info().rss / 1e6
+            print("Filling swaths buffer..."
+                  f" {buffer_size:.2f}MB/{self.max_buffer_memory_mb:.2f}MB",
+                  end="\r")
+            buffer_size += ds.nbytes / 1e6
+            if buffer_size > self.max_buffer_memory_mb:
+                out_dir.mkdir(parents=True, exist_ok=True)
+                print("\nBuffer full. Processing swath files..."
+                      "                     ",
+                      end="\r")
+                combined_ds = self.process(
+                    xr.combine_nested(
+                        buffer,
+                        concat_dim="obs",
+                        combine_attrs=self.ioclass.combine_attributes
+                    )
+                )
+                print(f"Processed {iteration}/{total_swaths} swath files."
+                      " Dumping to cell files...")
+                self._parallel_write_cells(
+                    combined_ds,
+                    out_dir,
+                    processes=processes,
+                    dupe_window=dupe_window
+                )
+                print("Finished dumping buffer to cell files.")
+                combined_ds.close()
+                buffer = []
+                buffer_size = ds.nbytes / 1e6
+            buffer.append(ds)
+
+        if len(buffer) > 0:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            print(f"Processed {total_swaths}/{total_swaths} swath files."
+                  " Processing remaining buffer data...",
+                  end="\r")
+            combined_ds = self.process(
+                xr.combine_nested(
+                    buffer,
+                    concat_dim="obs",
+                    combine_attrs=self.ioclass.combine_attributes,
+                )
+            )
+            print(f"Processed {total_swaths}/{total_swaths} swath files."
+                  " Dumping to cell files...")
+            self._parallel_write_cells(
+                combined_ds,
+                out_dir,
+                processes=processes,
+                dupe_window=dupe_window
+            )
+            total_cell_files = len(list(out_dir.glob("*.nc")))
+            print(f"Finished stacking {total_swaths} swath files to {total_cell_files}"
+                  " cell files.")
+            combined_ds.close()
+
+    def process(self, data):
+        """Process a stacked dataset of swath data into a format that is ready to be
+        split into cell timeseries datasets, and return the processed dataset.
+
+        Parameters
+        ----------
+        data : xarray.Dataset
+            Stacked dataset to process.
+        """
+        # if there are kwargs, use them instead of self.ioclass_kws
+        beam_idx = {"for": 0, "mid": 1, "aft": 2}
+        sat_id = {"a": 3, "b": 4, "c": 5}
+
+        # if any beam has backscatter data for a record, the record is valid. Drop
+        # observations that don't have any backscatter data.
+        if data["obs"].size > 0:
+            data = data.sel(
+                obs=~np.all(
+                    data["backscatter"] == data["backscatter"].attrs["missing_value"],
+                    # np.isnan(data["backscatter"]),
+                    axis=1
+                )
+            )
+
+        # break the beams dimension variables into separate variables for
+        # the fore, mid, and aft beams
+        if data["obs"].size > 0:
+            for var in self.ts_dtype.names:
+                if var[:-4] in self.beams_vars:
+                    ending = var[-3:]
+                    data[var] = data.sel(beams=beam_idx[ending])[var[:-4]]
+                # if var in data.variables:
+                #     if data[var].dtype != self.ts_dtype[var]:
+                #         data[var] = data[var].astype(self.ts_dtype[var])
+                    # data[var].attrs["dtype"] = self.ts_dtype[var]
+                    # data[var].attrs["_FillValue"] = dtype_to_nan[self.ts_dtype[var]]
+                    # data[var].attrs["missing_value"] = data[var].attrs["_FillValue"]
+
+            # drop the variables on the beams dimension
+            data = data.drop_dims("beams")
+            # add a variable for the satellite id
+            sat = data.attrs["spacecraft"][-1].lower()
+            del data.attrs["spacecraft"]
+            data["sat_id"] = ("obs", np.repeat(sat_id[sat], data["location_id"].size))
+
+        # Find which cell each observation belongs to, and assign it as a coordinate.
+        data = data.assign_coords(
+            {"cell": ("obs", self.grid.gpi2cell(data["location_id"].values))}
+        )
+        # Must set an index for the cell coordinate so that we can select by it later.
+        data = data.set_xindex("cell")
+
+        return data
+
+    def read(
+            self,
+            date_range,
+            cell=None,
+            location_id=None,
+            coords=None,
+            **kwargs
+    ):
+        """Takes either 1 or 2 arguments and calls the correct function
+        which is either reading the gpi directly or finding
+        the nearest gpi from given lat,lon coordinates and then reading it.
+
+        If the time range is large, this can be slow. It may make more sense to
+        convert to cell files first and access that data from disk using
+        a `CellFileCollection` or `CellFileCollectionStack`.
+
+        Parameters
+        ----------
+        date_range : tuple of datetime.datetime
+            Start and end dates.
+        cell : int or list of int, optional
+            Grid cell number to read.
+        location_id : int, optional
+            Location id.
+        coords : tuple, optional
+            Tuple of (lat, lon) coordinates.
+        """
+        start_dt, end_dt = date_range
+        fnames = self._get_filenames(start_dt, end_dt)
+        if cell is not None:
+            data = self._read_cell(fnames, cell, **kwargs)
+        elif location_id is not None:
+            data = self._read_location_id(location_id, **kwargs)
+        elif coords is not None:
+            data = self._read_latlon(coords[0], coords[1], **kwargs)
+        elif self._open(fnames):
+            data = self.fid.read(mask_and_scale=False, **kwargs)
+        else:
+            raise ValueError(f"No swath files found in directory {self.path} for the"
+                             f" passed date range: {start_dt} - {end_dt}")
+
+        data = data.set_xindex("time")
+        start_dt = np.datetime64(start_dt)
+        end_dt = np.datetime64(end_dt)
+        data = data.isel(obs=(data.time >= start_dt) & (data.time < end_dt))
+        data = data.reset_index("time", drop=False)
+        return data
+
+    def close(self):
+        """Close collection and constituent xarray datasets."""
+        if self.fid is not None:
+            self.fid.close()
+            self.fid = None
+
+    def _get_filenames(self, start_dt=None, end_dt=None):
         """Get filenames for the given time range.
 
         Parameters
@@ -1367,6 +1649,8 @@ class SwathFileCollection:
         NotImplementedError
             If the ioclass does not have a file search method named `chron_files`.
         """
+        if start_dt is None and end_dt is None:
+            return list(self.path.glob("*.nc"))
         if self.chron_files:
             fnames = self.chron_files.search_period(start_dt,
                                                     end_dt,
@@ -1463,12 +1747,14 @@ class SwathFileCollection:
         """Write a cell dataset to a file."""
         fname = self.ioclass.cell_fn_format.format(cell)
 
-        out_ds = xr.decode_cf(self._cell_data_as_indexed_ra(ds, cell, dupe_window))
-        for var in self.ts_dtype.names:
-            if var in out_ds.variables:
-                if out_ds[var].dtype != self.ts_dtype[var]:
-                    out_ds[var] = out_ds[var].astype(self.ts_dtype[var])
+        out_ds = self._cell_data_as_indexed_ra(ds, cell, dupe_window)
+        # out_ds = xr.decode_cf(out_ds, mask_and_scale=False)
+        # for var in self.ts_dtype.names:
+        #     if var in out_ds.variables:
+        #         if out_ds[var].dtype != self.ts_dtype[var]:
+        #             out_ds[var] = out_ds[var].astype(self.ts_dtype[var])
 
+        out_ds = xr.decode_cf(out_ds, mask_and_scale=True)
         out_ds.attrs["id"] = fname
 
         writer = self.ioclass(out_ds)
@@ -1503,184 +1789,6 @@ class SwathFileCollection:
         else:
             for arguments in tqdm(args):
                 self._write_cell_ds(*arguments)
-
-
-    def stack(
-            self,
-            fnames,
-            out_dir,
-            mode="w",
-            processes=1,
-            buffer_memory_mb=None,
-            dupe_window=None
-    ):
-        """Stack swath files and split them into cell timeseries files.
-
-        Reads swath files into memory, stacking their datasets in a buffer until the sum
-        of their sizes exceeds self.max_buffer_memory_mb. Then, splits the buffer into
-        cell timeseries datasets, writes them to disk in parallel, and clears the
-        buffer. This process repeats until all files have been processed, with
-        subsequent writes appending new data to existing cell files when appropriate.
-
-        Parameters
-        ----------
-        fnames : list of pathlib.Path
-            List of swath filenames to stack.
-        out_dir : pathlib.Path
-            Output directory to write the stacked files to.
-        mode : str, optional
-            Write mode. Default is "w", which will clear all files from out_dir before
-            processing. Use "a" to append data to existing files (only if those have
-            also been produced by this function).
-        processes : int, optional
-            Number of processes to use for parallel writing. Default is 1.
-        buffer_memory_mb : numeric, optional
-            Maximum amount of memory to use for the buffer, in megabytes. Will be set to
-            `self.max_buffer_memory_mb` if None. Default is None.
-        dupe_window : numpy.timedelta64, optional
-            Time window within which duplicate observations will be removed. Default is
-            `None`.
-
-        Raises
-        ------
-        ValueError
-            If mode is not "w" or "a".
-        """
-        if mode == "w":
-            input(f"Calling ragged_array_ts.stack with mode='w' will clear all files"
-                  f" from {out_dir}.\nPress enter to continue, or ctrl+c to cancel. ")
-            for f in out_dir.glob("*.nc"):
-                f.unlink()
-        elif mode == "a":
-            input(f"Calling ragged_array_ts.stack with mode='a' will append data to"
-                  f" existing files in `out_dir`:\n{out_dir}\nIf it is important to"
-                  " preserve the data in this directory it its current state, please"
-                  " save a backup elsewhere before continuing, or choose a different"
-                  " 'out_dir' for this function and combine the results afterwards"
-                  " using a CellFileCollectionStack.\nPress enter to continue, or"
-                  " ctrl+c to cancel. ")
-        else:
-            raise ValueError(f"Invalid mode {mode} for 'SwathFileCollection.stack'."
-                             " Valid modes are 'w' and 'a'.")
-
-        self.max_buffer_memory_mb = buffer_memory_mb or self.max_buffer_memory_mb
-        buffer = []
-        buffer_size = 0
-        # process = psutil.Process()
-        total_swaths = len(fnames)
-        for iteration, f in enumerate(fnames):
-            self._open(f)
-            ds = self.fid.read(mask_and_scale=False)
-            # buffer_size  = process.memory_info().rss / 1e6
-            print("Filling swaths buffer..."
-                  f" {buffer_size:.2f}MB/{self.max_buffer_memory_mb:.2f}MB",
-                  end="\r")
-            buffer_size += ds.nbytes / 1e6
-            if buffer_size > self.max_buffer_memory_mb:
-                out_dir.mkdir(parents=True, exist_ok=True)
-                print("\nBuffer full. Processing swath files..."
-                      "                     ",
-                      end="\r")
-                combined_ds = self.process(
-                    xr.combine_nested(
-                        buffer,
-                        concat_dim="obs",
-                        combine_attrs=self.ioclass.combine_attributes
-                    )
-                )
-                print(f"Processed {iteration}/{total_swaths} swath files."
-                      " Dumping to cell files...")
-                self._parallel_write_cells(
-                    combined_ds,
-                    out_dir,
-                    processes=processes,
-                    dupe_window=dupe_window
-                )
-                print("Finished dumping buffer to cell files.")
-                combined_ds.close()
-                buffer = []
-                buffer_size = ds.nbytes / 1e6
-            buffer.append(ds)
-
-        if len(buffer) > 0:
-            out_dir.mkdir(parents=True, exist_ok=True)
-            print(f"Processed {total_swaths}/{total_swaths} swath files."
-                  " Processing remaining buffer data...",
-                  end="\r")
-            combined_ds = self.process(
-                xr.combine_nested(
-                    buffer,
-                    concat_dim="obs",
-                    combine_attrs=self.ioclass.combine_attributes
-                )
-            )
-            print(f"Processed {total_swaths}/{total_swaths} swath files."
-                  " Dumping to cell files...")
-            self._parallel_write_cells(
-                combined_ds,
-                out_dir,
-                processes=processes,
-                dupe_window=dupe_window
-            )
-            total_cell_files = len(list(out_dir.glob("*.nc")))
-            print(f"Finished stacking {total_swaths} swath files to {total_cell_files}"
-                  " cell files.")
-            combined_ds.close()
-
-    def process(self, data):
-        """Process a stacked dataset of swath data into a format that is ready to be
-        split into cell timeseries datasets, and return the processed dataset.
-
-        Parameters
-        ----------
-        data : xarray.Dataset
-            Stacked dataset to process.
-        """
-        # if there are kwargs, use them instead of self.ioclass_kws
-
-        beam_idx = {"for": 0, "mid": 1, "aft": 2}
-        sat_id = {"a": 3, "b": 4, "c": 5}
-
-        # if any beam has backscatter data for a record, the record is valid. Drop
-        # observations that don't have any backscatter data.
-        if data["obs"].size > 0:
-            data = data.sel(
-                obs=~np.all(
-                    data["backscatter"] == data["backscatter"].attrs["missing_value"],
-                    # np.isnan(data["backscatter"]),
-                    axis=1
-                )
-            )
-
-        # break the beams dimension variables into separate variables for
-        # the fore, mid, and aft beams
-        if data["obs"].size > 0:
-            for var in self.ts_dtype.names:
-                if var[:-4] in self.beams_vars:
-                    ending = var[-3:]
-                    data[var] = data.sel(beams=beam_idx[ending])[var[:-4]]
-                # if var in data.variables:
-                #     if data[var].dtype != self.ts_dtype[var]:
-                #         data[var] = data[var].astype(self.ts_dtype[var])
-                    # data[var].attrs["dtype"] = self.ts_dtype[var]
-                    # data[var].attrs["_FillValue"] = dtype_to_nan[self.ts_dtype[var]]
-                    # data[var].attrs["missing_value"] = data[var].attrs["_FillValue"]
-
-            # drop the variables on the beams dimension
-            data = data.drop_dims("beams")
-            # add a variable for the satellite id
-            sat = data.attrs["spacecraft"][-1].lower()
-            del data.attrs["spacecraft"]
-            data["sat_id"] = ("obs", np.repeat(sat_id[sat], data["location_id"].size))
-
-        # Find which cell each observation belongs to, and assign it as a coordinate.
-        data = data.assign_coords(
-            {"cell": ("obs", self.grid.gpi2cell(data["location_id"].values))}
-        )
-        # Must set an index for the cell coordinate so that we can select by it later.
-        data = data.set_xindex("cell")
-
-        return data
 
     def _read_cell(self, fnames, cell, **kwargs):
         """Read data from the entire cell."""
@@ -1730,58 +1838,6 @@ class SwathFileCollection:
             data = self.fid.read(location_id=location_id, **kwargs)
 
         return data
-
-    def read(
-            self,
-            date_range,
-            cell=None,
-            location_id=None,
-            coords=None,
-            **kwargs
-    ):
-        """Takes either 1 or 2 arguments and calls the correct function
-        which is either reading the gpi directly or finding
-        the nearest gpi from given lat,lon coordinates and then reading it.
-
-        If the time range is large, this can be slow. It may make more sense to
-        convert to cell files first and access that data from disk using
-        a `CellFileCollection` or `CellFileCollectionStack`.
-
-        Parameters
-        ----------
-        date_range : tuple of datetime.datetime
-            Start and end dates.
-        cell : int, optional
-            Grid cell number to read.
-        location_id : int, optional
-            Location id.
-        coords : tuple, optional
-            Tuple of (lat, lon) coordinates.
-        """
-        start_dt, end_dt = date_range
-        fnames = self._get_filenames(start_dt, end_dt)
-        if cell is not None:
-            data = self._read_cell(fnames, cell, **kwargs)
-        elif location_id is not None:
-            data = self._read_location_id(location_id, **kwargs)
-        elif coords is not None:
-            data = self._read_latlon(coords[0], coords[1], **kwargs)
-        elif self._open(fnames):
-            data = self.fid.read(mask_and_scale=False, **kwargs)
-        else:
-            raise ValueError(f"No swath files found in directory {self.path} for the"
-                             f" passed date range: {start_dt} - {end_dt}")
-
-        data = data.set_xindex("time")
-        data = data.sel(time=slice(start_dt, end_dt))
-        data = data.reset_index("time", drop=False)
-        return data
-
-    def close(self):
-        """Close file."""
-        if self.fid is not None:
-            self.fid.close()
-            self.fid = None
 
     def __enter__(self):
         """Context manager initialization."""
