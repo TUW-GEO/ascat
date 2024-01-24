@@ -1113,6 +1113,20 @@ class AscatH129Cell(AscatNetCDFCellBase):
         self.custom_global_attrs = None
         self.custom_variable_encodings = None
 
+class AscatH122Cell(AscatNetCDFCellBase):
+    grid_info = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)
+    grid = grid_info["grid"]
+    grid_cell_size = 5
+    fn_format = "{:04d}.nc"
+    possible_cells = grid_info["possible_cells"]
+    max_cell = grid_info["max_cell"]
+    min_cell = grid_info["min_cell"]
+
+    def __init__(self, filename, **kwargs):
+        super().__init__(filename, obs_dim="obs", **kwargs)
+        self.custom_variable_attrs = None
+        self.custom_global_attrs = None
+        self.custom_variable_encodings = None
 
 class AscatSIG0Cell6250m(AscatNetCDFCellBase):
     grid_info = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)
@@ -1196,6 +1210,50 @@ class AscatH129Swath(SwathIOBase):
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
 
+class AscatH122Swath(SwathIOBase):
+    fn_pattern = "ascat_ssm_nrt_6.25km_*Z_{date}Z_metop-[abc]_h122.nc"
+    sf_pattern = {"year_folder": "{year}"}
+    date_format = "%Y%m%d%H%M%S"
+    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
+    grid_cell_size = 5
+    cell_fn_format = "{:04d}.nc"
+    beams_vars = []
+    ts_dtype = np.dtype([
+        ("sat_id", np.int64),
+        ("as_des_pass", np.int8),
+        ("swath_indicator", np.int8),
+        ("surface_soil_moisture", np.float32),
+        ("surface_soil_moisture_noise", np.float32),
+        ("sigma40", np.float32),
+        ("sigma40_noise", np.float32),
+        ("slope40", np.float32),
+        ("slope40_noise", np.float32),
+        ("curvature40", np.float32),
+        ("curvature40_noise", np.float32),
+        ("dry40", np.float32),
+        ("dry40_noise", np.float32),
+        ("wet40", np.float32),
+        ("wet40_noise", np.float32),
+        ("surface_soil_moisture_sensitivity", np.float32),
+        ("surface_soil_moisture_climatology", np.float32),
+        ("correction_flag", np.uint8),
+        ("processing_flag", np.uint8),
+        ("snow_cover_probability", np.int8),
+        ("frozen_soil_probability", np.int8),
+        ("wetland_fraction", np.int8),
+        ("topographic_complexity", np.int8),
+    ])
+
+    @staticmethod
+    def fn_read_fmt(timestamp):
+        return {"date": timestamp.strftime("%Y%m%d*")}
+
+    @staticmethod
+    def sf_read_fmt(timestamp):
+        return {"year_folder": {"year": f"{timestamp.year}"}}
+
+    def __init__(self, filename, **kwargs):
+        super().__init__(filename, "netcdf4", **kwargs)
 
 class AscatSIG0Swath6250m(SwathIOBase):
     """

@@ -39,10 +39,12 @@ from tqdm import tqdm
 from ascat.file_handling import braces_to_re_groups
 
 from ascat.read_native.xarray_io import AscatH129Cell
+from ascat.read_native.xarray_io import AscatH122Cell
 from ascat.read_native.xarray_io import AscatSIG0Cell6250m
 from ascat.read_native.xarray_io import AscatSIG0Cell12500m
 
 from ascat.read_native.xarray_io import AscatH129Swath
+from ascat.read_native.xarray_io import AscatH122Swath
 from ascat.read_native.xarray_io import AscatSIG0Swath6250m
 from ascat.read_native.xarray_io import AscatSIG0Swath12500m
 
@@ -938,6 +940,8 @@ class CellFileCollection:
         product_id = product_id.upper()
         if product_id == "H129":
             io_class = AscatH129Cell
+        elif product_id == "H122":
+            io_class = AscatH122Cell
         elif product_id == "SIG0_6.25":
             io_class = AscatSIG0Cell6250m
         elif product_id == "SIG0_12.5":
@@ -1548,19 +1552,20 @@ class SwathFileCollection:
         # break the beams dimension variables into separate variables for
         # the fore, mid, and aft beams
         if data["obs"].size > 0:
-            for var in self.ts_dtype.names:
-                if var[:-4] in self.beams_vars:
-                    ending = var[-3:]
-                    data[var] = data.sel(beams=beam_idx[ending])[var[:-4]]
-                # if var in data.variables:
-                #     if data[var].dtype != self.ts_dtype[var]:
-                #         data[var] = data[var].astype(self.ts_dtype[var])
-                    # data[var].attrs["dtype"] = self.ts_dtype[var]
-                    # data[var].attrs["_FillValue"] = dtype_to_nan[self.ts_dtype[var]]
-                    # data[var].attrs["missing_value"] = data[var].attrs["_FillValue"]
+            if "beams" in data.dims:
+                for var in self.ts_dtype.names:
+                    if var[:-4] in self.beams_vars:
+                        ending = var[-3:]
+                        data[var] = data.sel(beams=beam_idx[ending])[var[:-4]]
+                    # if var in data.variables:
+                    #     if data[var].dtype != self.ts_dtype[var]:
+                    #         data[var] = data[var].astype(self.ts_dtype[var])
+                        # data[var].attrs["dtype"] = self.ts_dtype[var]
+                        # data[var].attrs["_FillValue"] = dtype_to_nan[self.ts_dtype[var]]
+                        # data[var].attrs["missing_value"] = data[var].attrs["_FillValue"]
 
-            # drop the variables on the beams dimension
-            data = data.drop_dims("beams")
+                # drop the variables on the beams dimension
+                data = data.drop_dims("beams")
             # add a variable for the satellite id
             sat = data.attrs["spacecraft"][-1].lower()
             del data.attrs["spacecraft"]
