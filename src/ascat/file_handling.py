@@ -723,6 +723,7 @@ class ChronFiles(MultiFileHandler):
         search_date_fmt="%Y%m%d*",
         date_field="date",
         date_field_fmt="%Y%m%d",
+        end_inclusive=False,
     ):
         """
         Search files for time period.
@@ -741,6 +742,9 @@ class ChronFiles(MultiFileHandler):
             Date field name (default: "date").
         date_field_fmt : str, optional
             Date field string format (default: %Y%m%d).
+        end_inclusive : bool, optional
+            Include files from a dt_delta length period beyond dt_end if True
+            (default: False).
 
         Returns
         -------
@@ -749,8 +753,9 @@ class ChronFiles(MultiFileHandler):
         """
         filenames = []
 
-        for dt_cur in np.arange(dt_start, dt_end + dt_delta,
-                                dt_delta).astype(datetime):
+        dt_end = dt_end + dt_delta if end_inclusive else dt_end
+
+        for dt_cur in np.arange(dt_start, dt_end, dt_delta).astype(datetime):
             files, dates = self.search_date(
                 dt_cur,
                 search_date_fmt,
@@ -758,7 +763,7 @@ class ChronFiles(MultiFileHandler):
                 date_field_fmt,
                 return_date=True)
             for f, dt in zip(files, dates):
-                if f not in filenames and dt >= dt_start and dt < dt_end + dt_delta:
+                if f not in filenames and dt >= dt_start and dt < dt_end:
                     filenames.append(f)
 
         return filenames
