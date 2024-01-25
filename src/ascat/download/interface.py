@@ -1,4 +1,4 @@
-# Copyright (c) 2021, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2023, TU Wien, Department of Geodesy and Geoinformation
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -24,7 +24,6 @@
 # WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 """
 Download interface.
 """
@@ -55,8 +54,12 @@ def parse_date(s):
     return datetime.datetime.strptime(s, '%Y%m%d')
 
 
-def hsaf_download(credentials, remote_path, local_path, start_date,
-                  end_date, limit=None):
+def hsaf_download(credentials,
+                  remote_path,
+                  local_path,
+                  start_date,
+                  end_date,
+                  limit=None):
     """
     Function to start H SAF download.
 
@@ -81,8 +84,14 @@ def hsaf_download(credentials, remote_path, local_path, start_date,
     connector.close()
 
 
-def eumetsat_download(credentials, product, local_path, start_date,
-                      end_date, coords=None, limit=None):
+def eumetsat_download(credentials,
+                      product,
+                      local_path,
+                      start_date,
+                      end_date,
+                      max_workers=1,
+                      coords=None,
+                      limit=None):
     """
     Function to start EUMETSAT download.
 
@@ -98,6 +107,8 @@ def eumetsat_download(credentials, product, local_path, start_date,
         Start date of date range interval.
     end_date : datetime
         End date of date range interval.
+    max_workers : int, optional
+        Number of parallel downloads (default: 1).
     coords : list of float, optional
         A custom polygon using EPSG:4326 decimal degrees (default: None).
     limit : int, optional
@@ -105,8 +116,8 @@ def eumetsat_download(credentials, product, local_path, start_date,
     """
     connector = EumConnector()
     connector.connect(credentials)
-    connector.download(product, local_path, start_date, end_date, coords,
-                       limit)
+    connector.download(product, local_path, start_date, end_date, max_workers,
+                       coords, limit)
 
 
 def parse_args_hsaf_download(args):
@@ -129,24 +140,30 @@ def parse_args_hsaf_download(args):
         description='H SAF download command line interface.',
         formatter_class=argparse.RawTextHelpFormatter)
 
-    parser.add_argument('-cf', '--credential_file',
+    parser.add_argument('-cf',
+                        '--credential_file',
                         help='File where credentials are stored')
 
     parser.add_argument('-r', '--remote_path', help='FTP remote path')
 
     parser.add_argument('-o', '--output_dir', help='Directory to write output')
 
-    parser.add_argument('-from', '--start_date', type=parse_date,
+    parser.add_argument('-from',
+                        '--start_date',
+                        type=parse_date,
                         help='start date in YYYYMMDD format')
 
-    parser.add_argument('-to', '--end_date', type=parse_date,
+    parser.add_argument('-to',
+                        '--end_date',
+                        type=parse_date,
                         help='end date in YYYYMMDD format')
 
-    parser.add_argument('-co', '--coords',
-                        help='A custom polygon using EPSG:4326 decimal degrees')
+    parser.add_argument(
+        '-co',
+        '--coords',
+        help='A custom polygon using EPSG:4326 decimal degrees')
 
-    parser.add_argument('-l', '--limit',
-                        help='Filter number of results')
+    parser.add_argument('-l', '--limit', help='Filter number of results')
 
     return parser.parse_args(args), parser
 
@@ -171,24 +188,35 @@ def parse_args_eumetsat_download(args):
         description='EUMETSAT download command line interface.',
         formatter_class=argparse.RawTextHelpFormatter)
 
-    parser.add_argument('-cf', '--credential_file',
+    parser.add_argument('-cf',
+                        '--credential_file',
                         help='File where credentials are stored')
 
     parser.add_argument('-p', '--product', help='Name of product')
 
     parser.add_argument('-o', '--output_dir', help='Directory to write output')
 
-    parser.add_argument('-from', '--start_date', type=parse_date,
+    parser.add_argument('-from',
+                        '--start_date',
+                        type=parse_date,
                         help='start date in YYYYMMDD format')
 
-    parser.add_argument('-to', '--end_date', type=parse_date,
+    parser.add_argument('-to',
+                        '--end_date',
+                        type=parse_date,
                         help='end date in YYYYMMDD format')
 
-    parser.add_argument('-co', '--coords',
-                        help='A custom polygon using EPSG:4326 decimal degrees')
+    parser.add_argument('-mw',
+                        '--max_workers',
+                        type=int,
+                        help='Number of parallel downloads')
 
-    parser.add_argument('-l', '--limit',
-                        help='Filter number of results')
+    parser.add_argument(
+        '-co',
+        '--coords',
+        help='A custom polygon using EPSG:4326 decimal degrees')
+
+    parser.add_argument('-l', '--limit', help='Filter number of results')
 
     return parser.parse_args(args), parser
 
@@ -226,7 +254,8 @@ def eumetsat_main(cli_args):
     credentials.read(args.credential_file)
 
     eumetsat_download(credentials['eumetsat'], args.product, args.output_dir,
-                      args.start_date, args.end_date, args.coords, args.limit)
+                      args.start_date, args.end_date, args.max_workers,
+                      args.coords, args.limit)
 
 
 def run_hsaf_download():

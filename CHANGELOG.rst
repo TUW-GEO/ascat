@@ -2,6 +2,18 @@
 Changelog
 =========
 
+Version 2.3.0
+=============
+
+- Update interface of file handling module
+
+Version 2.2.0
+=============
+
+- Update to pyscaffold v4.5
+- Update download module, supporting parallel download for EUMETSAT Data Store
+- Update interface of file handling module
+
 Version 2.1.1
 =============
 
