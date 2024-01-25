@@ -723,7 +723,7 @@ class ChronFiles(MultiFileHandler):
         search_date_fmt="%Y%m%d*",
         date_field="date",
         date_field_fmt="%Y%m%d",
-        end_inclusive=False,
+        end_inclusive=True,
     ):
         """
         Search files for time period.
@@ -777,7 +777,7 @@ class ChronFiles(MultiFileHandler):
         search_date_fmt="%Y%m%d*",
         date_field="date",
         date_field_fmt="%Y%m%d",
-        end_inclusive=False,
+        end_inclusive=True,
         **kwargs,
     ):
         """
