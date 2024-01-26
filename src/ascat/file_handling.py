@@ -642,11 +642,11 @@ class ChronFiles(MultiFileHandler):
         timestamp : datetime
             File timestamp.
         """
-        # escape special characters in the template string
-        escaped_template = re.escape(self.ft.fn_templ)
+        # replace asterisks in filename template with regex any-length wildcard
+        wildcard_template = re.sub(r'\*', r'.*', self.ft.fn_templ)
 
-        # replace escaped curly braces with capturing groups
-        pattern = re.sub(r'\\{(.*?)\\}', r'(?P<\1>.*?)', escaped_template)
+        # replace curly braces with capturing groups
+        pattern = re.sub(r'\{(.*?)\}', r'(?P<\1>.+)', wildcard_template)
 
         match = re.match(pattern, Path(filename).name)
         date_substring = match.group(date_field)
@@ -704,7 +704,8 @@ class ChronFiles(MultiFileHandler):
         fn_read_fmt[date_field] = timestamp.strftime(search_date_fmt)
 
         fs = FileSearch(self.root_path, self.ft.fn_templ, self.ft.sf_templ)
-        filenames = sorted(fs.search(fn_read_fmt, sf_read_fmt))
+        key_func = lambda x: self._parse_date(x, date_field, date_field_fmt)
+        filenames = sorted(fs.search(fn_read_fmt, sf_read_fmt), key=key_func)
 
         if return_date:
             dates = []
@@ -723,6 +724,7 @@ class ChronFiles(MultiFileHandler):
         search_date_fmt="%Y%m%d*",
         date_field="date",
         date_field_fmt="%Y%m%d",
+        end_inclusive=True,
     ):
         """
         Search files for time period.
@@ -749,7 +751,8 @@ class ChronFiles(MultiFileHandler):
         """
         filenames = []
 
-        for dt_cur in np.arange(dt_start, dt_end + dt_delta,
+        dt_end = dt_end + dt_delta if end_inclusive else dt_end
+        for dt_cur in np.arange(dt_start, dt_end,
                                 dt_delta).astype(datetime):
             files, dates = self.search_date(
                 dt_cur,
@@ -758,7 +761,7 @@ class ChronFiles(MultiFileHandler):
                 date_field_fmt,
                 return_date=True)
             for f, dt in zip(files, dates):
-                if f not in filenames and dt >= dt_start and dt < dt_end + dt_delta:
+                if f not in filenames and dt >= dt_start and dt < dt_end:
                     filenames.append(f)
 
         return filenames
