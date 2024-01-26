@@ -36,20 +36,25 @@ import dask
 import xarray as xr
 import numpy as np
 from tqdm import tqdm
-from ascat.file_handling import braces_to_re_groups
 
 from ascat.read_native.xarray_io import AscatH129Cell
+from ascat.read_native.xarray_io import AscatH129v1Cell
+from ascat.read_native.xarray_io import AscatH121v1Cell
 from ascat.read_native.xarray_io import AscatH122Cell
 from ascat.read_native.xarray_io import AscatSIG0Cell6250m
 from ascat.read_native.xarray_io import AscatSIG0Cell12500m
 
 from ascat.read_native.xarray_io import AscatH129Swath
+from ascat.read_native.xarray_io import AscatH129v1Swath
+from ascat.read_native.xarray_io import AscatH121v1Swath
 from ascat.read_native.xarray_io import AscatH122Swath
 from ascat.read_native.xarray_io import AscatSIG0Swath6250m
 from ascat.read_native.xarray_io import AscatSIG0Swath12500m
 
 from ascat.read_native.xarray_io import trim_dates
 from ascat.read_native.xarray_io import append_to_netcdf
+
+process_warnings = True
 
 class CellFileCollectionStack():
     """Collection of grid cell file collections."""
@@ -155,13 +160,19 @@ class CellFileCollectionStack():
         product_id = product_id.upper()
         if product_id == "H129":
             io_class = AscatH129Cell
+        elif product_id == "H129_V1.0":
+            io_class = AscatH129v1Cell
+        elif product_id == "H121_V1.0":
+            io_class = AscatH121v1Cell
+        elif product_id == "H122":
+            io_class = AscatH122Cell
         elif product_id == "SIG0_6.25":
             io_class = AscatSIG0Cell6250m
         elif product_id == "SIG0_12.5":
             io_class = AscatSIG0Cell12500m
         else:
             raise ValueError(f"Product {product_id} not recognized. Valid products are"
-                             f" H129, SIG0_6.25, SIG0_12.5.")
+                             f" H129, H129_V1.0, H121_V1.0, H122, SIG0_6.25, SIG0_12.5.")
 
         return cls(
             collections,
@@ -860,6 +871,13 @@ class CellFileCollectionStack():
         for collection in self.collections:
             collection.close()
 
+    def __enter__(self):
+        """Context manager initialization."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Exit the runtime context related to this object."""
+        self.close()
 
 class CellFileCollection:
     """Collection of grid cell files.
@@ -940,6 +958,10 @@ class CellFileCollection:
         product_id = product_id.upper()
         if product_id == "H129":
             io_class = AscatH129Cell
+        elif product_id == "H129_V1.0":
+            io_class = AscatH129v1Cell
+        elif product_id == "H121_V1.0":
+            io_class = AscatH121v1Cell
         elif product_id == "H122":
             io_class = AscatH122Cell
         elif product_id == "SIG0_6.25":
@@ -948,7 +970,7 @@ class CellFileCollection:
             io_class = AscatSIG0Cell12500m
         else:
             raise ValueError(f"Product {product_id} not recognized. Valid products are"
-                             f" H129, SIG0_6.25, SIG0_12.5.")
+                             f" H129, H129_V1.0, H121_V1.0, H122, SIG0_6.25, SIG0_12.5.")
 
         return cls(collections, io_class, ioclass_kws=ioclass_kws)
 
@@ -1372,13 +1394,19 @@ class SwathFileCollection:
         product_id = product_id.upper()
         if product_id == "H129":
             io_class = AscatH129Swath
+        elif product_id == "H129_V1.0":
+            io_class = AscatH129v1Swath
+        elif product_id == "H121_V1.0":
+            io_class = AscatH121v1Swath
+        elif product_id == "H122":
+            io_class = AscatH122Swath
         elif product_id == "SIG0_6.25":
             io_class = AscatSIG0Swath6250m
         elif product_id == "SIG0_12.5":
             io_class = AscatSIG0Swath12500m
         else:
             raise ValueError(f"Product {product_id} not recognized. Valid products are"
-                             f" H129, SIG0_6.25, SIG0_12.5.")
+                             f" H129, H129_V1.0, H121_V1.0, H122, SIG0_6.25, SIG0_12.5.")
 
         return cls(
             path,
@@ -1432,18 +1460,20 @@ class SwathFileCollection:
             If mode is not "w" or "a".
         """
         if mode == "w":
-            input(f"Calling ragged_array_ts.stack with mode='w' will clear all files"
-                  f" from {out_dir}.\nPress enter to continue, or ctrl+c to cancel. ")
+            if process_warnings == True:
+                input(f"Calling ragged_array_ts.stack with mode='w' will clear all files"
+                    f" from {out_dir}.\nPress enter to continue, or ctrl+c to cancel. ")
             for f in out_dir.glob("*.nc"):
                 f.unlink()
         elif mode == "a":
-            input(f"Calling ragged_array_ts.stack with mode='a' will append data to"
-                  f" existing files in `out_dir`:\n{out_dir}\nIf it is important to"
-                  " preserve the data in this directory it its current state, please"
-                  " save a backup elsewhere before continuing, or choose a different"
-                  " 'out_dir' for this function and combine the results afterwards"
-                  " using a CellFileCollectionStack.\nPress enter to continue, or"
-                  " ctrl+c to cancel. ")
+            if process_warnings == True:
+                input(f"Calling ragged_array_ts.stack with mode='a' will append data to"
+                    f" existing files in `out_dir`:\n{out_dir}\nIf it is important to"
+                    " preserve the data in this directory it its current state, please"
+                    " save a backup elsewhere before continuing, or choose a different"
+                    " 'out_dir' for this function and combine the results afterwards"
+                    " using a CellFileCollectionStack.\nPress enter to continue, or"
+                    " ctrl+c to cancel. ")
         else:
             raise ValueError(f"Invalid mode {mode} for 'SwathFileCollection.stack'."
                              " Valid modes are 'w' and 'a'.")
@@ -1468,7 +1498,7 @@ class SwathFileCollection:
         total_swaths = len(fnames)
         for iteration, f in enumerate(fnames):
             self._open(f)
-            ds = self.fid.read(mask_and_scale=False)
+            ds = self.fid.read(mask_and_scale=False).load()
             # buffer_size  = process.memory_info().rss / 1e6
             print("Filling swaths buffer..."
                   f" {buffer_size:.2f}MB/{self.max_buffer_memory_mb:.2f}MB",
@@ -1540,14 +1570,15 @@ class SwathFileCollection:
 
         # if any beam has backscatter data for a record, the record is valid. Drop
         # observations that don't have any backscatter data.
-        if data["obs"].size > 0:
-            data = data.sel(
-                obs=~np.all(
-                    data["backscatter"] == data["backscatter"].attrs["missing_value"],
-                    # np.isnan(data["backscatter"]),
-                    axis=1
+        if "backscatter" in data.variables:
+            if data["obs"].size > 0:
+                data = data.sel(
+                    obs=~np.all(
+                        data["backscatter"] == data["backscatter"].attrs["missing_value"],
+                        # np.isnan(data["backscatter"]),
+                        axis=1
+                    )
                 )
-            )
 
         # break the beams dimension variables into separate variables for
         # the fore, mid, and aft beams
@@ -1616,7 +1647,7 @@ class SwathFileCollection:
         elif coords is not None:
             data = self._read_latlon(coords[0], coords[1], **kwargs)
         elif self._open(fnames):
-            data = self.fid.read(mask_and_scale=False, **kwargs)
+            data = self.fid.read(**kwargs)
         else:
             raise ValueError(f"No swath files found in directory {self.path} for the"
                              f" passed date range: {start_dt} - {end_dt}")
@@ -1655,11 +1686,12 @@ class SwathFileCollection:
             If the ioclass does not have a file search method named `chron_files`.
         """
         if start_dt is None and end_dt is None:
-            return list(self.path.glob("*.nc"))
+            return list(self.path.glob("**/*.nc"))
         if self.chron_files:
             fnames = self.chron_files.search_period(start_dt,
                                                     end_dt,
-                                                    date_str=self.date_format)
+                                                    date_field_fmt=self.date_format,
+                                                    end_inclusive=False)
         else:
             raise NotImplementedError("File search not implemented for this product."
                                       " Check if fn_pattern and sf_pattern are defined"
@@ -1852,6 +1884,44 @@ class SwathFileCollection:
         """Exit the runtime context related to this object."""
         self.close()
 
+def braces_to_re_groups(string):
+    """
+    Convert braces to character patterns defining regular expression groups.
+    If any group name is repeated in the template string, a backreference
+    is used for subsequent appearances.
+
+    Parameters
+    ----------
+    string : str
+        String with braces.
+
+    Returns
+    -------
+    string : str
+        String with regular expression groups.
+
+    Examples
+    --------
+    >>> braces_to_re_groups("{year}-{month}-{day}")
+    "(?P<year>.+)-(?P<month>.+)-(?P<day>.+)"
+    >>> braces_to_re_groups("{year}-{month}-{day}_{year}-{month}-{day2}")
+    "(?P<year>.+)-(?P<month>.+)-(?P<day>.+)_(?P=year)-(?P=month)-(?P<day2>.+)"
+    """
+
+    pattern = re.compile(r"{(.+?)}")
+    seen = set()
+    parts = pattern.split(string)
+
+    for i in range(1, len(parts), 2):
+        content = parts[i]
+
+        if content in seen:
+            parts[i] = f"(?P={content})"
+        else:
+            parts[i] = f"(?P<{content}>.+)"
+            seen.add(content)
+
+    return "".join(parts)
 
 ####################################################
 class RAFile:

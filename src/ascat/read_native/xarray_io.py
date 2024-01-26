@@ -99,7 +99,7 @@ def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
         data.encoding['dtype'] = nc_variable.dtype
     if hasattr(nc_variable, 'units'):
         data.encoding['units'] = nc_variable.units
-    if hasattr(nc_variable, '_FillValue'):
+    if hasattr(nc_variable, '_FillValue') and data.attrs.get('_FillValue') is None:
         data.encoding['_FillValue'] = nc_variable._FillValue
 
     data_encoded = xr.conventions.encode_cf_variable(data)
@@ -749,6 +749,8 @@ class SwathIOBase(ABC):
     Writes ragged array cell data in indexed or contiguous format.
     """
 
+    beams_vars = []
+
     @classmethod
     def __init_subclass__(cls):
         required_class_attrs = [
@@ -758,7 +760,6 @@ class SwathIOBase(ABC):
             "grid",
             "grid_cell_size",
             "cell_fn_format",
-            "beams_vars",
             "ts_dtype",
         ]
         for var in required_class_attrs:
@@ -820,7 +821,7 @@ class SwathIOBase(ABC):
                                          decode_cf=False,
                                          concat_dim="obs",
                                          combine="nested",
-                                         chunks=(chunks or "auto"),
+                                         # chunks=(chunks or "auto"),
                                          combine_attrs=self.combine_attributes,
                                          mask_and_scale=False,
                                          **kwargs)
@@ -1113,6 +1114,36 @@ class AscatH129Cell(AscatNetCDFCellBase):
         self.custom_global_attrs = None
         self.custom_variable_encodings = None
 
+class AscatH129v1Cell(AscatNetCDFCellBase):
+    grid_info = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)
+    grid = grid_info["grid"]
+    grid_cell_size = 5
+    fn_format = "{:04d}.nc"
+    possible_cells = grid_info["possible_cells"]
+    max_cell = grid_info["max_cell"]
+    min_cell = grid_info["min_cell"]
+
+    def __init__(self, filename, **kwargs):
+        super().__init__(filename, obs_dim="obs", **kwargs)
+        self.custom_variable_attrs = None
+        self.custom_global_attrs = None
+        self.custom_variable_encodings = None
+
+class AscatH121v1Cell(AscatNetCDFCellBase):
+    grid_info = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)
+    grid = grid_info["grid"]
+    grid_cell_size = 5
+    fn_format = "{:04d}.nc"
+    possible_cells = grid_info["possible_cells"]
+    max_cell = grid_info["max_cell"]
+    min_cell = grid_info["min_cell"]
+
+    def __init__(self, filename, **kwargs):
+        super().__init__(filename, obs_dim="obs", **kwargs)
+        self.custom_variable_attrs = None
+        self.custom_global_attrs = None
+        self.custom_variable_encodings = None
+
 class AscatH122Cell(AscatNetCDFCellBase):
     grid_info = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)
     grid = grid_info["grid"]
@@ -1197,6 +1228,86 @@ class AscatH129Swath(SwathIOBase):
         ("frozen_soil_probability", np.int8),
         ("wetland_fraction", np.int8),
         ("topographic_complexity", np.int8),
+    ])
+
+    @staticmethod
+    def fn_read_fmt(timestamp):
+        return {"date": timestamp.strftime("%Y%m%d*")}
+
+    @staticmethod
+    def sf_read_fmt(timestamp):
+        return {"year_folder": {"year": f"{timestamp.year}"}}
+
+    def __init__(self, filename, **kwargs):
+        super().__init__(filename, "netcdf4", **kwargs)
+
+class AscatH129v1Swath(SwathIOBase):
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25km-H129_C_LIIB_*_*_{date}____.nc"
+    sf_pattern = {"year_folder": "{year}"}
+    date_format = "%Y%m%d%H%M%S"
+    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
+    grid_cell_size = 5
+    cell_fn_format = "{:04d}.nc"
+    beams_vars = []
+    ts_dtype = np.dtype([
+        ("sat_id", np.int8),
+        ("as_des_pass", np.int8),
+        ("swath_indicator", np.int8),
+        ("surface_soil_moisture", np.float32),
+        ("surface_soil_moisture_noise", np.float32),
+        ("backscatter40", np.float32),
+        ("slope40", np.float32),
+        ("curvature40", np.float32),
+        ("surface_soil_moisture_sensitivity", np.float32),
+        ("backscatter_flag", np.uint8),
+        ("correction_flag", np.uint8),
+        ("processing_flag", np.uint8),
+        ("surface_flag", np.uint8),
+        ("snow_cover_probability", np.int8),
+        ("frozen_soil_probability", np.int8),
+        ("wetland_fraction", np.int8),
+        ("topographic_complexity", np.int8),
+        ("subsurface_scattering_probability", np.int8),
+    ])
+
+    @staticmethod
+    def fn_read_fmt(timestamp):
+        return {"date": timestamp.strftime("%Y%m%d*")}
+
+    @staticmethod
+    def sf_read_fmt(timestamp):
+        return {"year_folder": {"year": f"{timestamp.year}"}}
+
+    def __init__(self, filename, **kwargs):
+        super().__init__(filename, "netcdf4", **kwargs)
+
+class AscatH121v1Swath(SwathIOBase):
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H121_C_LIIB_*_*_{date}____.nc"
+    sf_pattern = {"year_folder": "{year}"}
+    date_format = "%Y%m%d%H%M%S"
+    grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)["grid"]
+    grid_cell_size = 5
+    cell_fn_format = "{:04d}.nc"
+    beams_vars = []
+    ts_dtype = np.dtype([
+        ("sat_id", np.int8),
+        ("as_des_pass", np.int8),
+        ("swath_indicator", np.int8),
+        ("surface_soil_moisture", np.float32),
+        ("surface_soil_moisture_noise", np.float32),
+        ("backscatter40", np.float32),
+        ("slope40", np.float32),
+        ("curvature40", np.float32),
+        ("surface_soil_moisture_sensitivity", np.float32),
+        ("backscatter_flag", np.uint8),
+        ("correction_flag", np.uint8),
+        ("processing_flag", np.uint8),
+        ("surface_flag", np.uint8),
+        ("snow_cover_probability", np.int8),
+        ("frozen_soil_probability", np.int8),
+        ("wetland_fraction", np.int8),
+        ("topographic_complexity", np.int8),
+        ("subsurface_scattering_probability", np.int8),
     ])
 
     @staticmethod
