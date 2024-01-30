@@ -465,7 +465,7 @@ class TestChronFiles(CustomTestCase):
         """
         timestamp = datetime(2022, 1, 1)
         filenames = self.chron_files.search_date(timestamp,
-                                                 date_field_fmt="%Y%m%d",
+                                                 date_str="%Y%m%d",
                                                  date_field="date")
         expected_filenames = [
             str(self.tmpdir / "temperature/EN01234/20220101_ascat.csv")
