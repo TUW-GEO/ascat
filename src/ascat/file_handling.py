@@ -704,7 +704,8 @@ class ChronFiles(MultiFileHandler):
         fn_read_fmt[date_field] = timestamp.strftime(search_date_fmt)
 
         fs = FileSearch(self.root_path, self.ft.fn_templ, self.ft.sf_templ)
-        filenames = sorted(fs.search(fn_read_fmt, sf_read_fmt))
+        key_func = lambda x: self._parse_date(x, date_field, date_field_fmt)
+        filenames = sorted(fs.search(fn_read_fmt, sf_read_fmt), key=key_func)
 
         if return_date:
             dates = []
