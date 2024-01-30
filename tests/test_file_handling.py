@@ -465,7 +465,7 @@ class TestChronFiles(CustomTestCase):
         """
         timestamp = datetime(2022, 1, 1)
         filenames = self.chron_files.search_date(timestamp,
-                                                 date_str="%Y%m%d",
+                                                 date_field_fmt="%Y%m%d",
                                                  date_field="date")
         expected_filenames = [
             str(self.tmpdir / "temperature/EN01234/20220101_ascat.csv")
@@ -485,6 +485,23 @@ class TestChronFiles(CustomTestCase):
             str(self.tmpdir / "temperature/EN01234/20220101_ascat.csv"),
             str(self.tmpdir / "temperature/EN01234/20220102_ascat.csv"),
             str(self.tmpdir / "temperature/EN01234/20220103_ascat.csv")
+        ]
+        self.assertTrue(filenames)
+        self.assertEqual(filenames, expected_filenames)
+
+    def test_search_period_exclusive(self):
+        """
+        Test search period.
+        """
+        dt_start = datetime(2022, 1, 1)
+        dt_end = datetime(2022, 1, 3)
+        filenames = self.chron_files.search_period(dt_start,
+                                                   dt_end,
+                                                   dt_delta=timedelta(days=1),
+                                                   end_inclusive=False)
+        expected_filenames = [
+            str(self.tmpdir / "temperature/EN01234/20220101_ascat.csv"),
+            str(self.tmpdir / "temperature/EN01234/20220102_ascat.csv"),
         ]
         self.assertTrue(filenames)
         self.assertEqual(filenames, expected_filenames)

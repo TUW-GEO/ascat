@@ -704,7 +704,8 @@ class ChronFiles(MultiFileHandler):
         fn_read_fmt[date_field] = timestamp.strftime(search_date_fmt)
 
         fs = FileSearch(self.root_path, self.ft.fn_templ, self.ft.sf_templ)
-        filenames = sorted(fs.search(fn_read_fmt, sf_read_fmt))
+        key_func = lambda x: self._parse_date(x, date_field, date_field_fmt)
+        filenames = sorted(fs.search(fn_read_fmt, sf_read_fmt), key=key_func)
 
         if return_date:
             dates = []
@@ -723,6 +724,7 @@ class ChronFiles(MultiFileHandler):
         search_date_fmt="%Y%m%d*",
         date_field="date",
         date_field_fmt="%Y%m%d",
+        end_inclusive=True,
     ):
         """
         Search files for time period.
@@ -741,6 +743,9 @@ class ChronFiles(MultiFileHandler):
             Date field name (default: "date").
         date_field_fmt : str, optional
             Date field string format (default: %Y%m%d).
+        end_inclusive : bool, optional
+            Include files from a dt_delta length period beyond dt_end if True
+            (default: False).
 
         Returns
         -------
@@ -749,8 +754,9 @@ class ChronFiles(MultiFileHandler):
         """
         filenames = []
 
-        for dt_cur in np.arange(dt_start, dt_end + dt_delta,
-                                dt_delta).astype(datetime):
+        dt_end = dt_end + dt_delta if end_inclusive else dt_end
+
+        for dt_cur in np.arange(dt_start, dt_end, dt_delta).astype(datetime):
             files, dates = self.search_date(
                 dt_cur,
                 search_date_fmt,
@@ -758,7 +764,7 @@ class ChronFiles(MultiFileHandler):
                 date_field_fmt,
                 return_date=True)
             for f, dt in zip(files, dates):
-                if f not in filenames and dt >= dt_start and dt < dt_end + dt_delta:
+                if f not in filenames and dt >= dt_start and dt < dt_end:
                     filenames.append(f)
 
         return filenames
@@ -772,6 +778,7 @@ class ChronFiles(MultiFileHandler):
         search_date_fmt="%Y%m%d*",
         date_field="date",
         date_field_fmt="%Y%m%d",
+        end_inclusive=True,
         **kwargs,
     ):
         """
@@ -802,7 +809,7 @@ class ChronFiles(MultiFileHandler):
         """
         filenames = self.search_period(dt_start - dt_buffer, dt_end, dt_delta,
                                        search_date_fmt, date_field,
-                                       date_field_fmt)
+                                       date_field_fmt, end_inclusive)
 
         data = []
 
