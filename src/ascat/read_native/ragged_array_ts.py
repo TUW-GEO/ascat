@@ -985,6 +985,74 @@ class CellFileCollection:
         """
         return [int(p.stem) for p in self.path.glob("*")]
 
+    def _write_single_cell(self, out_dir, cell, date_range, out_cell_size, ra_type, **kwargs):
+        """Write data for a single cell from the stack to disk.
+
+        Parameters
+        ----------
+        out_dir : str or Path
+            Path to output directory.
+        cell : tuple
+            Cell to write.
+        date_range : tuple of numpy.datetime64
+            Start and end dates to read data for before writing.
+        out_cell_size : tuple
+            Size of the output cell.
+        **kwargs
+            Keyword arguments to pass to the ioclass write function.
+        """
+        data = self.read(
+            cell=cell,
+            date_range=date_range,
+            # search_cell_size=out_cell_size,
+            mask_and_scale=False
+        )
+        fname = self.ioclass.fn_format.format(cell)
+        data.attrs["id"] = fname
+        writer = self.ioclass(data)
+        writer.write(out_dir / fname, ra_type=ra_type, **kwargs)
+        data.close()
+        writer.close()
+
+    def _write_single_cell_wrapper(self, args):
+        """Wrap arguments for `self._write_single_cell` and pass to that method.
+
+        Parameters
+        ----------
+        args : tuple
+            Tuple of arguments to pass to `self._write_single_cell`.
+        """
+        self._write_single_cell(*args)
+
+    def to_contiguous(self, out_dir, out_cell_size, processes=8):
+        """
+        """
+        out_dir = Path(out_dir)
+        out_dir.mkdir(exist_ok=True, parents=True)
+
+        cells = self.cells_in_collection
+        if processes < 2:
+            for cell in tqdm(cells):
+                self._write_single_cell(out_dir, cell, None, out_cell_size, "contiguous")
+            return
+
+        with mp.Pool(processes=processes) as pool:
+            chunksize_heuristic = (len(cells)//processes)+1
+            args_list = [
+                (out_dir, cell, None, out_cell_size, "contiguous") for cell in cells
+            ]
+
+            for _ in tqdm(
+                pool.imap_unordered(
+                    self._write_single_cell_wrapper,
+                    args_list,
+                    chunksize=chunksize_heuristic
+                ),
+                total=len(cells)
+            ):
+                pass
+
+
     def read(
             self,
             cell=None,
