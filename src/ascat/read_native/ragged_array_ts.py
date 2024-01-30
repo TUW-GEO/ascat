@@ -1688,10 +1688,12 @@ class SwathFileCollection:
         if start_dt is None and end_dt is None:
             return list(self.path.glob("**/*.nc"))
         if self.chron_files:
-            fnames = self.chron_files.search_period(start_dt,
-                                                    end_dt,
-                                                    date_field_fmt=self.date_format,
-                                                    end_inclusive=False)
+            fnames = self.chron_files.search_period(
+                start_dt,
+                end_dt,
+                date_field_fmt=self.date_format,
+                end_inclusive=False
+            )
         else:
             raise NotImplementedError("File search not implemented for this product."
                                       " Check if fn_pattern and sf_pattern are defined"

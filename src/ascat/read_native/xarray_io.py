@@ -1192,7 +1192,7 @@ class AscatSIG0Cell12500m(AscatNetCDFCellBase):
 
 
 class AscatH129Swath(SwathIOBase):
-    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25-H129_C_LIIB_{date}_*_*____.nc"
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc"
     sf_pattern = {"year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
@@ -1232,7 +1232,10 @@ class AscatH129Swath(SwathIOBase):
 
     @staticmethod
     def fn_read_fmt(timestamp):
-        return {"date": timestamp.strftime("%Y%m%d*")}
+        return {"date": timestamp.strftime("%Y%m%d*"),
+                "sat": "[ABC]",
+                "placeholder": "*",
+                "placeholder1": "*"}
 
     @staticmethod
     def sf_read_fmt(timestamp):
@@ -1242,7 +1245,7 @@ class AscatH129Swath(SwathIOBase):
         super().__init__(filename, "netcdf4", **kwargs)
 
 class AscatH129v1Swath(SwathIOBase):
-    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25km-H129_C_LIIB_*_*_{date}____.nc"
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
@@ -1272,7 +1275,10 @@ class AscatH129v1Swath(SwathIOBase):
 
     @staticmethod
     def fn_read_fmt(timestamp):
-        return {"date": timestamp.strftime("%Y%m%d*")}
+        return {"date": timestamp.strftime("%Y%m%d*"),
+                "sat": "[ABC]",
+                "placeholder": "*",
+                "placeholder1": "*"}
 
     @staticmethod
     def sf_read_fmt(timestamp):
@@ -1282,7 +1288,7 @@ class AscatH129v1Swath(SwathIOBase):
         super().__init__(filename, "netcdf4", **kwargs)
 
 class AscatH121v1Swath(SwathIOBase):
-    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H121_C_LIIB_*_*_{date}____.nc"
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)["grid"]
@@ -1312,7 +1318,10 @@ class AscatH121v1Swath(SwathIOBase):
 
     @staticmethod
     def fn_read_fmt(timestamp):
-        return {"date": timestamp.strftime("%Y%m%d*")}
+        return {"date": timestamp.strftime("%Y%m%d*"),
+                "sat": "[ABC]",
+                "placeholder": "*",
+                "placeholder1": "*"}
 
     @staticmethod
     def sf_read_fmt(timestamp):
@@ -1322,7 +1331,7 @@ class AscatH121v1Swath(SwathIOBase):
         super().__init__(filename, "netcdf4", **kwargs)
 
 class AscatH122Swath(SwathIOBase):
-    fn_pattern = "ascat_ssm_nrt_6.25km_*Z_{date}Z_metop-[abc]_h122.nc"
+    fn_pattern = "ascat_ssm_nrt_6.25km_{placeholder}Z_{date}Z_metop-{sat}_h122.nc"
     sf_pattern = {"year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
@@ -1357,7 +1366,9 @@ class AscatH122Swath(SwathIOBase):
 
     @staticmethod
     def fn_read_fmt(timestamp):
-        return {"date": timestamp.strftime("%Y%m%d*")}
+        return {"date": timestamp.strftime("%Y%m%d*"),
+                "sat": "[ABC]",
+                "placeholder": "*"}
 
     @staticmethod
     def sf_read_fmt(timestamp):
@@ -1370,7 +1381,7 @@ class AscatSIG0Swath6250m(SwathIOBase):
     """
     Class for reading ASCAT sigma0 swath data and writing it to cells.
     """
-    fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-6.25_C_LIIB_*_*_{date}____.nc"
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP{sat}-6.25_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
@@ -1448,7 +1459,10 @@ class AscatSIG0Swath6250m(SwathIOBase):
         dict
             Dictionary of formatted strings
         """
-        return {"date": timestamp.strftime("%Y%m%d*")}
+        return {"date": timestamp.strftime("%Y%m%d*"),
+                "sat": "[ABC]",
+                "placeholder": "*",
+                "placeholder1": "*"}
 
     @staticmethod
     def sf_read_fmt(timestamp):
@@ -1461,7 +1475,7 @@ class AscatSIG0Swath12500m(SwathIOBase):
     """
     Class for reading and writing ASCAT sigma0 swath data.
     """
-    fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-12.5_C_LIIB_*_*_{date}____.nc"
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP{sat}-12.5_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)["grid"]
@@ -1539,7 +1553,10 @@ class AscatSIG0Swath12500m(SwathIOBase):
         dict
             Dictionary of formatted strings
         """
-        return {"date": timestamp.strftime("%Y%m%d*")}
+        return {"date": timestamp.strftime("%Y%m%d*"),
+                "sat": "[ABC]",
+                "placeholder": "*",
+                "placeholder1": "*"}
 
     @staticmethod
     def sf_read_fmt(timestamp):
