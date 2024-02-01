@@ -3,4 +3,5 @@ Contributors
 ============
 
 * Sebastian Hahn <sebastian.hahn@geo.tuwien.ac.at>
-* Christoph Paulik <cpaulik@vandersat.com>
+* Clay Harrison <clay.harrison@geo.tuwien.ac.at>
+* Christoph Paulik <christoph@planet.com>
