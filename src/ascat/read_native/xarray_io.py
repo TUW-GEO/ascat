@@ -902,7 +902,7 @@ class SwathIOBase(ABC):
             the need for np.isin. Default is None.
         """
         if lookup_vector is not None:
-            return self._ds.isel(obs=lookup_vector[self._ds.location_id.values])
+            return self._ds.sel(obs=lookup_vector[self._ds.location_id.values])
 
         idxs = self._isin(self._ds.location_id, location_ids)
         idxs = np.array([1 if id in location_ids else 0
