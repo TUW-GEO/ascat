@@ -33,6 +33,7 @@ from pathlib import Path
 import netCDF4
 import xarray as xr
 import numpy as np
+import dask.array as da
 
 from fibgrid.realization import FibGrid
 from ascat.file_handling import ChronFiles
@@ -821,10 +822,15 @@ class SwathIOBase(ABC):
                                          decode_cf=False,
                                          concat_dim="obs",
                                          combine="nested",
-                                         # chunks=(chunks or "auto"),
+                                         chunks=(chunks or None),
                                          combine_attrs=self.combine_attributes,
                                          mask_and_scale=False,
                                          **kwargs)
+            if chunks is not None:
+                self._isin = da.isin
+            else:
+                self._isin = np.in1d
+
             chunks = None
 
         elif isinstance(source, (str, Path)):
@@ -846,7 +852,8 @@ class SwathIOBase(ABC):
         if "calender" in self._ds.time.attrs:
             self._ds.time.attrs["calendar"] = self._ds.time.attrs.pop("calender")
 
-    def read(self, cell=None, location_id=None, mask_and_scale=True):
+
+    def read(self, cell=None, location_id=None, mask_and_scale=True, lookup_vector=None):
         """
         Returns data for a cell or location_id if specified, or for the entire
         swath file if not specified.
@@ -861,7 +868,7 @@ class SwathIOBase(ABC):
             Whether to mask and scale the data. Default is True.
         """
         if location_id is not None:
-            out_data = self._read_location_ids(location_id)
+            out_data = self._read_location_ids(location_id, lookup_vector=lookup_vector)
         elif cell is not None:
             out_data = self._read_cell(cell)
         else:
@@ -882,11 +889,22 @@ class SwathIOBase(ABC):
         out_encoding = self._create_variable_encodings(out_ds, custom_dtypes = self.ts_dtype)
         out_ds.to_netcdf(filename, unlimited_dims=["obs"], encoding=out_encoding, **kwargs)
 
-    def _read_location_ids(self, location_ids):
+    def _read_location_ids(self, location_ids, lookup_vector=None):
         """
-        Read data for a list of location_ids
+        Read data for a list of location_ids.
+
+        Parameters
+        ----------
+        location_ids : list or 1D array of int
+            Location ids to read data for.
+        lookup_vector : 1D array of int, optional
+            Lookup vector for location_ids. Should make the search much faster by eliminating
+            the need for np.isin. Default is None.
         """
-        idxs = np.in1d(self._ds.location_id, location_ids)
+        if lookup_vector is not None:
+            return self._ds.isel(obs=lookup_vector[self._ds.location_id.values])
+
+        idxs = self._isin(self._ds.location_id, location_ids)
         idxs = np.array([1 if id in location_ids else 0
                          for id in self._ds.location_id.values])
         if not np.any(idxs):

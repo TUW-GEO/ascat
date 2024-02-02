@@ -1423,6 +1423,8 @@ class SwathFileCollection:
         self.fid = None
         self.max_buffer_memory_mb = 6*1024
 
+        self._possible_gpis = None
+
 
         if dask_scheduler is not None:
             dask.config.set(scheduler=dask_scheduler)
@@ -1711,9 +1713,9 @@ class SwathFileCollection:
         if cell is not None:
             data = self._read_cell(fnames, cell, **kwargs)
         elif location_id is not None:
-            data = self._read_location_id(location_id, **kwargs)
+            data = self._read_location_id(fnames, location_id, **kwargs)
         elif coords is not None:
-            data = self._read_latlon(coords[0], coords[1], **kwargs)
+            data = self._read_latlon(fnames, coords[0], coords[1], **kwargs)
         elif self._open(fnames):
             data = self.fid.read(**kwargs)
         else:
@@ -1942,9 +1944,12 @@ class SwathFileCollection:
         data = None
 
         if self._open(fnames):
-            data = self.fid.read(location_id=location_id, **kwargs)
+            wanted_gpis = np.zeros(self.grid.gpis.max()+1, dtype=np.int8)
+            wanted_gpis[location_id] = 1
+            data = self.fid.read(location_id=location_id, lookup_vector=wanted_gpis, **kwargs)
 
         return data
+
 
     def __enter__(self):
         """Context manager initialization."""
