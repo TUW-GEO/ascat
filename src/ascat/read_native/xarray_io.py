@@ -997,6 +997,12 @@ class SwathIOBase(ABC):
         that takes a list of attribute dictionaries as an argument.
         """
         ds.attrs["global_attributes_flag"] = 1
+        if "spacecraft" in ds.attrs:
+            # Assumption: the spacecraft attribute is something like "metop-a"
+            sat_id = {"a": 3, "b": 4, "c": 5}
+            sat = ds.attrs["spacecraft"][-1].lower()
+            ds["sat_id"] = ("obs", np.repeat(sat_id[sat], ds["location_id"].size))
+            del ds.attrs["spacecraft"]
         return ds
 
     @staticmethod
@@ -1016,28 +1022,8 @@ class SwathIOBase(ABC):
         Returns
         -------
         """
-        out_attrs = dict()
-
-        # we only really want to pass spacecraft from global attributes
+        # we don't need to pass on anything from global attributes
         if "global_attributes_flag" in attrs_list[0].keys():
-            spacecraft = None
-            for i, attrs in enumerate(attrs_list):
-            # we just grab the first matching value here, no need to iterate through the entire list
-            # Spacecraft is totally separate from missing_value since it's a global attribute
-            # Eventually if this needs to do more, this logic will need to be reconsidered
-                if "spacecraft" in attrs.keys():
-                    if spacecraft is None:
-                        spacecraft = attrs["spacecraft"]
-                        continue
-                    elif spacecraft == attrs["spacecraft"]:
-                        continue
-                    else:
-                        raise ValueError("Spacecraft mismatch in swath files. Cannot stack."
-                                        f"\n(file index {i} in list of swath files being"
-                                        " processed did not match previous swath files)")
-            if spacecraft is not None:
-                out_attrs["spacecraft"] = spacecraft
-                return out_attrs
             return None
 
         else:

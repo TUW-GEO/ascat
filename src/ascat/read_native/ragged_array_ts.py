@@ -1636,7 +1636,6 @@ class SwathFileCollection:
         """
         # if there are kwargs, use them instead of self.ioclass_kws
         beam_idx = {"for": 0, "mid": 1, "aft": 2}
-        sat_id = {"a": 3, "b": 4, "c": 5}
 
         # if any beam has backscatter data for a record, the record is valid. Drop
         # observations that don't have any backscatter data.
@@ -1667,10 +1666,6 @@ class SwathFileCollection:
 
                 # drop the variables on the beams dimension
                 data = data.drop_dims("beams")
-            # add a variable for the satellite id
-            sat = data.attrs["spacecraft"][-1].lower()
-            del data.attrs["spacecraft"]
-            data["sat_id"] = ("obs", np.repeat(sat_id[sat], data["location_id"].size))
 
         # Find which cell each observation belongs to, and assign it as a coordinate.
         data = data.assign_coords(
