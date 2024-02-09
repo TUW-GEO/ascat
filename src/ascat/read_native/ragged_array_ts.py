@@ -1960,9 +1960,9 @@ class SwathFileCollection:
         data = None
 
         if self._open(fnames):
-            wanted_gpis = np.zeros(self.grid.gpis.max()+1, dtype=bool)
-            wanted_gpis[location_id] = 1
-            data = self.fid.read(location_id=location_id, lookup_vector=wanted_gpis, **kwargs)
+            gpi_lookup = np.zeros(self.grid.gpis.max()+1, dtype=bool)
+            gpi_lookup[location_id] = 1
+            data = self.fid.read(location_id=location_id, lookup_vector=gpi_lookup, **kwargs)
 
         return data
 
