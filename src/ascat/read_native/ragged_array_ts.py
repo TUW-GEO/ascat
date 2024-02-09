@@ -1687,6 +1687,7 @@ class SwathFileCollection:
             cell=None,
             location_id=None,
             coords=None,
+            bbox=None,
             **kwargs
     ):
         """Takes either 1 or 2 arguments and calls the correct function
@@ -1707,6 +1708,8 @@ class SwathFileCollection:
             Location id.
         coords : tuple, optional
             Tuple of (lat, lon) coordinates.
+        bbox : tuple, optional
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
         """
         start_dt, end_dt = date_range
         fnames = self._get_filenames(start_dt, end_dt)
@@ -1716,6 +1719,8 @@ class SwathFileCollection:
             data = self._read_location_id(fnames, location_id, **kwargs)
         elif coords is not None:
             data = self._read_latlon(fnames, coords[0], coords[1], **kwargs)
+        elif bbox is not None:
+            data = self._read_bbox(fnames, bbox, **kwargs)
         elif self._open(fnames):
             data = self.fid.read(**kwargs)
         else:
@@ -1927,6 +1932,17 @@ class SwathFileCollection:
         location_id, _ = self.grid.find_nearest_gpi(lon, lat)
 
         return self._read_location_id(fnames, location_id, **kwargs)
+
+    def _read_bbox(self, fnames, bbox, **kwargs):
+        """Reading data for given bounding box.
+
+        Parameters
+        ----------
+        bbox : tuple or list
+            Bounding box coordinates (latmin, latmax, lonmin, lonmax).
+        """
+        location_ids = self.grid.get_bbox_grid_points(*bbox)
+        return self._read_location_id(fnames, location_ids, **kwargs)
 
     def _read_location_id(self, fnames, location_id, **kwargs):
         """Read data for given grid point.
