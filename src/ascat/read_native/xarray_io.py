@@ -1049,7 +1049,7 @@ class SwathIOBase(ABC):
                 dropped_keys |= {key for key in attrs if key not in result}
             return result
 
-    def contains_location_ids(self, location_ids):
+    def contains_location_ids(self, location_ids=None, lookup_vector=None):
         """
         Check if the dataset contains any of the given location_ids.
 
@@ -1063,13 +1063,19 @@ class SwathIOBase(ABC):
         bool
             True if the dataset contains any of the given location_ids, False otherwise.
         """
-        return np.any(
-            np.isin(
-                np.unique(self._ds.location_id.values),
-                location_ids,
-                assume_unique=True
+        if lookup_vector is not None:
+            return lookup_vector[self._ds.location_id.values].any()
+
+        if location_ids is not None:
+            return np.any(
+                np.in1d(
+                    np.unique(self._ds.location_id.values),
+                    location_ids,
+                    assume_unique=True
+                )
             )
-        )
+        else:
+            raise ValueError("Must provide either location_ids or lookup_vector")
 
     def __enter__(self):
         """

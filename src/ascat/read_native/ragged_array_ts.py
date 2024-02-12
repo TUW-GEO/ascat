@@ -1826,9 +1826,11 @@ class SwathFileCollection:
             location_ids = self._location_id_from_geometry(geom)
 
         if location_ids is not None:
+            gpi_lookup = np.zeros(self.grid.gpis.max()+1, dtype=bool)
+            gpi_lookup[location_ids] = 1
             fnames = [f
                     for f in fnames
-                    if self._open(f) and self.fid.contains_location_ids(location_ids)]
+                    if self._open(f) and self.fid.contains_location_ids(lookup_vector=gpi_lookup)]
 
         return fnames
 
