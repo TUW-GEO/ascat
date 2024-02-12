@@ -1568,3 +1568,21 @@ class AscatSIG0Swath12500m(SwathIOBase):
 
     def __init__(self, filename,  **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
+
+cell_io_catalog = {
+    "H129": AscatH129Cell,
+    "H129_V1.0": AscatH129v1Cell,
+    "H121_V1.0": AscatH121v1Cell,
+    "H122": AscatH122Cell,
+    "SIG0_6.25": AscatSIG0Cell6250m,
+    "SIG0_12.5": AscatSIG0Cell12500m,
+}
+
+swath_io_catalog = {
+    "H129": AscatH129Swath,
+    "H129_V1.0": AscatH129v1Swath,
+    "H121_V1.0": AscatH121v1Swath,
+    "H122": AscatH122Swath,
+    "SIG0_6.25": AscatSIG0Swath6250m,
+    "SIG0_12.5": AscatSIG0Swath12500m,
+}

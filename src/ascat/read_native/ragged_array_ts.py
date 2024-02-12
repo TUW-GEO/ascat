@@ -37,19 +37,22 @@ import xarray as xr
 import numpy as np
 from tqdm import tqdm
 
-from ascat.read_native.xarray_io import AscatH129Cell
-from ascat.read_native.xarray_io import AscatH129v1Cell
-from ascat.read_native.xarray_io import AscatH121v1Cell
-from ascat.read_native.xarray_io import AscatH122Cell
-from ascat.read_native.xarray_io import AscatSIG0Cell6250m
-from ascat.read_native.xarray_io import AscatSIG0Cell12500m
+# from ascat.read_native.xarray_io import AscatH129Cell
+# from ascat.read_native.xarray_io import AscatH129v1Cell
+# from ascat.read_native.xarray_io import AscatH121v1Cell
+# from ascat.read_native.xarray_io import AscatH122Cell
+# from ascat.read_native.xarray_io import AscatSIG0Cell6250m
+# from ascat.read_native.xarray_io import AscatSIG0Cell12500m
 
-from ascat.read_native.xarray_io import AscatH129Swath
-from ascat.read_native.xarray_io import AscatH129v1Swath
-from ascat.read_native.xarray_io import AscatH121v1Swath
-from ascat.read_native.xarray_io import AscatH122Swath
-from ascat.read_native.xarray_io import AscatSIG0Swath6250m
-from ascat.read_native.xarray_io import AscatSIG0Swath12500m
+# from ascat.read_native.xarray_io import AscatH129Swath
+# from ascat.read_native.xarray_io import AscatH129v1Swath
+# from ascat.read_native.xarray_io import AscatH121v1Swath
+# from ascat.read_native.xarray_io import AscatH122Swath
+# from ascat.read_native.xarray_io import AscatSIG0Swath6250m
+# from ascat.read_native.xarray_io import AscatSIG0Swath12500m
+
+from ascat.read_native.xarray_io import cell_io_catalog
+from ascat.read_native.xarray_io import swath_io_catalog
 
 from ascat.read_native.xarray_io import trim_dates
 from ascat.read_native.xarray_io import append_to_netcdf
@@ -158,21 +161,12 @@ class CellFileCollectionStack():
             class is initialized if None. Default: None
         """
         product_id = product_id.upper()
-        if product_id == "H129":
-            io_class = AscatH129Cell
-        elif product_id == "H129_V1.0":
-            io_class = AscatH129v1Cell
-        elif product_id == "H121_V1.0":
-            io_class = AscatH121v1Cell
-        elif product_id == "H122":
-            io_class = AscatH122Cell
-        elif product_id == "SIG0_6.25":
-            io_class = AscatSIG0Cell6250m
-        elif product_id == "SIG0_12.5":
-            io_class = AscatSIG0Cell12500m
+        if product_id in cell_io_catalog:
+            io_class = cell_io_catalog[product_id]
         else:
-            raise ValueError(f"Product {product_id} not recognized. Valid products are"
-                             f" H129, H129_V1.0, H121_V1.0, H122, SIG0_6.25, SIG0_12.5.")
+            error_str = f"Product {product_id} not recognized. Valid products are"
+            error_str += f" {', '.join(cell_io_catalog.keys())}."
+            raise ValueError(error_str)
 
         return cls(
             collections,
@@ -956,21 +950,12 @@ class CellFileCollection:
             If product_id is not recognized.
         """
         product_id = product_id.upper()
-        if product_id == "H129":
-            io_class = AscatH129Cell
-        elif product_id == "H129_V1.0":
-            io_class = AscatH129v1Cell
-        elif product_id == "H121_V1.0":
-            io_class = AscatH121v1Cell
-        elif product_id == "H122":
-            io_class = AscatH122Cell
-        elif product_id == "SIG0_6.25":
-            io_class = AscatSIG0Cell6250m
-        elif product_id == "SIG0_12.5":
-            io_class = AscatSIG0Cell12500m
+        if product_id in cell_io_catalog:
+            io_class = cell_io_catalog[product_id]
         else:
-            raise ValueError(f"Product {product_id} not recognized. Valid products are"
-                             f" H129, H129_V1.0, H121_V1.0, H122, SIG0_6.25, SIG0_12.5.")
+            error_str = f"Product {product_id} not recognized. Valid products are"
+            error_str += f" {', '.join(cell_io_catalog.keys())}."
+            raise ValueError(error_str)
 
         return cls(collections, io_class, ioclass_kws=ioclass_kws)
 
@@ -1462,21 +1447,12 @@ class SwathFileCollection:
 
         """
         product_id = product_id.upper()
-        if product_id == "H129":
-            io_class = AscatH129Swath
-        elif product_id == "H129_V1.0":
-            io_class = AscatH129v1Swath
-        elif product_id == "H121_V1.0":
-            io_class = AscatH121v1Swath
-        elif product_id == "H122":
-            io_class = AscatH122Swath
-        elif product_id == "SIG0_6.25":
-            io_class = AscatSIG0Swath6250m
-        elif product_id == "SIG0_12.5":
-            io_class = AscatSIG0Swath12500m
+        if product_id in swath_io_catalog:
+            io_class = swath_io_catalog[product_id]
         else:
-            raise ValueError(f"Product {product_id} not recognized. Valid products are"
-                             f" H129, H129_V1.0, H121_V1.0, H122, SIG0_6.25, SIG0_12.5.")
+            error_str = f"Product {product_id} not recognized. Valid products are"
+            error_str += f" {', '.join(swath_io_catalog.keys())}."
+            raise ValueError(error_str)
 
         return cls(
             path,
