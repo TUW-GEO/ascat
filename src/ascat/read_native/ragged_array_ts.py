@@ -39,20 +39,6 @@ import numpy as np
 from tqdm import tqdm
 from shapely.geometry import Point
 
-# from ascat.read_native.xarray_io import AscatH129Cell
-# from ascat.read_native.xarray_io import AscatH129v1Cell
-# from ascat.read_native.xarray_io import AscatH121v1Cell
-# from ascat.read_native.xarray_io import AscatH122Cell
-# from ascat.read_native.xarray_io import AscatSIG0Cell6250m
-# from ascat.read_native.xarray_io import AscatSIG0Cell12500m
-
-# from ascat.read_native.xarray_io import AscatH129Swath
-# from ascat.read_native.xarray_io import AscatH129v1Swath
-# from ascat.read_native.xarray_io import AscatH121v1Swath
-# from ascat.read_native.xarray_io import AscatH122Swath
-# from ascat.read_native.xarray_io import AscatSIG0Swath6250m
-# from ascat.read_native.xarray_io import AscatSIG0Swath12500m
-
 from ascat.read_native.xarray_io import cell_io_catalog
 from ascat.read_native.xarray_io import swath_io_catalog
 
