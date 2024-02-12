@@ -35,7 +35,9 @@ from datetime import datetime as dt
 import dask
 import xarray as xr
 import numpy as np
+
 from tqdm import tqdm
+from shapely.geometry import Point
 
 # from ascat.read_native.xarray_io import AscatH129Cell
 # from ascat.read_native.xarray_io import AscatH129v1Cell
@@ -220,6 +222,7 @@ class CellFileCollectionStack():
             cell=None,
             location_id=None,
             bbox=None,
+            geom=None,
             mask_and_scale=True,
             date_range=None,
             **kwargs
@@ -259,6 +262,8 @@ class CellFileCollectionStack():
             data = self._read_locations(location_id, date_range=date_range, **kwargs)
         elif bbox is not None:
             data = self._read_bbox(bbox, date_range=date_range, **kwargs)
+        elif geom is not None:
+            data = self._read_geometry(geom, date_range=date_range, **kwargs)
         else:
             raise ValueError("Need to specify either cell, location_id or bbox")
 
@@ -613,9 +618,38 @@ class CellFileCollectionStack():
             [coll.grid.get_bbox_grid_points(*bbox)
              for coll in self._collections_in_date_range(date_range)]
         )
-        cells = self.ioclass.grid.gpi2cell(location_ids)
+        return self._read_locations(location_ids, date_range=date_range, **kwargs)
+        # cells = self.ioclass.grid.gpi2cell(location_ids)
+        # return self._read_cells(cells, valid_gpis=location_ids, date_range=date_range, **kwargs)
 
-        return self._read_cells(cells, valid_gpis=location_ids, date_range=date_range, **kwargs)
+    def _read_geometry(
+            self,
+            geom,
+            date_range=None,
+            **kwargs
+    ):
+        bbox = geom.bounds
+        latmin, latmax, lonmin, lonmax = bbox[1], bbox[3], bbox[0], bbox[2]
+        bbox_gpis, bbox_lats, bbox_lons = self.ioclass.grid.get_bbox_grid_points(
+            latmin,
+            latmax,
+            lonmin,
+            lonmax,
+            both=True
+        )
+
+        # now that we have the grid points that are within the bounding box, we can
+        # check which ones are actually within the geometry
+        if len(bbox_gpis) > 0:
+            geom_location_ids = [
+                gpi
+                for gpi, lat, lon in zip(bbox_gpis, bbox_lats, bbox_lons)
+                if geom.contains(Point(lon, lat))
+            ]
+        else:
+            geom_location_ids = []
+
+        return self._read_locations(geom_location_ids, date_range=date_range, **kwargs)
 
     def _read_locations(
         self,
@@ -1044,6 +1078,7 @@ class CellFileCollection:
             location_id=None,
             coords=None,
             bbox=None,
+            geom=None,
             mask_and_scale=True,
             date_range=None,
             **kwargs
@@ -1085,7 +1120,8 @@ class CellFileCollection:
             data = self._read_latlon(coords[0], coords[1], date_range=date_range, **kwargs)
         elif bbox is not None:
             data = self._read_bbox(bbox, date_range=date_range, **kwargs)
-
+        elif geom is not None:
+            data = self._read_geometry(geom, date_range=date_range, **kwargs)
         else:
             raise ValueError("Either cell, location_id or coords (lon, lat)"
                              " must be given")
@@ -1241,6 +1277,28 @@ class CellFileCollection:
     def _read_bbox(self, bbox, date_range=None, **kwargs):
         location_ids = self.grid.get_bbox_grid_points(*bbox)
         return self._read_location_id(location_ids, date_range=date_range, **kwargs)
+
+    def _read_geometry(self, geom, date_range=None, **kwargs):
+        bbox = geom.bounds
+        latmin, latmax, lonmin, lonmax = bbox[1], bbox[3], bbox[0], bbox[2]
+        bbox_gpis, bbox_lats, bbox_lons = self.grid.get_bbox_grid_points(
+            latmin,
+            latmax,
+            lonmin,
+            lonmax,
+            both=True
+        )
+
+        if len(bbox_gpis) > 0:
+            geom_location_ids = [
+                gpi
+                for gpi, lat, lon in zip(bbox_gpis, bbox_lats, bbox_lons)
+                if geom.contains(Point(lon, lat))
+            ]
+        else:
+            geom_location_ids = []
+
+        return self._read_location_id(geom_location_ids, date_range=date_range, **kwargs)
 
     def _read_location_id(self, location_id, date_range=None, **kwargs):
         """Read data for given grid point.
@@ -1659,6 +1717,7 @@ class SwathFileCollection:
             location_id=None,
             coords=None,
             bbox=None,
+            geom=None,
             **kwargs
     ):
         """Takes either 1 or 2 arguments and calls the correct function
@@ -1681,6 +1740,8 @@ class SwathFileCollection:
             Tuple of (lat, lon) coordinates.
         bbox : tuple, optional
             Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        geometry : shapely.geometry, optional
+            Geometry object; use to read data that intersects the geometry.
         """
         start_dt, end_dt = date_range
         fnames = self._get_filenames(start_dt, end_dt)
@@ -1692,6 +1753,8 @@ class SwathFileCollection:
             data = self._read_latlon(fnames, coords[0], coords[1], **kwargs)
         elif bbox is not None:
             data = self._read_bbox(fnames, bbox, **kwargs)
+        elif geom is not None:
+            data = self._read_geometry(fnames, geom, **kwargs)
         elif self._open(fnames):
             data = self.fid.read(**kwargs)
         else:
@@ -1914,6 +1977,41 @@ class SwathFileCollection:
         """
         location_ids = self.grid.get_bbox_grid_points(*bbox)
         return self._read_location_id(fnames, location_ids, **kwargs)
+
+    def _read_geometry(self, fnames, geom, **kwargs):
+        """Reading data for given geometry.
+
+        Assumes geometry and grid are in the same coordinate system.
+
+        Parameters
+        ----------
+        geometry : shapely.geometry
+            Geometry object.
+        """
+        # first get the bounding box of the geometry so we can narrow down the
+        # grid points we need to check
+        bbox = geom.bounds
+        latmin, latmax, lonmin, lonmax = bbox[1], bbox[3], bbox[0], bbox[2]
+        bbox_gpis, bbox_lats, bbox_lons = self.grid.get_bbox_grid_points(
+            latmin,
+            latmax,
+            lonmin,
+            lonmax,
+            both=True
+        )
+
+        # now that we have the grid points that are within the bounding box, we can
+        # check which ones are actually within the geometry
+        if len(bbox_gpis) > 0:
+            geom_location_ids = [
+                gpi
+                for gpi, lat, lon in zip(bbox_gpis, bbox_lats, bbox_lons)
+                if geom.contains(Point(lon, lat))
+            ]
+        else:
+            geom_location_ids = []
+
+        return self._read_location_id(fnames, geom_location_ids, **kwargs)
 
     def _read_location_id(self, fnames, location_id, **kwargs):
         """Read data for given grid point.
