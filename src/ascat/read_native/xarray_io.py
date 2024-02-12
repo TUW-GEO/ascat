@@ -1293,7 +1293,10 @@ class AscatH129v1Swath(SwathIOBase):
 
 class AscatH121v1Swath(SwathIOBase):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {"year_folder": "{year}"}
+    sf_pattern = {
+        "satellite_folder": "metop_[abc]",
+        "year_folder": "{year}"
+    }
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)["grid"]
     grid_cell_size = 5
@@ -1329,7 +1332,10 @@ class AscatH121v1Swath(SwathIOBase):
 
     @staticmethod
     def sf_read_fmt(timestamp):
-        return {"year_folder": {"year": f"{timestamp.year}"}}
+        return {
+            "satellite_folder": {"satellite": "metop_[abc]"},
+            "year_folder": {"year": f"{timestamp.year}"},
+        }
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
