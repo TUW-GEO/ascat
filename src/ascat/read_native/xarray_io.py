@@ -1049,6 +1049,28 @@ class SwathIOBase(ABC):
                 dropped_keys |= {key for key in attrs if key not in result}
             return result
 
+    def contains_location_ids(self, location_ids):
+        """
+        Check if the dataset contains any of the given location_ids.
+
+        Parameters
+        ----------
+        location_ids : list of int
+            Location ids to check.
+
+        Returns
+        -------
+        bool
+            True if the dataset contains any of the given location_ids, False otherwise.
+        """
+        return np.any(
+            np.isin(
+                np.unique(self._ds.location_id.values),
+                location_ids,
+                assume_unique=True
+            )
+        )
+
     def __enter__(self):
         """
         Context manager initialization.
