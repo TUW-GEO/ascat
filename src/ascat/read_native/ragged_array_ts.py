@@ -1815,7 +1815,7 @@ class SwathFileCollection:
         # now check for location_ids
         location_ids = None
         if cell is not None:
-            location_ids = self.grid.cell2gpi(cell)
+            location_ids = self.grid.grid_points_for_cell(cell)
         elif location_id is not None:
             location_ids = [location_id]
         elif coords is not None:
