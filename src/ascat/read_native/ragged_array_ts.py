@@ -1570,7 +1570,7 @@ class SwathFileCollection:
 
         if date_range is not None:
             start_dt, end_dt = date_range
-            range_fnames = self._get_filenames(start_dt=start_dt, end_dt=end_dt)
+            range_fnames = self.get_filenames(start_dt=start_dt, end_dt=end_dt)
             if fnames is not None:
                 fnames = list(set(fnames).intersection(set(range_fnames)))
                 warnings.warn("Both `fnames` and `date_range` were passed. `fnames`"
@@ -1579,7 +1579,7 @@ class SwathFileCollection:
             else:
                 fnames = range_fnames
         elif fnames is None:
-            fnames = self._get_filenames()
+            fnames = self.get_filenames()
 
         self.max_buffer_memory_mb = buffer_memory_mb or self.max_buffer_memory_mb
         buffer = []
@@ -1730,7 +1730,15 @@ class SwathFileCollection:
             Geometry object; use to read data that intersects the geometry.
         """
         start_dt, end_dt = date_range
-        fnames = self._get_filenames(start_dt, end_dt)
+        fnames = self.get_filenames(
+            start_dt,
+            end_dt,
+            cell=cell,
+            location_id=location_id,
+            coords=coords,
+            bbox=bbox,
+            geom=geom,
+        )
         if cell is not None:
             data = self._read_cell(fnames, cell, **kwargs)
         elif location_id is not None:
@@ -1760,7 +1768,16 @@ class SwathFileCollection:
             self.fid.close()
             self.fid = None
 
-    def _get_filenames(self, start_dt=None, end_dt=None):
+    def get_filenames(
+            self,
+            start_dt=None,
+            end_dt=None,
+            cell=None,
+            location_id=None,
+            coords=None,
+            bbox=None,
+            geom=None,
+    ):
         """Get filenames for the given time range.
 
         Parameters
@@ -1793,6 +1810,27 @@ class SwathFileCollection:
             raise NotImplementedError("File search not implemented for this product."
                                       " Check if fn_pattern and sf_pattern are defined"
                                       f" in ioclass {self.ioclass.__name__}")
+
+
+        # now check for location_ids
+        location_ids = None
+        if cell is not None:
+            location_ids = self.grid.grid_points_for_cell(cell)
+        elif location_id is not None:
+            location_ids = [location_id]
+        elif coords is not None:
+            location_ids = self._location_id_from_coords(*coords)
+        elif bbox is not None:
+            location_ids = self._location_id_from_bbox(bbox)
+        elif geom is not None:
+            location_ids = self._location_id_from_geometry(geom)
+
+        if location_ids is not None:
+            gpi_lookup = np.zeros(self.grid.gpis.max()+1, dtype=bool)
+            gpi_lookup[location_ids] = 1
+            fnames = [f
+                    for f in fnames
+                    if self._open(f) and self.fid.contains_location_ids(lookup_vector=gpi_lookup)]
 
         return fnames
 
@@ -1924,6 +1962,40 @@ class SwathFileCollection:
             for arguments in tqdm(args):
                 self._write_cell_ds(*arguments)
 
+    def _location_id_from_coords(self, lat, lon):
+        """Get the location_id for a given lat/lon pair."""
+        return self.grid.find_nearest_gpi(lon, lat)[0]
+
+    def _location_id_from_bbox(self, bbox):
+        """Get the location_ids for a given bounding box.
+        (latmin, latmax, lonmin, lonmax)"""
+        return self.grid.get_bbox_grid_points(*bbox)
+
+
+    def _location_id_from_geometry(self, geom):
+        """Get the location_ids for a given geometry."""
+        bbox = geom.bounds
+        latmin, latmax, lonmin, lonmax = bbox[1], bbox[3], bbox[0], bbox[2]
+        bbox_gpis, bbox_lats, bbox_lons = self.grid.get_bbox_grid_points(
+            latmin,
+            latmax,
+            lonmin,
+            lonmax,
+            both=True
+        )
+        # now that we have the grid points that are within the bounding box, we can
+        # check which ones are actually within the geometry
+        if len(bbox_gpis) > 0:
+            geom_location_ids = [
+                gpi
+                for gpi, lat, lon in zip(bbox_gpis, bbox_lats, bbox_lons)
+                if geom.contains(Point(lon, lat))
+            ]
+        else:
+            geom_location_ids = []
+
+        return geom_location_ids
+
     def _read_cell(self, fnames, cell, **kwargs):
         """Read data from the entire cell."""
         # if there are kwargs, use them instead of self.ioclass_kws
@@ -1949,7 +2021,7 @@ class SwathFileCollection:
         data : dict of values
             data record.
         """
-        location_id, _ = self.grid.find_nearest_gpi(lon, lat)
+        location_id = self._location_id_from_coords(lat, lon)
 
         return self._read_location_id(fnames, location_id, **kwargs)
 
@@ -1961,7 +2033,7 @@ class SwathFileCollection:
         bbox : tuple or list
             Bounding box coordinates (latmin, latmax, lonmin, lonmax).
         """
-        location_ids = self.grid.get_bbox_grid_points(*bbox)
+        location_ids = self._location_id_from_bbox(bbox)
         return self._read_location_id(fnames, location_ids, **kwargs)
 
     def _read_geometry(self, fnames, geom, **kwargs):
@@ -1974,30 +2046,8 @@ class SwathFileCollection:
         geometry : shapely.geometry
             Geometry object.
         """
-        # first get the bounding box of the geometry so we can narrow down the
-        # grid points we need to check
-        bbox = geom.bounds
-        latmin, latmax, lonmin, lonmax = bbox[1], bbox[3], bbox[0], bbox[2]
-        bbox_gpis, bbox_lats, bbox_lons = self.grid.get_bbox_grid_points(
-            latmin,
-            latmax,
-            lonmin,
-            lonmax,
-            both=True
-        )
-
-        # now that we have the grid points that are within the bounding box, we can
-        # check which ones are actually within the geometry
-        if len(bbox_gpis) > 0:
-            geom_location_ids = [
-                gpi
-                for gpi, lat, lon in zip(bbox_gpis, bbox_lats, bbox_lons)
-                if geom.contains(Point(lon, lat))
-            ]
-        else:
-            geom_location_ids = []
-
-        return self._read_location_id(fnames, geom_location_ids, **kwargs)
+        location_ids = self._location_id_from_geometry(geom)
+        return self._read_location_id(fnames, location_ids, **kwargs)
 
     def _read_location_id(self, fnames, location_id, **kwargs):
         """Read data for given grid point.

@@ -1049,6 +1049,34 @@ class SwathIOBase(ABC):
                 dropped_keys |= {key for key in attrs if key not in result}
             return result
 
+    def contains_location_ids(self, location_ids=None, lookup_vector=None):
+        """
+        Check if the dataset contains any of the given location_ids.
+
+        Parameters
+        ----------
+        location_ids : list of int
+            Location ids to check.
+
+        Returns
+        -------
+        bool
+            True if the dataset contains any of the given location_ids, False otherwise.
+        """
+        if lookup_vector is not None:
+            return lookup_vector[self._ds.location_id.values].any()
+
+        if location_ids is not None:
+            return np.any(
+                np.in1d(
+                    np.unique(self._ds.location_id.values),
+                    location_ids,
+                    assume_unique=True
+                )
+            )
+        else:
+            raise ValueError("Must provide either location_ids or lookup_vector")
+
     def __enter__(self):
         """
         Context manager initialization.
@@ -1197,7 +1225,10 @@ class AscatSIG0Cell12500m(AscatNetCDFCellBase):
 
 class AscatH129Swath(SwathIOBase):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc"
-    sf_pattern = {"year_folder": "{year}"}
+    sf_pattern = {
+        "satellite_folder": "metop_[abc]",
+        "year_folder": "{year}"
+    }
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
     grid_cell_size = 5
@@ -1243,14 +1274,20 @@ class AscatH129Swath(SwathIOBase):
 
     @staticmethod
     def sf_read_fmt(timestamp):
-        return {"year_folder": {"year": f"{timestamp.year}"}}
+        return {
+            "satellite_folder": {"satellite": "metop_[abc]"},
+            "year_folder": {"year": f"{timestamp.year}"},
+        }
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
 
 class AscatH129v1Swath(SwathIOBase):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {"year_folder": "{year}"}
+    sf_pattern = {
+        "satellite_folder": "metop_[abc]",
+        "year_folder": "{year}"
+    }
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
     grid_cell_size = 5
@@ -1286,7 +1323,10 @@ class AscatH129v1Swath(SwathIOBase):
 
     @staticmethod
     def sf_read_fmt(timestamp):
-        return {"year_folder": {"year": f"{timestamp.year}"}}
+        return {
+            "satellite_folder": {"satellite": "metop_[abc]"},
+            "year_folder": {"year": f"{timestamp.year}"},
+        }
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
@@ -1342,7 +1382,10 @@ class AscatH121v1Swath(SwathIOBase):
 
 class AscatH122Swath(SwathIOBase):
     fn_pattern = "ascat_ssm_nrt_6.25km_{placeholder}Z_{date}Z_metop-{sat}_h122.nc"
-    sf_pattern = {"year_folder": "{year}"}
+    sf_pattern = {
+        "satellite_folder": "metop_[abc]",
+        "year_folder": "{year}"
+    }
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
     grid_cell_size = 5
@@ -1382,7 +1425,10 @@ class AscatH122Swath(SwathIOBase):
 
     @staticmethod
     def sf_read_fmt(timestamp):
-        return {"year_folder": {"year": f"{timestamp.year}"}}
+        return {
+            "satellite_folder": {"satellite": "metop_[abc]"},
+            "year_folder": {"year": f"{timestamp.year}"},
+        }
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
@@ -1392,7 +1438,10 @@ class AscatSIG0Swath6250m(SwathIOBase):
     Class for reading ASCAT sigma0 swath data and writing it to cells.
     """
     fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP{sat}-6.25_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {"year_folder": "{year}"}
+    sf_pattern = {
+        "satellite_folder": "metop_[abc]",
+        "year_folder": "{year}"
+    }
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
     grid_cell_size = 5
@@ -1476,7 +1525,10 @@ class AscatSIG0Swath6250m(SwathIOBase):
 
     @staticmethod
     def sf_read_fmt(timestamp):
-        return {"year_folder": {"year": f"{timestamp.year}"}}
+        return {
+            "satellite_folder": {"satellite": "metop_[abc]"},
+            "year_folder": {"year": f"{timestamp.year}"},
+        }
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
@@ -1486,7 +1538,10 @@ class AscatSIG0Swath12500m(SwathIOBase):
     Class for reading and writing ASCAT sigma0 swath data.
     """
     fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP{sat}-12.5_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {"year_folder": "{year}"}
+    sf_pattern = {
+        "satellite_folder": "metop_[abc]",
+        "year_folder": "{year}"
+    }
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)["grid"]
     grid_cell_size = 5
@@ -1570,7 +1625,10 @@ class AscatSIG0Swath12500m(SwathIOBase):
 
     @staticmethod
     def sf_read_fmt(timestamp):
-        return {"year_folder": {"year": f"{timestamp.year}"}}
+        return {
+            "satellite_folder": {"satellite": "metop_[abc]"},
+            "year_folder": {"year": f"{timestamp.year}"},
+        }
 
     def __init__(self, filename,  **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)

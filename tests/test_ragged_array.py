@@ -296,7 +296,7 @@ class TestSwathFileCollection(unittest.TestCase):
                                 )
         start = datetime(2021, 1, 1)
         end = datetime(2021, 1, 2)
-        fname = a._get_filenames(start, end)
+        fname = a.get_filenames(start, end)
         outdir = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a")
         from time import time
 
@@ -341,7 +341,7 @@ class TestSwathFileCollection(unittest.TestCase):
                                 product_id="sig0_12.5",
                                 )
         self.assertEqual(incorrect.ioclass, AscatSIG0Swath12500m)
-        self.assertEqual(incorrect._get_filenames(datetime(2021, 1, 12), datetime(2021, 1, 13)), [])
+        self.assertEqual(incorrect.get_filenames(datetime(2021, 1, 12), datetime(2021, 1, 13)), [])
 
         # trying to read this data first raises a RuntimeWarning, since it can't find any files
         # for the requested names, then an AttributeError since it tries to read a None object.
@@ -370,10 +370,10 @@ class TestSwathFileCollection(unittest.TestCase):
                                 )
         start_p1 = datetime(2021, 1, 1)
         end_p1 = datetime(2021, 1, 4)
-        fnames_p1 = swaths._get_filenames(start_p1, end_p1)
+        fnames_p1 = swaths.get_filenames(start_p1, end_p1)
         start_p2 = datetime(2021, 1, 4)
         end_p2 = datetime(2021, 1, 7)
-        fnames_p2 = swaths._get_filenames(start_p2, end_p2)
+        fnames_p2 = swaths.get_filenames(start_p2, end_p2)
         tester = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/")
         outdir = tester/"cells"
         outdir_p1 = outdir / "p1"
