@@ -35,21 +35,12 @@ from datetime import datetime as dt
 import dask
 import xarray as xr
 import numpy as np
+
 from tqdm import tqdm
+from shapely.geometry import Point
 
-from ascat.read_native.xarray_io import AscatH129Cell
-from ascat.read_native.xarray_io import AscatH129v1Cell
-from ascat.read_native.xarray_io import AscatH121v1Cell
-from ascat.read_native.xarray_io import AscatH122Cell
-from ascat.read_native.xarray_io import AscatSIG0Cell6250m
-from ascat.read_native.xarray_io import AscatSIG0Cell12500m
-
-from ascat.read_native.xarray_io import AscatH129Swath
-from ascat.read_native.xarray_io import AscatH129v1Swath
-from ascat.read_native.xarray_io import AscatH121v1Swath
-from ascat.read_native.xarray_io import AscatH122Swath
-from ascat.read_native.xarray_io import AscatSIG0Swath6250m
-from ascat.read_native.xarray_io import AscatSIG0Swath12500m
+from ascat.read_native.xarray_io import cell_io_catalog
+from ascat.read_native.xarray_io import swath_io_catalog
 
 from ascat.read_native.xarray_io import trim_dates
 from ascat.read_native.xarray_io import append_to_netcdf
@@ -158,21 +149,12 @@ class CellFileCollectionStack():
             class is initialized if None. Default: None
         """
         product_id = product_id.upper()
-        if product_id == "H129":
-            io_class = AscatH129Cell
-        elif product_id == "H129_V1.0":
-            io_class = AscatH129v1Cell
-        elif product_id == "H121_V1.0":
-            io_class = AscatH121v1Cell
-        elif product_id == "H122":
-            io_class = AscatH122Cell
-        elif product_id == "SIG0_6.25":
-            io_class = AscatSIG0Cell6250m
-        elif product_id == "SIG0_12.5":
-            io_class = AscatSIG0Cell12500m
+        if product_id in cell_io_catalog:
+            io_class = cell_io_catalog[product_id]
         else:
-            raise ValueError(f"Product {product_id} not recognized. Valid products are"
-                             f" H129, H129_V1.0, H121_V1.0, H122, SIG0_6.25, SIG0_12.5.")
+            error_str = f"Product {product_id} not recognized. Valid products are"
+            error_str += f" {', '.join(cell_io_catalog.keys())}."
+            raise ValueError(error_str)
 
         return cls(
             collections,
@@ -226,6 +208,7 @@ class CellFileCollectionStack():
             cell=None,
             location_id=None,
             bbox=None,
+            geom=None,
             mask_and_scale=True,
             date_range=None,
             **kwargs
@@ -265,6 +248,8 @@ class CellFileCollectionStack():
             data = self._read_locations(location_id, date_range=date_range, **kwargs)
         elif bbox is not None:
             data = self._read_bbox(bbox, date_range=date_range, **kwargs)
+        elif geom is not None:
+            data = self._read_geometry(geom, date_range=date_range, **kwargs)
         else:
             raise ValueError("Need to specify either cell, location_id or bbox")
 
@@ -619,9 +604,38 @@ class CellFileCollectionStack():
             [coll.grid.get_bbox_grid_points(*bbox)
              for coll in self._collections_in_date_range(date_range)]
         )
-        cells = self.ioclass.grid.gpi2cell(location_ids)
+        return self._read_locations(location_ids, date_range=date_range, **kwargs)
+        # cells = self.ioclass.grid.gpi2cell(location_ids)
+        # return self._read_cells(cells, valid_gpis=location_ids, date_range=date_range, **kwargs)
 
-        return self._read_cells(cells, valid_gpis=location_ids, date_range=date_range, **kwargs)
+    def _read_geometry(
+            self,
+            geom,
+            date_range=None,
+            **kwargs
+    ):
+        bbox = geom.bounds
+        latmin, latmax, lonmin, lonmax = bbox[1], bbox[3], bbox[0], bbox[2]
+        bbox_gpis, bbox_lats, bbox_lons = self.ioclass.grid.get_bbox_grid_points(
+            latmin,
+            latmax,
+            lonmin,
+            lonmax,
+            both=True
+        )
+
+        # now that we have the grid points that are within the bounding box, we can
+        # check which ones are actually within the geometry
+        if len(bbox_gpis) > 0:
+            geom_location_ids = [
+                gpi
+                for gpi, lat, lon in zip(bbox_gpis, bbox_lats, bbox_lons)
+                if geom.contains(Point(lon, lat))
+            ]
+        else:
+            geom_location_ids = []
+
+        return self._read_locations(geom_location_ids, date_range=date_range, **kwargs)
 
     def _read_locations(
         self,
@@ -956,21 +970,12 @@ class CellFileCollection:
             If product_id is not recognized.
         """
         product_id = product_id.upper()
-        if product_id == "H129":
-            io_class = AscatH129Cell
-        elif product_id == "H129_V1.0":
-            io_class = AscatH129v1Cell
-        elif product_id == "H121_V1.0":
-            io_class = AscatH121v1Cell
-        elif product_id == "H122":
-            io_class = AscatH122Cell
-        elif product_id == "SIG0_6.25":
-            io_class = AscatSIG0Cell6250m
-        elif product_id == "SIG0_12.5":
-            io_class = AscatSIG0Cell12500m
+        if product_id in cell_io_catalog:
+            io_class = cell_io_catalog[product_id]
         else:
-            raise ValueError(f"Product {product_id} not recognized. Valid products are"
-                             f" H129, H129_V1.0, H121_V1.0, H122, SIG0_6.25, SIG0_12.5.")
+            error_str = f"Product {product_id} not recognized. Valid products are"
+            error_str += f" {', '.join(cell_io_catalog.keys())}."
+            raise ValueError(error_str)
 
         return cls(collections, io_class, ioclass_kws=ioclass_kws)
 
@@ -1059,6 +1064,7 @@ class CellFileCollection:
             location_id=None,
             coords=None,
             bbox=None,
+            geom=None,
             mask_and_scale=True,
             date_range=None,
             **kwargs
@@ -1100,7 +1106,8 @@ class CellFileCollection:
             data = self._read_latlon(coords[0], coords[1], date_range=date_range, **kwargs)
         elif bbox is not None:
             data = self._read_bbox(bbox, date_range=date_range, **kwargs)
-
+        elif geom is not None:
+            data = self._read_geometry(geom, date_range=date_range, **kwargs)
         else:
             raise ValueError("Either cell, location_id or coords (lon, lat)"
                              " must be given")
@@ -1256,6 +1263,28 @@ class CellFileCollection:
     def _read_bbox(self, bbox, date_range=None, **kwargs):
         location_ids = self.grid.get_bbox_grid_points(*bbox)
         return self._read_location_id(location_ids, date_range=date_range, **kwargs)
+
+    def _read_geometry(self, geom, date_range=None, **kwargs):
+        bbox = geom.bounds
+        latmin, latmax, lonmin, lonmax = bbox[1], bbox[3], bbox[0], bbox[2]
+        bbox_gpis, bbox_lats, bbox_lons = self.grid.get_bbox_grid_points(
+            latmin,
+            latmax,
+            lonmin,
+            lonmax,
+            both=True
+        )
+
+        if len(bbox_gpis) > 0:
+            geom_location_ids = [
+                gpi
+                for gpi, lat, lon in zip(bbox_gpis, bbox_lats, bbox_lons)
+                if geom.contains(Point(lon, lat))
+            ]
+        else:
+            geom_location_ids = []
+
+        return self._read_location_id(geom_location_ids, date_range=date_range, **kwargs)
 
     def _read_location_id(self, location_id, date_range=None, **kwargs):
         """Read data for given grid point.
@@ -1423,6 +1452,8 @@ class SwathFileCollection:
         self.fid = None
         self.max_buffer_memory_mb = 6*1024
 
+        self._possible_gpis = None
+
 
         if dask_scheduler is not None:
             dask.config.set(scheduler=dask_scheduler)
@@ -1460,21 +1491,12 @@ class SwathFileCollection:
 
         """
         product_id = product_id.upper()
-        if product_id == "H129":
-            io_class = AscatH129Swath
-        elif product_id == "H129_V1.0":
-            io_class = AscatH129v1Swath
-        elif product_id == "H121_V1.0":
-            io_class = AscatH121v1Swath
-        elif product_id == "H122":
-            io_class = AscatH122Swath
-        elif product_id == "SIG0_6.25":
-            io_class = AscatSIG0Swath6250m
-        elif product_id == "SIG0_12.5":
-            io_class = AscatSIG0Swath12500m
+        if product_id in swath_io_catalog:
+            io_class = swath_io_catalog[product_id]
         else:
-            raise ValueError(f"Product {product_id} not recognized. Valid products are"
-                             f" H129, H129_V1.0, H121_V1.0, H122, SIG0_6.25, SIG0_12.5.")
+            error_str = f"Product {product_id} not recognized. Valid products are"
+            error_str += f" {', '.join(swath_io_catalog.keys())}."
+            raise ValueError(error_str)
 
         return cls(
             path,
@@ -1634,7 +1656,6 @@ class SwathFileCollection:
         """
         # if there are kwargs, use them instead of self.ioclass_kws
         beam_idx = {"for": 0, "mid": 1, "aft": 2}
-        sat_id = {"a": 3, "b": 4, "c": 5}
 
         # if any beam has backscatter data for a record, the record is valid. Drop
         # observations that don't have any backscatter data.
@@ -1665,10 +1686,6 @@ class SwathFileCollection:
 
                 # drop the variables on the beams dimension
                 data = data.drop_dims("beams")
-            # add a variable for the satellite id
-            sat = data.attrs["spacecraft"][-1].lower()
-            del data.attrs["spacecraft"]
-            data["sat_id"] = ("obs", np.repeat(sat_id[sat], data["location_id"].size))
 
         # Find which cell each observation belongs to, and assign it as a coordinate.
         data = data.assign_coords(
@@ -1685,6 +1702,8 @@ class SwathFileCollection:
             cell=None,
             location_id=None,
             coords=None,
+            bbox=None,
+            geom=None,
             **kwargs
     ):
         """Takes either 1 or 2 arguments and calls the correct function
@@ -1705,15 +1724,23 @@ class SwathFileCollection:
             Location id.
         coords : tuple, optional
             Tuple of (lat, lon) coordinates.
+        bbox : tuple, optional
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        geometry : shapely.geometry, optional
+            Geometry object; use to read data that intersects the geometry.
         """
         start_dt, end_dt = date_range
         fnames = self._get_filenames(start_dt, end_dt)
         if cell is not None:
             data = self._read_cell(fnames, cell, **kwargs)
         elif location_id is not None:
-            data = self._read_location_id(location_id, **kwargs)
+            data = self._read_location_id(fnames, location_id, **kwargs)
         elif coords is not None:
-            data = self._read_latlon(coords[0], coords[1], **kwargs)
+            data = self._read_latlon(fnames, coords[0], coords[1], **kwargs)
+        elif bbox is not None:
+            data = self._read_bbox(fnames, bbox, **kwargs)
+        elif geom is not None:
+            data = self._read_geometry(fnames, geom, **kwargs)
         elif self._open(fnames):
             data = self.fid.read(**kwargs)
         else:
@@ -1926,6 +1953,52 @@ class SwathFileCollection:
 
         return self._read_location_id(fnames, location_id, **kwargs)
 
+    def _read_bbox(self, fnames, bbox, **kwargs):
+        """Reading data for given bounding box.
+
+        Parameters
+        ----------
+        bbox : tuple or list
+            Bounding box coordinates (latmin, latmax, lonmin, lonmax).
+        """
+        location_ids = self.grid.get_bbox_grid_points(*bbox)
+        return self._read_location_id(fnames, location_ids, **kwargs)
+
+    def _read_geometry(self, fnames, geom, **kwargs):
+        """Reading data for given geometry.
+
+        Assumes geometry and grid are in the same coordinate system.
+
+        Parameters
+        ----------
+        geometry : shapely.geometry
+            Geometry object.
+        """
+        # first get the bounding box of the geometry so we can narrow down the
+        # grid points we need to check
+        bbox = geom.bounds
+        latmin, latmax, lonmin, lonmax = bbox[1], bbox[3], bbox[0], bbox[2]
+        bbox_gpis, bbox_lats, bbox_lons = self.grid.get_bbox_grid_points(
+            latmin,
+            latmax,
+            lonmin,
+            lonmax,
+            both=True
+        )
+
+        # now that we have the grid points that are within the bounding box, we can
+        # check which ones are actually within the geometry
+        if len(bbox_gpis) > 0:
+            geom_location_ids = [
+                gpi
+                for gpi, lat, lon in zip(bbox_gpis, bbox_lats, bbox_lons)
+                if geom.contains(Point(lon, lat))
+            ]
+        else:
+            geom_location_ids = []
+
+        return self._read_location_id(fnames, geom_location_ids, **kwargs)
+
     def _read_location_id(self, fnames, location_id, **kwargs):
         """Read data for given grid point.
 
@@ -1942,9 +2015,12 @@ class SwathFileCollection:
         data = None
 
         if self._open(fnames):
-            data = self.fid.read(location_id=location_id, **kwargs)
+            gpi_lookup = np.zeros(self.grid.gpis.max()+1, dtype=bool)
+            gpi_lookup[location_id] = 1
+            data = self.fid.read(location_id=location_id, lookup_vector=gpi_lookup, **kwargs)
 
         return data
+
 
     def __enter__(self):
         """Context manager initialization."""

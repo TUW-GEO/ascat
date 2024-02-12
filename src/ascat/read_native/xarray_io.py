@@ -33,6 +33,7 @@ from pathlib import Path
 import netCDF4
 import xarray as xr
 import numpy as np
+import dask.array as da
 
 from fibgrid.realization import FibGrid
 from ascat.file_handling import ChronFiles
@@ -821,10 +822,15 @@ class SwathIOBase(ABC):
                                          decode_cf=False,
                                          concat_dim="obs",
                                          combine="nested",
-                                         # chunks=(chunks or "auto"),
+                                         chunks=(chunks or None),
                                          combine_attrs=self.combine_attributes,
                                          mask_and_scale=False,
                                          **kwargs)
+            if chunks is not None:
+                self._isin = da.isin
+            else:
+                self._isin = np.in1d
+
             chunks = None
 
         elif isinstance(source, (str, Path)):
@@ -846,7 +852,8 @@ class SwathIOBase(ABC):
         if "calender" in self._ds.time.attrs:
             self._ds.time.attrs["calendar"] = self._ds.time.attrs.pop("calender")
 
-    def read(self, cell=None, location_id=None, mask_and_scale=True):
+
+    def read(self, cell=None, location_id=None, mask_and_scale=True, lookup_vector=None):
         """
         Returns data for a cell or location_id if specified, or for the entire
         swath file if not specified.
@@ -861,7 +868,7 @@ class SwathIOBase(ABC):
             Whether to mask and scale the data. Default is True.
         """
         if location_id is not None:
-            out_data = self._read_location_ids(location_id)
+            out_data = self._read_location_ids(location_id, lookup_vector=lookup_vector)
         elif cell is not None:
             out_data = self._read_cell(cell)
         else:
@@ -882,11 +889,22 @@ class SwathIOBase(ABC):
         out_encoding = self._create_variable_encodings(out_ds, custom_dtypes = self.ts_dtype)
         out_ds.to_netcdf(filename, unlimited_dims=["obs"], encoding=out_encoding, **kwargs)
 
-    def _read_location_ids(self, location_ids):
+    def _read_location_ids(self, location_ids, lookup_vector=None):
         """
-        Read data for a list of location_ids
+        Read data for a list of location_ids.
+
+        Parameters
+        ----------
+        location_ids : list or 1D array of int
+            Location ids to read data for.
+        lookup_vector : 1D array of int, optional
+            Lookup vector for location_ids. Should make the search much faster by eliminating
+            the need for np.isin. Default is None.
         """
-        idxs = np.in1d(self._ds.location_id, location_ids)
+        if lookup_vector is not None:
+            return self._ds.sel(obs=lookup_vector[self._ds.location_id.values])
+
+        idxs = self._isin(self._ds.location_id, location_ids)
         idxs = np.array([1 if id in location_ids else 0
                          for id in self._ds.location_id.values])
         if not np.any(idxs):
@@ -979,6 +997,12 @@ class SwathIOBase(ABC):
         that takes a list of attribute dictionaries as an argument.
         """
         ds.attrs["global_attributes_flag"] = 1
+        if "spacecraft" in ds.attrs:
+            # Assumption: the spacecraft attribute is something like "metop-a"
+            sat_id = {"a": 3, "b": 4, "c": 5}
+            sat = ds.attrs["spacecraft"][-1].lower()
+            ds["sat_id"] = ("obs", np.repeat(sat_id[sat], ds["location_id"].size))
+            del ds.attrs["spacecraft"]
         return ds
 
     @staticmethod
@@ -998,28 +1022,8 @@ class SwathIOBase(ABC):
         Returns
         -------
         """
-        out_attrs = dict()
-
-        # we only really want to pass spacecraft from global attributes
+        # we don't need to pass on anything from global attributes
         if "global_attributes_flag" in attrs_list[0].keys():
-            spacecraft = None
-            for i, attrs in enumerate(attrs_list):
-            # we just grab the first matching value here, no need to iterate through the entire list
-            # Spacecraft is totally separate from missing_value since it's a global attribute
-            # Eventually if this needs to do more, this logic will need to be reconsidered
-                if "spacecraft" in attrs.keys():
-                    if spacecraft is None:
-                        spacecraft = attrs["spacecraft"]
-                        continue
-                    elif spacecraft == attrs["spacecraft"]:
-                        continue
-                    else:
-                        raise ValueError("Spacecraft mismatch in swath files. Cannot stack."
-                                        f"\n(file index {i} in list of swath files being"
-                                        " processed did not match previous swath files)")
-            if spacecraft is not None:
-                out_attrs["spacecraft"] = spacecraft
-                return out_attrs
             return None
 
         else:
@@ -1289,7 +1293,10 @@ class AscatH129v1Swath(SwathIOBase):
 
 class AscatH121v1Swath(SwathIOBase):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {"year_folder": "{year}"}
+    sf_pattern = {
+        "satellite_folder": "metop_[abc]",
+        "year_folder": "{year}"
+    }
     date_format = "%Y%m%d%H%M%S"
     grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)["grid"]
     grid_cell_size = 5
@@ -1325,7 +1332,10 @@ class AscatH121v1Swath(SwathIOBase):
 
     @staticmethod
     def sf_read_fmt(timestamp):
-        return {"year_folder": {"year": f"{timestamp.year}"}}
+        return {
+            "satellite_folder": {"satellite": "metop_[abc]"},
+            "year_folder": {"year": f"{timestamp.year}"},
+        }
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
@@ -1564,3 +1574,21 @@ class AscatSIG0Swath12500m(SwathIOBase):
 
     def __init__(self, filename,  **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
+
+cell_io_catalog = {
+    "H129": AscatH129Cell,
+    "H129_V1.0": AscatH129v1Cell,
+    "H121_V1.0": AscatH121v1Cell,
+    "H122": AscatH122Cell,
+    "SIG0_6.25": AscatSIG0Cell6250m,
+    "SIG0_12.5": AscatSIG0Cell12500m,
+}
+
+swath_io_catalog = {
+    "H129": AscatH129Swath,
+    "H129_V1.0": AscatH129v1Swath,
+    "H121_V1.0": AscatH121v1Swath,
+    "H122": AscatH122Swath,
+    "SIG0_6.25": AscatSIG0Swath6250m,
+    "SIG0_12.5": AscatSIG0Swath12500m,
+}
