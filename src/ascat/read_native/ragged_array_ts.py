@@ -1799,7 +1799,7 @@ class SwathFileCollection:
         """
         if start_dt is None and end_dt is None:
             fnames = list(self.path.glob("**/*.nc"))
-        if self.chron_files:
+        elif self.chron_files:
             fnames = self.chron_files.search_period(
                 start_dt,
                 end_dt,
