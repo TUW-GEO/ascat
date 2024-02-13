@@ -1834,6 +1834,60 @@ class SwathFileCollection:
 
         return fnames
 
+    def swath_data_generator(
+            self,
+            start_dt=None,
+            end_dt=None,
+            cell=None,
+            location_id=None,
+            coords=None,
+            bbox=None,
+            geom=None,
+    ):
+        """Return a generator producing the data for each requested swath file.
+
+        Parameters
+        ----------
+        start_dt : datetime.datetime
+            Start time.
+        end_dt : datetime.datetime
+            End time.
+        cell : int
+            Grid cell number to select.
+        location_id : int
+            Location id.
+        coords : tuple
+            Tuple of (lat, lon) coordinates.
+        bbox : tuple
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        geom : shapely.geometry
+            Geometry object; use to select data that intersects the geometry.
+
+        Yields
+        ------
+        data : xarray.Dataset
+            Dataset for each swath file intersecting the requested extent.
+        """
+        fnames = self.get_filenames(
+            start_dt=start_dt,
+            end_dt=end_dt,
+            cell=cell,
+            location_id=location_id,
+            coords=coords,
+            bbox=bbox,
+            geom=geom,
+        )
+
+        for f in fnames:
+            self._open(f)
+            data = self.fid.read()
+            # start_timestamp = data.attrs["sensing_start_time_utc"]
+            start_timestamp = data["time"].values.min()
+            # end_timestamp = data.attrs["sensing_end_time_utc"]
+            end_timestamp = data["time"].values.max()
+            sat = data.attrs["spacecraft"]
+            yield start_timestamp, end_timestamp, sat, data
+
     def _open(self, fnames):
         """Open swath files
 
