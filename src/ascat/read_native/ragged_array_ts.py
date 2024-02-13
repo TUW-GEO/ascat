@@ -1867,6 +1867,12 @@ class SwathFileCollection:
 
         Yields
         ------
+        start_timestamp : numpy.datetime64
+            Sensing start time of the swath file.
+        end_timestamp : numpy.datetime64
+            Sensing end time of the swath file.
+        sat : str
+            Satellite name.
         data : xarray.Dataset
             Dataset for each swath file intersecting the requested extent.
         """
