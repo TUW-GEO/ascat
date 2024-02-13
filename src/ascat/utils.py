@@ -300,3 +300,75 @@ def get_roi_subset(ds, roi):
                 ds = ds[subset]
 
     return ds
+
+
+class Spacecraft:
+    """
+    Spacecraft class.
+    """
+
+    valid_spacecraft_names = [
+        "METOPA", "METOPB", "METOPC", "METOP-A", "METOP-B", "METOP-C",
+        "METOP-SG B1", "METOP-SG B2", "METOP-SG B3"
+    ]
+
+    def __init__(self, name):
+        """
+        Initialize spacecraft class.
+
+        Parameters
+        ----------
+        name : str
+            Spacecraft name.
+        """
+        if name not in Spacecraft.valid_spacecraft_names:
+            valid_names = ' ,'.join(Spacecraft.valid_spacecraft_names)
+            msg = f"Spacecraft {name} unknown. Valid options: {valid_names}"
+            raise RuntimeError(msg)
+
+        satellite_dict = {
+            "METOPA": "METOPA",
+            "METOPB": "METOPB",
+            "METOPC": "METOPC",
+            "METOP-A": "METOPA",
+            "METOP-B": "METOPB",
+            "METOP-C": "METOPC",
+            "METOP-SG B1": "METOP-SGB1",
+            "METOP-SG B2": "METOP-SGB2",
+            "METOP-SG B3": "METOP-SGB3"
+        }
+
+        platform_dict = {
+            "METOPA": "Metop",
+            "METOPB": "Metop",
+            "METOPC": "Metop",
+            "METOP-SGB1": "Metop-SG",
+            "METOP-SGB2": "Metop-SG",
+            "METOP-SGB3": "Metop-SG"
+        }
+
+        sensor_dict = {"Metop": "ASCAT", "Metop-SG": "SCA"}
+
+        sat_name_dict = {
+            "METOPA": "A",
+            "METOPB": "B",
+            "METOPC": "C",
+            "METOP-SGB1": "B1",
+            "METOP-SGB2": "B2",
+            "METOP-SGB3": "B3"
+        }
+
+        sat_id_dict = {
+            "METOPA": 3,
+            "METOPB": 4,
+            "METOPC": 5,
+            "METOP-SGB1": 6,
+            "METOP-SGB2": 7,
+            "METOP-SGB3": 8
+        }
+
+        self.satellite = satellite_dict[name]
+        self.platform = platform_dict[self.satellite]
+        self.sensor = sensor_dict[self.platform]
+        self.sat_name = sat_name_dict[self.satellite]
+        self.sat_id = sat_id_dict[self.satellite]
