@@ -1798,8 +1798,8 @@ class SwathFileCollection:
             If the ioclass does not have a file search method named `chron_files`.
         """
         if start_dt is None and end_dt is None:
-            return list(self.path.glob("**/*.nc"))
-        if self.chron_files:
+            fnames = list(self.path.glob("**/*.nc"))
+        elif self.chron_files:
             fnames = self.chron_files.search_period(
                 start_dt,
                 end_dt,
