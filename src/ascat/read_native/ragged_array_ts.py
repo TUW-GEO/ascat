@@ -45,6 +45,8 @@ from ascat.read_native.xarray_io import swath_io_catalog
 from ascat.read_native.xarray_io import trim_dates
 from ascat.read_native.xarray_io import append_to_netcdf
 
+from ascat.utils import Spacecraft
+
 process_warnings = True
 
 class CellFileCollectionStack():
@@ -1881,11 +1883,11 @@ class SwathFileCollection:
         for f in fnames:
             self._open(f)
             data = self.fid.read()
-            # start_timestamp = data.attrs["sensing_start_time_utc"]
-            start_timestamp = data["time"].values.min()
-            # end_timestamp = data.attrs["sensing_end_time_utc"]
-            end_timestamp = data["time"].values.max()
-            sat = data.attrs["spacecraft"]
+            start_timestamp = np.datetime64(data.attrs["sensing_start_time_utc"], "ns")
+            end_timestamp = np.datetime64(data.attrs["sensing_end_time_utc"], "ns")
+            spacecraft = Spacecraft(data.attrs["spacecraft"])
+            sat = spacecraft.satellite
+
             yield start_timestamp, end_timestamp, sat, data
 
     def _open(self, fnames):
