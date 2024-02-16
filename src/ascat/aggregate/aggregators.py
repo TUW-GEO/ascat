@@ -74,11 +74,7 @@ class TemporalSwathAggregator:
         self.data = None
         self.agg_vars = [
             "surface_soil_moisture",
-            "surface_soil_moisture_noise",
             "backscatter40",
-            "slope40",
-            "curvature40",
-            "surface_soil_moisture_sensitivity",
         ]
 
     def _read_data(self):
