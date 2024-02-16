@@ -63,6 +63,22 @@ def parse_args_temporal_swath_agg(args):
         metavar='PROD',
         help='Product id'
     )
+    parser.add_argument(
+        '-snow_cover_mask',
+        metavar='SNOW_MASK',
+        help='Snow cover probability value above which to mask the source data'
+    )
+    parser.add_argument(
+        '-frozen_soil_mask',
+        metavar='FROZEN_MASK',
+        help='Frozen soil probability value above which to mask the source data'
+    )
+    parser.add_argument(
+        '-subsurface_scattering_mask',
+        metavar='SUBSCAT_MASK',
+        help='Subsurface scattering probability value above which to mask the source data'
+    )
+
     return parser.parse_args(args), parser
 
 def temporal_swath_agg_main(cli_args):
@@ -83,7 +99,10 @@ def temporal_swath_agg_main(cli_args):
         args.end_dt,
         args.t_delta,
         args.agg,
-        args.product
+        args.product,
+        args.snow_cover_mask,
+        args.frozen_soil_mask,
+        args.subsurface_scattering_mask
     )
 
     transf.write_time_chunks(args.outpath)

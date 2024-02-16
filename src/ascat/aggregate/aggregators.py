@@ -41,7 +41,19 @@ progress_to_stdout = False
 class TemporalSwathAggregator:
     """ Class to aggregate ASCAT data its location ids over time."""
 
-    def __init__(self, filepath, outpath, start_dt, end_dt, t_delta, agg, product):
+    def __init__(
+            self,
+            filepath,
+            outpath,
+            start_dt,
+            end_dt,
+            t_delta,
+            agg,
+            product,
+            snow_cover_mask=80,
+            frozen_soil_mask=80,
+            subsurface_scattering_mask=90,
+    ):
         """ Initialize the class.
 
         Parameters
@@ -76,6 +88,11 @@ class TemporalSwathAggregator:
             "surface_soil_moisture",
             "backscatter40",
         ]
+        self.mask_probs = {
+            "snow_cover_probability": snow_cover_mask,
+            "frozen_soil_probability": frozen_soil_mask,
+            "subsurface_scattering_probability": subsurface_scattering_mask,
+        }
 
     def _read_data(self):
         if progress_to_stdout:
@@ -105,7 +122,6 @@ class TemporalSwathAggregator:
             ds = self._set_metadata(ds)
             ds.to_netcdf(
                 f"{out_dir}/ascat_{self.agg}_{chunk_start_str}_{chunk_end_str}.nc",
-                # encoding={"location_id": {"dtype": int}}
             )
 
     def yield_aggregated_time_chunks(self):
@@ -113,6 +129,14 @@ class TemporalSwathAggregator:
         if self.data is None:
             self._read_data()
         ds = self.data
+        # mask ds where "surface_flag" is 1, "snow_cover_probability" is > 90, or "frozen_soil_probability" is > 90
+        mask = (
+            (ds.surface_flag != 0)
+            | (ds.snow_cover_probability > self.mask_probs["snow_cover_probability"])
+            | (ds.frozen_soil_probability > self.mask_probs["frozen_soil_probability"])
+            | (ds.subsurface_scattering_probability > self.mask_probs["subsurface_scattering_probability"])
+        )
+        ds = ds.where(~mask, drop=True)
         ds["time_chunks"] = (
             ds.time - np.datetime64(self.start_dt, "ns")
         ) // self.timedelta
