@@ -35,6 +35,7 @@ import pandas as pd
 from flox.xarray import xarray_reduce
 
 import ascat.read_native.ragged_array_ts as rat
+from ascat.read_native.xarray_io import get_swath_product_id
 
 progress_to_stdout = False
 
@@ -44,12 +45,10 @@ class TemporalSwathAggregator:
     def __init__(
             self,
             filepath,
-            outpath,
             start_dt,
             end_dt,
             t_delta,
             agg,
-            product,
             snow_cover_mask=None,
             frozen_soil_mask=None,
             subsurface_scattering_mask=None,
@@ -60,8 +59,6 @@ class TemporalSwathAggregator:
         ----------
         filepath : str
             Path to the data.
-        outpath : str
-            Path to the output data.
         start_dt : str
             Start date and time (formatted e.g. 2020-01-01T00:00:00).
         end_dt : str
@@ -70,18 +67,28 @@ class TemporalSwathAggregator:
             Time period for aggregation (e.g. 1D, 1W, 1M, 1Y, 2D, 3M, 4Y, etc.).
         agg : str
             Aggregation.
-        product : str
-            Product id.
+        snow_cover_mask : int, optional
+            Snow cover probability value above which to mask the source data.
+        frozen_soil_mask : int, optional
+            Frozen soil probability value above which to mask the source data.
+        subsurface_scattering_mask : int, optional
+            Subsurface scattering probability value above which to mask the source data.
         """
         self.filepath = filepath
         self.start_dt = datetime.datetime.strptime(start_dt, "%Y-%m-%dT%H:%M:%S")
         self.end_dt = datetime.datetime.strptime(end_dt, "%Y-%m-%dT%H:%M:%S")
         self.timedelta = pd.Timedelta(t_delta)
         self.agg = agg
+
+        # assumes ONLY swath files are in the folder
+        first_fname = str(next(Path(filepath).rglob("*.nc")).name)
+        product = get_swath_product_id(first_fname)
         self.product = product
+
         self.collection = rat.SwathFileCollection.from_product_id(
             Path(filepath), product
         )
+
         self.grid = self.collection.grid
         self.data = None
         self.agg_vars = [
@@ -126,8 +133,17 @@ class TemporalSwathAggregator:
             )
             ds["location_id"] = ds["location_id"].astype(int)
             ds = self._set_metadata(ds)
+            out_name = (
+                f"ascat"
+                f"_{self.product.lower().replace('_', '-')}"
+                f"_{self.collection.ioclass.grid_sampling_km}"
+                f"_{self.agg}"
+                f"_{chunk_start_str}"
+                f"_{chunk_end_str}.nc"
+            )
+
             ds.to_netcdf(
-                f"{out_dir}/ascat_{self.agg}_{chunk_start_str}_{chunk_end_str}.nc",
+                Path(out_dir)/out_name,
             )
 
     def yield_aggregated_time_chunks(self):

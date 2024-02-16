@@ -59,11 +59,6 @@ def parse_args_temporal_swath_agg(args):
         help='Aggregation'
     )
     parser.add_argument(
-        '--product',
-        metavar='PROD',
-        help='Product id'
-    )
-    parser.add_argument(
         '--snow_cover_mask',
         metavar='SNOW_MASK',
         help='Snow cover probability value above which to mask the source data'
@@ -98,12 +93,10 @@ def temporal_swath_agg_main(cli_args):
 
     transf = aggs.TemporalSwathAggregator(
         args.filepath,
-        args.outpath,
         args.start_dt,
         args.end_dt,
         args.t_delta,
         args.agg,
-        args.product,
         args.snow_cover_mask,
         args.frozen_soil_mask,
         args.subsurface_scattering_mask
