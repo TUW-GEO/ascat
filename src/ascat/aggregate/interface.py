@@ -39,42 +39,42 @@ def parse_args_temporal_swath_agg(args):
     parser.add_argument('filepath', metavar='FILEPATH', help='Path to the data')
     parser.add_argument('outpath', metavar='OUTPATH', help='Path to the output data')
     parser.add_argument(
-        '-start_dt',
+        '--start_dt',
         metavar='START_DT',
         help='Start date and time (formatted e.g. 2020-01-01T00:00:00)'
     )
     parser.add_argument(
-        '-end_dt',
+        '--end_dt',
         metavar='END_DT',
         help='End date and time (formatted e.g. 2020-02-01T00:00:00)'
     )
     parser.add_argument(
-        '-t_delta',
+        '--t_delta',
         metavar='T_DELTA',
         help='Time period for aggregation (e.g. 1D, 1W, 1M, 1Y, 2D, 3M, 4Y, etc.)'
     )
     parser.add_argument(
-        '-agg',
+        '--agg',
         metavar='AGG',
         help='Aggregation'
     )
     parser.add_argument(
-        '-product',
+        '--product',
         metavar='PROD',
         help='Product id'
     )
     parser.add_argument(
-        '-snow_cover_mask',
+        '--snow_cover_mask',
         metavar='SNOW_MASK',
         help='Snow cover probability value above which to mask the source data'
     )
     parser.add_argument(
-        '-frozen_soil_mask',
+        '--frozen_soil_mask',
         metavar='FROZEN_MASK',
         help='Frozen soil probability value above which to mask the source data'
     )
     parser.add_argument(
-        '-subsurface_scattering_mask',
+        '--subsurface_scattering_mask',
         metavar='SUBSCAT_MASK',
         help='Subsurface scattering probability value above which to mask the source data'
     )
