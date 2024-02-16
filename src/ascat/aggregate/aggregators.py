@@ -50,9 +50,9 @@ class TemporalSwathAggregator:
             t_delta,
             agg,
             product,
-            snow_cover_mask=80,
-            frozen_soil_mask=80,
-            subsurface_scattering_mask=90,
+            snow_cover_mask=None,
+            frozen_soil_mask=None,
+            subsurface_scattering_mask=None,
     ):
         """ Initialize the class.
 
@@ -89,9 +89,15 @@ class TemporalSwathAggregator:
             "backscatter40",
         ]
         self.mask_probs = {
-            "snow_cover_probability": snow_cover_mask,
-            "frozen_soil_probability": frozen_soil_mask,
-            "subsurface_scattering_probability": subsurface_scattering_mask,
+            "snow_cover_probability": (
+                80 if snow_cover_mask is None else snow_cover_mask
+            ),
+            "frozen_soil_probability": (
+                80 if frozen_soil_mask is None else frozen_soil_mask
+            ),
+            "subsurface_scattering_probability": (
+                90 if subsurface_scattering_mask is None else subsurface_scattering_mask
+            ),
         }
 
     def _read_data(self):

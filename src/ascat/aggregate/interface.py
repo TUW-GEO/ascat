@@ -91,6 +91,10 @@ def temporal_swath_agg_main(cli_args):
         Command line arguments.
     """
     args, parser = parse_args_temporal_swath_agg(cli_args)
+    int_args = ["snow_cover_mask", "frozen_soil_mask", "subsurface_scattering_mask"]
+    for arg in int_args:
+        if getattr(args, arg) is not None:
+            setattr(args, arg, int(getattr(args, arg)))
 
     transf = aggs.TemporalSwathAggregator(
         args.filepath,
