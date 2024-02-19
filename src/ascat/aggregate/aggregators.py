@@ -32,7 +32,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from flox import groupby_reduce
 from flox.xarray import xarray_reduce
+
+from dask.array import vstack
 
 import ascat.read_native.ragged_array_ts as rat
 from ascat.read_native.xarray_io import get_swath_product_id
@@ -151,6 +154,7 @@ class TemporalSwathAggregator:
         if self.data is None:
             self._read_data()
         ds = self.data
+
         # mask ds where "surface_flag" is 1, "snow_cover_probability" is > 90, or "frozen_soil_probability" is > 90
         mask = (
             (ds.surface_flag != 0)
@@ -158,7 +162,9 @@ class TemporalSwathAggregator:
             | (ds.frozen_soil_probability > self.mask_probs["frozen_soil_probability"])
             | (ds.subsurface_scattering_probability > self.mask_probs["subsurface_scattering_probability"])
         )
-        ds = ds.where(~mask, drop=True)
+
+        ds = ds.where(~mask, drop=False)
+
         ds["time_chunks"] = (
             ds.time - np.datetime64(self.start_dt, "ns")
         ) // self.timedelta
@@ -167,26 +173,48 @@ class TemporalSwathAggregator:
         total_time_chunks = int(
             (self.end_dt - self.start_dt) / self.timedelta
         ) + 1
-        for timechunk, group in ds.groupby("time_chunks"):
+
+
+        agg_vars_stack = vstack([ds[var].data for var in present_agg_vars])
+        grouped_data, time_groups, loc_groups = groupby_reduce(
+            agg_vars_stack,
+            ds["time_chunks"],
+            ds["location_id"],
+            func=self.agg
+        )
+        # shape of grouped_data is (n_agg_vars, n_time_chunks, n_locations)
+        # now we need to rebuild an xarray dataset from this
+        # we can use the time_groups and loc_groups to do this
+        import xarray as xr
+        grouped_ds = xr.Dataset(
+            {
+                var: (("time_chunks", "location_id"), grouped_data[i])
+                for i, var in enumerate(present_agg_vars)
+            },
+            coords={
+                "time_chunks": time_groups,
+                "location_id": loc_groups,
+            },
+        )
+
+        lons, lats = self.grid.gpi2lonlat(grouped_ds.location_id.values)
+        grouped_ds["lon"] = ("location_id", lons)
+        grouped_ds["lat"] = ("location_id", lats)
+        grouped_ds = grouped_ds.set_coords(["lon", "lat"])
+
+        # location_id dimension here will be the same for each output dataset.
+        # this may use a bit more storage than necessary but it will ensure that
+        # the output datasets are also mergable
+        for timechunk, group in grouped_ds.groupby("time_chunks"):
             if progress_to_stdout:
                 print(f"processing time chunk {timechunk + 1}/{total_time_chunks}...      ", end="\r")
-            chunk_means = xarray_reduce(
-                group[present_agg_vars + ["location_id"]],
-                group.location_id,
-                expected_groups=(np.unique(group.location_id.values),),
-                # dims = ["obs"],
-                func=self.agg,
-            )
-
-            lons, lats = self.grid.gpi2lonlat(chunk_means.location_id.values)
-            chunk_means["lon"] = ("location_id", lons)
-            chunk_means["lat"] = ("location_id", lats)
-            chunk_means = chunk_means.set_coords(["lon", "lat"])
-
             chunk_start = self.start_dt + self.timedelta * timechunk
             chunk_end = (
                 self.start_dt + self.timedelta * (timechunk + 1) - pd.Timedelta("1s")
             )
-            chunk_means.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
-            chunk_means.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
-            yield chunk_means
+            group.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
+            group.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
+            group["time_chunks"] = np.datetime64(chunk_start, "ns")
+            # rename time_chunks to time
+            group = group.rename({"time_chunks": "time"})
+            yield group
