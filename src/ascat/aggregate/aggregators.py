@@ -31,6 +31,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 
 from flox import groupby_reduce
 from flox.xarray import xarray_reduce
@@ -123,7 +124,16 @@ class TemporalSwathAggregator:
 
     def write_time_chunks(self, out_dir):
         """Loop through time chunks and write them to file."""
-        for ds in self.yield_aggregated_time_chunks():
+        product_id = self.product.lower().replace("_", "-")
+        grid_sampling_km = self.collection.ioclass.grid_sampling_km
+        if self.agg is not None:
+            yield_func = self.yield_aggregated_time_chunks
+            agg_str = f"_{self.agg}"
+        else:
+            yield_func = self.yield_time_chunks
+            agg_str = "_data"
+
+        for ds in yield_func():
             chunk_start_str = (
                 np.datetime64(ds.attrs["start_time"])
                 .astype(datetime.datetime)
@@ -134,13 +144,15 @@ class TemporalSwathAggregator:
                 .astype(datetime.datetime)
                 .strftime("%Y%m%d%H%M%S")
             )
-            ds["location_id"] = ds["location_id"].astype(int)
+            # if location_id is not an integer, convert it to an integer
+            if not np.issubdtype(ds.location_id.dtype, np.integer):
+                ds["location_id"] = ds.location_id.astype(int)
             ds = self._set_metadata(ds)
             out_name = (
                 f"ascat"
-                f"_{self.product.lower().replace('_', '-')}"
-                f"_{self.collection.ioclass.grid_sampling_km}"
-                f"_{self.agg}"
+                f"_{product_id}"
+                f"_{grid_sampling_km}km"
+                f"{agg_str}"
                 f"_{chunk_start_str}"
                 f"_{chunk_end_str}.nc"
             )
@@ -149,12 +161,38 @@ class TemporalSwathAggregator:
                 Path(out_dir)/out_name,
             )
 
+    def yield_time_chunks(self):
+        """Loop through time chunks of the range, yield the merged data unmodified."""
+        time_chunks = pd.date_range(
+            start=self.start_dt, end=self.end_dt, freq=self.timedelta
+        )
+        if self.data is not None:
+            # I don't know why this case would exist, but if it does...
+            ds = self.data
+            for timechunk in time_chunks:
+                chunk_start = timechunk
+                chunk_end = timechunk + self.timedelta - pd.Timedelta("1s")
+                ds_chunk = ds.sel(time=slice(chunk_start, chunk_end))
+                ds_chunk.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
+                ds_chunk.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
+                yield ds_chunk
+        if self.data is None:
+            for timechunk in time_chunks:
+                chunk_start = timechunk
+                chunk_end = timechunk + self.timedelta
+                ds_chunk = self.collection.read(date_range=(chunk_start, chunk_end))
+                chunk_end = chunk_end - pd.Timedelta("1s")
+                ds_chunk.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
+                ds_chunk.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
+                yield ds_chunk
+
     def yield_aggregated_time_chunks(self):
         """Loop through data in time chunks, aggregating it over time."""
         if self.data is None:
             self._read_data()
         ds = self.data
-
+        if progress_to_stdout:
+            print("masking data...", end="\r")
         # mask ds where "surface_flag" is 1, "snow_cover_probability" is > 90, or "frozen_soil_probability" is > 90
         mask = (
             (ds.surface_flag != 0)
@@ -162,20 +200,17 @@ class TemporalSwathAggregator:
             | (ds.frozen_soil_probability > self.mask_probs["frozen_soil_probability"])
             | (ds.subsurface_scattering_probability > self.mask_probs["subsurface_scattering_probability"])
         )
-
         ds = ds.where(~mask, drop=False)
-
         ds["time_chunks"] = (
             ds.time - np.datetime64(self.start_dt, "ns")
         ) // self.timedelta
 
         present_agg_vars = [var for var in self.agg_vars if var in ds.variables]
-        total_time_chunks = int(
-            (self.end_dt - self.start_dt) / self.timedelta
-        ) + 1
-
 
         agg_vars_stack = vstack([ds[var].data for var in present_agg_vars])
+
+        if progress_to_stdout:
+            print("constructing groups...", end="\r")
         grouped_data, time_groups, loc_groups = groupby_reduce(
             agg_vars_stack,
             ds["time_chunks"],
@@ -185,7 +220,6 @@ class TemporalSwathAggregator:
         # shape of grouped_data is (n_agg_vars, n_time_chunks, n_locations)
         # now we need to rebuild an xarray dataset from this
         # we can use the time_groups and loc_groups to do this
-        import xarray as xr
         grouped_ds = xr.Dataset(
             {
                 var: (("time_chunks", "location_id"), grouped_data[i])
@@ -202,12 +236,9 @@ class TemporalSwathAggregator:
         grouped_ds["lat"] = ("location_id", lats)
         grouped_ds = grouped_ds.set_coords(["lon", "lat"])
 
-        # location_id dimension here will be the same for each output dataset.
-        # this may use a bit more storage than necessary but it will ensure that
-        # the output datasets are also mergable
         for timechunk, group in grouped_ds.groupby("time_chunks"):
             if progress_to_stdout:
-                print(f"processing time chunk {timechunk + 1}/{total_time_chunks}...      ", end="\r")
+                print(f"processing time chunk {timechunk + 1}/{len(time_groups)}...      ", end="\r")
             chunk_start = self.start_dt + self.timedelta * timechunk
             chunk_end = (
                 self.start_dt + self.timedelta * (timechunk + 1) - pd.Timedelta("1s")
@@ -218,3 +249,28 @@ class TemporalSwathAggregator:
             # rename time_chunks to time
             group = group.rename({"time_chunks": "time"})
             yield group
+
+        # # alternative implementation: loop through time chunks and THEN build the dataset
+        # # for each
+        # lons, lats = self.grid.gpi2lonlat(loc_groups)
+        # for timegroup in time_groups:
+        #     print(f"processing time chunk {timegroup + 1}/{len(time_groups)}...      ", end="\r")
+        #     group_ds = xr.Dataset(
+        #         {
+        #             var: (("location_id",), grouped_data[i, timegroup])
+        #             for i, var in enumerate(present_agg_vars)
+        #         },
+        #         coords={
+        #             "location_id": loc_groups,
+        #             "lon": ("location_id", lons),
+        #             "lat": ("location_id", lats),
+        #         },
+        #     )
+        #     chunk_start = self.start_dt + self.timedelta * timegroup
+        #     chunk_end = (
+        #         self.start_dt + self.timedelta * (timegroup + 1) - pd.Timedelta("1s")
+        #     )
+        #     group_ds.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
+        #     group_ds.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
+        #     group_ds["time"] = np.datetime64(chunk_start, "ns")
+        #     yield group_ds
