@@ -72,6 +72,7 @@ extensions = [
     "sphinx.ext.ifconfig",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
+    "myst_nb",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -284,3 +285,7 @@ intersphinx_mapping = {
 }
 
 print(f"loading configurations for {project} {version} ...", file=sys.stderr)
+
+
+# -- MyST-NB config ----------------------------------------------------------
+nb_execution_mode = 'off'
