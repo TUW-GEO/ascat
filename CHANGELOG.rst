@@ -2,6 +2,13 @@
 Changelog
 =========
 
+Version 2.x.x
+=============
+
+- Update file handling read_period
+- Add tutorial for xarray readers/writers
+- Add swath bbox
+
 Version 2.3.1
 =============
 
