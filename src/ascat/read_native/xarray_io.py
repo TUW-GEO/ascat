@@ -836,11 +836,11 @@ class SwathIOBase(ABC):
 
         elif isinstance(source, (str, Path)):
             self._ds = xr.open_dataset(source, engine=engine, **kwargs, decode_cf=False, mask_and_scale=False)
-            self._ds["global_attributes_flag"] = 1
+            self._ds = self._preprocess(self._ds)
 
         elif isinstance(source, xr.Dataset):
             self._ds = source
-            self._ds["global_attributes_flag"] = 1
+            self._ds = self._preprocess(self._ds)
 
         self._kwargs = kwargs
 
