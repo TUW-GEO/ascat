@@ -1,5 +1,11 @@
-#+title: Working with ASCAT swath files
-#+PROPERTY: header-args:ipython :results raw drawer :session tutorial
+#+title: Working with ASCAT data and Xarray
+#+PROPERTY: header-args:ipython :results raw drawer :session tutorial :eval no
+#+OX-IPYNB-LANGUAGE: ipython
+
+#+begin_src elisp :exports none
+(micromamba-activate "egu2024")
+#+end_src
+
 * Working with swath files
 ** Creating a SwathFileCollection
 If we have a collection of time-series swath files, we can create a SwathFileCollection object that will handle them as a group.
@@ -9,7 +15,9 @@ from datetime import datetime
 from importlib import reload
 
 import ascat.read_native.ragged_array_ts as rat
+from ascat.read_native import xarray_io
 reload(rat)
+reload(xarray_io)
 
 from time import time
 #+end_src
@@ -19,7 +27,7 @@ from time import time
 :end:
 
 #+begin_src ipython
-swath_source = "/home/charriso/p14/data-write/RADAR/hsaf/h121_v1.0"
+swath_source = "/home/charriso/p14/data-write/RADAR/hsaf/h121_v1.0/swaths"
 #+end_src
 
 #+RESULTS:
@@ -29,14 +37,14 @@ swath_source = "/home/charriso/p14/data-write/RADAR/hsaf/h121_v1.0"
 It's important to understand the structure of the data, so that the SwathFileCollection can find and parse all of the data that is requested from it. Handily, this package comes with existing parsers for several ASCAT products. These can be used with ~SwathFileCollection.from_product_id()~:
 
 #+begin_src ipython
-collection = rat.SwathFileCollection.from_product_id(swath_source, "H121_V1.0")
+swath_collection = rat.SwathFileCollection.from_product_id(swath_source, "H121_V1.0")
 #+end_src
 
 #+RESULTS:
 :results:
 :end:
 
-The currently included project ids are the keys of `ascat.read_native.xarray_io.swath_io_catalog`
+The currently included project ids are the keys of ~ascat.read_native.xarray_io.swath_io_catalog~
 
 #+begin_src ipython
 from ascat.read_native.xarray_io import swath_io_catalog
@@ -50,6 +58,7 @@ swath_io_catalog.keys()
 
 If your data structure does not match anything included in the package, you can write a class inheriting from ~ascat.read_native.xarray_io.SwathIOBase~:
 
+#+attr_ipynb: :executable False
 #+begin_src ipython :eval no
 class AscatH121v1Swath(SwathIOBase):
     # outlines the basic structure of the swath filenames, with {bracketed} variable names
@@ -130,53 +139,66 @@ class AscatH121v1Swath(SwathIOBase):
         super().__init__(filename, "netcdf4", **kwargs)
 #+end_src
 
-After creating your io class, you can use it to make a collection by passing it to the SwathFileCollection class:
+After creating your IO class, you can use it to make a collection by passing it to the SwathFileCollection class:
 
 #+begin_src ipython :eval no
-collection = rat.SwathFileCollection(swath_source, ioclass=ASCATH121v1Swath)
+swath_collection = rat.SwathFileCollection(swath_source, ioclass=ASCATH121v1Swath)
 #+end_src
 
 Regardless of how you define you define your collection, once created it can be used to read data from your swath collection for any given date range and geographic extent. It can also be used to stack data in the collection into cellwise timeseries in indexed ragged array format, according to the CellGrid defined in the ioclass.
 
-** Reading data from a SwathFileCollection
-Let's start with a rectangular, roughly country-sized area in Central Europe, and a time period of four days. The collection has an ioclass, that ioclass has a grid, and that grid has a method `get_bbox_grid_points` that will take our boundaries and return the grid points within them. The bounding box reader isn't actually in the package yet but it will just do this under the hood.
+** COMMENT Reading data from a SwathFileCollection
+
+Let's start with a rectangular, roughly country-sized area in Central Europe, and a time period of four days.
 
 #+begin_src ipython
-bounds = (45, 50, 10, 20) #latmin, latmx, lonmin, lonmax
+bounds = (45, 50, 10, 20) #latmin, latmax, lonmin, lonmax
 dates = (datetime(2020, 12, 1), datetime(2020, 12, 5))
-gpis = collection.ioclass.grid.get_bbox_grid_points(latmin=45, latmax=50, lonmin=10, lonmax=20)
-gpis
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
+
+By calling the ~read~ method of our SwathFileCollection, we open every dataset within the ~date_range~ we've passed, concatenate them together into an xarray dataset, and filter out any observations that don't intersect with the bounding box we've passed to ~bbox~. Other spatial selections we could pass to ~read~ are ~cell~ (cell number or list of cell numbers in the swath data's grid system), ~location_id~ (grid point ID or list of IDs in the swath data's grid system), ~coords~ (lat/lon coordinate or list of coorinates that will be converted to the nearest grid point ID or list of grid point IDs), or ~geom~ (a Shapely geometry).
+
+#+begin_src ipython
+output = swath_collection.read(bbox=bounds, date_range=dates)
+output
 #+end_src
 
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  masked_array(data=[1162873, 1162928, 1163017, ..., 1260256, 1260345,
-                     1260434],
-               mask=False,
-         fill_value=999999,
-              dtype=int32)
+  <xarray.Dataset>
+  Dimensions:                            (obs: 45007)
+  Coordinates:
+      latitude                           (obs) float64 dask.array<chunksize=(1056,), meta=np.ndarray>
+      longitude                          (obs) float64 dask.array<chunksize=(1056,), meta=np.ndarray>
+      time                               (obs) datetime64[ns] 2020-12-01T08:09:...
+  Dimensions without coordinates: obs
+  Data variables: (12/19)
+      location_id                        (obs) float64 dask.array<chunksize=(1056,), meta=np.ndarray>
+      as_des_pass                        (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
+      swath_indicator                    (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
+      surface_soil_moisture              (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
+      surface_soil_moisture_noise        (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
+      backscatter40                      (obs) float64 dask.array<chunksize=(1056,), meta=np.ndarray>
+      ...                                 ...
+      snow_cover_probability             (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
+      frozen_soil_probability            (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
+      wetland_fraction                   (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
+      topographic_complexity             (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
+      subsurface_scattering_probability  (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
+      sat_id                             (obs) int64 ...
 #+END_EXAMPLE
 :end:
 
-
-Now that we have the gpis within our bounding box, we can pass them to the ~location_id~ argument of `collection.read()`.
-
-#+begin_src ipython
-# output = collection.read(location_id=gpis, date_range=dates)
-output = collection.read(bbox=bounds, date_range=dates)
-# output.load()
-#+end_src
-
-#+RESULTS:
-:results:
-:end:
-
-Now we have a nice xarray dataset that we can work with however we wish. In this case, it's one-dimensional, so we are basically working with a tabular data structure.
+Now we have a nice Xarray dataset that we can work with however we wish. In this case, it's one-dimensional, so we are basically working with a tabular data structure. In order to work with it as 3-dimensional (latitude, longitude, time) raster data, we can aggregate it into timesteps.
 
 First, to make sure we got the desired data, let's make some plots.
 
-This is a somewhat silly plot but it shows that the data covers the time range we requested, and that it includes all three satellites.
+This is not a very useful plot, but it shows that the data covers the time range we requested, and that it includes data from all three Metop satellites.
 
 #+begin_src ipython
 %matplotlib inline
@@ -198,7 +220,7 @@ plt.tight_layout()
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/fg3R3K.png]]
+[[file:./obipy-resources/ga7Qd6.png]]
 :end:
 
 
@@ -206,6 +228,7 @@ We can check the spatial coverage of the data by plotting it on a map.
 
 #+begin_src ipython
 import cartopy.crs as ccrs
+from shapely import Point
 
 plt.close()
 ax = plt.axes(projection=ccrs.PlateCarree())
@@ -222,18 +245,13 @@ plt.scatter(
 
 #+RESULTS:
 :results:
-: <matplotlib.collections.PathCollection at 0x7f7c36f00d00>
-[[file:./obipy-resources/pVGn0v.png]]
+: <matplotlib.collections.PathCollection at 0x7f01908dd4f0>
+[[file:./obipy-resources/CLjFXU.png]]
 :end:
 
-We requested the
-
-Having the data as an xarray makes it handy to do transformations. For example, we can groupby location_id and get the average surface soil moisture at each.
+Having the data as an Xarray makes it handy to do transformations. For example, we can group by location_id and get the average surface soil moisture at each. First, we need to load the ~location_id~ into memory, since it currently exists as a chunked dask array, and the groupby method only works with numpy arrays.
 
 #+begin_src ipython
-# first we need to load the variable we'll be grouping by into memory
-# currently it exists as a chunked dask array, which xarray apparently can't use
-# as a
 output["location_id"].load()
 #+end_src
 
@@ -254,19 +272,18 @@ output["location_id"].load()
 #+END_EXAMPLE
 :end:
 
-
 #+begin_src ipython
 %%time
-location_avgs = output.groupby("location_id").mean("obs")
-avg_ssm_groupby = location_avgs.surface_soil_moisture
-avg_ssm_groupby
+avg_ssm = output["surface_soil_moisture"].groupby(output["location_id"]).mean("obs")
+avg_ssm.load()
 #+end_src
 
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
   <xarray.DataArray 'surface_soil_moisture' (location_id: 2652)>
-  dask.array<getitem, shape=(2652,), dtype=float32, chunksize=(2,), chunktype=numpy.ndarray>
+  array([55.3      , 73.21357  , 54.573635 , ...,  3.9599998, 41.566666 ,
+         25.1      ], dtype=float32)
   Coordinates:
     * location_id  (location_id) float64 1.163e+06 1.163e+06 ... 1.26e+06 1.26e+06
   Attributes:
@@ -277,22 +294,30 @@ avg_ssm_groupby
 #+END_EXAMPLE
 :end:
 
-This takes 5.4 seconds on my own machine, which isn't too bad, but we're only working with 5 days of data here for a relatively small area. This operation could easily balloon in complexity and become intractable, especially if it needs to be repeated often. We also get these annoying warnings from flox (a package xarray uses for groupby operations) warning of slicing with an out-of-order index.
+This takes 1.1 seconds on my own machine, which isn't too bad, but we're only working with 5 days of data here for a relatively small area. This operation could easily balloon in complexity and become intractable, especially if it needs to be repeated often. We also get warnings about slicing with an out-of-order index.
 
-However, if we use flox directly, we can accomplish the same operation in a tiny fraction of the time (10-20 ms on my machine). I still need to investigate exactly what the difference is here.
+However, if we use flox directly (a package from the developers of Xarray that is created to do faster groupbys with Xarray datasets), we can accomplish the same operation in a fraction of the time (88ms on my machine). When scaling up to much longer time periods and larger surface areas, these savings can make a huge difference.
+
+#+begin_src ipython
+from flox.xarray import xarray_reduce
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
 
 #+begin_src ipython
 %%time
-import flox
-avg_ssm_flox = flox.xarray.xarray_reduce(output["surface_soil_moisture"], output["location_id"], func="mean")
-avg_ssm_flox
+avg_ssm_flox = xarray_reduce(output["surface_soil_moisture"], output["location_id"], func="mean")
+avg_ssm_flox.load()
 #+end_src
 
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
   <xarray.DataArray 'surface_soil_moisture' (location_id: 2652)>
-  dask.array<groupby_nanmean, shape=(2652,), dtype=float32, chunksize=(2652,), chunktype=numpy.ndarray>
+  array([55.3      , 73.21357  , 54.57363  , ...,  3.9599998, 41.566666 ,
+         25.100002 ], dtype=float32)
   Coordinates:
     * location_id  (location_id) float64 1.163e+06 1.163e+06 ... 1.26e+06 1.26e+06
   Attributes:
@@ -303,33 +328,56 @@ avg_ssm_flox
 #+END_EXAMPLE
 :end:
 
-The time savings here seem almost too good to be true, let's check that we indeed have the same result.
+Note: if, when using flox, you get an error about needing to provide ~expected_groups~, make sure you've ~load~ -ed the variables you'll be grouping your data by into memory first. If your dataset is too big for that, you can calculate the unique values of those variables and pass them in a tuple to the ~expected_groups~ parameter. For example, if we want to calculate seasonal soil moisture averages per location, we can add a grouping of the ~time~ variable to our ~xarray_reduce~ arguments. However, if we haven't loaded ~location_id~ into memory yet, we'll get an error:
+
+#+begin_src ipython
+short_dates = (datetime(2020, 12, 1), datetime(2020, 12, 2))
+ds = swath_collection.read(bbox=bounds, date_range=dates)
+xarray_reduce(ds["surface_soil_moisture"], ds["location_id"], ds["time"].dt.hour, func="mean")
+#+end_src
+
+We didn't get this error before because we had already loaded ~location_id~ into memory. Loading a single variable into memory shouldn't be much of a problem, but if it is, here's how you would use ~expected_groups~ to solve it instead:
+
 #+begin_src ipython
 import numpy as np
-np.all(avg_ssm_groupby.values == avg_ssm_flox.values)
+xarray_reduce(
+    ds["surface_soil_moisture"],
+    ds["location_id"],
+    ds["time"].dt.hour,
+    expected_groups=(np.unique(output["location_id"].values),
+                     np.unique(output["time"].dt.hour.values)),
+    func="mean"
+).load()
 #+end_src
 
 #+RESULTS:
 :results:
-: False
+#+BEGIN_EXAMPLE
+  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652, hour: 9)>
+  array([[91.71     , 37.46     , 71.503334 , ..., 55.53     , 40.95     ,
+                 nan],
+         [75.7      , 56.953327 , 63.656666 , ..., 80.432495 , 94.45     ,
+                 nan],
+         [52.       , 42.173332 , 57.54333  , ..., 58.72333  ,        nan,
+                 nan],
+         ...,
+         [ 3.9599998,        nan,        nan, ...,        nan,        nan,
+                 nan],
+         [       nan, 26.9      , 70.9      , ...,        nan,        nan,
+                 nan],
+         [14.49     , 21.055    , 12.83     , ...,        nan, 31.404999 ,
+                 nan]], dtype=float32)
+  Coordinates:
+    * location_id  (location_id) float64 1.163e+06 1.163e+06 ... 1.26e+06 1.26e+06
+    * hour         (hour) int32 7 8 9 10 17 18 19 20 21
+  Attributes:
+      long_name:  surface soil moisture
+      units:      percent saturation
+      valid_min:  0
+      valid_max:  10000
+#+END_EXAMPLE
 :end:
 
-OK, that's embarrassing! The results are not identical. But maybe they're very close?
-
-#+begin_src ipython :results output
-print(
-    np.nanmax(avg_ssm_groupby.values - avg_ssm_flox.values),
-    np.nanmin(avg_ssm_groupby.values - avg_ssm_flox.values),
-    np.nanmean(avg_ssm_groupby.values - avg_ssm_flox.values)
-)
-#+end_src
-
-#+RESULTS:
-:results:
-1.5258789e-05 -1.5258789e-05 -3.0470326e-09
-:end:
-
-Well, it looks like the result of the direct flox calculation only varies from that of the xarray groupby operation by a very small amount, on the order of 10^-5 at most, and on the order of 10^-9 on average. I'm not sure what the cause of this discrepancy is, but it may be small enough that the time savings are worth it.
 
 I'll step away from the data for a second and write a quick function for plotting it on a map:
 
@@ -379,46 +427,46 @@ def simple_map(lons, lats, color_var, cmap, dates=None, cbar_label=None):
 And here is our mean soil moisture!
 
 #+begin_src ipython
-# make sure that location_ids are in the same order as our average soil moisture values
-unique_lids, lid_idx = np.unique(output.location_id.values, return_index=True)
-assert np.all(unique_lids == location_avgs.location_id.values)
-lats = output.latitude[lid_idx]
-lons = output.longitude[lid_idx]
-simple_map(lons, lats, avg_ssm_flox, "viridis", (output.time.values.min(), output.time.values.max()))
+import cmcrameri.cm as cmc
+lons, lats = swath_collection.grid.gpi2lonlat(avg_ssm_flox.location_id.values)
+simple_map(lons, lats, avg_ssm_flox, cmc.roma, (output.time.values.min(), output.time.values.max()))
 #+end_src
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/5cScCF.png]]
+[[file:./obipy-resources/DGLKhg.png]]
 :end:
 
 
 Now it's easy to make a map of any of the other variables in the dataset. Here's the average backscatter at 40 degrees incidence angle:
 
 #+begin_src ipython
-avg_sms = flox.xarray.xarray_reduce(output["surface_soil_moisture_sensitivity"], output["location_id"], func="mean")
+avg_sms = xarray_reduce(output["backscatter40"], output["location_id"], func="mean")
 simple_map(lons, lats, avg_sms, "viridis", (output.time.values.min(), output.time.values.max()))
 #+end_src
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/SKr2NC.png]]
+[[file:./obipy-resources/b2HrXM.png]]
 :end:
 
 
 Or we could make a timeseries plot of a variable at a single location or a collection of locations:
 
 #+begin_src ipython
-%%time
-means, dts = flox.groupby_reduce(output["backscatter40"], output["time.date"], func="mean")
+week_dates = (datetime(2020, 12, 1), datetime(2020, 12, 8))
+week_data = swath_collection.read(date_range=week_dates, bbox=bounds)
+date_groups = week_data.groupby("time.date")
+#+end_src
 
-plt.close()
-date_groups = output.groupby("time.date")
+#+begin_src ipython
 for dt, ds in date_groups:
     plt.scatter(ds["time.date"], ds.backscatter40, color="black", s=1, alpha=0.01)
 
-plt.plot(dts, date_groups.mean().backscatter40.values, color="red")
-plt.title("Daily backscatter values, Metop A, B and C")
+plt.plot(date_groups.groups.keys(), date_groups.mean().backscatter40.values, color="red")
+
+plt.title("Daily backscatter values, Metop A, B and C\n"
+          "Latitudes 45-50, Longitudes 10-20")
 plt.ylabel(f"{ds.backscatter40.units}")
 plt.xlabel(f"date")
 plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
@@ -429,7 +477,7 @@ plt.tight_layout()
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/gtpYK5.png]]
+[[file:./obipy-resources/UGmdA8.png]]
 :end:
 
 
@@ -439,11 +487,11 @@ We can make a 5-year climatology for our data in three lines of code, but it wil
 #+begin_src ipython :eval no
 # five year climatology
 five_years = [datetime(2015, 1, 1), datetime(2020, 1, 1)]
-five_years_data = collection.read(location_id=gpis, date_range=five_years)#.load()
+five_years_data = swath_collection.read(location_id=gpis, date_range=five_years)#.load()
 climatology = output.groupby("time.dayofyear").mean("obs")
 #+end_src
 
-If you need to do operations on larger chunks of time, it could be useful to convert the data to a cell file collection and work off of that. (see CellFileCollection section below)
+If you need to do several operations on larger chunks of time, it could be useful to convert the data to a cell file collection and work off of that. (see CellFileCollection section below)
 
 ** Converting swath collections to cell collections
 
@@ -472,7 +520,7 @@ processes = 8
 # default is 6144MB
 buffer_memory_mb = None
 
-collection.stack(
+swath_collection.stack(
     output_dir=cell_file_directory,
     fnames=fnames,
     date_range=date_range,
@@ -506,13 +554,10 @@ from importlib import reload
 from time import time
 
 import ascat.read_native.ragged_array_ts as rat
-reload(rat)
-
 #+end_src
 
 #+RESULTS:
 :results:
-: <module 'ascat.read_native.ragged_array_ts' from '/home/charriso/Projects/ascat/src/ascat/read_native/ragged_array_ts.py'>
 :end:
 
 Our cell files, in this case, all live in a single directory, so that's the path we'll pass to ~rat.CellFileCollectionStack.from_product_id()~. If we had multiple sets of cell files contained in different directories, we could pass a list of these directories' paths, assuming they were all of the same product type (and therefore had the same dimensions, data variables, etc).
@@ -521,7 +566,7 @@ The product id, ~"H121_V1.0"~, refers to a specific handler class defined in ~as
 
 #+begin_src ipython
 cell_source = "/home/charriso/p14/data-write/USERS/charriso/h121_merged/metop_abc/"
-collection = rat.CellFileCollectionStack.from_product_id(cell_source, "H121_V1.0")
+cell_collection = rat.CellFileCollectionStack.from_product_id(cell_source, "H121_V1.0")
 #+end_src
 
 #+RESULTS:
@@ -546,7 +591,7 @@ dates = (np.datetime64(datetime(2020, 12, 1)), np.datetime64(datetime(2020, 12, 
 
 
 #+begin_src ipython
-output_bbox = collection.read(bbox=bounds)#, date_range=dates)
+output_bbox = cell_collection.read(bbox=bounds)#, date_range=dates)
 output_bbox
 #+end_src
 
@@ -592,7 +637,6 @@ output_bbox
 #+END_EXAMPLE
 :end:
 
-Now that we've read the dataset for our geographic area, we can create a subset for our area of temporal interest:
 
 #+begin_src ipython
 date_range_data = output_bbox.sel(obs=(output_bbox["time"] > dates[0]) & (output_bbox["time"] < dates[1]))
@@ -644,30 +688,45 @@ date_range_data
 Now let's map the average surface soil moisture over the area and time range we selected.
 
 #+begin_src ipython
-avg_sm = flox.xarray.xarray_reduce(date_range_data["surface_soil_moisture"], date_range_data["locationIndex"], func="mean")
+from flox.xarray import xarray_reduce
+avg_sm = xarray_reduce(date_range_data["surface_soil_moisture"], date_range_data["locationIndex"], func="mean")
+avg_sm
 #+end_src
 
 #+RESULTS:
 :results:
+#+BEGIN_EXAMPLE
+  <xarray.DataArray 'surface_soil_moisture' (locationIndex: 4000)>
+  array([73.23913 , 85.52    , 52.248085, ..., 64.45    , 35.750626,
+         62.632   ], dtype=float32)
+  Coordinates:
+    * locationIndex  (locationIndex) int64 1 2 4 5 6 ... 4373 4374 4375 4376 4377
+  Attributes:
+      long_name:    surface soil moisture
+      units:        percent saturation
+      valid_min:    0
+      valid_max:    10000
+      coordinates:  time latitude longitude
+#+END_EXAMPLE
 :end:
 
 #+begin_src ipython
 import numpy as np
 lons = date_range_data.lon.values[avg_sm.locationIndex.values]
 lats = date_range_data.lat.values[avg_sm.locationIndex.values]
-simple_map(lons, lats, avg_sm, "Greens", (date_range_data.time.values.min(), date_range_data.time.values.max()))
+simple_map(lons, lats, avg_sm, cmc.roma, (date_range_data.time.values.min(), date_range_data.time.values.max()))
 #+end_src
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/QPgIbI.png]]
+[[file:./obipy-resources/1Fsj8R.png]]
 :end:
 
 
 When we read data using cell ids, the process is just as easy:
 
 #+begin_src ipython
-output_cells = collection.read(cell=[1431, 1432, 1395, 1396])#, date_range=dates)
+output_cells = cell_collection.read(cell=[1431, 1432, 1395, 1396])
 #+end_src
 
 #+RESULTS:
@@ -675,18 +734,18 @@ output_cells = collection.read(cell=[1431, 1432, 1395, 1396])#, date_range=dates
 :end:
 
 #+begin_src ipython
-avg_sm = flox.xarray.xarray_reduce(output_cells["surface_soil_moisture"], output_cells["locationIndex"], func="mean")
+avg_sm = xarray_reduce(output_cells["surface_soil_moisture"], output_cells["locationIndex"], func="mean")
 lons = output_cells.lon.values[avg_sm.locationIndex.values]
 lats = output_cells.lat.values[avg_sm.locationIndex.values]
-simple_map(lons, lats, avg_sm, "Greens", (output_cells.time.values.min(), output_cells.time.values.max()))
+simple_map(lons, lats, avg_sm, cmc.roma, (output_cells.time.values.min(), output_cells.time.values.max()))
 #+end_src
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/QhyfT0.png]]
+[[file:./obipy-resources/lyz7SP.png]]
 :end:
 
-Oops, I accidentally forgot to filter by time range, but it took flox only a few seconds to calculate the average surface soil moisture over the entire time range of the dataset for these cells!
+I forgot to filter by time range, but it took flox only a few seconds to calculate the average surface soil moisture over the entire time range of the dataset for these cells!
 
 *** Using geometries
 
@@ -723,18 +782,18 @@ def get_country_geometries(country_names, resolution="10m", ne_product="admin_0_
 :results:
 :end:
 
-If we are interested in the Baltic countries, for example, we can simply pass a list of their names to ~get_country_geometries~, then pass the resulting geometry to the ~geom~ argument of ~collection.read()~.
+If we are interested in the Baltic countries, for example, we can simply pass a list of their names to ~get_country_geometries~, then pass the resulting geometry to the ~geom~ argument of ~cell_collection.read()~.
 
 #+begin_src ipython
 baltics = ["Estonia", "Latvia", "Lithuania"]
-country_data = collection.read(geom=get_country_geometries(baltics))
+country_data = cell_collection.read(geom=get_country_geometries(baltics))
 #+end_src
 
 #+RESULTS:
 :results:
 :end:
 
-With the magic of flox, groupby operations are fast and easy. Here we calculate the average summer soil moisture for each location in the Baltics across the entire time range of the dataset.
+Groupby operations are easy with flox. Here we calculate the average summer soil moisture for each location in the Baltics across the entire time range of the dataset.
 
 #+begin_src ipython
 import numpy as np
@@ -750,20 +809,28 @@ label = (
         f"({avg_sm.units})\n"
         f"June, July, and August of 2007 - 2022"
 )
-simple_map(lons, lats, avg_sm, "Greens", cbar_label=label)
+simple_map(lons, lats, avg_sm, cmc.roma, cbar_label=label)
 #+end_src
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/qhFP8Y.png]]
+[[file:./obipy-resources/l0OHps.png]]
 :end:
 
-Remember that climatology we were going to make in the swaths section? Let's do that now, for all the variables in the dataset.
+Remember that climatology we were going to make in the swaths section? Let's do that now, it's simple:
 
 #+begin_src ipython
 # 15-year climatology
-climatology = xarray_reduce(country_data, country_data["time"].dt.dayofyear, func="mean")
-climatology
+ssm_climatology = xarray_reduce(country_data["surface_soil_moisture"], country_data["time"].dt.dayofyear, func="mean")
+plt.close()
+plt.plot(ssm_climatology)
+plt.xlabel("Day of year")
+plt.ylabel("Average surface soil moisture\n(% saturation)")
+plt.title("Average surface soil moisture per day of year\n(Estonia, Latvia, and Lithuania; 2010-2019)")
+plt.tight_layout()
 #+end_src
 
-On my machine that only took 18 seconds.
+#+RESULTS:
+:results:
+[[file:./obipy-resources/TGQLXN.png]]
+:end:

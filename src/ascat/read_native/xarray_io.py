@@ -26,6 +26,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
+import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -835,11 +836,11 @@ class SwathIOBase(ABC):
 
         elif isinstance(source, (str, Path)):
             self._ds = xr.open_dataset(source, engine=engine, **kwargs, decode_cf=False, mask_and_scale=False)
-            self._ds["global_attributes_flag"] = 1
+            self._ds = self._preprocess(self._ds)
 
         elif isinstance(source, xr.Dataset):
             self._ds = source
-            self._ds["global_attributes_flag"] = 1
+            self._ds = self._preprocess(self._ds)
 
         self._kwargs = kwargs
 
@@ -1230,7 +1231,8 @@ class AscatH129Swath(SwathIOBase):
         "year_folder": "{year}"
     }
     date_format = "%Y%m%d%H%M%S"
-    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
+    grid_sampling_km = 6.25
+    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = ["backscatter", "incidence_angle", "azimuth_angle", "kp"]
@@ -1289,7 +1291,8 @@ class AscatH129v1Swath(SwathIOBase):
         "year_folder": "{year}"
     }
     date_format = "%Y%m%d%H%M%S"
-    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
+    grid_sampling_km = 6.25
+    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
@@ -1338,7 +1341,8 @@ class AscatH121v1Swath(SwathIOBase):
         "year_folder": "{year}"
     }
     date_format = "%Y%m%d%H%M%S"
-    grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)["grid"]
+    grid_sampling_km = 12.5
+    grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
@@ -1387,7 +1391,8 @@ class AscatH122Swath(SwathIOBase):
         "year_folder": "{year}"
     }
     date_format = "%Y%m%d%H%M%S"
-    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
+    grid_sampling_km = 6.25
+    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
@@ -1443,7 +1448,8 @@ class AscatSIG0Swath6250m(SwathIOBase):
         "year_folder": "{year}"
     }
     date_format = "%Y%m%d%H%M%S"
-    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)["grid"]
+    grid_sampling_km = 6.25
+    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = [
@@ -1543,7 +1549,8 @@ class AscatSIG0Swath12500m(SwathIOBase):
         "year_folder": "{year}"
     }
     date_format = "%Y%m%d%H%M%S"
-    grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)["grid"]
+    grid_sampling_km = 12.5
+    grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = [
@@ -1650,3 +1657,18 @@ swath_io_catalog = {
     "SIG0_6.25": AscatSIG0Swath6250m,
     "SIG0_12.5": AscatSIG0Swath12500m,
 }
+
+swath_fname_regex_lookup = {
+    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25-H129_C_LIIB_.*_.*_.*____.nc": "H129",
+    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25km-H129_C_LIIB_.*_.*_.*____.nc": "H129_V1.0",
+    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H121_C_LIIB_.*_.*_.*____.nc": "H121_V1.0",
+    "ascat_ssm_nrt_6.25km_.*Z_.*Z_metop-[ABC]_h122.nc": "H122",
+    "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-6.25_C_LIIB_.*_.*_.*____.nc": "SIG0_6.25",
+    "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-12.5_C_LIIB_.*_.*_.*____.nc": "SIG0_12.5",
+}
+
+def get_swath_product_id(filename):
+    for pattern, swath_product_id in swath_fname_regex_lookup.items():
+        if re.match(pattern, filename):
+            return swath_product_id
+    return None

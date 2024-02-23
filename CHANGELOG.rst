@@ -6,8 +6,10 @@ Version 2.x.x
 =============
 
 - Update file handling read_period
+- Refactor xarray readers/writers into SwathFileCollection, CellFileCollection,
+  and CellFileCollectionStack
 - Add tutorial for xarray readers/writers
-- Add swath bbox
+- Add "temporal_swath_agg" console script
 
 Version 2.3.1
 =============
