@@ -73,6 +73,11 @@ def parse_args_temporal_swath_agg(args):
         metavar='SUBSCAT_MASK',
         help='Subsurface scattering probability value above which to mask the source data'
     )
+    parser.add_argument(
+        '--regrid',
+        metavar='REGRID_DEG',
+        help='Regrid the data to a regular grid with the given spacing in degrees'
+    )
 
     return parser.parse_args(args), parser
 
@@ -91,6 +96,11 @@ def temporal_swath_agg_main(cli_args):
         if getattr(args, arg) is not None:
             setattr(args, arg, int(getattr(args, arg)))
 
+    float_args = ["regrid"]
+    for arg in float_args:
+        if getattr(args, arg) is not None:
+            setattr(args, arg, float(getattr(args, arg)))
+
     transf = aggs.TemporalSwathAggregator(
         args.filepath,
         args.start_dt,
@@ -99,7 +109,8 @@ def temporal_swath_agg_main(cli_args):
         args.agg,
         args.snow_cover_mask,
         args.frozen_soil_mask,
-        args.subsurface_scattering_mask
+        args.subsurface_scattering_mask,
+        args.regrid
     )
 
     transf.write_time_chunks(args.outpath)

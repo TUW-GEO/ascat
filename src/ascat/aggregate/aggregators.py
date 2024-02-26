@@ -40,6 +40,7 @@ from dask.array import vstack
 
 import ascat.read_native.ragged_array_ts as rat
 from ascat.read_native.xarray_io import get_swath_product_id
+from ascat.regrid import fib_to_standard
 
 progress_to_stdout = False
 
@@ -56,6 +57,7 @@ class TemporalSwathAggregator:
             snow_cover_mask=None,
             frozen_soil_mask=None,
             subsurface_scattering_mask=None,
+            regrid_degrees=None,
     ):
         """ Initialize the class.
 
@@ -97,6 +99,7 @@ class TemporalSwathAggregator:
         ]:
             agg = "nan" + agg
         self.agg = agg
+        self.regrid_degrees = regrid_degrees
 
         # assumes ONLY swath files are in the folder
         first_fname = str(next(Path(filepath).rglob("*.nc")).name)
@@ -128,7 +131,21 @@ class TemporalSwathAggregator:
     def _read_data(self):
         if progress_to_stdout:
             print("reading data, this may take some time...")
-        self.data = self.collection.read(date_range=(self.start_dt, self.end_dt))
+        self.data = self.collection.read(
+            date_range=(self.start_dt, self.end_dt),
+        )
+        if self.regrid_degrees is not None:
+            print("regridding")
+            new_grid, new_gpis, new_lons, new_lats = fib_to_standard(
+                self.data["location_id"].values.astype(int),
+                self.grid,
+                self.regrid_degrees,
+            )
+            self.data["location_id"] = ("obs", new_gpis)
+            self.data["longitude"] = ("obs", new_lons)
+            self.data["latitude"] = ("obs", new_lats)
+            self.grid = new_grid
+
         if progress_to_stdout:
             print("done reading data")
 
@@ -139,7 +156,11 @@ class TemporalSwathAggregator:
     def write_time_chunks(self, out_dir):
         """Loop through time chunks and write them to file."""
         product_id = self.product.lower().replace("_", "-")
-        grid_sampling_km = self.collection.ioclass.grid_sampling_km
+        if self.regrid_degrees is None:
+            grid_sampling = self.collection.ioclass.grid_sampling_km + "km"
+        else:
+            grid_sampling = str(self.regrid_degrees) + "deg"
+
         if self.agg is not None:
             yield_func = self.yield_aggregated_time_chunks
             agg_str = f"_{self.agg}"
@@ -162,7 +183,7 @@ class TemporalSwathAggregator:
             out_name = (
                 f"ascat"
                 f"_{product_id}"
-                f"_{grid_sampling_km}km"
+                f"_{grid_sampling}"
                 f"{agg_str}"
                 f"_{chunk_start_str}"
                 f"_{chunk_end_str}.nc"
@@ -247,6 +268,10 @@ class TemporalSwathAggregator:
         grouped_ds["lat"] = ("location_id", lats)
         grouped_ds = grouped_ds.set_coords(["lon", "lat"])
 
+        if self.regrid_degrees is not None:
+            grouped_ds = grouped_ds.set_index(location_id=["lat", "lon"])
+            grouped_ds = grouped_ds.unstack()
+
         for timechunk, group in grouped_ds.groupby("time_chunks"):
             if progress_to_stdout:
                 print(f"processing time chunk {timechunk + 1}/{len(time_groups)}...      ", end="\r")
@@ -257,7 +282,6 @@ class TemporalSwathAggregator:
             group.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
             group.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
             group["time_chunks"] = np.datetime64(chunk_start, "ns")
-            # rename time_chunks to time
             group = group.rename({"time_chunks": "time"})
             yield group
 
