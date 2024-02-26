@@ -158,9 +158,6 @@ class TemporalSwathAggregator:
                 .astype(datetime.datetime)
                 .strftime("%Y%m%d%H%M%S")
             )
-            # if location_id is not an integer, convert it to an integer
-            if not np.issubdtype(ds.location_id.dtype, np.integer):
-                ds["location_id"] = ds.location_id.astype(int)
             ds = self._set_metadata(ds)
             out_name = (
                 f"ascat"
@@ -241,7 +238,7 @@ class TemporalSwathAggregator:
             },
             coords={
                 "time_chunks": time_groups,
-                "location_id": loc_groups,
+                "location_id": loc_groups.astype(int),
             },
         )
 
