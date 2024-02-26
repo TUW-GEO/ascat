@@ -82,6 +82,20 @@ class TemporalSwathAggregator:
         self.start_dt = datetime.datetime.strptime(start_dt, "%Y-%m-%dT%H:%M:%S")
         self.end_dt = datetime.datetime.strptime(end_dt, "%Y-%m-%dT%H:%M:%S")
         self.timedelta = pd.Timedelta(t_delta)
+        if agg in [
+                "mean",
+                "median",
+                "mode",
+                "std",
+                "min",
+                "max",
+                "argmin",
+                "argmax",
+                "quantile",
+                "first",
+                "last",
+        ]:
+            agg = "nan" + agg
         self.agg = agg
 
         # assumes ONLY swath files are in the folder
