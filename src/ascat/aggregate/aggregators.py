@@ -34,7 +34,6 @@ import pandas as pd
 import xarray as xr
 
 from flox import groupby_reduce
-from flox.xarray import xarray_reduce
 
 from dask.array import vstack
 
@@ -44,22 +43,23 @@ from ascat.regrid import fib_to_standard_ds, fib_to_standard
 
 progress_to_stdout = False
 
+
 class TemporalSwathAggregator:
-    """ Class to aggregate ASCAT data its location ids over time."""
+    """Class to aggregate ASCAT data its location ids over time."""
 
     def __init__(
-            self,
-            filepath,
-            start_dt,
-            end_dt,
-            t_delta,
-            agg,
-            snow_cover_mask=None,
-            frozen_soil_mask=None,
-            subsurface_scattering_mask=None,
-            regrid_degrees=None,
+        self,
+        filepath,
+        start_dt,
+        end_dt,
+        t_delta,
+        agg,
+        snow_cover_mask=None,
+        frozen_soil_mask=None,
+        subsurface_scattering_mask=None,
+        regrid_degrees=None,
     ):
-        """ Initialize the class.
+        """Initialize the class.
 
         Parameters
         ----------
@@ -85,17 +85,17 @@ class TemporalSwathAggregator:
         self.end_dt = datetime.datetime.strptime(end_dt, "%Y-%m-%dT%H:%M:%S")
         self.timedelta = pd.Timedelta(t_delta)
         if agg in [
-                "mean",
-                "median",
-                "mode",
-                "std",
-                "min",
-                "max",
-                "argmin",
-                "argmax",
-                "quantile",
-                "first",
-                "last",
+            "mean",
+            "median",
+            "mode",
+            "std",
+            "min",
+            "max",
+            "argmin",
+            "argmax",
+            "quantile",
+            "first",
+            "last",
         ]:
             agg = "nan" + agg
         self.agg = agg
@@ -178,7 +178,7 @@ class TemporalSwathAggregator:
             )
 
             ds.to_netcdf(
-                Path(out_dir)/out_name,
+                Path(out_dir) / out_name,
             )
         print("complete                     ")
 
@@ -219,7 +219,10 @@ class TemporalSwathAggregator:
             (ds.surface_flag != 0)
             | (ds.snow_cover_probability > self.mask_probs["snow_cover_probability"])
             | (ds.frozen_soil_probability > self.mask_probs["frozen_soil_probability"])
-            | (ds.subsurface_scattering_probability > self.mask_probs["subsurface_scattering_probability"])
+            | (
+                ds.subsurface_scattering_probability
+                > self.mask_probs["subsurface_scattering_probability"]
+            )
         )
         ds = ds.where(~mask, drop=False)
         ds["time_chunks"] = (
@@ -233,10 +236,7 @@ class TemporalSwathAggregator:
         if progress_to_stdout:
             print("constructing groups...", end="\r")
         grouped_data, time_groups, loc_groups = groupby_reduce(
-            agg_vars_stack,
-            ds["time_chunks"],
-            ds["location_id"],
-            func=self.agg
+            agg_vars_stack, ds["time_chunks"], ds["location_id"], func=self.agg
         )
         # shape of grouped_data is (n_agg_vars, n_time_chunks, n_locations)
         # now we need to rebuild an xarray dataset from this
@@ -264,7 +264,10 @@ class TemporalSwathAggregator:
 
         for timechunk, group in grouped_ds.groupby("time_chunks"):
             if progress_to_stdout:
-                print(f"processing time chunk {timechunk + 1}/{len(time_groups)}...      ", end="\r")
+                print(
+                    f"processing time chunk {timechunk + 1}/{len(time_groups)}...      ",
+                    end="\r",
+                )
             chunk_start = self.start_dt + self.timedelta * timechunk
             chunk_end = (
                 self.start_dt + self.timedelta * (timechunk + 1) - pd.Timedelta("1s")
