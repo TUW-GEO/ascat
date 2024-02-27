@@ -40,7 +40,7 @@ from dask.array import vstack
 
 import ascat.read_native.ragged_array_ts as rat
 from ascat.read_native.xarray_io import get_swath_product_id
-from ascat.regrid import fib_to_standard
+from ascat.regrid import fib_to_standard_ds, fib_to_standard
 
 progress_to_stdout = False
 
@@ -134,18 +134,6 @@ class TemporalSwathAggregator:
         self.data = self.collection.read(
             date_range=(self.start_dt, self.end_dt),
         )
-        if self.regrid_degrees is not None:
-            print("regridding")
-            new_grid, new_gpis, new_lons, new_lats = fib_to_standard(
-                self.data["location_id"].values.astype(int),
-                self.grid,
-                self.regrid_degrees,
-            )
-            self.data["location_id"] = ("obs", new_gpis)
-            self.data["longitude"] = ("obs", new_lons)
-            self.data["latitude"] = ("obs", new_lats)
-            self.grid = new_grid
-
         if progress_to_stdout:
             print("done reading data")
 
@@ -192,6 +180,7 @@ class TemporalSwathAggregator:
             ds.to_netcdf(
                 Path(out_dir)/out_name,
             )
+        print("complete                     ")
 
     def yield_time_chunks(self):
         """Loop through time chunks of the range, yield the merged data unmodified."""
@@ -263,14 +252,15 @@ class TemporalSwathAggregator:
             },
         )
 
-        lons, lats = self.grid.gpi2lonlat(grouped_ds.location_id.values)
-        grouped_ds["lon"] = ("location_id", lons)
-        grouped_ds["lat"] = ("location_id", lats)
-        grouped_ds = grouped_ds.set_coords(["lon", "lat"])
-
         if self.regrid_degrees is not None:
-            grouped_ds = grouped_ds.set_index(location_id=["lat", "lon"])
-            grouped_ds = grouped_ds.unstack()
+            print("regridding             ")
+            grouped_ds = fib_to_standard_ds(grouped_ds, self.grid, self.regrid_degrees)
+
+        else:
+            lons, lats = self.grid.gpi2lonlat(grouped_ds.location_id.values)
+            grouped_ds["lon"] = ("location_id", lons)
+            grouped_ds["lat"] = ("location_id", lats)
+            grouped_ds = grouped_ds.set_coords(["lon", "lat"])
 
         for timechunk, group in grouped_ds.groupby("time_chunks"):
             if progress_to_stdout:
