@@ -25,64 +25,48 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from fibgrid.realization import FibGrid
 from pygeogrids.grids import genreg_grid
 
-def fib_to_standard(fibgrid, outgrid_size):
-    """
-    Convert a Fibonacci grid to a standard grid.
+
+# move this to pygeogrids
+def grid_to_regular_grid(old_grid, new_grid_size):
+    """ Create a regular grid of a given size and a lookup table from it to another grid.
 
     Parameters
     ----------
-    lon_arr : numpy.ndarray
-        1D array of longitudes in degrees.
-    lat_arr : numpy.ndarray
-        1D array of latitudes in degrees.
-    fibgrid : fibgrid.realization.FibGrid
-        Instance of FibGrid from which lon_arr and lat_arr were generated.
-    outgrid_size : int
-        Size of the output grid in degrees.
-
-    Returns
-    -------
-    numpy.ndarray
-        1D array of values on the standard grid.
+    old_grid : pygeogrids.grids.BasicGrid
+        The grid to create a lookup table to.
+    new_grid_size : int
+        Size of the new grid in degrees.
     """
-    reg_grid = genreg_grid(outgrid_size, outgrid_size)
-    fib_to_reg_lut = fibgrid.calc_lut(reg_grid)
-    # new_data_gpis = fib_to_reg_lut[fib_gpis]
-    # out_lons, out_lats = reg_grid.gpi2lonlat(out_gpis)
-    return reg_grid
+    new_grid = genreg_grid(new_grid_size, new_grid_size)
+    old_grid_lut = new_grid.calc_lut(old_grid)
+    return new_grid, old_grid_lut
 
-def fib_to_standard_ds(ds, fibgrid, outgrid_size):
+
+def regrid_xarray_ds(ds, new_grid, ds_grid_lut):
     """
     Convert a dataset from a Fibonacci grid to a standard grid.
 
     Parameters
     ----------
     ds : xarray.Dataset
-        Dataset with lon and lat dimensions.
-    fibgrid : fibgrid.realization.FibGrid
-        Instance of FibGrid from which lon_arr and lat_arr were generated.
-    outgrid_size : int
-        Size of the output grid in degrees.
+        Dataset with a location_id variable derived from a pygeogrids.grids.BasicGrid.
+    new_grid : pygeogrids.grids.BasicGrid
+        Instance of BasicGrid that the dataset should be regridded to.
+    ds_grid_lut : dict
+        Lookup table from the new grid to the dataset's grid.
 
     Returns
     -------
     xarray.Dataset
-        Dataset with lon and lat dimensions.
+        Dataset with lon and lat dimensions according to the new grid system.
     """
-
-    new_grid = fib_to_standard(
-        fibgrid,
-        outgrid_size,
-    )
     new_gpis = new_grid.gpis
     new_lons = new_grid.arrlon
     new_lats = new_grid.arrlat
-    fibgrid_lut = new_grid.calc_lut(fibgrid)
-    nearest_old_gpis = fibgrid_lut[new_gpis]
-    ds = ds.reindex(location_id=nearest_old_gpis)
+    nearest_ds_gpis = ds_grid_lut[new_gpis]
+    ds = ds.reindex(location_id=nearest_ds_gpis)
 
     # put the new gpi/lon/lat data onto the grouped_ds as well
     ds["location_id"] = ("location_id", new_gpis)

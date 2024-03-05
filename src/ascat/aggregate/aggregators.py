@@ -37,11 +37,51 @@ from flox import groupby_reduce
 
 from dask.array import vstack
 
+from pygeogrids.netcdf import save_grid, load_grid
+
 import ascat.read_native.ragged_array_ts as rat
 from ascat.read_native.xarray_io import get_swath_product_id
-from ascat.regrid import fib_to_standard_ds, fib_to_standard
+from ascat.regrid import regrid_xarray_ds, grid_to_regular_grid
 
 progress_to_stdout = False
+
+
+def retrieve_or_store_grid_lut(
+        store_path,
+        current_grid,
+        current_grid_id,
+        target_grid_id,
+        regrid_degrees
+):
+    """Get a grid and its lookup table from a store directory or create, store, and return them.
+
+    Parameters
+    ----------
+    store_path : str
+        Path to the store directory.
+    current_grid : pygeogrids.BasicGrid
+        The current grid.
+    current_grid_id : str
+        The current grid's id.
+    target_grid_id : str
+        The target grid's id.
+    regrid_degrees : int
+        The size of the new grid in degrees.
+    """
+    store_path = Path(store_path)
+    lut_path = store_path / f"lut_{current_grid_id}_{target_grid_id}.npy"
+    grid_path = store_path / f"grid_{target_grid_id}.nc"
+    if lut_path.exists() and grid_path.exists():
+        new_grid = load_grid(grid_path)
+        current_grid_lut = np.load(lut_path, allow_pickle=True)
+
+    else:
+        new_grid, current_grid_lut = grid_to_regular_grid(current_grid, regrid_degrees)
+        lut_path.parent.mkdir(parents=True, exist_ok=True)
+        current_grid_lut.dump(lut_path)
+        save_grid(grid_path, new_grid)
+
+    return new_grid, current_grid_lut
 
 
 class TemporalSwathAggregator:
@@ -58,6 +98,7 @@ class TemporalSwathAggregator:
         frozen_soil_mask=None,
         subsurface_scattering_mask=None,
         regrid_degrees=None,
+        grid_store_path=None,
     ):
         """Initialize the class.
 
@@ -79,6 +120,10 @@ class TemporalSwathAggregator:
             Frozen soil probability value above which to mask the source data.
         subsurface_scattering_mask : int, optional
             Subsurface scattering probability value above which to mask the source data.
+        regrid_degrees : int, optional
+            Degrees defining the size of a regular grid to regrid the data to.
+        grid_store_path : str, optional
+            Path to store the grid lookup tables and new grids for easy retrieval.
         """
         self.filepath = filepath
         self.start_dt = datetime.datetime.strptime(start_dt, "%Y-%m-%dT%H:%M:%S")
@@ -127,6 +172,7 @@ class TemporalSwathAggregator:
                 90 if subsurface_scattering_mask is None else subsurface_scattering_mask
             ),
         }
+        self.grid_store_path = None or grid_store_path
 
     def _read_data(self):
         if progress_to_stdout:
@@ -254,7 +300,23 @@ class TemporalSwathAggregator:
 
         if self.regrid_degrees is not None:
             print("regridding             ")
-            grouped_ds = fib_to_standard_ds(grouped_ds, self.grid, self.regrid_degrees)
+            grid_store_path = self.grid_store_path
+            if grid_store_path is not None:
+                # maybe need to chop off zeros
+                ds_grid_id = f"fib_grid_{self.collection.ioclass.grid_sampling_km}km"
+                target_grid_id = f"reg_grid_{self.regrid_degrees}deg"
+                new_grid, ds_grid_lut = retrieve_or_store_grid_lut(
+                    grid_store_path,
+                    self.grid,
+                    ds_grid_id,
+                    target_grid_id,
+                    self.regrid_degrees
+                )
+            else:
+                new_grid, ds_grid_lut = grid_to_regular_grid(
+                    self.grid, self.regrid_degrees
+                )
+            grouped_ds = regrid_xarray_ds(grouped_ds, new_grid, ds_grid_lut)
 
         else:
             lons, lats = self.grid.gpi2lonlat(grouped_ds.location_id.values)
@@ -277,28 +339,3 @@ class TemporalSwathAggregator:
             group["time_chunks"] = np.datetime64(chunk_start, "ns")
             group = group.rename({"time_chunks": "time"})
             yield group
-
-        # # alternative implementation: loop through time chunks and THEN build the dataset
-        # # for each
-        # lons, lats = self.grid.gpi2lonlat(loc_groups)
-        # for timegroup in time_groups:
-        #     print(f"processing time chunk {timegroup + 1}/{len(time_groups)}...      ", end="\r")
-        #     group_ds = xr.Dataset(
-        #         {
-        #             var: (("location_id",), grouped_data[i, timegroup])
-        #             for i, var in enumerate(present_agg_vars)
-        #         },
-        #         coords={
-        #             "location_id": loc_groups,
-        #             "lon": ("location_id", lons),
-        #             "lat": ("location_id", lats),
-        #         },
-        #     )
-        #     chunk_start = self.start_dt + self.timedelta * timegroup
-        #     chunk_end = (
-        #         self.start_dt + self.timedelta * (timegroup + 1) - pd.Timedelta("1s")
-        #     )
-        #     group_ds.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
-        #     group_ds.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
-        #     group_ds["time"] = np.datetime64(chunk_start, "ns")
-        #     yield group_ds
