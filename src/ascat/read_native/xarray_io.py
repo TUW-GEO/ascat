@@ -1337,8 +1337,8 @@ class AscatH129v1Swath(SwathIOBase):
 class AscatH121v1Swath(SwathIOBase):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {
-        "satellite_folder": "metop_[abc]",
-        "year_folder": "{year}"
+        # "satellite_folder": "metop_[abc]",
+        # "year_folder": "{year}"
     }
     date_format = "%Y%m%d%H%M%S"
     grid_sampling_km = 12.5
@@ -1377,8 +1377,8 @@ class AscatH121v1Swath(SwathIOBase):
     @staticmethod
     def sf_read_fmt(timestamp):
         return {
-            "satellite_folder": {"satellite": "metop_[abc]"},
-            "year_folder": {"year": f"{timestamp.year}"},
+            # "satellite_folder": {"satellite": "metop_[abc]"},
+            # "year_folder": {"year": f"{timestamp.year}"},
         }
 
     def __init__(self, filename, **kwargs):

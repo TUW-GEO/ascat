@@ -41,47 +41,10 @@ from pygeogrids.netcdf import save_grid, load_grid
 
 import ascat.read_native.ragged_array_ts as rat
 from ascat.read_native.xarray_io import get_swath_product_id
-from ascat.regrid import regrid_xarray_ds, grid_to_regular_grid
+from ascat.regrid.regrid import regrid_global_raster_ds, grid_to_regular_grid
+from ascat.regrid.regrid import retrieve_or_store_grid_lut
 
 progress_to_stdout = False
-
-
-def retrieve_or_store_grid_lut(
-        store_path,
-        current_grid,
-        current_grid_id,
-        target_grid_id,
-        regrid_degrees
-):
-    """Get a grid and its lookup table from a store directory or create, store, and return them.
-
-    Parameters
-    ----------
-    store_path : str
-        Path to the store directory.
-    current_grid : pygeogrids.BasicGrid
-        The current grid.
-    current_grid_id : str
-        The current grid's id.
-    target_grid_id : str
-        The target grid's id.
-    regrid_degrees : int
-        The size of the new grid in degrees.
-    """
-    store_path = Path(store_path)
-    lut_path = store_path / f"lut_{current_grid_id}_{target_grid_id}.npy"
-    grid_path = store_path / f"grid_{target_grid_id}.nc"
-    if lut_path.exists() and grid_path.exists():
-        new_grid = load_grid(grid_path)
-        current_grid_lut = np.load(lut_path, allow_pickle=True)
-
-    else:
-        new_grid, current_grid_lut = grid_to_regular_grid(current_grid, regrid_degrees)
-        lut_path.parent.mkdir(parents=True, exist_ok=True)
-        current_grid_lut.dump(lut_path)
-        save_grid(grid_path, new_grid)
-
-    return new_grid, current_grid_lut
 
 
 class TemporalSwathAggregator:
@@ -303,20 +266,20 @@ class TemporalSwathAggregator:
             grid_store_path = self.grid_store_path
             if grid_store_path is not None:
                 # maybe need to chop off zeros
-                ds_grid_id = f"fib_grid_{self.collection.ioclass.grid_sampling_km}km"
-                target_grid_id = f"reg_grid_{self.regrid_degrees}deg"
-                new_grid, ds_grid_lut = retrieve_or_store_grid_lut(
+                old_grid_id = f"fib_grid_{self.collection.ioclass.grid_sampling_km}km"
+                new_grid_id = f"reg_grid_{self.regrid_degrees}deg"
+                new_grid, old_grid_lut, _ = retrieve_or_store_grid_lut(
                     grid_store_path,
                     self.grid,
-                    ds_grid_id,
-                    target_grid_id,
+                    old_grid_id,
+                    new_grid_id,
                     self.regrid_degrees
                 )
             else:
-                new_grid, ds_grid_lut = grid_to_regular_grid(
+                new_grid, old_grid_lut, _ = grid_to_regular_grid(
                     self.grid, self.regrid_degrees
                 )
-            grouped_ds = regrid_xarray_ds(grouped_ds, new_grid, ds_grid_lut)
+            grouped_ds = regrid_global_raster_ds(grouped_ds, new_grid, old_grid_lut)
 
         else:
             lons, lats = self.grid.gpi2lonlat(grouped_ds.location_id.values)
