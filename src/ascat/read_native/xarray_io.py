@@ -39,7 +39,6 @@ import dask.array as da
 from fibgrid.realization import FibGrid
 from ascat.file_handling import ChronFiles
 
-
 int8_nan = np.iinfo(np.int8).max
 uint8_nan = np.iinfo(np.uint8).max
 int16_nan = np.iinfo(np.int16).max
@@ -48,16 +47,18 @@ int32_nan = np.iinfo(np.int32).max
 int64_nan = np.iinfo(np.int64).max
 float32_nan = -999999.
 float64_nan = -999999.
-dtype_to_nan = {np.dtype('int8'): int8_nan,
-                np.dtype('uint8'): uint8_nan,
-                np.dtype('float32'): float32_nan,
-                np.dtype('float64'): float64_nan,
-                np.dtype('int16'): int16_nan,
-                np.dtype('uint16'): uint8_nan,
-                np.dtype('int32'): int32_nan,
-                np.dtype('int64'): int64_nan,
-                np.dtype('<U1'): None,
-                np.dtype('O'): None,}
+dtype_to_nan = {
+    np.dtype('int8'): int8_nan,
+    np.dtype('uint8'): uint8_nan,
+    np.dtype('float32'): float32_nan,
+    np.dtype('float64'): float64_nan,
+    np.dtype('int16'): int16_nan,
+    np.dtype('uint16'): uint8_nan,
+    np.dtype('int32'): int32_nan,
+    np.dtype('int64'): int64_nan,
+    np.dtype('<U1'): None,
+    np.dtype('O'): None,
+}
 
 
 def trim_dates(ds, date_range):
@@ -81,9 +82,8 @@ def trim_dates(ds, date_range):
         return ds
     start_date = np.datetime64(date_range[0])
     end_date = np.datetime64(date_range[1])
-    return ds.isel(
-        obs=(ds.time >= start_date) & (ds.time <= end_date)
-    )
+    return ds.isel(obs=(ds.time >= start_date) & (ds.time <= end_date))
+
 
 def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
     # Adapted from @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
@@ -93,24 +93,25 @@ def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
     # encodings too
     data.encoding = dict()
     if hasattr(nc_variable, 'calendar'):
-        data.encoding['calendar']= nc_variable.calendar
+        data.encoding['calendar'] = nc_variable.calendar
     if hasattr(nc_variable, 'calender'):
-        data.encoding['calendar']= nc_variable.calender
+        data.encoding['calendar'] = nc_variable.calender
 
     if hasattr(nc_variable, 'dtype'):
         data.encoding['dtype'] = nc_variable.dtype
     if hasattr(nc_variable, 'units'):
         data.encoding['units'] = nc_variable.units
-    if hasattr(nc_variable, '_FillValue') and data.attrs.get('_FillValue') is None:
+    if hasattr(nc_variable,
+               '_FillValue') and data.attrs.get('_FillValue') is None:
         data.encoding['_FillValue'] = nc_variable._FillValue
 
     data_encoded = xr.conventions.encode_cf_variable(data)
 
     left_slices = data.dims.index(expanding_dim)
     right_slices = data.ndim - left_slices - 1
-    nc_slice = ((slice(None),) * left_slices
-                + (slice(nc_shape, nc_shape + added_size),)
-                + (slice(None),) * (right_slices))
+    nc_slice = ((slice(None),) * left_slices +
+                (slice(nc_shape, nc_shape + added_size),) + (slice(None),) *
+                (right_slices))
     nc_variable[nc_slice] = data_encoded.data
 
 
@@ -146,7 +147,8 @@ def append_to_netcdf(filename, ds_to_append, unlimited_dim):
                 continue
 
             nc_variable = nc[name]
-            _expand_variable(nc_variable, data, unlimited_dim, nc_shape, added_size)
+            _expand_variable(nc_variable, data, unlimited_dim, nc_shape,
+                             added_size)
 
 
 def var_order(ds):
@@ -254,7 +256,10 @@ def set_attributes(ds, variable_attributes=None, global_attributes=None):
         "location_description": {},
     }
 
-    variable_attributes = {**default_variable_attributes, **variable_attributes}
+    variable_attributes = {
+        **default_variable_attributes,
+        **variable_attributes
+    }
 
     for var, attrs in variable_attributes.items():
         ds[var] = ds[var].assign_attrs(attrs)
@@ -278,7 +283,9 @@ def set_attributes(ds, variable_attributes=None, global_attributes=None):
     return ds
 
 
-def create_variable_encodings(ds, custom_variable_encodings=None, custom_dtypes=None):
+def create_variable_encodings(ds,
+                              custom_variable_encodings=None,
+                              custom_dtypes=None):
     """
     Create an encoding dictionary for a dataset, optionally
     overriding the default encoding or adding additional
@@ -348,9 +355,7 @@ def create_variable_encodings(ds, custom_variable_encodings=None, custom_dtypes=
             "zlib": bool(np.issubdtype(dtype, np.number)),
             "complevel": 4,
             "_FillValue": dtype_to_nan[dtype],
-        }
-        for var, dtype in ds.dtypes.items()
-        if var not in default_encoding
+        } for var, dtype in ds.dtypes.items() if var not in default_encoding
     })
 
     if custom_dtypes is not None:
@@ -360,14 +365,13 @@ def create_variable_encodings(ds, custom_variable_encodings=None, custom_dtypes=
                 "zlib": bool(np.issubdtype(custom_dtypes[var], np.number)),
                 "complevel": 4,
                 "_FillValue": dtype_to_nan[custom_dtypes[var]],
-            }
-            for var in custom_dtypes.names
-            if var in ds.data_vars
+            } for var in custom_dtypes.names if var in ds.data_vars
         }
 
     encoding = {**default_encoding, **custom_variable_encodings}
 
     return encoding
+
 
 class RaggedXArrayCellIOBase(ABC):
     """Base class for ascat xarray IO classes
@@ -410,8 +414,7 @@ class RaggedXArrayCellIOBase(ABC):
                 concat_dim=obs_dim,
                 combine="nested",
                 data_vars="minimal",
-                **kwargs
-            )
+                **kwargs)
         elif isinstance(source, (str, Path)):
             self._ds = self._ensure_obs_dim(
                 xr.open_dataset(
@@ -419,9 +422,7 @@ class RaggedXArrayCellIOBase(ABC):
                     engine=engine,
                     decode_cf=False,
                     mask_and_scale=False,
-                    **kwargs
-                )
-            )
+                    **kwargs))
         elif isinstance(source, xr.Dataset):
             self._ds = self._ensure_obs_dim(source)
 
@@ -451,8 +452,8 @@ class RaggedXArrayCellIOBase(ABC):
             if self.expected_obs_dim != preferred_obs_dim:
                 ds = ds.rename_dims({self.expected_obs_dim: preferred_obs_dim})
             return ds
-        raise ValueError(f"obs_dim '{self.expected_obs_dim}' not found in dataset")
-
+        raise ValueError(
+            f"obs_dim '{self.expected_obs_dim}' not found in dataset")
 
     @property
     def date_range(self):
@@ -526,8 +527,8 @@ class RaggedXArrayCellIOBase(ABC):
         if ds is None or "locationIndex" in ds.data_vars:
             return ds
 
-        row_size = np.where(ds["row_size"].values > 0,
-                            ds["row_size"].values, 0)
+        row_size = np.where(ds["row_size"].values > 0, ds["row_size"].values,
+                            0)
 
         locationIndex = np.repeat(np.arange(row_size.size), row_size)
         ds["locationIndex"] = ("obs", locationIndex)
@@ -581,6 +582,7 @@ class RaggedXArrayCellIOBase(ABC):
 
 
 class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
+
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
         self.custom_variable_attrs = None
@@ -615,12 +617,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
             ds = self._ds
 
         return trim_dates(
-            xr.decode_cf(
-                ds,
-                mask_and_scale=mask_and_scale
-            ),
-            date_range
-        )
+            xr.decode_cf(ds, mask_and_scale=mask_and_scale), date_range)
 
     def write(self, filename, ra_type="indexed", **kwargs):
         """
@@ -644,16 +641,22 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
 
         out_ds = out_ds[self._var_order(out_ds)]
 
-        custom_variable_attrs = self._kwargs.get("attributes", None) or self.custom_variable_attrs
-        custom_global_attrs = self._kwargs.get("global_attributes", None) or self.custom_global_attrs
-        out_ds = self._set_attributes(out_ds, custom_variable_attrs, custom_global_attrs)
+        custom_variable_attrs = self._kwargs.get(
+            "attributes", None) or self.custom_variable_attrs
+        custom_global_attrs = self._kwargs.get(
+            "global_attributes", None) or self.custom_global_attrs
+        out_ds = self._set_attributes(out_ds, custom_variable_attrs,
+                                      custom_global_attrs)
 
-        custom_variable_encodings = self._kwargs.get("encoding", None) or self.custom_variable_encodings
-        encoding = self._create_variable_encodings(out_ds, custom_variable_encodings)
+        custom_variable_encodings = self._kwargs.get(
+            "encoding", None) or self.custom_variable_encodings
+        encoding = self._create_variable_encodings(out_ds,
+                                                   custom_variable_encodings)
         out_ds.encoding["unlimited_dims"] = ["obs"]
 
         for var, var_encoding in encoding.items():
-            if "_FillValue" in var_encoding and "_FillValue" in out_ds[var].attrs:
+            if "_FillValue" in var_encoding and "_FillValue" in out_ds[
+                    var].attrs:
                 del out_ds[var].attrs["_FillValue"]
 
         out_ds.to_netcdf(filename, encoding=encoding, **kwargs)
@@ -817,16 +820,17 @@ class SwathIOBase(ABC):
         # else use open_dataset
         chunks = kwargs.pop("chunks", None)
         if isinstance(source, list):
-            self._ds = xr.open_mfdataset(source,
-                                         engine=engine,
-                                         preprocess=self._preprocess,
-                                         decode_cf=False,
-                                         concat_dim="obs",
-                                         combine="nested",
-                                         chunks=(chunks or None),
-                                         combine_attrs=self.combine_attributes,
-                                         mask_and_scale=False,
-                                         **kwargs)
+            self._ds = xr.open_mfdataset(
+                source,
+                engine=engine,
+                preprocess=self._preprocess,
+                decode_cf=False,
+                concat_dim="obs",
+                combine="nested",
+                chunks=(chunks or None),
+                combine_attrs=self.combine_attributes,
+                mask_and_scale=False,
+                **kwargs)
             if chunks is not None:
                 self._isin = da.isin
             else:
@@ -835,7 +839,12 @@ class SwathIOBase(ABC):
             chunks = None
 
         elif isinstance(source, (str, Path)):
-            self._ds = xr.open_dataset(source, engine=engine, **kwargs, decode_cf=False, mask_and_scale=False)
+            self._ds = xr.open_dataset(
+                source,
+                engine=engine,
+                **kwargs,
+                decode_cf=False,
+                mask_and_scale=False)
             self._ds = self._preprocess(self._ds)
 
         elif isinstance(source, xr.Dataset):
@@ -851,10 +860,14 @@ class SwathIOBase(ABC):
         # this fixes that and lets xarray pick it up when decoding the time variable
         # I'm not sure if it really makes a difference but this is more correct.
         if "calender" in self._ds.time.attrs:
-            self._ds.time.attrs["calendar"] = self._ds.time.attrs.pop("calender")
+            self._ds.time.attrs["calendar"] = self._ds.time.attrs.pop(
+                "calender")
 
-
-    def read(self, cell=None, location_id=None, mask_and_scale=True, lookup_vector=None):
+    def read(self,
+             cell=None,
+             location_id=None,
+             mask_and_scale=True,
+             lookup_vector=None):
         """
         Returns data for a cell or location_id if specified, or for the entire
         swath file if not specified.
@@ -869,7 +882,8 @@ class SwathIOBase(ABC):
             Whether to mask and scale the data. Default is True.
         """
         if location_id is not None:
-            out_data = self._read_location_ids(location_id, lookup_vector=lookup_vector)
+            out_data = self._read_location_ids(
+                location_id, lookup_vector=lookup_vector)
         elif cell is not None:
             out_data = self._read_cell(cell)
         else:
@@ -887,8 +901,10 @@ class SwathIOBase(ABC):
                 append_to_netcdf(filename, out_ds, unlimited_dim="obs")
                 return
 
-        out_encoding = self._create_variable_encodings(out_ds, custom_dtypes = self.ts_dtype)
-        out_ds.to_netcdf(filename, unlimited_dims=["obs"], encoding=out_encoding, **kwargs)
+        out_encoding = self._create_variable_encodings(
+            out_ds, custom_dtypes=self.ts_dtype)
+        out_ds.to_netcdf(
+            filename, unlimited_dims=["obs"], encoding=out_encoding, **kwargs)
 
     def _read_location_ids(self, location_ids, lookup_vector=None):
         """
@@ -906,8 +922,10 @@ class SwathIOBase(ABC):
             return self._ds.sel(obs=lookup_vector[self._ds.location_id.values])
 
         idxs = self._isin(self._ds.location_id, location_ids)
-        idxs = np.array([1 if id in location_ids else 0
-                         for id in self._ds.location_id.values])
+        idxs = np.array([
+            1 if id in location_ids else 0
+            for id in self._ds.location_id.values
+        ])
         if not np.any(idxs):
             return None
         ds = self._ds.isel(obs=idxs)
@@ -969,10 +987,12 @@ class SwathIOBase(ABC):
         ds : xarray.Dataset
             Dataset with variable_attributes and global_attributes.
         """
-        return set_attributes(ds,variable_attributes, global_attributes)
+        return set_attributes(ds, variable_attributes, global_attributes)
 
     @staticmethod
-    def _create_variable_encodings(ds, custom_variable_encodings=None, custom_dtypes=None):
+    def _create_variable_encodings(ds,
+                                   custom_variable_encodings=None,
+                                   custom_dtypes=None):
         """
         A wrapper for xarray_io.create_variable_encodings. This can be overridden in a child class
         if different logic for this function is needed.
@@ -989,7 +1009,8 @@ class SwathIOBase(ABC):
         ds : xarray.Dataset
             Dataset with encodings.
         """
-        return create_variable_encodings(ds, custom_variable_encodings, custom_dtypes)
+        return create_variable_encodings(ds, custom_variable_encodings,
+                                         custom_dtypes)
 
     @staticmethod
     def _preprocess(ds):
@@ -1002,7 +1023,8 @@ class SwathIOBase(ABC):
             # Assumption: the spacecraft attribute is something like "metop-a"
             sat_id = {"a": 3, "b": 4, "c": 5}
             sat = ds.attrs["spacecraft"][-1].lower()
-            ds["sat_id"] = ("obs", np.repeat(sat_id[sat], ds["location_id"].size))
+            ds["sat_id"] = ("obs",
+                            np.repeat(sat_id[sat], ds["location_id"].size))
             del ds.attrs["spacecraft"]
         return ds
 
@@ -1035,17 +1057,16 @@ class SwathIOBase(ABC):
             result = {}
             dropped_keys = set()
             for attrs in variable_attrs:
-                result.update(
-                    {
-                        key: value
-                        for key, value in attrs.items()
-                        if key not in result and key not in dropped_keys
-                    }
-                )
+                result.update({
+                    key: value
+                    for key, value in attrs.items()
+                    if key not in result and key not in dropped_keys
+                })
                 result = {
                     key: value
                     for key, value in result.items()
-                    if key not in attrs or xr.core.utils.equivalent(attrs[key], value)
+                    if key not in attrs or
+                    xr.core.utils.equivalent(attrs[key], value)
                 }
                 dropped_keys |= {key for key in attrs if key not in result}
             return result
@@ -1072,11 +1093,10 @@ class SwathIOBase(ABC):
                 np.in1d(
                     np.unique(self._ds.location_id.values),
                     location_ids,
-                    assume_unique=True
-                )
-            )
+                    assume_unique=True))
         else:
-            raise ValueError("Must provide either location_ids or lookup_vector")
+            raise ValueError(
+                "Must provide either location_ids or lookup_vector")
 
     def __enter__(self):
         """
@@ -1090,7 +1110,6 @@ class SwathIOBase(ABC):
         """
         self.close()
 
-
     def close(self):
         """
         Close the dataset.
@@ -1098,11 +1117,11 @@ class SwathIOBase(ABC):
         self._ds.close()
 
 
-
 class CellGridCache:
     """
     Cache for CellGrid objects.
     """
+
     def __init__(self):
         self.grids = {}
 
@@ -1116,14 +1135,18 @@ class CellGridCache:
         """
         if key not in self.grids:
             if cell_grid_type is None:
-                raise ValueError("Key not in cache, please specify cell_grid_type and arguments"
-                                 " to create a new CellGrid object and add it to the cache under"
-                                 " the given key.")
+                raise ValueError(
+                    "Key not in cache, please specify cell_grid_type and arguments"
+                    " to create a new CellGrid object and add it to the cache under"
+                    " the given key.")
             self.grids[key] = dict()
             self.grids[key]["grid"] = cell_grid_type(*args)
-            self.grids[key]["possible_cells"] = self.grids[key]["grid"].get_cells()
-            self.grids[key]["max_cell"] = self.grids[key]["possible_cells"].max()
-            self.grids[key]["min_cell"] = self.grids[key]["possible_cells"].min()
+            self.grids[key]["possible_cells"] = self.grids[key][
+                "grid"].get_cells()
+            self.grids[key]["max_cell"] = self.grids[key][
+                "possible_cells"].max()
+            self.grids[key]["min_cell"] = self.grids[key][
+                "possible_cells"].min()
 
         return self.grids[key]
 
@@ -1147,6 +1170,7 @@ class AscatH129Cell(AscatNetCDFCellBase):
         self.custom_global_attrs = None
         self.custom_variable_encodings = None
 
+
 class AscatH129v1Cell(AscatNetCDFCellBase):
     grid_info = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)
     grid = grid_info["grid"]
@@ -1161,6 +1185,7 @@ class AscatH129v1Cell(AscatNetCDFCellBase):
         self.custom_variable_attrs = None
         self.custom_global_attrs = None
         self.custom_variable_encodings = None
+
 
 class AscatH121v1Cell(AscatNetCDFCellBase):
     grid_info = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)
@@ -1177,6 +1202,7 @@ class AscatH121v1Cell(AscatNetCDFCellBase):
         self.custom_global_attrs = None
         self.custom_variable_encodings = None
 
+
 class AscatH122Cell(AscatNetCDFCellBase):
     grid_info = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)
     grid = grid_info["grid"]
@@ -1191,6 +1217,7 @@ class AscatH122Cell(AscatNetCDFCellBase):
         self.custom_variable_attrs = None
         self.custom_global_attrs = None
         self.custom_variable_encodings = None
+
 
 class AscatSIG0Cell6250m(AscatNetCDFCellBase):
     grid_info = grid_cache.fetch_or_store("Fib6.25", FibGrid, 6.25)
@@ -1226,13 +1253,11 @@ class AscatSIG0Cell12500m(AscatNetCDFCellBase):
 
 class AscatH129Swath(SwathIOBase):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc"
-    sf_pattern = {
-        "satellite_folder": "metop_[abc]",
-        "year_folder": "{year}"
-    }
+    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid_sampling_km = 6.25
-    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, grid_sampling_km)["grid"]
+    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid,
+                                     grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = ["backscatter", "incidence_angle", "azimuth_angle", "kp"]
@@ -1269,30 +1294,35 @@ class AscatH129Swath(SwathIOBase):
 
     @staticmethod
     def fn_read_fmt(timestamp):
-        return {"date": timestamp.strftime("%Y%m%d*"),
-                "sat": "[ABC]",
-                "placeholder": "*",
-                "placeholder1": "*"}
+        return {
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": "[ABC]",
+            "placeholder": "*",
+            "placeholder1": "*"
+        }
 
     @staticmethod
     def sf_read_fmt(timestamp):
         return {
-            "satellite_folder": {"satellite": "metop_[abc]"},
-            "year_folder": {"year": f"{timestamp.year}"},
+            "satellite_folder": {
+                "satellite": "metop_[abc]"
+            },
+            "year_folder": {
+                "year": f"{timestamp.year}"
+            },
         }
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
+
 
 class AscatH129v1Swath(SwathIOBase):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {
-        "satellite_folder": "metop_[abc]",
-        "year_folder": "{year}"
-    }
+    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid_sampling_km = 6.25
-    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, grid_sampling_km)["grid"]
+    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid,
+                                     grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
@@ -1319,30 +1349,35 @@ class AscatH129v1Swath(SwathIOBase):
 
     @staticmethod
     def fn_read_fmt(timestamp):
-        return {"date": timestamp.strftime("%Y%m%d*"),
-                "sat": "[ABC]",
-                "placeholder": "*",
-                "placeholder1": "*"}
+        return {
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": "[ABC]",
+            "placeholder": "*",
+            "placeholder1": "*"
+        }
 
     @staticmethod
     def sf_read_fmt(timestamp):
         return {
-            "satellite_folder": {"satellite": "metop_[abc]"},
-            "year_folder": {"year": f"{timestamp.year}"},
+            "satellite_folder": {
+                "satellite": "metop_[abc]"
+            },
+            "year_folder": {
+                "year": f"{timestamp.year}"
+            },
         }
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
+
 
 class AscatH121v1Swath(SwathIOBase):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {
-        # "satellite_folder": "metop_[abc]",
-        # "year_folder": "{year}"
-    }
+    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid_sampling_km = 12.5
-    grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, grid_sampling_km)["grid"]
+    grid = grid_cache.fetch_or_store("Fib12.5", FibGrid,
+                                     grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
@@ -1369,30 +1404,35 @@ class AscatH121v1Swath(SwathIOBase):
 
     @staticmethod
     def fn_read_fmt(timestamp):
-        return {"date": timestamp.strftime("%Y%m%d*"),
-                "sat": "[ABC]",
-                "placeholder": "*",
-                "placeholder1": "*"}
+        return {
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": "[ABC]",
+            "placeholder": "*",
+            "placeholder1": "*"
+        }
 
     @staticmethod
     def sf_read_fmt(timestamp):
         return {
-            # "satellite_folder": {"satellite": "metop_[abc]"},
-            # "year_folder": {"year": f"{timestamp.year}"},
+            "satellite_folder": {
+                "satellite": "metop_[abc]"
+            },
+            "year_folder": {
+                "year": f"{timestamp.year}"
+            },
         }
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
 
+
 class AscatH122Swath(SwathIOBase):
     fn_pattern = "ascat_ssm_nrt_6.25km_{placeholder}Z_{date}Z_metop-{sat}_h122.nc"
-    sf_pattern = {
-        "satellite_folder": "metop_[abc]",
-        "year_folder": "{year}"
-    }
+    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid_sampling_km = 6.25
-    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, grid_sampling_km)["grid"]
+    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid,
+                                     grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
@@ -1424,32 +1464,37 @@ class AscatH122Swath(SwathIOBase):
 
     @staticmethod
     def fn_read_fmt(timestamp):
-        return {"date": timestamp.strftime("%Y%m%d*"),
-                "sat": "[ABC]",
-                "placeholder": "*"}
+        return {
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": "[ABC]",
+            "placeholder": "*"
+        }
 
     @staticmethod
     def sf_read_fmt(timestamp):
         return {
-            "satellite_folder": {"satellite": "metop_[abc]"},
-            "year_folder": {"year": f"{timestamp.year}"},
+            "satellite_folder": {
+                "satellite": "metop_[abc]"
+            },
+            "year_folder": {
+                "year": f"{timestamp.year}"
+            },
         }
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
+
 
 class AscatSIG0Swath6250m(SwathIOBase):
     """
     Class for reading ASCAT sigma0 swath data and writing it to cells.
     """
     fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP{sat}-6.25_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {
-        "satellite_folder": "metop_[abc]",
-        "year_folder": "{year}"
-    }
+    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid_sampling_km = 6.25
-    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid, grid_sampling_km)["grid"]
+    grid = grid_cache.fetch_or_store("Fib6.25", FibGrid,
+                                     grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = [
@@ -1524,33 +1569,38 @@ class AscatSIG0Swath6250m(SwathIOBase):
         dict
             Dictionary of formatted strings
         """
-        return {"date": timestamp.strftime("%Y%m%d*"),
-                "sat": "[ABC]",
-                "placeholder": "*",
-                "placeholder1": "*"}
+        return {
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": "[ABC]",
+            "placeholder": "*",
+            "placeholder1": "*"
+        }
 
     @staticmethod
     def sf_read_fmt(timestamp):
         return {
-            "satellite_folder": {"satellite": "metop_[abc]"},
-            "year_folder": {"year": f"{timestamp.year}"},
+            "satellite_folder": {
+                "satellite": "metop_[abc]"
+            },
+            "year_folder": {
+                "year": f"{timestamp.year}"
+            },
         }
 
     def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
+
 
 class AscatSIG0Swath12500m(SwathIOBase):
     """
     Class for reading and writing ASCAT sigma0 swath data.
     """
     fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP{sat}-12.5_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {
-        "satellite_folder": "metop_[abc]",
-        "year_folder": "{year}"
-    }
+    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_format = "%Y%m%d%H%M%S"
     grid_sampling_km = 12.5
-    grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, grid_sampling_km)["grid"]
+    grid = grid_cache.fetch_or_store("Fib12.5", FibGrid,
+                                     grid_sampling_km)["grid"]
     grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = [
@@ -1625,20 +1675,27 @@ class AscatSIG0Swath12500m(SwathIOBase):
         dict
             Dictionary of formatted strings
         """
-        return {"date": timestamp.strftime("%Y%m%d*"),
-                "sat": "[ABC]",
-                "placeholder": "*",
-                "placeholder1": "*"}
+        return {
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": "[ABC]",
+            "placeholder": "*",
+            "placeholder1": "*"
+        }
 
     @staticmethod
     def sf_read_fmt(timestamp):
         return {
-            "satellite_folder": {"satellite": "metop_[abc]"},
-            "year_folder": {"year": f"{timestamp.year}"},
+            "satellite_folder": {
+                "satellite": "metop_[abc]"
+            },
+            "year_folder": {
+                "year": f"{timestamp.year}"
+            },
         }
 
-    def __init__(self, filename,  **kwargs):
+    def __init__(self, filename, **kwargs):
         super().__init__(filename, "netcdf4", **kwargs)
+
 
 cell_io_catalog = {
     "H129": AscatH129Cell,
@@ -1659,13 +1716,20 @@ swath_io_catalog = {
 }
 
 swath_fname_regex_lookup = {
-    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25-H129_C_LIIB_.*_.*_.*____.nc": "H129",
-    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25km-H129_C_LIIB_.*_.*_.*____.nc": "H129_V1.0",
-    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H121_C_LIIB_.*_.*_.*____.nc": "H121_V1.0",
-    "ascat_ssm_nrt_6.25km_.*Z_.*Z_metop-[ABC]_h122.nc": "H122",
-    "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-6.25_C_LIIB_.*_.*_.*____.nc": "SIG0_6.25",
-    "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-12.5_C_LIIB_.*_.*_.*____.nc": "SIG0_12.5",
+    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25-H129_C_LIIB_.*_.*_.*____.nc":
+        "H129",
+    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25km-H129_C_LIIB_.*_.*_.*____.nc":
+        "H129_V1.0",
+    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H121_C_LIIB_.*_.*_.*____.nc":
+        "H121_V1.0",
+    "ascat_ssm_nrt_6.25km_.*Z_.*Z_metop-[ABC]_h122.nc":
+        "H122",
+    "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-6.25_C_LIIB_.*_.*_.*____.nc":
+        "SIG0_6.25",
+    "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-12.5_C_LIIB_.*_.*_.*____.nc":
+        "SIG0_12.5",
 }
+
 
 def get_swath_product_id(filename):
     for pattern, swath_product_id in swath_fname_regex_lookup.items():
