@@ -31,18 +31,15 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import xarray as xr
 
-from flox import groupby_reduce
-
-from dask.array import vstack
-
-from pygeogrids.netcdf import save_grid, load_grid
+from flox.xarray import xarray_reduce
+from dask.array import unique as da_unique
 
 import ascat.read_native.ragged_array_ts as rat
 from ascat.read_native.xarray_io import get_swath_product_id
 from ascat.regrid.regrid import regrid_global_raster_ds, grid_to_regular_grid
 from ascat.regrid.regrid import retrieve_or_store_grid_lut
+
 
 progress_to_stdout = False
 
@@ -221,9 +218,13 @@ class TemporalSwathAggregator:
         if self.data is None:
             self._read_data()
         ds = self.data
+
         if progress_to_stdout:
             print("masking data...", end="\r")
-        # mask ds where "surface_flag" is 1, "snow_cover_probability" is > 90, or "frozen_soil_probability" is > 90
+
+        # mask ds where "surface_flag" is 1, "snow_cover_probability" is > 90,
+        # or "frozen_soil_probability" is > 90
+        # (or whatever values the user has defined)
         mask = (
             (ds.surface_flag != 0)
             | (ds.snow_cover_probability > self.mask_probs["snow_cover_probability"])
@@ -233,36 +234,42 @@ class TemporalSwathAggregator:
                 > self.mask_probs["subsurface_scattering_probability"]
             )
         )
+
+        # Masking turns data into NaNs (and therefore floats).
+        # To avoid this we could use a .sel() here instead, but this is much faster
         ds = ds.where(~mask, drop=False)
+
+        # discretize time into integer-labeled chunks according to our desired frequency
         ds["time_chunks"] = (
             ds.time - np.datetime64(self.start_dt, "ns")
         ) // self.timedelta
 
         present_agg_vars = [var for var in self.agg_vars if var in ds.variables]
 
-        agg_vars_stack = vstack([ds[var].data for var in present_agg_vars])
+        # get unique time_chunk and location_id values so we can tell xarray_reduce
+        # what to expect.
+        expected_time_chunks = da_unique(ds["time_chunks"].data).compute()
+        expected_location_ids = da_unique(ds["location_id"].data).compute()
+
+        # remove NaN from the expected location ids (this was introduced by the masking)
+        expected_location_ids = expected_location_ids[~np.isnan(expected_location_ids)]
 
         if progress_to_stdout:
-            print("constructing groups...", end="\r")
-        grouped_data, time_groups, loc_groups = groupby_reduce(
-            agg_vars_stack, ds["time_chunks"], ds["location_id"], func=self.agg
-        )
-        # shape of grouped_data is (n_agg_vars, n_time_chunks, n_locations)
-        # now we need to rebuild an xarray dataset from this
-        # we can use the time_groups and loc_groups to do this
-        grouped_ds = xr.Dataset(
-            {
-                var: (("time_chunks", "location_id"), grouped_data[i])
-                for i, var in enumerate(present_agg_vars)
-            },
-            coords={
-                "time_chunks": time_groups,
-                "location_id": loc_groups.astype(int),
-            },
-        )
+            print("grouping data...           ")
+        # group the data by time_chunks and location_id and aggregate it
+        grouped_ds = xarray_reduce(ds[present_agg_vars],
+                                   ds["time_chunks"],
+                                   ds["location_id"],
+                                   expected_groups=(expected_time_chunks,
+                                                    expected_location_ids),
+                                   func=self.agg)
+
+        # convert the location_id back to an integer
+        grouped_ds["location_id"] = grouped_ds["location_id"].astype(int)
 
         if self.regrid_degrees is not None:
-            print("regridding             ")
+            if progress_to_stdout:
+                print("regridding             ")
             grid_store_path = self.grid_store_path
             if grid_store_path is not None:
                 # maybe need to chop off zeros
@@ -290,7 +297,7 @@ class TemporalSwathAggregator:
         for timechunk, group in grouped_ds.groupby("time_chunks"):
             if progress_to_stdout:
                 print(
-                    f"processing time chunk {timechunk + 1}/{len(time_groups)}...      ",
+                    f"processing time chunk {timechunk + 1}/{len(grouped_ds['time_chunks'])}...      ",
                     end="\r",
                 )
             chunk_start = self.start_dt + self.timedelta * timechunk
