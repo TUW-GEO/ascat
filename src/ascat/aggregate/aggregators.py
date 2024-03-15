@@ -26,11 +26,13 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import datetime
+import tempfile
 
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 
 from flox.xarray import xarray_reduce
 from dask.array import unique as da_unique
@@ -136,12 +138,12 @@ class TemporalSwathAggregator:
 
     def _read_data(self):
         if progress_to_stdout:
-            print("reading data, this may take some time...")
+            print("constructing dataset, this may take some time...")
         self.data = self.collection.read(
             date_range=(self.start_dt, self.end_dt),
         )
         if progress_to_stdout:
-            print("done reading data")
+            print("done constructing dataset")
 
     def _set_metadata(self, ds):
         """Add appropriate metadata to datasets."""
@@ -151,18 +153,19 @@ class TemporalSwathAggregator:
         """Loop through time chunks and write them to file."""
         product_id = self.product.lower().replace("_", "-")
         if self.regrid_degrees is None:
-            grid_sampling = self.collection.ioclass.grid_sampling_km + "km"
+            grid_sampling = str(self.collection.ioclass.grid_sampling_km) + "km"
         else:
             grid_sampling = str(self.regrid_degrees) + "deg"
 
         if self.agg is not None:
-            yield_func = self.yield_aggregated_time_chunks
+            datasets = self.get_aggregated_time_chunks()
             agg_str = f"_{self.agg}"
         else:
-            yield_func = self.yield_time_chunks
+            datasets = self.get_time_chunks()
             agg_str = "_data"
 
-        for ds in yield_func():
+        paths = []
+        for ds in datasets:
             chunk_start_str = (
                 np.datetime64(ds.attrs["start_time"])
                 .astype(datetime.datetime)
@@ -173,7 +176,6 @@ class TemporalSwathAggregator:
                 .astype(datetime.datetime)
                 .strftime("%Y%m%d%H%M%S")
             )
-            ds = self._set_metadata(ds)
             out_name = (
                 f"ascat"
                 f"_{product_id}"
@@ -182,17 +184,20 @@ class TemporalSwathAggregator:
                 f"_{chunk_start_str}"
                 f"_{chunk_end_str}.nc"
             )
+            paths.append(Path(out_dir) / out_name)
 
-            ds.to_netcdf(
-                Path(out_dir) / out_name,
-            )
+        if progress_to_stdout:
+            print("saving datasets...", end="\r")
+
+        xr.save_mfdataset(datasets, paths)
         print("complete                     ")
 
-    def yield_time_chunks(self):
-        """Loop through time chunks of the range, yield the merged data unmodified."""
+    def get_time_chunks(self):
+        """Loop through time chunks of the range, return the merged data for each unmodified."""
         time_chunks = pd.date_range(
             start=self.start_dt, end=self.end_dt, freq=self.timedelta
         )
+        datasets = []
         if self.data is not None:
             # I don't know why this case would exist, but if it does...
             ds = self.data
@@ -202,7 +207,7 @@ class TemporalSwathAggregator:
                 ds_chunk = ds.sel(time=slice(chunk_start, chunk_end))
                 ds_chunk.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
                 ds_chunk.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
-                yield ds_chunk
+                datasets.append(ds_chunk)
         if self.data is None:
             for timechunk in time_chunks:
                 chunk_start = timechunk
@@ -211,9 +216,11 @@ class TemporalSwathAggregator:
                 chunk_end = chunk_end - pd.Timedelta("1s")
                 ds_chunk.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
                 ds_chunk.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
-                yield ds_chunk
+                datasets.append(ds_chunk)
 
-    def yield_aggregated_time_chunks(self):
+        return datasets
+
+    def get_aggregated_time_chunks(self):
         """Loop through data in time chunks, aggregating it over time."""
         if self.data is None:
             self._read_data()
@@ -239,6 +246,9 @@ class TemporalSwathAggregator:
         # To avoid this we could use a .sel() here instead, but this is much faster
         ds = ds.where(~mask, drop=False)
 
+        if progress_to_stdout:
+            print("grouping data...           ")
+
         # discretize time into integer-labeled chunks according to our desired frequency
         ds["time_chunks"] = (
             ds.time - np.datetime64(self.start_dt, "ns")
@@ -254,8 +264,6 @@ class TemporalSwathAggregator:
         # remove NaN from the expected location ids (this was introduced by the masking)
         expected_location_ids = expected_location_ids[~np.isnan(expected_location_ids)]
 
-        if progress_to_stdout:
-            print("grouping data...           ")
         # group the data by time_chunks and location_id and aggregate it
         grouped_ds = xarray_reduce(ds[present_agg_vars],
                                    ds["time_chunks"],
@@ -272,7 +280,6 @@ class TemporalSwathAggregator:
                 print("regridding             ")
             grid_store_path = self.grid_store_path
             if grid_store_path is not None:
-                # maybe need to chop off zeros
                 old_grid_id = f"fib_grid_{self.collection.ioclass.grid_sampling_km}km"
                 new_grid_id = f"reg_grid_{self.regrid_degrees}deg"
                 new_grid, old_grid_lut, _ = retrieve_or_store_grid_lut(
@@ -294,10 +301,25 @@ class TemporalSwathAggregator:
             grouped_ds["lat"] = ("location_id", lats)
             grouped_ds = grouped_ds.set_coords(["lon", "lat"])
 
+        grouped_ds = grouped_ds.chunk({"time_chunks": 1})
+
+        # Compute the results, write to a temporary directory, and then read it back in.
+        # If we don't do this, dask will try to compute the entire dataset
+        # for each chunk of time before writing it to disk later.
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "ascat.nc"
+            if progress_to_stdout:
+                print("computing results...             ")
+            grouped_ds.to_netcdf(temp_path)
+            grouped_ds.close()
+            grouped_ds = xr.open_dataset(temp_path)
+
+        groups = []
         for timechunk, group in grouped_ds.groupby("time_chunks"):
             if progress_to_stdout:
                 print(
-                    f"processing time chunk {timechunk + 1}/{len(grouped_ds['time_chunks'])}...      ",
+                    f"writing time chunk {timechunk + 1}/{len(grouped_ds['time_chunks'])}...      ",
                     end="\r",
                 )
             chunk_start = self.start_dt + self.timedelta * timechunk
@@ -308,4 +330,6 @@ class TemporalSwathAggregator:
             group.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
             group["time_chunks"] = np.datetime64(chunk_start, "ns")
             group = group.rename({"time_chunks": "time"})
-            yield group
+            group = self._set_metadata(group)
+            groups.append(group)
+        return groups
