@@ -225,6 +225,7 @@ class TemporalSwathAggregator:
         if self.data is None:
             self._read_data()
         ds = self.data
+        present_agg_vars = [var for var in self.agg_vars if var in ds.variables]
 
         if progress_to_stdout:
             print("masking data...", end="\r")
@@ -232,19 +233,24 @@ class TemporalSwathAggregator:
         # mask ds where "surface_flag" is 1, "snow_cover_probability" is > 90,
         # or "frozen_soil_probability" is > 90
         # (or whatever values the user has defined)
-        mask = (
+        global_mask = (
             (ds.surface_flag != 0)
-            | (ds.snow_cover_probability > self.mask_probs["snow_cover_probability"])
-            | (ds.frozen_soil_probability > self.mask_probs["frozen_soil_probability"])
             | (
                 ds.subsurface_scattering_probability
                 > self.mask_probs["subsurface_scattering_probability"]
             )
         )
+        variable_masks = {
+            "surface_soil_moisture": (
+                (ds["frozen_soil_probability"] > self.mask_probs["frozen_soil_probability"])
+                | (ds["snow_cover_probability"] > self.mask_probs["snow_cover_probability"])
+            ),
+        }
 
-        # Masking turns data into NaNs (and therefore floats).
-        # To avoid this we could use a .sel() here instead, but this is much faster
-        ds = ds.where(~mask, drop=False)
+        ds = ds.where(~global_mask, drop=False)
+
+        for var, var_mask in variable_masks.items():
+            ds[var] = ds[var].where(~var_mask, drop=False)
 
         if progress_to_stdout:
             print("grouping data...           ")
@@ -254,7 +260,6 @@ class TemporalSwathAggregator:
             ds.time - np.datetime64(self.start_dt, "ns")
         ) // self.timedelta
 
-        present_agg_vars = [var for var in self.agg_vars if var in ds.variables]
 
         # get unique time_chunk and location_id values so we can tell xarray_reduce
         # what to expect.
