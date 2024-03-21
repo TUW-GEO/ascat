@@ -72,12 +72,14 @@ def swath_regrid_main(cli_args):
     new_grid = None
 
     if filepath.is_dir():
-        files = filepath.glob("*.nc")
-    else:
+        files = list(filepath.glob("**/*.nc"))
+    elif filepath.is_file() and filepath.suffix == ".nc":
         files = [filepath]
+    else:
+        files = None
 
     if files is None:
-        raise ValueError("No .nc files found in the provided filepath.")
+        raise ValueError("No .nc files found at the provided filepath.")
 
     first_file = files[0]
     product = swath_io_catalog[get_swath_product_id(str(first_file.name))]
@@ -90,12 +92,12 @@ def swath_regrid_main(cli_args):
         grid_store = None
 
     for file in files:
-        if new_grid is None:
+        if new_grid is None and grid_store is None:
             new_grid, _, new_grid_lut = grid_to_regular_grid(
                 old_grid,
                 new_grid_size
             )
-        else:
+        elif new_grid is None:
             old_grid_id = f"fib_grid_{old_grid_size}km"
             new_grid_id = f"reg_grid_{args.regrid_deg}deg"
             new_grid, _, new_grid_lut = retrieve_or_store_grid_lut(
@@ -107,7 +109,15 @@ def swath_regrid_main(cli_args):
             )
         swath_ds = xr.open_dataset(file, decode_cf=False, mask_and_scale=False)
         regridded_ds = regrid_swath_ds(swath_ds, new_grid, new_grid_lut)
-        regridded_ds.to_netcdf(outpath / file.name)
+
+        # figure out directories between filepath and file, if any
+        relative_path = file.relative_to(filepath)
+        if relative_path != Path("."):
+            outfile = outpath / relative_path
+            outfile.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            outfile = outpath / file.name
+        regridded_ds.to_netcdf(outfile)
 
 
 def run_swath_regrid():
