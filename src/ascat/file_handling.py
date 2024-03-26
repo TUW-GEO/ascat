@@ -759,9 +759,9 @@ class ChronFiles(MultiFileHandler):
         for dt_cur in np.arange(dt_start, dt_end, dt_delta).astype(datetime):
             files, dates = self.search_date(
                 dt_cur,
-                search_date_fmt,
-                date_field,
-                date_field_fmt,
+                search_date_fmt=search_date_fmt,
+                date_field=date_field,
+                date_field_fmt=date_field_fmt,
                 return_date=True)
             for f, dt in zip(files, dates):
                 if f not in filenames and dt >= dt_start and dt < dt_end:
