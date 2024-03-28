@@ -357,7 +357,8 @@ class TemporalSwathAggregator:
             grouped_ds = xr.open_dataset(temp_path)
 
         groups = []
-        for timechunk, group in grouped_ds.groupby("time_chunks"):
+        for timechunk, group in grouped_ds.groupby("time_chunks", squeeze=False):
+            group = group.squeeze("time_chunks")
             if progress_to_stdout:
                 print(
                     f"writing time chunk {timechunk + 1}/{len(grouped_ds['time_chunks'])}...      ",
