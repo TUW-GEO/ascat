@@ -39,6 +39,7 @@ from dask.array import unique as da_unique
 
 import ascat.read_native.ragged_array_ts as rat
 from ascat.read_native.xarray_io import get_swath_product_id
+from ascat.read_native.xarray_io import dtype_to_nan
 from ascat.regrid.regrid import regrid_global_raster_ds, grid_to_regular_grid
 from ascat.regrid.regrid import retrieve_or_store_grid_lut
 
@@ -119,10 +120,16 @@ class TemporalSwathAggregator:
 
         self.grid = self.collection.grid
         self.data = None
-        self.agg_vars = [
-            "surface_soil_moisture",
-            "backscatter40",
-        ]
+        self.agg_vars = {
+            "surface_soil_moisture": {
+                "dtype": np.dtype("int16"),
+                "scale_factor": 1e-2,
+            },
+            "backscatter40": {
+                "dtype": np.dtype("int32"),
+                "scale_factor": 1e-7,
+            },
+        }
         self.mask_probs = {
             "snow_cover_probability": (
                 80 if snow_cover_mask is None else snow_cover_mask
@@ -148,6 +155,35 @@ class TemporalSwathAggregator:
     def _set_metadata(self, ds):
         """Add appropriate metadata to datasets."""
         return ds
+
+    def _create_output_encoding(self):
+        output_encoding = {
+            "lat": {"dtype": np.dtype("int32"),
+                    "scale_factor": 1e-6,
+                    "zlib": True,
+                    "complevel": 4,
+                    "_FillValue": dtype_to_nan[np.dtype("int32")]},
+            "lon": {"dtype": np.dtype("int32"),
+                    "scale_factor": 1e-6,
+                    "zlib": True,
+                    "complevel": 4,
+                    "_FillValue": dtype_to_nan[np.dtype("int32")]},
+            "time": {"dtype": np.dtype("float64"),
+                     "zlib": True,
+                     "complevel": 4,
+                     "_FillValue": dtype_to_nan[np.dtype("float64")]},
+        }
+        for var in self.agg_vars:
+            if var in output_encoding:
+                continue
+            output_encoding[var] = {
+                "dtype": self.agg_vars[var]["dtype"],
+                "scale_factor": self.agg_vars[var]["scale_factor"],
+                "zlib": True,
+                "complevel": 4,
+                "_FillValue": dtype_to_nan[self.agg_vars[var]["dtype"]],
+            }
+        return output_encoding
 
     def write_time_chunks(self, out_dir):
         """Loop through time chunks and write them to file."""
@@ -189,7 +225,8 @@ class TemporalSwathAggregator:
         if progress_to_stdout:
             print("saving datasets...", end="\r")
 
-        xr.save_mfdataset(datasets, paths)
+        output_encoding = self._create_output_encoding()
+        xr.save_mfdataset(datasets, paths, encoding=output_encoding)
         print("complete                     ")
 
     def get_time_chunks(self):
@@ -259,7 +296,6 @@ class TemporalSwathAggregator:
         ds["time_chunks"] = (
             ds.time - np.datetime64(self.start_dt, "ns")
         ) // self.timedelta
-
 
         # get unique time_chunk and location_id values so we can tell xarray_reduce
         # what to expect.
