@@ -313,27 +313,35 @@ def create_variable_encodings(ds,
         custom_variable_encodings = {}
 
     if "row_size" in ds.data_vars:
-        first_var = "row_size"
+        # contiguous RA case
+        first_var = {"row_size": {"dtype": "int64"}}
+        coord_vars = {
+            "lon": {"dtype": "float32",},
+            "lat": {"dtype": "float32",},
+            "alt": {"dtype": "float32",},
+        }
     elif "locationIndex" in ds.data_vars:
-        first_var = "locationIndex"
+        # indexed RA case
+        first_var = {"locationIndex": {"dtype": "int64"}}
+        coord_vars = {
+            "lon": {"dtype": "float32"},
+            "lat": {"dtype": "float32"},
+            "alt": {"dtype": "float32"},
+        }
     else:
-        raise ValueError("No row_size or locationIndex in ds."
-                         " Cannot determine if indexed or ragged")
+        # swath file case
+        first_var = {}
+        coord_vars = {
+            "lon": {"dtype": "float32"},
+            "lat": {"dtype": "float32"},
+            # "longitude": {"dtype": "float32"},
+            # "latitude": {"dtype": "float32"},
+        }
 
     # default encodings for coordinates and row_size
     default_encoding = {
-        first_var: {
-            "dtype": "int64",
-        },
-        "lon": {
-            "dtype": "float32",
-        },
-        "lat": {
-            "dtype": "float32",
-        },
-        "alt": {
-            "dtype": "float32",
-        },
+        **first_var,
+        **coord_vars,
         "location_id": {
             "dtype": "int64",
         },
@@ -728,7 +736,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         return set_attributes(ds, variable_attributes, global_attributes)
 
     @staticmethod
-    def _create_variable_encodings(ds, custom_variable_encodings=None):
+    def _create_variable_encodings(ds, custom_variable_encodings=None, custom_dtypes=None):
         """
         A wrapper for xarray_io.create_variable_encodings. This can be overridden in a child class
         if different logic for this function is needed.
@@ -745,7 +753,7 @@ class AscatNetCDFCellBase(RaggedXArrayCellIOBase):
         ds : xarray.Dataset
             Dataset with encodings.
         """
-        return create_variable_encodings(ds, custom_variable_encodings)
+        return create_variable_encodings(ds, custom_variable_encodings, custom_dtypes)
 
 
 class SwathIOBase(ABC):
@@ -1009,8 +1017,7 @@ class SwathIOBase(ABC):
         ds : xarray.Dataset
             Dataset with encodings.
         """
-        return create_variable_encodings(ds, custom_variable_encodings,
-                                         custom_dtypes)
+        return create_variable_encodings(ds, custom_variable_encodings, custom_dtypes)
 
     @staticmethod
     def _preprocess(ds):
