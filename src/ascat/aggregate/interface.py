@@ -121,7 +121,7 @@ def temporal_swath_agg_main(cli_args):
         args.grid_store
     )
 
-    transf.write_time_chunks(args.outpath)
+    transf.write_time_steps(args.outpath)
 
 
 def run_temporal_swath_agg():

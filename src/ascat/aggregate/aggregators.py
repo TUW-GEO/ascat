@@ -185,8 +185,8 @@ class TemporalSwathAggregator:
             }
         return output_encoding
 
-    def write_time_chunks(self, out_dir):
-        """Loop through time chunks and write them to file."""
+    def write_time_steps(self, out_dir):
+        """Loop through time steps and write them to file."""
         product_id = self.product.lower().replace("_", "-")
         if self.regrid_degrees is None:
             grid_sampling = str(self.collection.ioclass.grid_sampling_km) + "km"
@@ -194,20 +194,20 @@ class TemporalSwathAggregator:
             grid_sampling = str(self.regrid_degrees) + "deg"
 
         if self.agg is not None:
-            datasets = self.get_aggregated_time_chunks()
+            datasets = self.get_aggregated_time_steps()
             agg_str = f"_{self.agg}"
         else:
-            datasets = self.get_time_chunks()
+            datasets = self.get_time_steps()
             agg_str = "_data"
 
         paths = []
         for ds in datasets:
-            chunk_start_str = (
+            step_start_str = (
                 np.datetime64(ds.attrs["start_time"])
                 .astype(datetime.datetime)
                 .strftime("%Y%m%d%H%M%S")
             )
-            chunk_end_str = (
+            step_end_str = (
                 np.datetime64(ds.attrs["end_time"])
                 .astype(datetime.datetime)
                 .strftime("%Y%m%d%H%M%S")
@@ -217,8 +217,8 @@ class TemporalSwathAggregator:
                 f"_{product_id}"
                 f"_{grid_sampling}"
                 f"{agg_str}"
-                f"_{chunk_start_str}"
-                f"_{chunk_end_str}.nc"
+                f"_{step_start_str}"
+                f"_{step_end_str}.nc"
             )
             paths.append(Path(out_dir) / out_name)
 
@@ -229,36 +229,36 @@ class TemporalSwathAggregator:
         xr.save_mfdataset(datasets, paths, encoding=output_encoding)
         print("complete                     ")
 
-    def get_time_chunks(self):
-        """Loop through time chunks of the range, return the merged data for each unmodified."""
-        time_chunks = pd.date_range(
+    def get_time_steps(self):
+        """Loop through time steps of the range, return the merged data for each unmodified."""
+        time_steps = pd.date_range(
             start=self.start_dt, end=self.end_dt, freq=self.timedelta
         )
         datasets = []
         if self.data is not None:
             # I don't know why this case would exist, but if it does...
             ds = self.data
-            for timechunk in time_chunks:
-                chunk_start = timechunk
-                chunk_end = timechunk + self.timedelta - pd.Timedelta("1s")
-                ds_chunk = ds.sel(time=slice(chunk_start, chunk_end))
-                ds_chunk.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
-                ds_chunk.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
-                datasets.append(ds_chunk)
+            for timestep in time_steps:
+                step_start = timestep
+                step_end = timestep + self.timedelta - pd.Timedelta("1s")
+                ds_step = ds.sel(time=slice(step_start, step_end))
+                ds_step.attrs["start_time"] = np.datetime64(step_start).astype(str)
+                ds_step.attrs["end_time"] = np.datetime64(step_end).astype(str)
+                datasets.append(ds_step)
         if self.data is None:
-            for timechunk in time_chunks:
-                chunk_start = timechunk
-                chunk_end = timechunk + self.timedelta
-                ds_chunk = self.collection.read(date_range=(chunk_start, chunk_end))
-                chunk_end = chunk_end - pd.Timedelta("1s")
-                ds_chunk.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
-                ds_chunk.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
-                datasets.append(ds_chunk)
+            for timestep in time_steps:
+                step_start = timestep
+                step_end = timestep + self.timedelta
+                ds_step = self.collection.read(date_range=(step_start, step_end))
+                step_end = step_end - pd.Timedelta("1s")
+                ds_step.attrs["start_time"] = np.datetime64(step_start).astype(str)
+                ds_step.attrs["end_time"] = np.datetime64(step_end).astype(str)
+                datasets.append(ds_step)
 
         return datasets
 
-    def get_aggregated_time_chunks(self):
-        """Loop through data in time chunks, aggregating it over time."""
+    def get_aggregated_time_steps(self):
+        """Loop through data in time steps, aggregating it over time."""
         if self.data is None:
             self._read_data()
         ds = self.data
@@ -292,24 +292,24 @@ class TemporalSwathAggregator:
         if progress_to_stdout:
             print("grouping data...           ")
 
-        # discretize time into integer-labeled chunks according to our desired frequency
-        ds["time_chunks"] = (
+        # discretize time into integer-labeled steps according to our desired frequency
+        ds["time_steps"] = (
             ds.time - np.datetime64(self.start_dt, "ns")
         ) // self.timedelta
 
-        # get unique time_chunk and location_id values so we can tell xarray_reduce
+        # get unique time_step and location_id values so we can tell xarray_reduce
         # what to expect.
-        expected_time_chunks = da_unique(ds["time_chunks"].data).compute()
+        expected_time_steps = da_unique(ds["time_steps"].data).compute()
         expected_location_ids = da_unique(ds["location_id"].data).compute()
 
         # remove NaN from the expected location ids (this was introduced by the masking)
         expected_location_ids = expected_location_ids[~np.isnan(expected_location_ids)]
 
-        # group the data by time_chunks and location_id and aggregate it
+        # group the data by time_steps and location_id and aggregate it
         grouped_ds = xarray_reduce(ds[present_agg_vars],
-                                   ds["time_chunks"],
+                                   ds["time_steps"],
                                    ds["location_id"],
-                                   expected_groups=(expected_time_chunks,
+                                   expected_groups=(expected_time_steps,
                                                     expected_location_ids),
                                    func=self.agg)
 
@@ -342,11 +342,11 @@ class TemporalSwathAggregator:
             grouped_ds["lat"] = ("location_id", lats)
             grouped_ds = grouped_ds.set_coords(["lon", "lat"])
 
-        grouped_ds = grouped_ds.chunk({"time_chunks": 1})
+        grouped_ds = grouped_ds.chunk({"time_steps": 1})
 
         # Compute the results, write to a temporary directory, and then read it back in.
         # If we don't do this, dask will try to compute the entire dataset
-        # for each chunk of time before writing it to disk later.
+        # for each step of time before writing it to disk later.
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "ascat.nc"
@@ -357,21 +357,21 @@ class TemporalSwathAggregator:
             grouped_ds = xr.open_dataset(temp_path)
 
         groups = []
-        for timechunk, group in grouped_ds.groupby("time_chunks", squeeze=False):
-            group = group.squeeze("time_chunks")
+        for timestep, group in grouped_ds.groupby("time_steps", squeeze=False):
+            group = group.squeeze("time_steps")
             if progress_to_stdout:
                 print(
-                    f"writing time chunk {timechunk + 1}/{len(grouped_ds['time_chunks'])}...      ",
+                    f"writing time step {timestep + 1}/{len(grouped_ds['time_steps'])}...      ",
                     end="\r",
                 )
-            chunk_start = self.start_dt + self.timedelta * timechunk
-            chunk_end = (
-                self.start_dt + self.timedelta * (timechunk + 1) - pd.Timedelta("1s")
+            step_start = self.start_dt + self.timedelta * timestep
+            step_end = (
+                self.start_dt + self.timedelta * (timestep + 1) - pd.Timedelta("1s")
             )
-            group.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
-            group.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
-            group["time_chunks"] = np.datetime64(chunk_start, "ns")
-            group = group.rename({"time_chunks": "time"})
+            group.attrs["start_time"] = np.datetime64(step_start).astype(str)
+            group.attrs["end_time"] = np.datetime64(step_end).astype(str)
+            group["time_steps"] = np.datetime64(step_start, "ns")
+            group = group.rename({"time_steps": "time"})
             group = self._set_metadata(group)
             groups.append(group)
         return groups
