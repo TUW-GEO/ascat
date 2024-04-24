@@ -367,7 +367,7 @@ class OrthoMultiCell:
     def read(self, date_range=None, valid_gpis=None):
         ds = xr.open_dataset(self.filename)
         # ds = ds.set_index(locations="location_id")
-        ds = ds.chunk({"time": self.chunks, "locations": self.chunks"})
+        ds = ds.chunk({"time": self.chunks, "locations": self.chunks})
         # do these after merging?
         if date_range is not None:
             ds = ds.sel(time=slice(*date_range))
