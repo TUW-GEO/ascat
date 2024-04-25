@@ -32,6 +32,7 @@ import ascat.aggregate.aggregators as aggs
 
 aggs.progress_to_stdout = True
 
+
 def parse_args_temporal_swath_agg(args):
     parser = argparse.ArgumentParser(
         description='Calculate aggregates of ASCAT swath data over a given time period'
@@ -73,8 +74,19 @@ def parse_args_temporal_swath_agg(args):
         metavar='SUBSCAT_MASK',
         help='Subsurface scattering probability value above which to mask the source data'
     )
+    parser.add_argument(
+        '--regrid',
+        metavar='REGRID_DEG',
+        help='Regrid the data to a regular grid with the given spacing in degrees'
+    )
+    parser.add_argument(
+        '--grid_store',
+        metavar='GRID_STORE',
+        help='Path to a directory for storing grids and lookup tables between them'
+    )
 
-    return parser.parse_args(args), parser
+    return parser.parse_args(args)
+
 
 def temporal_swath_agg_main(cli_args):
     """
@@ -85,11 +97,16 @@ def temporal_swath_agg_main(cli_args):
     cli_args : list
         Command line arguments.
     """
-    args, parser = parse_args_temporal_swath_agg(cli_args)
+    args = parse_args_temporal_swath_agg(cli_args)
     int_args = ["snow_cover_mask", "frozen_soil_mask", "subsurface_scattering_mask"]
     for arg in int_args:
         if getattr(args, arg) is not None:
             setattr(args, arg, int(getattr(args, arg)))
+
+    float_args = ["regrid"]
+    for arg in float_args:
+        if getattr(args, arg) is not None:
+            setattr(args, arg, float(getattr(args, arg)))
 
     transf = aggs.TemporalSwathAggregator(
         args.filepath,
@@ -99,10 +116,13 @@ def temporal_swath_agg_main(cli_args):
         args.agg,
         args.snow_cover_mask,
         args.frozen_soil_mask,
-        args.subsurface_scattering_mask
+        args.subsurface_scattering_mask,
+        args.regrid,
+        args.grid_store
     )
 
-    transf.write_time_chunks(args.outpath)
+    transf.write_time_steps(args.outpath)
+
 
 def run_temporal_swath_agg():
     """

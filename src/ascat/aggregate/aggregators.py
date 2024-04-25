@@ -26,6 +26,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import datetime
+import tempfile
 
 from pathlib import Path
 
@@ -33,31 +34,36 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from flox import groupby_reduce
 from flox.xarray import xarray_reduce
-
-from dask.array import vstack
+from dask.array import unique as da_unique
 
 import ascat.read_native.ragged_array_ts as rat
 from ascat.read_native.xarray_io import get_swath_product_id
+from ascat.read_native.xarray_io import dtype_to_nan
+from ascat.regrid.regrid import regrid_global_raster_ds, grid_to_regular_grid
+from ascat.regrid.regrid import retrieve_or_store_grid_lut
+
 
 progress_to_stdout = False
 
+
 class TemporalSwathAggregator:
-    """ Class to aggregate ASCAT data its location ids over time."""
+    """Class to aggregate ASCAT data its location ids over time."""
 
     def __init__(
-            self,
-            filepath,
-            start_dt,
-            end_dt,
-            t_delta,
-            agg,
-            snow_cover_mask=None,
-            frozen_soil_mask=None,
-            subsurface_scattering_mask=None,
+        self,
+        filepath,
+        start_dt,
+        end_dt,
+        t_delta,
+        agg,
+        snow_cover_mask=None,
+        frozen_soil_mask=None,
+        subsurface_scattering_mask=None,
+        regrid_degrees=None,
+        grid_store_path=None,
     ):
-        """ Initialize the class.
+        """Initialize the class.
 
         Parameters
         ----------
@@ -77,12 +83,31 @@ class TemporalSwathAggregator:
             Frozen soil probability value above which to mask the source data.
         subsurface_scattering_mask : int, optional
             Subsurface scattering probability value above which to mask the source data.
+        regrid_degrees : int, optional
+            Degrees defining the size of a regular grid to regrid the data to.
+        grid_store_path : str, optional
+            Path to store the grid lookup tables and new grids for easy retrieval.
         """
         self.filepath = filepath
         self.start_dt = datetime.datetime.strptime(start_dt, "%Y-%m-%dT%H:%M:%S")
         self.end_dt = datetime.datetime.strptime(end_dt, "%Y-%m-%dT%H:%M:%S")
         self.timedelta = pd.Timedelta(t_delta)
+        if agg in [
+            "mean",
+            "median",
+            "mode",
+            "std",
+            "min",
+            "max",
+            "argmin",
+            "argmax",
+            "quantile",
+            "first",
+            "last",
+        ]:
+            agg = "nan" + agg
         self.agg = agg
+        self.regrid_degrees = regrid_degrees
 
         # assumes ONLY swath files are in the folder
         first_fname = str(next(Path(filepath).rglob("*.nc")).name)
@@ -95,10 +120,16 @@ class TemporalSwathAggregator:
 
         self.grid = self.collection.grid
         self.data = None
-        self.agg_vars = [
-            "surface_soil_moisture",
-            "backscatter40",
-        ]
+        self.agg_vars = {
+            "surface_soil_moisture": {
+                "dtype": np.dtype("int16"),
+                "scale_factor": 1e-2,
+            },
+            "backscatter40": {
+                "dtype": np.dtype("int32"),
+                "scale_factor": 1e-7,
+            },
+        }
         self.mask_probs = {
             "snow_cover_probability": (
                 80 if snow_cover_mask is None else snow_cover_mask
@@ -110,167 +141,237 @@ class TemporalSwathAggregator:
                 90 if subsurface_scattering_mask is None else subsurface_scattering_mask
             ),
         }
+        self.grid_store_path = None or grid_store_path
 
     def _read_data(self):
         if progress_to_stdout:
-            print("reading data, this may take some time...")
-        self.data = self.collection.read(date_range=(self.start_dt, self.end_dt))
+            print("constructing dataset, this may take some time...")
+        self.data = self.collection.read(
+            date_range=(self.start_dt, self.end_dt),
+        )
         if progress_to_stdout:
-            print("done reading data")
+            print("done constructing dataset")
 
     def _set_metadata(self, ds):
         """Add appropriate metadata to datasets."""
         return ds
 
-    def write_time_chunks(self, out_dir):
-        """Loop through time chunks and write them to file."""
+    def _create_output_encoding(self):
+        output_encoding = {
+            "lat": {"dtype": np.dtype("int32"),
+                    "scale_factor": 1e-6,
+                    "zlib": True,
+                    "complevel": 4,
+                    "_FillValue": dtype_to_nan[np.dtype("int32")]},
+            "lon": {"dtype": np.dtype("int32"),
+                    "scale_factor": 1e-6,
+                    "zlib": True,
+                    "complevel": 4,
+                    "_FillValue": dtype_to_nan[np.dtype("int32")]},
+            "time": {"dtype": np.dtype("float64"),
+                     "zlib": True,
+                     "complevel": 4,
+                     "_FillValue": dtype_to_nan[np.dtype("float64")]},
+        }
+        for var in self.agg_vars:
+            if var in output_encoding:
+                continue
+            output_encoding[var] = {
+                "dtype": self.agg_vars[var]["dtype"],
+                "scale_factor": self.agg_vars[var]["scale_factor"],
+                "zlib": True,
+                "complevel": 4,
+                "_FillValue": dtype_to_nan[self.agg_vars[var]["dtype"]],
+            }
+        return output_encoding
+
+    def write_time_steps(self, out_dir):
+        """Loop through time steps and write them to file."""
         product_id = self.product.lower().replace("_", "-")
-        grid_sampling_km = self.collection.ioclass.grid_sampling_km
+        if self.regrid_degrees is None:
+            grid_sampling = str(self.collection.ioclass.grid_sampling_km) + "km"
+        else:
+            grid_sampling = str(self.regrid_degrees) + "deg"
+
         if self.agg is not None:
-            yield_func = self.yield_aggregated_time_chunks
+            datasets = self.get_aggregated_time_steps()
             agg_str = f"_{self.agg}"
         else:
-            yield_func = self.yield_time_chunks
+            datasets = self.get_time_steps()
             agg_str = "_data"
 
-        for ds in yield_func():
-            chunk_start_str = (
+        paths = []
+        for ds in datasets:
+            step_start_str = (
                 np.datetime64(ds.attrs["start_time"])
                 .astype(datetime.datetime)
                 .strftime("%Y%m%d%H%M%S")
             )
-            chunk_end_str = (
+            step_end_str = (
                 np.datetime64(ds.attrs["end_time"])
                 .astype(datetime.datetime)
                 .strftime("%Y%m%d%H%M%S")
             )
-            # if location_id is not an integer, convert it to an integer
-            if not np.issubdtype(ds.location_id.dtype, np.integer):
-                ds["location_id"] = ds.location_id.astype(int)
-            ds = self._set_metadata(ds)
             out_name = (
                 f"ascat"
                 f"_{product_id}"
-                f"_{grid_sampling_km}km"
+                f"_{grid_sampling}"
                 f"{agg_str}"
-                f"_{chunk_start_str}"
-                f"_{chunk_end_str}.nc"
+                f"_{step_start_str}"
+                f"_{step_end_str}.nc"
             )
+            paths.append(Path(out_dir) / out_name)
 
-            ds.to_netcdf(
-                Path(out_dir)/out_name,
-            )
+        if progress_to_stdout:
+            print("saving datasets...", end="\r")
 
-    def yield_time_chunks(self):
-        """Loop through time chunks of the range, yield the merged data unmodified."""
-        time_chunks = pd.date_range(
+        output_encoding = self._create_output_encoding()
+        xr.save_mfdataset(datasets, paths, encoding=output_encoding)
+        print("complete                     ")
+
+    def get_time_steps(self):
+        """Loop through time steps of the range, return the merged data for each unmodified."""
+        time_steps = pd.date_range(
             start=self.start_dt, end=self.end_dt, freq=self.timedelta
         )
+        datasets = []
         if self.data is not None:
             # I don't know why this case would exist, but if it does...
             ds = self.data
-            for timechunk in time_chunks:
-                chunk_start = timechunk
-                chunk_end = timechunk + self.timedelta - pd.Timedelta("1s")
-                ds_chunk = ds.sel(time=slice(chunk_start, chunk_end))
-                ds_chunk.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
-                ds_chunk.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
-                yield ds_chunk
+            for timestep in time_steps:
+                step_start = timestep
+                step_end = timestep + self.timedelta - pd.Timedelta("1s")
+                ds_step = ds.sel(time=slice(step_start, step_end))
+                ds_step.attrs["start_time"] = np.datetime64(step_start).astype(str)
+                ds_step.attrs["end_time"] = np.datetime64(step_end).astype(str)
+                datasets.append(ds_step)
         if self.data is None:
-            for timechunk in time_chunks:
-                chunk_start = timechunk
-                chunk_end = timechunk + self.timedelta
-                ds_chunk = self.collection.read(date_range=(chunk_start, chunk_end))
-                chunk_end = chunk_end - pd.Timedelta("1s")
-                ds_chunk.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
-                ds_chunk.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
-                yield ds_chunk
+            for timestep in time_steps:
+                step_start = timestep
+                step_end = timestep + self.timedelta
+                ds_step = self.collection.read(date_range=(step_start, step_end))
+                step_end = step_end - pd.Timedelta("1s")
+                ds_step.attrs["start_time"] = np.datetime64(step_start).astype(str)
+                ds_step.attrs["end_time"] = np.datetime64(step_end).astype(str)
+                datasets.append(ds_step)
 
-    def yield_aggregated_time_chunks(self):
-        """Loop through data in time chunks, aggregating it over time."""
+        return datasets
+
+    def get_aggregated_time_steps(self):
+        """Loop through data in time steps, aggregating it over time."""
         if self.data is None:
             self._read_data()
         ds = self.data
+        present_agg_vars = [var for var in self.agg_vars if var in ds.variables]
+
         if progress_to_stdout:
             print("masking data...", end="\r")
-        # mask ds where "surface_flag" is 1, "snow_cover_probability" is > 90, or "frozen_soil_probability" is > 90
-        mask = (
+
+        # mask ds where "surface_flag" is 1, "snow_cover_probability" is > 90,
+        # or "frozen_soil_probability" is > 90
+        # (or whatever values the user has defined)
+        global_mask = (
             (ds.surface_flag != 0)
-            | (ds.snow_cover_probability > self.mask_probs["snow_cover_probability"])
-            | (ds.frozen_soil_probability > self.mask_probs["frozen_soil_probability"])
-            | (ds.subsurface_scattering_probability > self.mask_probs["subsurface_scattering_probability"])
+            | (
+                ds.subsurface_scattering_probability
+                > self.mask_probs["subsurface_scattering_probability"]
+            )
         )
-        ds = ds.where(~mask, drop=False)
-        ds["time_chunks"] = (
+        variable_masks = {
+            "surface_soil_moisture": (
+                (ds["frozen_soil_probability"] > self.mask_probs["frozen_soil_probability"])
+                | (ds["snow_cover_probability"] > self.mask_probs["snow_cover_probability"])
+            ),
+        }
+
+        ds = ds.where(~global_mask, drop=False)
+
+        for var, var_mask in variable_masks.items():
+            ds[var] = ds[var].where(~var_mask, drop=False)
+
+        if progress_to_stdout:
+            print("grouping data...           ")
+
+        # discretize time into integer-labeled steps according to our desired frequency
+        ds["time_steps"] = (
             ds.time - np.datetime64(self.start_dt, "ns")
         ) // self.timedelta
 
-        present_agg_vars = [var for var in self.agg_vars if var in ds.variables]
+        # get unique time_step and location_id values so we can tell xarray_reduce
+        # what to expect.
+        expected_time_steps = da_unique(ds["time_steps"].data).compute()
+        expected_location_ids = da_unique(ds["location_id"].data).compute()
 
-        agg_vars_stack = vstack([ds[var].data for var in present_agg_vars])
+        # remove NaN from the expected location ids (this was introduced by the masking)
+        expected_location_ids = expected_location_ids[~np.isnan(expected_location_ids)]
 
-        if progress_to_stdout:
-            print("constructing groups...", end="\r")
-        grouped_data, time_groups, loc_groups = groupby_reduce(
-            agg_vars_stack,
-            ds["time_chunks"],
-            ds["location_id"],
-            func=self.agg
-        )
-        # shape of grouped_data is (n_agg_vars, n_time_chunks, n_locations)
-        # now we need to rebuild an xarray dataset from this
-        # we can use the time_groups and loc_groups to do this
-        grouped_ds = xr.Dataset(
-            {
-                var: (("time_chunks", "location_id"), grouped_data[i])
-                for i, var in enumerate(present_agg_vars)
-            },
-            coords={
-                "time_chunks": time_groups,
-                "location_id": loc_groups,
-            },
-        )
+        # group the data by time_steps and location_id and aggregate it
+        grouped_ds = xarray_reduce(ds[present_agg_vars],
+                                   ds["time_steps"],
+                                   ds["location_id"],
+                                   expected_groups=(expected_time_steps,
+                                                    expected_location_ids),
+                                   func=self.agg)
 
-        lons, lats = self.grid.gpi2lonlat(grouped_ds.location_id.values)
-        grouped_ds["lon"] = ("location_id", lons)
-        grouped_ds["lat"] = ("location_id", lats)
-        grouped_ds = grouped_ds.set_coords(["lon", "lat"])
+        # convert the location_id back to an integer
+        grouped_ds["location_id"] = grouped_ds["location_id"].astype(int)
 
-        for timechunk, group in grouped_ds.groupby("time_chunks"):
+        if self.regrid_degrees is not None:
             if progress_to_stdout:
-                print(f"processing time chunk {timechunk + 1}/{len(time_groups)}...      ", end="\r")
-            chunk_start = self.start_dt + self.timedelta * timechunk
-            chunk_end = (
-                self.start_dt + self.timedelta * (timechunk + 1) - pd.Timedelta("1s")
-            )
-            group.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
-            group.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
-            group["time_chunks"] = np.datetime64(chunk_start, "ns")
-            # rename time_chunks to time
-            group = group.rename({"time_chunks": "time"})
-            yield group
+                print("regridding             ")
+            grid_store_path = self.grid_store_path
+            if grid_store_path is not None:
+                old_grid_id = f"fib_grid_{self.collection.ioclass.grid_sampling_km}km"
+                new_grid_id = f"reg_grid_{self.regrid_degrees}deg"
+                new_grid, old_grid_lut, _ = retrieve_or_store_grid_lut(
+                    grid_store_path,
+                    self.grid,
+                    old_grid_id,
+                    new_grid_id,
+                    self.regrid_degrees
+                )
+            else:
+                new_grid, old_grid_lut, _ = grid_to_regular_grid(
+                    self.grid, self.regrid_degrees
+                )
+            grouped_ds = regrid_global_raster_ds(grouped_ds, new_grid, old_grid_lut)
 
-        # # alternative implementation: loop through time chunks and THEN build the dataset
-        # # for each
-        # lons, lats = self.grid.gpi2lonlat(loc_groups)
-        # for timegroup in time_groups:
-        #     print(f"processing time chunk {timegroup + 1}/{len(time_groups)}...      ", end="\r")
-        #     group_ds = xr.Dataset(
-        #         {
-        #             var: (("location_id",), grouped_data[i, timegroup])
-        #             for i, var in enumerate(present_agg_vars)
-        #         },
-        #         coords={
-        #             "location_id": loc_groups,
-        #             "lon": ("location_id", lons),
-        #             "lat": ("location_id", lats),
-        #         },
-        #     )
-        #     chunk_start = self.start_dt + self.timedelta * timegroup
-        #     chunk_end = (
-        #         self.start_dt + self.timedelta * (timegroup + 1) - pd.Timedelta("1s")
-        #     )
-        #     group_ds.attrs["start_time"] = np.datetime64(chunk_start).astype(str)
-        #     group_ds.attrs["end_time"] = np.datetime64(chunk_end).astype(str)
-        #     group_ds["time"] = np.datetime64(chunk_start, "ns")
-        #     yield group_ds
+        else:
+            lons, lats = self.grid.gpi2lonlat(grouped_ds.location_id.values)
+            grouped_ds["lon"] = ("location_id", lons)
+            grouped_ds["lat"] = ("location_id", lats)
+            grouped_ds = grouped_ds.set_coords(["lon", "lat"])
+
+        grouped_ds = grouped_ds.chunk({"time_steps": 1})
+
+        # Compute the results, write to a temporary directory, and then read it back in.
+        # If we don't do this, dask will try to compute the entire dataset
+        # for each step of time before writing it to disk later.
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "ascat.nc"
+            if progress_to_stdout:
+                print("computing results...             ")
+            grouped_ds.to_netcdf(temp_path)
+            grouped_ds.close()
+            grouped_ds = xr.open_dataset(temp_path)
+
+        groups = []
+        for timestep, group in grouped_ds.groupby("time_steps", squeeze=False):
+            group = group.squeeze("time_steps")
+            if progress_to_stdout:
+                print(
+                    f"writing time step {timestep + 1}/{len(grouped_ds['time_steps'])}...      ",
+                    end="\r",
+                )
+            step_start = self.start_dt + self.timedelta * timestep
+            step_end = (
+                self.start_dt + self.timedelta * (timestep + 1) - pd.Timedelta("1s")
+            )
+            group.attrs["start_time"] = np.datetime64(step_start).astype(str)
+            group.attrs["end_time"] = np.datetime64(step_end).astype(str)
+            group["time_steps"] = np.datetime64(step_start, "ns")
+            group = group.rename({"time_steps": "time"})
+            group = self._set_metadata(group)
+            groups.append(group)
+        return groups
