@@ -423,7 +423,7 @@ class CellGridFiles(MultiFileHandler):
         cache_size=0,
     ):
         """
-        Initialize ChronFiles class.
+        Initialize CellGridFiles class.
 
         Parameters
         ----------
@@ -622,7 +622,7 @@ class CellGridFiles(MultiFileHandler):
         cells = self._cells_for_location_id(gpis)
         return cells
 
-    def read(
+    def extract(
             self,
             cell=None,
             location_id=None,
@@ -646,6 +646,8 @@ class CellGridFiles(MultiFileHandler):
             Tuple of (lon, lat) coordinates.
         bbox : tuple
             Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        date_range : tuple of np.datetime64
+            Tuple of (start, end) dates.
 
         Returns
         -------

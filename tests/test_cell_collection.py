@@ -305,7 +305,7 @@ class TestCellGridFiles(unittest.TestCase):
         self.assertEqual(contig_collection.spatial_search(location_id=[1493629, 1549346, 1493629]),
                          [str(root_path/"2587.nc"), str(root_path/"2588.nc")])
 
-    def test_read(self):
+    def test_extract(self):
         # sf_pattern = {
         #     "satellite_folder": "metop_[abc]",
         # }
@@ -316,25 +316,26 @@ class TestCellGridFiles(unittest.TestCase):
         contig_collection = CellGridFiles(
             **self._init_options(root_path, {"sat_str": "{sat}"}, {"sat_str": {"sat": "metop_[abc]"}})
         )
-        ds_2588 = contig_collection.read(cell=2588)
+        ds_2588 = contig_collection.extract(cell=2588)
         self.assertIsInstance(ds_2588, xr.Dataset)
 
-        ds_2587 = contig_collection.read(cell=2587)
+        ds_2587 = contig_collection.extract(cell=2587)
         self.assertIsInstance(ds_2587, xr.Dataset)
 
-        ds_cell_merged = contig_collection.read(cell=[2587, 2588])
+        ds_cell_merged = contig_collection.extract(cell=[2587, 2588])
         self.assertIsInstance(ds_cell_merged, xr.Dataset)
 
         # # DELETE THIS
         # from time import time
-        # collection_path = Path("/home/charriso/p14/data-write/RADAR/charriso/sig0_12.5/stack_cell_merged_sig0/metop_a")
+        # collection_path = Path("/home/charriso/p14/data-write/RADAR/charriso/sig0_12.5/stack_cell_merged_sig0/")
         # real_collection = CellGridFiles(
         #     **self._init_options(collection_path)
         # )
         # bbox = (-7, -4, -69, -65)
-        # # real_merged = real_collection.read(cell=[2587, 2588])
+        # # real_merged = real_collection.extract(cell=[2587, 2588])
         # start = time()
-        # real_merged = real_collection.read(bbox=bbox)
+        # real_merged = real_collection.extract(bbox=bbox)
+        # print(real_merged)
 
 
 
@@ -377,6 +378,21 @@ class TestRaggedArrayFiles(unittest.TestCase):
         self.assertEqual(contig_collection.spatial_search(location_id=[1493629, 1549346, 1493629]),
                          [str(root_path/"2587.nc"), str(root_path/"2588.nc")])
 
+    def test_extract(self):
+        root_path = self.tempdir_path / "contiguous"
+        contig_collection = RaggedArrayFiles(
+            root_path,
+            product_id="sig0_12.5",
+        )
+        real_merged = contig_collection.extract(cell=[2587, 2588])
+
+        root_path = self.tempdir_path
+        allsats_collection = RaggedArrayFiles(
+            root_path,
+            product_id="sig0_12.5",
+            all_sats=True,
+        )
+        real_merged = allsats_collection.extract(cell=[2587, 2588])
 
 class TestOrthomultiArrayFiles(unittest.TestCase):
     def setUp(self):
@@ -387,16 +403,16 @@ class TestOrthomultiArrayFiles(unittest.TestCase):
         self.tempdir.cleanup()
 
     # delete this later
-    def test_real(self):
-        realdata_path = Path("/home/charriso/p14/data-read/RADAR/warp/era5_land_2023/")
-        real_collection = OrthoMultiArrayFiles(
-            realdata_path,
-            product_id="nothing",
-            grid=load_grid(realdata_path/"grid.nc")
-        )
-        bbox = (-7, -4, -69, -65)
-        ds = real_collection.read(bbox=bbox)
-        print(ds)
+    # def test_real(self):
+    #     realdata_path = Path("/home/charriso/p14/data-read/RADAR/warp/era5_land_2023/")
+    #     real_collection = OrthoMultiArrayFiles(
+    #         realdata_path,
+    #         product_id="nothing",
+    #         grid=load_grid(realdata_path/"grid.nc")
+    #     )
+    #     bbox = (-7, -4, -69, -65)
+    #     ds = real_collection.read(bbox=bbox)
+    #     print(ds)
 
     # def test_init(self):
     #     om_collection = RaggedArrayFiles(
