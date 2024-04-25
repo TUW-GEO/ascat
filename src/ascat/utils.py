@@ -301,6 +301,50 @@ def get_roi_subset(ds, roi):
 
     return ds
 
+def get_grid_gpis(
+        grid,
+        cell=None,
+        location_id=None,
+        coords=None,
+        bbox=None,
+):
+    """
+    Get grid point indices.
+
+    Parameters
+    ----------
+    grid : pygeogrids.CellGrid
+        Grid object.
+    cell : int or iterable of int, optional
+        Cell number(s).
+    location_id : int or iterable of int, optional
+        Location ID.
+    coords : tuple, optional
+        Tuple of (lon, lat) coordinates.
+    bbox : tuple, optional
+        Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+
+    Returns
+    -------
+    gpi : int
+        Grid point index.
+    """
+    if cell is not None:
+        gpis, lons, lats = grid.grid_points_for_cell(cell)
+    elif location_id is not None:
+        gpis = location_id
+        if not isinstance(gpis, list) and not isinstance(gpis, np.ndarray):
+            gpis = [gpis]
+        gpis = np.array(gpis)
+    elif coords is not None:
+        gpis = grid.find_nearest_gpi(*coords)
+    elif bbox is not None:
+        gpis = grid.get_bbox_grid_points(*bbox)
+    else:
+        return None
+
+    return gpis
+
 
 class Spacecraft:
     """
