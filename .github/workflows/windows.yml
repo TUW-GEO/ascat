@@ -1,4 +1,4 @@
-name: ascat_windows
+name: windows
 
 on:
   push:

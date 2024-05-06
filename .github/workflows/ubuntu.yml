@@ -1,4 +1,4 @@
-name: ascat_ubuntu
+name: ubuntu
 
 on:
   push:
