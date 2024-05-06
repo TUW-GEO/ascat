@@ -9,3 +9,5 @@ channels:
     - sphinx-design =0.5.0
     - sphinx_rtd_theme =2.0.0
     - pip
+    - pip:
+        - ../.
