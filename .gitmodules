@@ -1,0 +1,4 @@
+[submodule "tests/ascat-test-data"]
+	path = tests/ascat-test-data
+	url = git@git.geo.tuwien.ac.at:public_projects/rs/rs_testdata/ascat-test-data.git
+	lfs = true

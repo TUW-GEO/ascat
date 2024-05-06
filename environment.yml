@@ -20,6 +20,7 @@ dependencies:
   - pygeogrids
   - pynetcf
   - pytest
+  - fibgrid
   - pytest-cov
   - pytest-mpl
   - build
