@@ -10,6 +10,7 @@ dependencies:
 - h5py
 - xarray
 - dask
+- shapely
 - pip
 - pip:
   - cadati
