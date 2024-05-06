@@ -72,7 +72,7 @@ extensions = [
     "sphinx.ext.ifconfig",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
-    "myst_nb",
+    # "myst_nb",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
