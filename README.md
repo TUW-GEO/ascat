@@ -3,8 +3,8 @@
 [![PyPi](https://img.shields.io/pypi/v/ascat)](https://pypi.org/project/ascat/)
 [![Readthedocs](https://readthedocs.org/projects/ascat/badge/?version=latest)](http://ascat.readthedocs.org/)
 [![Downloads](https://img.shields.io/pypi/dm/ascat)](https://pypi.org/project/ascat)
-[![Linux actions status](https://github.com/TUW-GEO/ascat/workflows/ascat_ubunty.yml/badge.svg)](https://github.com/TUW-GEO/ascat/actions/workflows/ascat_ubuntu.yml)
-[![Windows actions status](https://github.com/TUW-GEO/ascat/workflows/ascat_windows.yml/badge.svg)](https://github.com/TUW-GEO/ascat/actions/workflows/ascat_windows.yml)
+[![Linux actions status](https://github.com/TUW-GEO/ascat/actions/workflows/ascat_ubuntu.yml/badge.svg)](https://github.com/TUW-GEO/ascat/actions/workflows/ascat_ubuntu.yml)
+[![Windows actions status](https://github.com/TUW-GEO/ascat/actions/workflows/ascat_windows.yml/badge.svg)](https://github.com/TUW-GEO/ascat/actions/workflows/ascat_windows.yml)
 [![Coveralls](https://coveralls.io/repos/github/TUW-GEO/ascat/badge.svg?branch=master)](https://coveralls.io/github/TUW-GEO/ascat?branch=master)
 
 Read and visualize data from the Advanced Scatterometer (ASCAT) on-board the series of Metop satellites.
