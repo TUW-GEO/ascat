@@ -19,12 +19,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          submodules: true # does not work with self-hosted testdata
+          submodules: false # does not work with self-hosted testdata
           fetch-depth: 0
-      - name: Checkout Testdata
+      - name: Checkout test data
         shell: bash -l {0}
         run : |
           git submodule init
+          git submodule sync
+          git submodule update
       - uses: conda-incubator/setup-miniconda@v2.0.1
         with:
           miniforge-variant: Mambaforge
