@@ -20,7 +20,6 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: false # does not work with self-hosted testdata
-          fetch-depth: 0
       - name: Checkout test data
         shell: bash -l {0}
         run : |

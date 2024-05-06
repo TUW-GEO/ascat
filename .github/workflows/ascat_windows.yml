@@ -14,27 +14,31 @@ jobs:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
         os: ['windows-latest']
+        ymlfile: ["environment_win.yml"]
 
     steps:
       - uses: actions/checkout@v2
         with:
           submodules: false # does not work with self-hosted testdata
-      - name: Checkout Testdata
+      - name: Checkout test data
         shell: bash -l {0}
         run : |
           git submodule init
+          git submodule sync
           git submodule update
       - uses: conda-incubator/setup-miniconda@v2.0.1
         with:
-          miniconda-version: "latest"
-          auto-update-conda: false
+          miniforge-variant: Mambaforge
+          miniforge-version: "latest"
+          channel-priority: flexible
           python-version: ${{ matrix.python-version }}
-          environment-file: environment_win.yml
+          environment-file: ${{ matrix.ymlfile }}
           activate-environment: ascat_env
           auto-activate-base: false
-      - name: Print environment infos
+      - name: Print infos
         shell: bash -l {0}
         run: |
+          git status
           conda info -a
           conda list
           pip list
@@ -43,6 +47,5 @@ jobs:
       - name: Install package and test
         shell: bash -l {0}
         run: |
-          pip install .
-          pip install pytest==6.2.5 tomli==1.2.3 pytest-cov==2.12.1
-          python setup.py test
+          pip install -e .[testing]
+          pytest --cache-clear

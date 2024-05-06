@@ -1,18 +1,28 @@
 name: ascat_env
 channels:
   - conda-forge
-dependencies:
-- numpy
-- pandas
-- pykdtree
-- h5py
-- netCDF4
-- pip
-- pip:
-  - cadati
-  - xarray
-  - requests
-  - tqdm
-  - lxml
-  - pygeogrids
-  - pynetcf
+  dependencies:
+    - numpy
+    - pandas
+    - pygrib
+    - netCDF4
+    - pykdtree
+    - h5py
+    - xarray
+    - dask
+    - shapely
+    - pip
+    - pip:
+        - cadati
+        - requests
+        - tqdm
+        - lxml
+        - pygeogrids
+        - pynetcf
+        - pytest
+        - fibgrid
+        - pytest-cov
+        - pytest-mpl
+        - build
+        - flake8
+        - yapf
