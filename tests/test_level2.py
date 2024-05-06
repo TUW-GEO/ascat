@@ -60,7 +60,8 @@ class Test_AscatL2BufrFile(unittest.TestCase):
         """
         Setup test files.
         """
-        data_path = get_testdata_path() / "eumetsat/ASCAT_L2_SM_125/bufr/Metop_B"
+        data_path = get_testdata_path(
+        ) / "eumetsat/ASCAT_L2_SM_125/bufr/Metop_B"
         fname = data_path / 'M01-ASCA-ASCSMR02-NA-5.0-20170220050900.000000000Z-20170220055833-1207110.bfr'
         self.reader = AscatL2BufrFile(fname)
 
@@ -90,12 +91,12 @@ class Test_AscatL2BufrFile(unittest.TestCase):
         ])
 
         nptest.assert_allclose(data['lat'][:25], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['Surface Soil Moisture (Ms)'][:25],
-                               ssm_should,
-                               atol=1e-5)
-        nptest.assert_allclose(data['Mean Surface Soil Moisture'][:25],
-                               ssm_mean_should,
-                               atol=1e-5)
+        nptest.assert_allclose(
+            data['Surface Soil Moisture (Ms)'][:25], ssm_should, atol=1e-5)
+        nptest.assert_allclose(
+            data['Mean Surface Soil Moisture'][:25],
+            ssm_mean_should,
+            atol=1e-5)
 
 
 class Test_AscatL2NcFile(unittest.TestCase):
@@ -137,12 +138,10 @@ class Test_AscatL2NcFile(unittest.TestCase):
         ])
 
         nptest.assert_allclose(data['latitude'][:25], lats_should, atol=1e-5)
-        nptest.assert_allclose(data['soil_moisture'][:25],
-                               ssm_should,
-                               atol=1e-5)
-        nptest.assert_allclose(data['mean_soil_moisture'][:25],
-                               ssm_mean_should,
-                               atol=1e-5)
+        nptest.assert_allclose(
+            data['soil_moisture'][:25], ssm_should, atol=1e-5)
+        nptest.assert_allclose(
+            data['mean_soil_moisture'][:25], ssm_mean_should, atol=1e-5)
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
@@ -167,38 +166,57 @@ class Test_AscatL2NcFile_AscatL2BufrFile(unittest.TestCase):
         data_nc, metadata = self.reader_nc.read()
         data_bufr, metadata = self.reader_bufr.read()
 
-        nptest.assert_allclose(data_nc['latitude'],
-                               data_bufr['lat'],
-                               atol=1e-4)
+        nptest.assert_allclose(
+            data_nc['latitude'], data_bufr['lat'], atol=1e-4)
 
         nc_bufr_matching = {
-            'slope40': 'Slope At 40 Deg Incidence Angle',
+            'slope40':
+                'Slope At 40 Deg Incidence Angle',
             'sigma40_error':
-            'Estimated Error In Sigma0 At 40 Deg Incidence Angle',
-            'utc_line_nodes': None,
-            'wet_backscatter': 'Wet Backscatter',
-            'swath_indicator': None,
-            'frozen_soil_probability': 'Frozen Land Surface Fraction',
-            'wetland_flag': 'Inundation And Wetland Fraction',
+                'Estimated Error In Sigma0 At 40 Deg Incidence Angle',
+            'utc_line_nodes':
+                None,
+            'wet_backscatter':
+                'Wet Backscatter',
+            'swath_indicator':
+                None,
+            'frozen_soil_probability':
+                'Frozen Land Surface Fraction',
+            'wetland_flag':
+                'Inundation And Wetland Fraction',
             # The processing flag definition between BUFR and netCDF is slightly different
             # 'proc_flag1': 'Soil Moisture Processing Flag',
-            'proc_flag2': None,
-            'abs_line_number': None,
-            'sat_track_azi': None,
-            'sigma40': 'Backscatter',
-            'soil_moisture': 'Surface Soil Moisture (Ms)',
-            'soil_moisture_error': 'Estimated Error In Surface Soil Moisture',
+            'proc_flag2':
+                None,
+            'abs_line_number':
+                None,
+            'sat_track_azi':
+                None,
+            'sigma40':
+                'Backscatter',
+            'soil_moisture':
+                'Surface Soil Moisture (Ms)',
+            'soil_moisture_error':
+                'Estimated Error In Surface Soil Moisture',
             # 'rainfall_flag': 'Rain Fall Detection',
-            'soil_moisture_sensitivity': 'Soil Moisture Sensitivity',
-            'corr_flags': 'Soil Moisture Correction Flag',
-            'dry_backscatter': 'Dry Backscatter',
-            'aggregated_quality_flag': None,
-            'mean_soil_moisture': 'Mean Surface Soil Moisture',
-            'as_des_pass': None,
+            'soil_moisture_sensitivity':
+                'Soil Moisture Sensitivity',
+            'corr_flags':
+                'Soil Moisture Correction Flag',
+            'dry_backscatter':
+                'Dry Backscatter',
+            'aggregated_quality_flag':
+                None,
+            'mean_soil_moisture':
+                'Mean Surface Soil Moisture',
+            'as_des_pass':
+                None,
             'slope40_error':
-            'Estimated Error In Slope At 40 Deg Incidence Angle',
-            'topography_flag': 'Topographic Complexity',
-            'snow_cover_probability': 'Snow Cover'
+                'Estimated Error In Slope At 40 Deg Incidence Angle',
+            'topography_flag':
+                'Topographic Complexity',
+            'snow_cover_probability':
+                'Snow Cover'
         }
 
         # BUFR contains less accurate data so we only compare to 0.1
@@ -226,9 +244,8 @@ class Test_AscatL2NcFile_AscatL2BufrFile(unittest.TestCase):
                          & (data_bufr[bufr_name] != bufr_float_nan)
                          & (~np.isnan(data_bufr[bufr_name])))
 
-            nptest.assert_allclose(data_nc[nc_name][valid],
-                                   data_bufr[bufr_name][valid],
-                                   atol=0.1)
+            nptest.assert_allclose(
+                data_nc[nc_name][valid], data_bufr[bufr_name][valid], atol=0.1)
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
@@ -336,9 +353,8 @@ class Test_AscatL2File(unittest.TestCase):
         nptest.assert_allclose(eps_ds['lat'][:25], lat_should, atol=1e-5)
         nptest.assert_allclose(eps_ds['lon'][:25], lon_should, atol=1e-5)
         nptest.assert_allclose(eps_ds['sm'][:25], sm_should, atol=1e-5)
-        nptest.assert_allclose(eps_ds['sm_mean'][:25],
-                               sm_mean_should,
-                               atol=1e-5)
+        nptest.assert_allclose(
+            eps_ds['sm_mean'][:25], sm_mean_should, atol=1e-5)
         nptest.assert_equal(eps_ds['time'][35:45], t_should)
 
 
@@ -380,9 +396,8 @@ class Test_AscatL2FileList(unittest.TestCase):
         eps_data, metadata = self.eps_smo.read(dt)
 
         for coord in ['lon', 'lat']:
-            nptest.assert_allclose(bufr_data[coord],
-                                   eps_data[coord],
-                                   atol=1e-4)
+            nptest.assert_allclose(
+                bufr_data[coord], eps_data[coord], atol=1e-4)
             nptest.assert_allclose(eps_data[coord], nc_data[coord], atol=1e-4)
             nptest.assert_allclose(nc_data[coord], bufr_data[coord], atol=1e-4)
 
@@ -393,19 +408,20 @@ class Test_AscatL2FileList(unittest.TestCase):
         dt_start = datetime(2018, 6, 12, 4, 0, 0)
         dt_end = datetime(2018, 6, 12, 4, 13, 0)
 
+        date_field_fmt = "%Y%m%d%H%M%S"
+
         bufr_data, metadata = self.bufr_smo.read_period(
-            dt_start, dt_end, date_str="%Y%m%d%H%M%S")
-        nc_data, metadata = self.nc_smo.read_period(dt_start,
-                                                    dt_end,
-                                                    date_str="%Y%m%d%H%M%S")
-        eps_data, metadata = self.eps_smo.read_period(dt_start,
-                                                      dt_end,
-                                                      date_str="%Y%m%d%H%M%S")
+            dt_start, dt_end, date_field_fmt=date_field_fmt)
+
+        nc_data, metadata = self.nc_smo.read_period(
+            dt_start, dt_end, date_field_fmt=date_field_fmt)
+
+        eps_data, metadata = self.eps_smo.read_period(
+            dt_start, dt_end, date_field_fmt=date_field_fmt)
 
         for coord in ['lon', 'lat']:
-            nptest.assert_allclose(bufr_data[coord],
-                                   eps_data[coord],
-                                   atol=1e-4)
+            nptest.assert_allclose(
+                bufr_data[coord], eps_data[coord], atol=1e-4)
             nptest.assert_allclose(eps_data[coord], nc_data[coord], atol=1e-4)
             nptest.assert_allclose(nc_data[coord], bufr_data[coord], atol=1e-4)
 

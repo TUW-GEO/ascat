@@ -48,6 +48,7 @@ xr.set_options(display_max_rows=100)
 
 TEST_DATA = Path("ascat_test_data")
 
+
 class TestCellFileCollection(unittest.TestCase):
     """
     Test the merge function
@@ -87,8 +88,10 @@ class TestCellFileCollection(unittest.TestCase):
 
     def test_from_product_id(self):
         return
-        h129 = CellFileCollection.from_product_id(self.cells_h129_idx,
-                                                  product_id="h129",)
+        h129 = CellFileCollection.from_product_id(
+            self.cells_h129_idx,
+            product_id="h129",
+        )
         self.assertEqual(h129.ioclass, AscatH129Cell)
 
         sig0_12_5 = CellFileCollection.from_product_id(
@@ -98,8 +101,10 @@ class TestCellFileCollection(unittest.TestCase):
 
         self.assertEqual(sig0_12_5.ioclass, AscatSIG0Cell12500m)
 
-        incorrect = CellFileCollection.from_product_id(self.cells_h129_idx,
-                                                       product_id="sig0_12.5",)
+        incorrect = CellFileCollection.from_product_id(
+            self.cells_h129_idx,
+            product_id="sig0_12.5",
+        )
 
         self.assertEqual(incorrect.ioclass, AscatSIG0Cell12500m)
 
@@ -107,9 +112,8 @@ class TestCellFileCollection(unittest.TestCase):
         # for the requested names, then an AttributeError since it tries to read a None object.
         with self.assertRaises(AttributeError):
             with self.assertWarns(RuntimeWarning):
-                incorrect.read(start_dt=datetime(2021, 1, 1),
-                               end_dt=datetime(2021, 1, 2))
-
+                incorrect.read(
+                    start_dt=datetime(2021, 1, 1), end_dt=datetime(2021, 1, 2))
 
     def test_cells_in_collection(self):
         sig0_12_5 = CellFileCollection.from_product_id(
@@ -121,7 +125,6 @@ class TestCellFileCollection(unittest.TestCase):
 
         expected_cells = [0, 1, 9]
         self.assertEqual(set(cells_in_collection), set(expected_cells))
-
 
     def test_read(self):
         coll = CellFileCollection.from_product_id(
@@ -141,24 +144,20 @@ class TestCellFileCollection(unittest.TestCase):
         id = coll.read(location_id=2148049)
         # assert something
 
-
     def test_create_cell_lookup(self):
         coll = CellFileCollection.from_product_id(
-            self.cells_sig0_12500_idx/"20221219000000_20230101000000",
-            product_id="sig0_12.5"
-        )
+            self.cells_sig0_12500_idx / "20221219000000_20230101000000",
+            product_id="sig0_12.5")
         self.assertIsNone(coll.cell_lut)
         coll.create_cell_lookup(10)
         self.assertIsNotNone(coll.cell_lut)
         self.assertEqual(set(coll.cell_lut[0]), {0, 1, 36, 37})
 
     def test_get_cell_path(self):
-        source_dir = self.cells_sig0_12500_idx/"20221219000000_20230101000000"
+        source_dir = self.cells_sig0_12500_idx / "20221219000000_20230101000000"
         coll = CellFileCollection.from_product_id(
-            source_dir,
-            product_id="sig0_12.5"
-        )
-        self.assertEqual(coll.get_cell_path(cell=0), source_dir/"0000.nc")
+            source_dir, product_id="sig0_12.5")
+        self.assertEqual(coll.get_cell_path(cell=0), source_dir / "0000.nc")
         with self.assertRaises(ValueError):
             # this should raise a value error since cell 2593 is not in the 12.5km FibGrid
             # with a cell size of 5km (max 2592)
@@ -166,14 +165,12 @@ class TestCellFileCollection(unittest.TestCase):
 
         # however, cells within the possible range that simply don't have a file in the
         # folder should work just fine
-        self.assertEqual(coll.get_cell_path(cell=100), source_dir/"0100.nc")
+        self.assertEqual(coll.get_cell_path(cell=100), source_dir / "0100.nc")
 
     def test_close(self):
-        source_dir = self.cells_sig0_12500_idx/"20221219000000_20230101000000"
+        source_dir = self.cells_sig0_12500_idx / "20221219000000_20230101000000"
         coll = CellFileCollection.from_product_id(
-            source_dir,
-            product_id="sig0_12.5"
-        )
+            source_dir, product_id="sig0_12.5")
         self.assertIsNone(coll.fid)
         coll.read(cell=0)
         self.assertIsNotNone(coll.fid)
@@ -211,54 +208,64 @@ class TestCellFileCollectionStack(unittest.TestCase):
 
         sig0_12_5 = CellFileCollectionStack.from_product_id(
             self.cells_sig0_12500_idx_metop_b,
-            product_id="sig0_12.5",)
+            product_id="sig0_12.5",
+        )
 
         self.assertEqual(sig0_12_5.ioclass, AscatSIG0Cell12500m)
 
-        product_id_mismatch = CellFileCollectionStack.from_product_id(self.cells_sig0_12500_idx_metop_b,
-                                                       product_id="h129",)
+        product_id_mismatch = CellFileCollectionStack.from_product_id(
+            self.cells_sig0_12500_idx_metop_b,
+            product_id="h129",
+        )
 
         self.assertEqual(product_id_mismatch.ioclass, AscatH129Cell)
 
         # TODO currently this does not fail, but it should.
         # with self.assertRaises():
-            # incorrect_data = product_id_mismatch.read(cell=0)
-
+        # incorrect_data = product_id_mismatch.read(cell=0)
 
     def test_add_collection(self):
-        stack = CellFileCollectionStack.from_product_id(self.cells_sig0_12500_idx_metop_b,
-                                                        product_id="sig0_12.5")
+        stack = CellFileCollectionStack.from_product_id(
+            self.cells_sig0_12500_idx_metop_b, product_id="sig0_12.5")
 
         self.assertEqual(set(stack.read(cell=1).sat_id.values), {4})
 
         # merge metop_b with metop_c
-        stack.add_collection([self.cells_sig0_12500_idx_metop_c], product_id="sig0_12.5")
+        stack.add_collection([self.cells_sig0_12500_idx_metop_c],
+                             product_id="sig0_12.5")
         self.assertEqual(set(stack.read(cell=1).sat_id.values), {4, 5})
 
     def test_read(self):
-        stack = CellFileCollectionStack.from_product_id(self.cells_sig0_12500_idx_metop_b,
-                                                        product_id="sig0_12.5")
+        stack = CellFileCollectionStack.from_product_id(
+            self.cells_sig0_12500_idx_metop_b, product_id="sig0_12.5")
 
         stack.read(cell=0)
         stack.read(location_id=2148049)
         stack.read(location_id=[1650078, 2148049])
 
     def test_merge_and_write(self):
-        stack = CellFileCollectionStack.from_product_id(self.cells_sig0_12500_idx_metop_b,
-                                                        product_id="sig0_12.5")
-        stack.merge_and_write(self.tmpdir/"5m", cells=[0,1,9])
-        stack.merge_and_write(self.tmpdir/"10m", cells=[0,1,9], out_cell_size=10)
+        stack = CellFileCollectionStack.from_product_id(
+            self.cells_sig0_12500_idx_metop_b, product_id="sig0_12.5")
+        stack.merge_and_write(self.tmpdir / "5m", cells=[0, 1, 9])
+        stack.merge_and_write(
+            self.tmpdir / "10m", cells=[0, 1, 9], out_cell_size=10)
 
         # test that writing to different grid cell size produces expected output
-        written_files_5m = {int(f.stem) for f in (self.tmpdir/"5m").glob("*.nc")}
-        written_files_10m = {int(f.stem) for f in (self.tmpdir/"10m").glob("*.nc")}
+        written_files_5m = {
+            int(f.stem) for f in (self.tmpdir / "5m").glob("*.nc")
+        }
+        written_files_10m = {
+            int(f.stem) for f in (self.tmpdir / "10m").glob("*.nc")
+        }
         self.assertEqual(written_files_5m, {0, 1, 9})
         self.assertEqual(written_files_10m, {0, 4})
 
         # test merge_and_write without multiprocessing
-        stack.merge_and_write(self.tmpdir/"5m", cells=[0,1,9], processes=1)
+        stack.merge_and_write(self.tmpdir / "5m", cells=[0, 1, 9], processes=1)
+
 
 class TestSwathFileCollection(unittest.TestCase):
+
     def assertNanEqual(self, d1, d2):
         try:
             np.testing.assert_equal(d1, d2)
@@ -269,9 +276,13 @@ class TestSwathFileCollection(unittest.TestCase):
         self.temporary_directory = TemporaryDirectory()
         self.tmpdir = Path(self.temporary_directory.name)
 
-        self.idx_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_new/metop_a")
+        self.idx_data = Path(
+            "/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_new/metop_a"
+        )
         self.ref_idx_data = TEST_DATA / "hsaf" / "sig0/12500m/metop_c" / "stack_cells"
-        self.ctg_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_merged_new/metop_a")
+        self.ctg_data = Path(
+            "/home/charriso/test_cells/data-write/RADAR/hsaf/stack_cell_merged_new/metop_a"
+        )
         # self.swath_data = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/metop_a")
         self.swath_data = TEST_DATA / "hsaf" / "h129" / "swaths"
         self.swath_data_sig0_6_25 = Path("")
@@ -284,14 +295,16 @@ class TestSwathFileCollection(unittest.TestCase):
 
     def test_init(self):
         return
-        a = SwathFileCollection.from_product_id(self.swath_data,
-                                product_id="h129",
-                                dask_scheduler="processes",
-                                )
+        a = SwathFileCollection.from_product_id(
+            self.swath_data,
+            product_id="h129",
+            dask_scheduler="processes",
+        )
         start = datetime(2021, 1, 1)
         end = datetime(2021, 1, 2)
         fname = a.get_filenames(start, end)
-        outdir = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a")
+        outdir = Path(
+            "/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a")
         from time import time
 
         # swath = xr.decode_cf(a.read(start, end, cell=0).load())
@@ -311,19 +324,22 @@ class TestSwathFileCollection(unittest.TestCase):
         print(time() - st_time, "seconds to stack a week of swaths")
 
     def test_from_product_id(self):
-        h129 = SwathFileCollection.from_product_id(self.swath_data,
-                                product_id="h129",
-                                )
+        h129 = SwathFileCollection.from_product_id(
+            self.swath_data,
+            product_id="h129",
+        )
         self.assertEqual(h129.ioclass, AscatH129Swath)
 
-        sig0_6_25 = SwathFileCollection.from_product_id(self.swath_data_sig0_6_25,
-                                product_id="sig0_6.25",
-                                )
+        sig0_6_25 = SwathFileCollection.from_product_id(
+            self.swath_data_sig0_6_25,
+            product_id="sig0_6.25",
+        )
         self.assertEqual(sig0_6_25.ioclass, AscatSIG0Swath6250m)
 
-        sig0_12_5 = SwathFileCollection.from_product_id(self.swath_data_sig0_12_5,
-                                product_id="sig0_12.5",
-                                )
+        sig0_12_5 = SwathFileCollection.from_product_id(
+            self.swath_data_sig0_12_5,
+            product_id="sig0_12.5",
+        )
         self.assertEqual(sig0_12_5.ioclass, AscatSIG0Swath12500m)
 
         # this works just fine because there are no checks to make sure the product_id actually
@@ -331,11 +347,14 @@ class TestSwathFileCollection(unittest.TestCase):
         # However, it will fail at some point when trying to read the data, either because the
         # format for filenames is different and it won't find any files, or because the data
         # has different variables and it will try to read something that doesn't exist.
-        incorrect = SwathFileCollection.from_product_id(self.swath_data,
-                                product_id="sig0_12.5",
-                                )
+        incorrect = SwathFileCollection.from_product_id(
+            self.swath_data,
+            product_id="sig0_12.5",
+        )
         self.assertEqual(incorrect.ioclass, AscatSIG0Swath12500m)
-        self.assertEqual(incorrect.get_filenames(datetime(2021, 1, 12), datetime(2021, 1, 13)), [])
+        self.assertEqual(
+            incorrect.get_filenames(
+                datetime(2021, 1, 12), datetime(2021, 1, 13)), [])
 
         # trying to read this data first raises a RuntimeWarning, since it can't find any files
         # for the requested names, then an AttributeError since it tries to read a None object.
@@ -344,12 +363,13 @@ class TestSwathFileCollection(unittest.TestCase):
                 incorrect.read((datetime(2021, 1, 12), datetime(2021, 1, 13)))
 
     def test_read_and_process(self):
-        swaths = SwathFileCollection.from_product_id(self.swath_data,
-                                                     product_id="h129",
-                                                     dask_scheduler="processes",
-                                                     )
-        start_p1 = datetime(2021, 1, 12)#, 0, 0, 0)
-        end_p1 = datetime(2021, 1, 13)#, 0, 3, 0)
+        swaths = SwathFileCollection.from_product_id(
+            self.swath_data,
+            product_id="h129",
+            dask_scheduler="processes",
+        )
+        start_p1 = datetime(2021, 1, 12)  #, 0, 0, 0)
+        end_p1 = datetime(2021, 1, 13)  #, 0, 3, 0)
         ds = swaths.read((start_p1, end_p1)).load()
         processed_ds = swaths.process(ds)
 
@@ -358,18 +378,20 @@ class TestSwathFileCollection(unittest.TestCase):
         if not run_test:
             return
 
-        swaths = SwathFileCollection.from_product_id(self.swath_data,
-                                product_id="h129",
-                                dask_scheduler="processes",
-                                )
+        swaths = SwathFileCollection.from_product_id(
+            self.swath_data,
+            product_id="h129",
+            dask_scheduler="processes",
+        )
         start_p1 = datetime(2021, 1, 1)
         end_p1 = datetime(2021, 1, 4)
         fnames_p1 = swaths.get_filenames(start_p1, end_p1)
         start_p2 = datetime(2021, 1, 4)
         end_p2 = datetime(2021, 1, 7)
         fnames_p2 = swaths.get_filenames(start_p2, end_p2)
-        tester = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/")
-        outdir = tester/"cells"
+        tester = Path(
+            "/home/charriso/test_cells/data-write/RADAR/hsaf/tester/")
+        outdir = tester / "cells"
         outdir_p1 = outdir / "p1"
         # outdir_p1.mkdir(exist_ok=True, parents=True)
         outdir_p2 = outdir / "p2"
@@ -378,7 +400,8 @@ class TestSwathFileCollection(unittest.TestCase):
         swaths.stack(fnames_p2, outdir_p2, processes=8)
         #
 
-        cells = CellFileCollectionStack.from_product_id(outdir, product_id="h129")
+        cells = CellFileCollectionStack.from_product_id(
+            outdir, product_id="h129")
         cell_outdir = tester / "merged_cells"
         cell_outdir.mkdir(exist_ok=True, parents=True)
         # print(cells.read(cell=0))
@@ -398,16 +421,23 @@ class TestSwathFileCollection(unittest.TestCase):
                 if min_cell_date is None or written_ds_min_time < min_cell_date:
                     min_cell_date = written_ds_min_time
 
-        self.assertLessEqual(max_cell_date.astype("datetime64[D]"), end_p2.date())
-        self.assertGreaterEqual(min_cell_date.astype("datetime64[D]"), start_p1.date())
+        self.assertLessEqual(
+            max_cell_date.astype("datetime64[D]"), end_p2.date())
+        self.assertGreaterEqual(
+            min_cell_date.astype("datetime64[D]"), start_p1.date())
 
     def test_output(self):
         return
-        ref = CellFileCollection.from_product_id(self.ref_idx_data/"20221212000000_20221219000000", product_id="sig0_12.5")
-        outdir = Path("/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a")
+        ref = CellFileCollection.from_product_id(
+            self.ref_idx_data / "20221212000000_20221219000000",
+            product_id="sig0_12.5")
+        outdir = Path(
+            "/home/charriso/test_cells/data-write/RADAR/hsaf/tester/metop_a")
         print("ref")
         print(ref.cells_in_collection)
-        print(ref.read(cell=0, mask_and_scale=False).sel(obs=range(0,10)).load())
+        print(
+            ref.read(cell=0,
+                     mask_and_scale=False).sel(obs=range(0, 10)).load())
 
         this = CellFileCollection.from_product_id(outdir, product_id="h129")
         print("this")
