@@ -19,3 +19,9 @@ dependencies:
   - lxml
   - pygeogrids
   - pynetcf
+  - pytest
+  - pytest-cov
+  - pytest-mpl
+  - build
+  - flake8
+  - yapf

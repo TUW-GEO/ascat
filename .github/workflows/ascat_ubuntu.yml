@@ -18,23 +18,25 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          submodules: false # does not work with self-hosted testdata
+          submodules: true # does not work with self-hosted testdata
+          fetch-depth: 0
       - name: Checkout Testdata
         shell: bash -l {0}
         run : |
           git submodule init
-          git submodule update
       - uses: conda-incubator/setup-miniconda@v2.0.1
         with:
-          miniconda-version: "latest"
-          auto-update-conda: true
+          miniforge-variant: Mambaforge
+          miniforge-version: "latest"
+          channel-priority: flexible
           python-version: ${{ matrix.python-version }}
-          environment-file: environment.yml
+          environment-file: ${{ matrix.ymlfile }}
           activate-environment: ascat_env
           auto-activate-base: false
-      - name: Print environment infos
+      - name: Print infos
         shell: bash -l {0}
         run: |
+          git status
           conda info -a
           conda list
           pip list
@@ -46,17 +48,11 @@ jobs:
           mkdir -p .artifacts
           filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
           conda env export --no-builds | grep -v "prefix" > .artifacts/$filename
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: os_py_environments
-          path: .artifacts/*
       - name: Install package and test
         shell: bash -l {0}
         run: |
-          pip install .
-          pip install pytest==6.2.5 coverage==5.2.1 tomli==1.2.3
-          python setup.py test
+          pip install -e .[testing]
+          pytest --cache-clear
       - name: Upload Coverage
         shell: bash -l {0}
         run: |
@@ -65,6 +61,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COVERALLS_FLAG_NAME: ${{ matrix.python-version }}
           COVERALLS_PARALLEL: true
+      - name: Create wheel and dist package
+        shell: bash -l {0}
+        run: |
+          git status
+          pip install setuptools_scm
+          python setup.py sdist --dist-dir .artifacts/dist
+          ls .artifacts/dist
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: Artifacts
+          path: .artifacts/*
   coveralls:
     name: Submit Coveralls
     needs: build
