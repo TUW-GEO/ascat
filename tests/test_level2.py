@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2024, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -44,6 +44,8 @@ from ascat.eumetsat.level2 import AscatL2NcFileList
 from ascat.eumetsat.level2 import AscatL2BufrFileList
 from ascat.eumetsat.level2 import AscatL2EpsFileList
 
+from get_path import get_testdata_path
+
 eps_float_nan = -2147483648.
 bufr_float_nan = 1.7e+38
 uint8_nan = np.iinfo(np.uint8).max
@@ -58,15 +60,8 @@ class Test_AscatL2BufrFile(unittest.TestCase):
         """
         Setup test files.
         """
-        data_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
-                                 'eumetsat', 'ASCAT_L2_SM_125', 'bufr',
-                                 'Metop_B')
-
-        fname = os.path.join(
-            data_path,
-            'M01-ASCA-ASCSMR02-NA-5.0-20170220050900.000000000Z-20170220055833-1207110.bfr'
-        )
-
+        data_path = get_testdata_path() / "eumetsat/ASCAT_L2_SM_125/bufr/Metop_B"
+        fname = data_path / 'M01-ASCA-ASCSMR02-NA-5.0-20170220050900.000000000Z-20170220055833-1207110.bfr'
         self.reader = AscatL2BufrFile(fname)
 
     def test_read(self):
@@ -109,13 +104,8 @@ class Test_AscatL2NcFile(unittest.TestCase):
         """
         Setup test files.
         """
-        data_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
-                                 'eumetsat', 'ASCAT_L2_SM_125', 'nc',
-                                 'Metop_A')
-        fname = os.path.join(
-            data_path,
-            'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20170220041500_53652_eps_o_125_ssm_l2.nc'
-        )
+        data_path = get_testdata_path() / "eumetsat/ASCAT_L2_SM_125/nc/Metop_A"
+        fname = data_path / 'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20170220041500_53652_eps_o_125_ssm_l2.nc'
         self.reader = AscatL2NcFile(fname)
 
     def test_read(self):
@@ -162,18 +152,12 @@ class Test_AscatL2NcFile_AscatL2BufrFile(unittest.TestCase):
         """
         Setup test files.
         """
-        data_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
-                                 'eumetsat', 'ASCAT_L2_SM_125')
-        fname_nc = os.path.join(
-            data_path, 'nc', 'Metop_A',
-            'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20170220041500_53652_eps_o_125_ssm_l2.nc'
-        )
+        data_path = get_testdata_path() / "eumetsat/ASCAT_L2_SM_125"
+
+        fname_nc = data_path / "nc/Metop_A/W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20170220041500_53652_eps_o_125_ssm_l2.nc"
         self.reader_nc = AscatL2NcFile(fname_nc)
 
-        fname_bufr = os.path.join(
-            data_path, 'bufr', 'Metop_A',
-            'M02-ASCA-ASCSMR02-NA-5.0-20170220041500.000000000Z-20170220055656-1207110.bfr'
-        )
+        fname_bufr = data_path / "bufr/Metop_A/M02-ASCA-ASCSMR02-NA-5.0-20170220041500.000000000Z-20170220055656-1207110.bfr"
         self.reader_bufr = AscatL2BufrFile(fname_bufr)
 
     def test_read(self):
@@ -254,21 +238,11 @@ class Test_AscatL2File(unittest.TestCase):
         """
         Setup test files.
         """
-        data_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
-                                 'eumetsat', 'ASCAT_generic_reader_data')
+        data_path = get_testdata_path() / "eumetsat/ASCAT_generic_reader_data"
 
-        name_b = os.path.join(
-            data_path, 'bufr',
-            'M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr'
-        )
-        name_e = os.path.join(
-            data_path, 'eps_nat',
-            'ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat'
-        )
-        name_n = os.path.join(
-            data_path, 'nc',
-            'W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_20180612035700_29742_eps_o_250_ssm_l2.nc'
-        )
+        name_b = data_path / "bufr/M01-ASCA-ASCSMO02-NA-5.0-20180612035700.000000000Z-20180612044530-1281300.bfr"
+        name_e = data_path / "eps_nat/ASCA_SMO_02_M01_20180612035700Z_20180612053856Z_N_O_20180612044530Z.nat"
+        name_n = data_path / "nc/W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPB+ASCAT_C_EUMP_20180612035700_29742_eps_o_250_ssm_l2.nc"
 
         self.bufr = AscatL2File(name_b)
         self.eps = AscatL2File(name_e)
@@ -378,20 +352,19 @@ class Test_AscatL2FileList(unittest.TestCase):
         """
         Setup test data.
         """
-        root_path = os.path.join(os.path.dirname(__file__), 'ascat_test_data',
-                                 'eumetsat', 'ASCAT_generic_reader_data')
+        root_path = get_testdata_path() / "eumetsat/ASCAT_generic_reader_data"
 
-        path = os.path.join(root_path, 'bufr')
+        path = root_path / 'bufr'
         sat = 'b'
         product = 'smo'
         self.bufr_smo = AscatL2BufrFileList(path, sat, product)
 
-        path = os.path.join(root_path, 'nc')
+        path = root_path / 'nc'
         sat = 'b'
         product = 'smo'
         self.nc_smo = AscatL2NcFileList(path, sat, product)
 
-        path = os.path.join(root_path, 'eps_nat')
+        path = root_path / 'eps_nat'
         sat = 'b'
         product = 'smo'
         self.eps_smo = AscatL2EpsFileList(path, sat, product)

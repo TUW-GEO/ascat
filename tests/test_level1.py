@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2024, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -28,7 +28,6 @@
 Test ASCAT Level 1 reader.
 """
 
-import os
 import sys
 import pytest
 import unittest
@@ -43,6 +42,8 @@ from ascat.eumetsat.level1 import AscatL1bEpsFileList
 from ascat.eumetsat.level1 import AscatL1bBufrFileList
 from ascat.eumetsat.level1 import AscatL1bHdf5FileList
 
+from get_path import get_testdata_path
+
 float32_nan = -999999.
 
 
@@ -50,36 +51,15 @@ float32_nan = -999999.
 class Test_AscatL1bFile(unittest.TestCase):
 
     def setUp(self):
-        data_path = os.path.join(os.path.dirname(__file__), "ascat_test_data",
-                                 "eumetsat", "ASCAT_generic_reader_data")
+        data_path = get_testdata_path() / "eumetsat" / "ASCAT_generic_reader_data"
 
-        name_b = os.path.join(
-            data_path, "bufr",
-            "M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr"
-        )
-        name_e = os.path.join(
-            data_path, "eps_nat",
-            "ASCA_SZR_1B_M02_20100609013900Z_20100609032058Z_R_O_20130824233100Z.nat"
-        )
-        name_n = os.path.join(
-            data_path, "nc",
-            "W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20100609013900_18872_eps_o_125_l1.nc"
-        )
+        name_b = data_path / "bufr" / "M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr"
+        name_e = data_path / "eps_nat" / "ASCA_SZR_1B_M02_20100609013900Z_20100609032058Z_R_O_20130824233100Z.nat"
+        name_n = data_path / "nc" / "W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOPA+ASCAT_C_EUMP_20100609013900_18872_eps_o_125_l1.nc"
 
-        name_e11 = os.path.join(
-            data_path, "eps_nat",
-            "ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat"
-        )
-
-        name_e_szf = os.path.join(
-            data_path, "eps_nat",
-            "ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.nat"
-        )
-
-        name_h = os.path.join(
-            data_path, "hdf5",
-            "ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.h5"
-        )
+        name_e11 = data_path / "eps_nat" / "ASCA_SZR_1B_M02_20071212071500Z_20071212085659Z_R_O_20081225063118Z.nat"
+        name_e_szf = data_path / "eps_nat" / "ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.nat"
+        name_h = data_path / "hdf5" / "ASCA_SZF_1B_M01_20180611041800Z_20180611055959Z_N_O_20180611050637Z.h5"
 
         self.bufr = AscatL1bFile(name_b)
         self.nc = AscatL1bFile(name_n)
@@ -324,32 +304,31 @@ class Test_AscatL1bFileList(unittest.TestCase):
         """
         Setup test data.
         """
-        root_path = os.path.join(os.path.dirname(__file__), "ascat_test_data",
-                                 "eumetsat", "ASCAT_generic_reader_data")
+        root_path = get_testdata_path() / "eumetsat" / "ASCAT_generic_reader_data"
 
-        path = os.path.join(root_path, "bufr")
+        path = root_path / "bufr"
         sat = "a"
         product = "szr"
         self.bufr_szr = AscatL1bBufrFileList(path, sat, product)
 
-        path = os.path.join(root_path, "nc")
+        path = root_path / "nc"
         sat = "a"
         product = "szr"
         self.nc_szr = AscatL1bNcFileList(path, sat, product)
 
-        path = os.path.join(root_path, "eps_nat")
+        path = root_path / "eps_nat"
         sat = "a"
         product = "szr"
         self.eps_szr = AscatL1bEpsFileList(path, sat, product)
 
         sat = "b"
         product = "szf"
-        path = os.path.join(root_path, "eps_nat")
+        path = root_path / "eps_nat"
         self.eps_szf = AscatL1bEpsFileList(path, sat, product)
 
         sat = "b"
         product = "szf"
-        path = os.path.join(root_path, "hdf5")
+        path = root_path / "hdf5"
         self.hdf5_szf = AscatL1bHdf5FileList(path, sat, product)
 
     def test_szr_read_date(self):

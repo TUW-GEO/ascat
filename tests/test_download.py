@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2024, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -24,7 +24,6 @@
 # WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 """
 Test download.
 """
@@ -37,10 +36,17 @@ from datetime import datetime, timedelta
 from ascat.download.connectors import HsafConnector
 from ascat.download.connectors import EumConnector
 
-credentials = {'EUM': {'consumer_key': os.getenv('EUM_CONSUMER_KEY'),
-                       'consumer_secret': os.getenv('EUM_CONSUMER_SECRET')},
-               'HSAF': {'user': os.getenv('HSAF_FTP_USER'),
-                        'password': os.getenv('HSAF_FTP_PASSWORD')}}
+credentials = {
+    'EUM': {
+        'consumer_key': os.getenv('EUM_CONSUMER_KEY'),
+        'consumer_secret': os.getenv('EUM_CONSUMER_SECRET')
+    },
+    'HSAF': {
+        'user': os.getenv('HSAF_FTP_USER'),
+        'password': os.getenv('HSAF_FTP_PASSWORD')
+    }
+}
+
 
 class TestDownload(unittest.TestCase):
 
@@ -74,8 +80,8 @@ class TestDownload(unittest.TestCase):
 
         connector = EumConnector()
         connector.connect(credentials['EUM'])
-        connector.download(product, self.local_path, self.start_date,
-                           self.end_date, limit=1)
+        connector.download(
+            product, self.local_path, self.start_date, self.end_date, limit=1)
 
     @unittest.skipIf(credentials['HSAF']['user'] is None,
                      "Skip H SAF connection test")
@@ -97,9 +103,14 @@ class TestDownload(unittest.TestCase):
 
         connector = HsafConnector()
         connector.connect(credentials['HSAF'])
-        connector.download(remote_path, self.local_path, self.start_date,
-                           self.end_date, limit=1)
+        connector.download(
+            remote_path,
+            self.local_path,
+            self.start_date,
+            self.end_date,
+            limit=1)
         connector.close()
+
 
 if __name__ == '__main__':
     unittest.main()

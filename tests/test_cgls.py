@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2024, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -24,24 +24,23 @@
 # WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 """
 Tests for reading CGLOPS SWI data.
 """
 
-from ascat.cgls import SWI_TS
-import os
 import pandas as pd
 import numpy as np
 import pytest
+
+from get_path import get_testdata_path
+from ascat.cgls import SWI_TS
 
 
 def test_swi_ts_reader():
     """
     Test SWI time series reader.
     """
-    data_path = os.path.join(
-        os.path.dirname(__file__), 'ascat_test_data', 'cglops', 'swi_ts')
+    data_path = get_testdata_path() / "cglops" / "swi_ts"
 
     rd = SWI_TS(data_path)
     data = rd.read(3002621, mask_frozen=False)
@@ -68,8 +67,7 @@ def test_swi_ts_reader_no_data_in_folder():
     """
     Test SWI time series reader when no data is in folder.
     """
-    data_path = os.path.join(
-        os.path.dirname(__file__), 'ascat_test_data', 'cglops', 'swi_ts_non_existing')
+    data_path = get_testdata_path() / "cglops" / "swi_ts_non_existing"
 
     with pytest.raises(IOError):
         SWI_TS(data_path)
@@ -79,15 +77,14 @@ def test_swi_ts_qflag_reading():
     """
     Test SWI time series quality flag reader.
     """
-    data_path = os.path.join(
-        os.path.dirname(__file__), 'ascat_test_data', 'cglops', 'swi_ts')
+    data_path = get_testdata_path() / "cglops" / "swi_ts"
     rd = SWI_TS(data_path, parameters=['SWI_001', 'QFLAG_001', 'SSF'])
     data = rd.read(3002621, mask_frozen=True)
     # check if QFLAG is correctly read. It should have as many NaN values as
     # SWI
     assert len(data[data.loc[:, 'QFLAG_001'] != np.nan]) > 0
-    assert (len(data[data.loc[:, 'QFLAG_001'] == np.nan]) ==
-            len(data[data.loc[:, 'SWI_001'] == np.nan]))
+    assert (len(data[data.loc[:, 'QFLAG_001'] == np.nan]) == len(
+        data[data.loc[:, 'SWI_001'] == np.nan]))
 
 
 if __name__ == "__main__":

@@ -16,7 +16,6 @@ Contents
    xarray_readers_tutorial.ipynb
    License <license>
    Authors <authors>
-   Changelog <changelog>
    Module Reference <api/modules>
 
 

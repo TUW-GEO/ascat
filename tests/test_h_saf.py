@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2024, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -25,7 +25,6 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
 import sys
 import pytest
 import unittest
@@ -38,6 +37,8 @@ from ascat.h_saf import H14GribFileList
 from ascat.h_saf import AscatNrtBufrFileList
 from ascat.h_saf import AscatSsmDataRecord
 
+from get_path import get_testdata_path
+
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatNrtSsm(unittest.TestCase):
@@ -46,15 +47,14 @@ class Test_AscatNrtSsm(unittest.TestCase):
         """
         Setup test data.
         """
-        self.root_path = os.path.join(os.path.dirname(__file__),
-                                      'ascat_test_data', 'hsaf')
+        self.root_path = get_testdata_path() / "hsaf"
 
     def test_h16_read(self):
         """
         Test read file.
         """
         dt = datetime(2017, 2, 20, 11, 15, 0)
-        path = os.path.join(self.root_path, 'h16')
+        path = self.root_path / 'h16'
         product = 'h16'
 
         h16 = AscatNrtBufrFileList(path, product)
@@ -90,16 +90,15 @@ class Test_AscatNrtSsm(unittest.TestCase):
 
         nptest.assert_allclose(data['lat'][798:813], lats_should, atol=1e-5)
         nptest.assert_allclose(data['sm'][798:813], sm_should, atol=0.01)
-        nptest.assert_allclose(data['sm_mean'][798:813],
-                               sm_mean_should,
-                               atol=0.01)
+        nptest.assert_allclose(
+            data['sm_mean'][798:813], sm_mean_should, atol=0.01)
 
     def test_h101_read(self):
         """
         Test read file.
         """
         dt = datetime(2017, 2, 20, 10, 42, 0)
-        path = os.path.join(self.root_path, 'h101')
+        path = self.root_path / 'h101'
         product_id = 'h101'
 
         h101 = AscatNrtBufrFileList(path, product_id)
@@ -124,16 +123,15 @@ class Test_AscatNrtSsm(unittest.TestCase):
 
         nptest.assert_allclose(data['lat'][1800:1820], lats_should, atol=1e-5)
         nptest.assert_allclose(data['sm'][1800:1820], sm_should, atol=0.01)
-        nptest.assert_allclose(data['sm_mean'][1800:1820],
-                               sm_mean_should,
-                               atol=0.01)
+        nptest.assert_allclose(
+            data['sm_mean'][1800:1820], sm_mean_should, atol=0.01)
 
     def test_h102_read(self):
         """
         Test read file.
         """
         dt = datetime(2017, 2, 20, 10, 42, 0)
-        path = os.path.join(self.root_path, 'h102')
+        path = self.root_path / 'h102'
         product_id = 'h102'
 
         h102 = AscatNrtBufrFileList(path, product_id)
@@ -157,16 +155,15 @@ class Test_AscatNrtSsm(unittest.TestCase):
 
         nptest.assert_allclose(data['lat'][0:19], lats_should, atol=1e-5)
         nptest.assert_allclose(data['sm'][0:19], sm_should, atol=0.01)
-        nptest.assert_allclose(data['sm_mean'][0:19],
-                               sm_mean_should,
-                               atol=0.01)
+        nptest.assert_allclose(
+            data['sm_mean'][0:19], sm_mean_should, atol=0.01)
 
     def test_h103_read(self):
         """
         Test read file.
         """
         dt = datetime(2017, 2, 20, 10, 30, 0)
-        path = os.path.join(self.root_path, 'h103')
+        path = self.root_path / 'h103'
         product_id = 'h103'
 
         h103 = AscatNrtBufrFileList(path, product_id)
@@ -190,9 +187,8 @@ class Test_AscatNrtSsm(unittest.TestCase):
 
         nptest.assert_allclose(data['lat'][0:19], lats_should, atol=1e-5)
         nptest.assert_allclose(data['sm'][0:19], sm_should, atol=0.01)
-        nptest.assert_allclose(data['sm_mean'][0:19],
-                               sm_mean_should,
-                               atol=0.01)
+        nptest.assert_allclose(
+            data['sm_mean'][0:19], sm_mean_should, atol=0.01)
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
@@ -202,8 +198,7 @@ class Test_H14(unittest.TestCase):
         """
         Setup test data.
         """
-        self.root_path = os.path.join(os.path.dirname(__file__),
-                                      'ascat_test_data', 'hsaf', 'h14')
+        self.root_path = get_testdata_path() / "hsaf" / "h14"
 
     def test_read(self):
         """
@@ -225,32 +220,29 @@ class Test_H14(unittest.TestCase):
 class Test_AscatSsmDataRecord(unittest.TestCase):
 
     def setUp(self):
-
-        path = os.path.dirname(__file__)
+        path = get_testdata_path()
 
         self.gpi = 3066159
-        self.cdr_path = os.path.join(path, 'ascat_test_data', 'hsaf')
-        self.grid_path = os.path.join(path, 'ascat_test_data', 'hsaf', 'grid')
-        self.static_layer_path = os.path.join(path, 'ascat_test_data', 'hsaf',
-                                              'static_layer')
+        self.cdr_path = path / "hsaf"
+        self.grid_path = str(path / "hsaf" / "grid")
+        self.static_layer_path = str(path / "hsaf" / "static_layer")
 
     def test_read_h25(self):
         """
         Test read H25.
         """
-        self.h25 = AscatSsmDataRecord(os.path.join(self.cdr_path, 'h25'),
-                                      self.grid_path,
-                                      static_layer_path=self.static_layer_path)
+        self.h25 = AscatSsmDataRecord(
+            str(self.cdr_path / 'h25'),
+            self.grid_path,
+            static_layer_path=self.static_layer_path)
 
         data = self.h25.read(self.gpi, absolute_sm=True)
         assert data.attrs['gpi'] == self.gpi
 
-        np.testing.assert_approx_equal(data.attrs['lon'],
-                                       19.03533,
-                                       significant=4)
-        np.testing.assert_approx_equal(data.attrs['lat'],
-                                       70.05438,
-                                       significant=4)
+        np.testing.assert_approx_equal(
+            data.attrs['lon'], 19.03533, significant=4)
+        np.testing.assert_approx_equal(
+            data.attrs['lat'], 70.05438, significant=4)
 
         assert len(data) == 7737
         assert data.iloc[15].name.to_pydatetime() == datetime(
@@ -267,41 +259,35 @@ class Test_AscatSsmDataRecord(unittest.TestCase):
         np.testing.assert_approx_equal(data.iloc[15]['abs_sm_noise_gldas'],
                                        np.nan)
 
-        np.testing.assert_approx_equal(data.iloc[15]['abs_sm_hwsd'],
-                                       0.1078,
-                                       significant=6)
-        np.testing.assert_approx_equal(data.iloc[15]['abs_sm_noise_hwsd'],
-                                       0.0294,
-                                       significant=6)
+        np.testing.assert_approx_equal(
+            data.iloc[15]['abs_sm_hwsd'], 0.1078, significant=6)
+        np.testing.assert_approx_equal(
+            data.iloc[15]['abs_sm_noise_hwsd'], 0.0294, significant=6)
 
         assert data.attrs['topo_complex'] == 9
         assert data.attrs['wetland_frac'] == 41
 
-        np.testing.assert_approx_equal(data.attrs['porosity_gldas'],
-                                       np.nan,
-                                       significant=5)
-        np.testing.assert_approx_equal(data.attrs['porosity_hwsd'],
-                                       0.49000001,
-                                       significant=5)
+        np.testing.assert_approx_equal(
+            data.attrs['porosity_gldas'], np.nan, significant=5)
+        np.testing.assert_approx_equal(
+            data.attrs['porosity_hwsd'], 0.49000001, significant=5)
 
     def test_read_h108(self):
         """
         Test read H108.
         """
         self.h108 = AscatSsmDataRecord(
-            os.path.join(self.cdr_path, 'h108'),
+            str(self.cdr_path / 'h108'),
             self.grid_path,
             static_layer_path=self.static_layer_path)
 
         data = self.h108.read(self.gpi, absolute_sm=True)
         assert data.attrs['gpi'] == self.gpi
 
-        np.testing.assert_approx_equal(data.attrs['lon'],
-                                       19.03533,
-                                       significant=4)
-        np.testing.assert_approx_equal(data.attrs['lat'],
-                                       70.05438,
-                                       significant=4)
+        np.testing.assert_approx_equal(
+            data.attrs['lon'], 19.03533, significant=4)
+        np.testing.assert_approx_equal(
+            data.attrs['lat'], 70.05438, significant=4)
 
         assert len(data) == 8222
         assert data.iloc[15].name.to_pydatetime() == datetime(
@@ -318,39 +304,34 @@ class Test_AscatSsmDataRecord(unittest.TestCase):
         np.testing.assert_approx_equal(data.iloc[15]['abs_sm_noise_gldas'],
                                        np.nan)
 
-        np.testing.assert_approx_equal(data.iloc[15]['abs_sm_hwsd'],
-                                       0.1078,
-                                       significant=6)
-        np.testing.assert_approx_equal(data.iloc[15]['abs_sm_noise_hwsd'],
-                                       0.0294,
-                                       significant=6)
+        np.testing.assert_approx_equal(
+            data.iloc[15]['abs_sm_hwsd'], 0.1078, significant=6)
+        np.testing.assert_approx_equal(
+            data.iloc[15]['abs_sm_noise_hwsd'], 0.0294, significant=6)
 
         assert data.attrs['topo_complex'] == 9
         assert data.attrs['wetland_frac'] == 41
 
         np.testing.assert_equal(data.attrs['porosity_gldas'], np.nan)
-        np.testing.assert_approx_equal(data.attrs['porosity_hwsd'],
-                                       0.49000001,
-                                       significant=5)
+        np.testing.assert_approx_equal(
+            data.attrs['porosity_hwsd'], 0.49000001, significant=5)
 
     def test_read_h109(self):
         """
         Test read H109.
         """
         self.h109 = AscatSsmDataRecord(
-            os.path.join(self.cdr_path, 'h109'),
+            str(self.cdr_path / 'h109'),
             self.grid_path,
             static_layer_path=self.static_layer_path)
 
         data = self.h109.read(self.gpi, absolute_sm=True)
         assert data.attrs['gpi'] == self.gpi
 
-        np.testing.assert_approx_equal(data.attrs['lon'],
-                                       19.03533,
-                                       significant=4)
-        np.testing.assert_approx_equal(data.attrs['lat'],
-                                       70.05438,
-                                       significant=4)
+        np.testing.assert_approx_equal(
+            data.attrs['lon'], 19.03533, significant=4)
+        np.testing.assert_approx_equal(
+            data.attrs['lat'], 70.05438, significant=4)
 
         assert len(data) == 11736
         assert data.iloc[15].name.to_pydatetime() == \
@@ -369,39 +350,34 @@ class Test_AscatSsmDataRecord(unittest.TestCase):
         np.testing.assert_approx_equal(data.iloc[15]['abs_sm_noise_gldas'],
                                        np.nan)
 
-        np.testing.assert_approx_equal(data.iloc[15]['abs_sm_hwsd'],
-                                       0.1323,
-                                       significant=6)
-        np.testing.assert_approx_equal(data.iloc[15]['abs_sm_noise_hwsd'],
-                                       0.0245,
-                                       significant=6)
+        np.testing.assert_approx_equal(
+            data.iloc[15]['abs_sm_hwsd'], 0.1323, significant=6)
+        np.testing.assert_approx_equal(
+            data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
 
         assert data.attrs['topo_complex'] == 9
         assert data.attrs['wetland_frac'] == 41
 
         np.testing.assert_equal(data.attrs['porosity_gldas'], np.nan)
-        np.testing.assert_approx_equal(data.attrs['porosity_hwsd'],
-                                       0.49000001,
-                                       significant=5)
+        np.testing.assert_approx_equal(
+            data.attrs['porosity_hwsd'], 0.49000001, significant=5)
 
     def test_read_h110(self):
         """
         Test read H110.
         """
         self.h110 = AscatSsmDataRecord(
-            os.path.join(self.cdr_path, 'h110'),
+            str(self.cdr_path / 'h110'),
             self.grid_path,
             static_layer_path=self.static_layer_path)
 
         data = self.h110.read(self.gpi, absolute_sm=True)
         assert data.attrs['gpi'] == self.gpi
 
-        np.testing.assert_approx_equal(data.attrs['lon'],
-                                       19.03533,
-                                       significant=4)
-        np.testing.assert_approx_equal(data.attrs['lat'],
-                                       70.05438,
-                                       significant=4)
+        np.testing.assert_approx_equal(
+            data.attrs['lon'], 19.03533, significant=4)
+        np.testing.assert_approx_equal(
+            data.attrs['lat'], 70.05438, significant=4)
 
         assert len(data) == 1148
         assert data.iloc[15].name.to_pydatetime() == datetime(
@@ -420,39 +396,34 @@ class Test_AscatSsmDataRecord(unittest.TestCase):
         np.testing.assert_approx_equal(data.iloc[15]['abs_sm_noise_gldas'],
                                        np.nan)
 
-        np.testing.assert_approx_equal(data.iloc[15]['abs_sm_hwsd'],
-                                       0.2352,
-                                       significant=6)
-        np.testing.assert_approx_equal(data.iloc[15]['abs_sm_noise_hwsd'],
-                                       0.0245,
-                                       significant=6)
+        np.testing.assert_approx_equal(
+            data.iloc[15]['abs_sm_hwsd'], 0.2352, significant=6)
+        np.testing.assert_approx_equal(
+            data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
 
         assert data.attrs['topo_complex'] == 9
         assert data.attrs['wetland_frac'] == 41
 
         np.testing.assert_equal(data.attrs['porosity_gldas'], np.nan)
-        np.testing.assert_approx_equal(data.attrs['porosity_hwsd'],
-                                       0.49000001,
-                                       significant=5)
+        np.testing.assert_approx_equal(
+            data.attrs['porosity_hwsd'], 0.49000001, significant=5)
 
     def test_read_h111(self):
         """
         Test read H111.
         """
         self.h111 = AscatSsmDataRecord(
-            os.path.join(self.cdr_path, 'h111'),
+            str(self.cdr_path / 'h111'),
             self.grid_path,
             static_layer_path=self.static_layer_path)
 
         data = self.h111.read(self.gpi, absolute_sm=True)
         assert data.attrs['gpi'] == self.gpi
 
-        np.testing.assert_approx_equal(data.attrs['lon'],
-                                       19.03533,
-                                       significant=4)
-        np.testing.assert_approx_equal(data.attrs['lat'],
-                                       70.05438,
-                                       significant=4)
+        np.testing.assert_approx_equal(
+            data.attrs['lon'], 19.03533, significant=4)
+        np.testing.assert_approx_equal(
+            data.attrs['lat'], 70.05438, significant=4)
 
         assert len(data) == 13715
         assert data.iloc[15].name.to_pydatetime() == datetime(
@@ -471,20 +442,17 @@ class Test_AscatSsmDataRecord(unittest.TestCase):
         np.testing.assert_approx_equal(data.iloc[15]['abs_sm_noise_gldas'],
                                        np.nan)
 
-        np.testing.assert_approx_equal(data.iloc[15]['abs_sm_hwsd'],
-                                       0.1372,
-                                       significant=6)
-        np.testing.assert_approx_equal(data.iloc[15]['abs_sm_noise_hwsd'],
-                                       0.0245,
-                                       significant=6)
+        np.testing.assert_approx_equal(
+            data.iloc[15]['abs_sm_hwsd'], 0.1372, significant=6)
+        np.testing.assert_approx_equal(
+            data.iloc[15]['abs_sm_noise_hwsd'], 0.0245, significant=6)
 
         assert data.attrs['topo_complex'] == 9
         assert data.attrs['wetland_frac'] == 41
 
         np.testing.assert_equal(data.attrs['porosity_gldas'], np.nan)
-        np.testing.assert_approx_equal(data.attrs['porosity_hwsd'],
-                                       0.49000001,
-                                       significant=5)
+        np.testing.assert_approx_equal(
+            data.attrs['porosity_hwsd'], 0.49000001, significant=5)
 
     def test_read_2points_cell_switch(self):
         """
@@ -493,7 +461,7 @@ class Test_AscatSsmDataRecord(unittest.TestCase):
         was closed too soon.
         """
         self.h111 = AscatSsmDataRecord(
-            os.path.join(self.cdr_path, 'h111'),
+            str(self.cdr_path / 'h111'),
             self.grid_path,
             static_layer_path=self.static_layer_path)
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2024, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -29,21 +29,15 @@ import unittest
 from pathlib import Path
 from datetime import datetime
 from tempfile import TemporaryDirectory
-from copy import deepcopy
 
 import numpy as np
 import xarray as xr
-
-from fibgrid.realization import FibGrid
-
-from ascat.file_handling import ChronFiles
 
 from ascat.read_native.ragged_array_ts import CellFileCollection
 from ascat.read_native.ragged_array_ts import SwathFileCollection
 from ascat.read_native.ragged_array_ts import CellFileCollectionStack
 
 from ascat.read_native.xarray_io import AscatH129Cell
-from ascat.read_native.xarray_io import AscatSIG0Cell6250m
 from ascat.read_native.xarray_io import AscatSIG0Cell12500m
 
 from ascat.read_native.xarray_io import AscatH129Swath
