@@ -51,7 +51,8 @@ float32_nan = -999999.
 class Test_AscatL1bFile(unittest.TestCase):
 
     def setUp(self):
-        data_path = get_testdata_path() / "eumetsat" / "ASCAT_generic_reader_data"
+        data_path = get_testdata_path(
+        ) / "eumetsat" / "ASCAT_generic_reader_data"
 
         name_b = data_path / "bufr" / "M02-ASCA-ASCSZR1B0200-NA-9.1-20100609013900.000000000Z-20130824233100-1280350.bfr"
         name_e = data_path / "eps_nat" / "ASCA_SZR_1B_M02_20100609013900Z_20100609032058Z_R_O_20130824233100Z.nat"
@@ -126,14 +127,16 @@ class Test_AscatL1bFile(unittest.TestCase):
 
         for antenna in ["lf-vv", "lm-vv", "la-vv", "rf-vv", "rm-vv", "ra-vv"]:
             for coord in ["lon", "lat"]:
-                nptest.assert_allclose(eps_data[antenna][coord],
-                                       h5_data[antenna][coord],
-                                       atol=1e-4)
+                nptest.assert_allclose(
+                    eps_data[antenna][coord],
+                    h5_data[antenna][coord],
+                    atol=1e-4)
 
             for eps_field, hdf5_field in zip(eps_fields, hdf5_fields):
-                nptest.assert_allclose(eps_data[antenna][eps_field],
-                                       h5_data[antenna][hdf5_field],
-                                       atol=0.1)
+                nptest.assert_allclose(
+                    eps_data[antenna][eps_field],
+                    h5_data[antenna][hdf5_field],
+                    atol=0.1)
 
     def test_szx_eps(self):
         """
@@ -183,9 +186,8 @@ class Test_AscatL1bFile(unittest.TestCase):
 
         nptest.assert_allclose(self.reader["lat"][:25], lat_should, atol=1e-5)
         nptest.assert_allclose(self.reader["lon"][:25], lon_should, atol=1e-5)
-        nptest.assert_allclose(self.reader["sig"][:25, 0],
-                               sig_should,
-                               atol=1e-5)
+        nptest.assert_allclose(
+            self.reader["sig"][:25, 0], sig_should, atol=1e-5)
         nptest.assert_allclose(self.reader["kp"][:25, 0], kp_should, atol=1e-5)
         nptest.assert_equal(self.reader["time"][75:85], t_should)
 
@@ -237,9 +239,8 @@ class Test_AscatL1bFile(unittest.TestCase):
 
         nptest.assert_allclose(self.reader["lat"][:25], lat_should, atol=1e-5)
         nptest.assert_allclose(self.reader["lon"][:25], lon_should, atol=1e-5)
-        nptest.assert_allclose(self.reader["sig"][:25, 0],
-                               sig_should,
-                               atol=1e-5)
+        nptest.assert_allclose(
+            self.reader["sig"][:25, 0], sig_should, atol=1e-5)
         nptest.assert_allclose(self.reader["kp"][:25, 0], kp_should, atol=1e-5)
         nptest.assert_equal(self.reader["time"][75:85], t_should)
 
@@ -282,15 +283,12 @@ class Test_AscatL1bFile(unittest.TestCase):
         ],
                             dtype="datetime64[ms]")
 
-        nptest.assert_allclose(self.reader["lf-vv"]["lat"][:25],
-                               lat_should,
-                               atol=1e-5)
-        nptest.assert_allclose(self.reader["lf-vv"]["lon"][:25],
-                               lon_should,
-                               atol=1e-5)
-        nptest.assert_allclose(self.reader["lf-vv"]["sig"][:25],
-                               sig_should,
-                               atol=1e-5)
+        nptest.assert_allclose(
+            self.reader["lf-vv"]["lat"][:25], lat_should, atol=1e-5)
+        nptest.assert_allclose(
+            self.reader["lf-vv"]["lon"][:25], lon_should, atol=1e-5)
+        nptest.assert_allclose(
+            self.reader["lf-vv"]["sig"][:25], sig_should, atol=1e-5)
         nptest.assert_equal(self.reader["lf-vv"]["time"][190:200], t_should)
 
 
@@ -304,7 +302,8 @@ class Test_AscatL1bFileList(unittest.TestCase):
         """
         Setup test data.
         """
-        root_path = get_testdata_path() / "eumetsat" / "ASCAT_generic_reader_data"
+        root_path = get_testdata_path(
+        ) / "eumetsat" / "ASCAT_generic_reader_data"
 
         path = root_path / "bufr"
         sat = "a"
@@ -378,17 +377,14 @@ class Test_AscatL1bFileList(unittest.TestCase):
         dt_start = datetime(2010, 6, 9, 1, 39, 0)
         dt_end = datetime(2010, 6, 9, 2, 0, 0)
 
-        date_str = "%Y%m%d%H%M%S"
+        date_field_fmt = "%Y%m%d%H%M%S"
 
-        bufr_data, bufr_metadata = self.bufr_szr.read_period(dt_start,
-                                                             dt_end,
-                                                             date_str=date_str)
-        nc_data, nc_metadata = self.nc_szr.read_period(dt_start,
-                                                       dt_end,
-                                                       date_str=date_str)
-        eps_data, eps_metadata = self.eps_szr.read_period(dt_start,
-                                                          dt_end,
-                                                          date_str=date_str)
+        bufr_data, bufr_metadata = self.bufr_szr.read_period(
+            dt_start, dt_end, date_field_fmt=date_field_fmt)
+        nc_data, nc_metadata = self.nc_szr.read_period(
+            dt_start, dt_end, date_field_fmt=date_field_fmt)
+        eps_data, eps_metadata = self.eps_szr.read_period(
+            dt_start, dt_end, date_field_fmt=date_field_fmt)
 
         for f in ["lat", "lon"]:
             nptest.assert_allclose(bufr_data[f], eps_data[f], atol=1e-2)
@@ -413,9 +409,8 @@ class Test_AscatL1bFileList(unittest.TestCase):
             bufr_data[field][nan_mask] = float32_nan
             valid = ((eps_data[field] > -25))
 
-            nptest.assert_allclose(bufr_data[field][valid],
-                                   eps_data[field][valid],
-                                   atol=0.1)
+            nptest.assert_allclose(
+                bufr_data[field][valid], eps_data[field][valid], atol=0.1)
 
     def test_szf_read_date(self):
         """
@@ -437,14 +432,16 @@ class Test_AscatL1bFileList(unittest.TestCase):
 
         for antenna in ["lf-vv", "lm-vv", "la-vv", "rf-vv", "rm-vv", "ra-vv"]:
             for coord in ["lon", "lat"]:
-                nptest.assert_allclose(eps_data[antenna][coord],
-                                       hdf5_data[antenna][coord],
-                                       atol=1e-4)
+                nptest.assert_allclose(
+                    eps_data[antenna][coord],
+                    hdf5_data[antenna][coord],
+                    atol=1e-4)
 
             for eps_field, hdf5_field in zip(eps_fields, hdf5_fields):
-                nptest.assert_allclose(eps_data[antenna][eps_field],
-                                       hdf5_data[antenna][hdf5_field],
-                                       atol=0.1)
+                nptest.assert_allclose(
+                    eps_data[antenna][eps_field],
+                    hdf5_data[antenna][hdf5_field],
+                    atol=0.1)
 
     def test_szf_read_period(self):
         """
@@ -453,19 +450,18 @@ class Test_AscatL1bFileList(unittest.TestCase):
         dt_start = datetime(2018, 6, 11, 4, 18, 0)
         dt_end = datetime(2018, 6, 11, 4, 19, 0)
 
-        date_str = "%Y%m%d%H%M%S"
-        eps_data, eps_metadata = self.eps_szf.read_period(dt_start,
-                                                          dt_end,
-                                                          date_str=date_str)
-        hdf5_data, hdf5_metadata = self.hdf5_szf.read_period(dt_start,
-                                                             dt_end,
-                                                             date_str=date_str)
+        date_field_fmt = "%Y%m%d%H%M%S"
+        eps_data, eps_metadata = self.eps_szf.read_period(
+            dt_start, dt_end, date_field_fmt=date_field_fmt)
+        hdf5_data, hdf5_metadata = self.hdf5_szf.read_period(
+            dt_start, dt_end, date_field_fmt=date_field_fmt)
 
         for antenna in ["lf-vv", "lm-vv", "la-vv", "rf-vv", "rm-vv", "ra-vv"]:
             for coord in ["lon", "lat"]:
-                nptest.assert_allclose(eps_data[antenna][coord],
-                                       hdf5_data[antenna][coord],
-                                       atol=1e-4)
+                nptest.assert_allclose(
+                    eps_data[antenna][coord],
+                    hdf5_data[antenna][coord],
+                    atol=1e-4)
 
             matching = [
                 "sig", "inc", "azi", "sat_id", "as_des_pass", "land_frac",
@@ -473,9 +469,10 @@ class Test_AscatL1bFileList(unittest.TestCase):
             ]
 
             for field in matching:
-                nptest.assert_allclose(eps_data[antenna][coord],
-                                       hdf5_data[antenna][coord],
-                                       atol=0.1)
+                nptest.assert_allclose(
+                    eps_data[antenna][coord],
+                    hdf5_data[antenna][coord],
+                    atol=0.1)
 
 
 if __name__ == "__main__":
