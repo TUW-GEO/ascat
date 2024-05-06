@@ -14,6 +14,7 @@ jobs:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
         os: ["ubuntu-latest"]
+        ymlfile: ["environment.yml"]
 
     steps:
       - uses: actions/checkout@v2
