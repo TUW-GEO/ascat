@@ -1,13 +1,14 @@
-name: docs
+name: doc_env
 channels:
   - conda-forge
-  dependencies:
-    - docutils =0.20.1
-    - sphinx =7.2.6
-    - sphinx-copybutton =0.5.2
-    - myst-nb =1.0.0
-    - sphinx-design =0.5.0
-    - sphinx_rtd_theme =2.0.0
-    - pip
-    - pip:
-        - ../.
+dependencies:
+  - python=3.11
+  - docutils=0.20.1
+  - sphinx=7.2.6
+  - sphinx-copybutton=0.5.2
+  - myst-nb=1.0.0
+  - sphinx-design=0.5.0
+  - sphinx_rtd_theme=2.0.0
+  - pip
+  - pip:
+    - ../.
