@@ -79,6 +79,13 @@ def parse_args_temporal_swath_agg(args):
         help="Subsurface scattering probability value above which to mask the source data"
     )
     parser.add_argument(
+        "--surface_soil_moisture_sensitivity",
+        metavar="SSM_SENSITIVITY_MASK",
+        type=float,
+        default=1.0,
+        help="Surface soil moisture sensitivity value below which to mask the source data"
+    )
+    parser.add_argument(
         "--regrid",
         metavar="REGRID_DEG",
         type=float,
@@ -112,7 +119,8 @@ def temporal_swath_agg_main(cli_args):
                                           args.end_dt, args.t_delta, args.agg,
                                           args.snow_cover_mask,
                                           args.frozen_soil_mask,
-                                          args.subsurface_scattering_mask)
+                                          args.subsurface_scattering_mask,
+                                          args.surface_soil_moisture_sensitivity)
 
     outpath = Path(args.outpath)
     outpath.mkdir(parents=True, exist_ok=True)
