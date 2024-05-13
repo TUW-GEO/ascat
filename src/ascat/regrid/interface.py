@@ -61,6 +61,7 @@ def parse_args_swath_regrid(args):
     parser.add_argument(
         "regrid_deg",
         metavar="REGRID_DEG",
+        type=float,
         help="Target grid spacing in degrees")
     parser.add_argument(
         "--grid_store",
@@ -85,18 +86,11 @@ def swath_regrid_main(cli_args):
         Command line arguments.
     """
     args = parse_args_swath_regrid(cli_args)
-
     filepath = Path(args.filepath)
+    trg_grid_size = args.regrid_deg
 
     outpath = Path(args.outpath)
     outpath.parent.mkdir(parents=True, exist_ok=True)
-
-    trg_grid_size = float(args.regrid_deg)
-
-    if args.grid_store:
-        grid_store = args.grid_store
-    else:
-        grid_store = None
 
     if args.suffix:
         suffix = args.suffix
@@ -114,16 +108,25 @@ def swath_regrid_main(cli_args):
         raise ValueError("No files found at the provided filepath.")
 
     first_file = files[0]
-    product = swath_io_catalog[get_swath_product_id(str(first_file.name))]
+
+    product_id = get_swath_product_id(str(first_file.name))
+
+    if product_id is None:
+        raise RuntimeError("Product identifier not found in filename")
+
+    product = swath_io_catalog[product_id]
     src_grid = product.grid
     src_grid_size = product.grid_sampling_km
 
     src_grid_id = f"fib_grid_{src_grid_size}km"
     trg_grid_id = f"reg_grid_{trg_grid_size}deg"
 
-    trg_grid, grid_lut = retrieve_or_store_grid_lut(grid_store, src_grid,
-                                                    src_grid_id, trg_grid_id,
-                                                    trg_grid_size)
+    trg_grid, grid_lut = retrieve_or_store_grid_lut(
+        src_grid,
+        src_grid_id,
+        trg_grid_id,
+        trg_grid_size,
+        args.grid_store)
 
     for f in files:
         outfile = outpath / Path(f.stem + suffix + f.suffix)

@@ -39,23 +39,27 @@ import dask.array as da
 from fibgrid.realization import FibGrid
 from ascat.file_handling import ChronFiles
 
-int8_nan = np.iinfo(np.int8).max
+int8_nan = np.iinfo(np.int8).min
 uint8_nan = np.iinfo(np.uint8).max
-int16_nan = np.iinfo(np.int16).max
-uint8_nan = np.iinfo(np.uint8).max
-int32_nan = np.iinfo(np.int32).max
-int64_nan = np.iinfo(np.int64).max
+int16_nan = np.iinfo(np.int16).min
+uint16_nan = np.iinfo(np.uint16).max
+int32_nan = np.iinfo(np.int32).min
+uint32_nan = np.iinfo(np.uint32).max
+int64_nan = np.iinfo(np.int64).min
+uint64_nan = np.iinfo(np.uint64).max
 float32_nan = -999999.
 float64_nan = -999999.
 dtype_to_nan = {
     np.dtype('int8'): int8_nan,
     np.dtype('uint8'): uint8_nan,
+    np.dtype('int16'): int16_nan,
+    np.dtype('uint16'): uint16_nan,
+    np.dtype('int32'): int32_nan,
+    np.dtype('uint32'): uint32_nan,
+    np.dtype('int64'): int64_nan,
+    np.dtype('uint64'): uint64_nan,
     np.dtype('float32'): float32_nan,
     np.dtype('float64'): float64_nan,
-    np.dtype('int16'): int16_nan,
-    np.dtype('uint16'): uint8_nan,
-    np.dtype('int32'): int32_nan,
-    np.dtype('int64'): int64_nan,
     np.dtype('<U1'): None,
     np.dtype('O'): None,
 }
@@ -1735,11 +1739,31 @@ swath_fname_regex_lookup = {
         "SIG0_6.25",
     "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-12.5_C_LIIB_.*_.*_.*____.nc":
         "SIG0_12.5",
+    "ascat_h129-v1.0_6.25km_.*_.*_.*.nc": "H129",
+    "ascat_h121-v1.0_12.5km_.*_.*_.*.nc": "H121",
+    "ascat_h122_6.25km_.*_.*_*.nc": "H122",
+    "ascat_h129_6.25km_.*_.*_.*.nc": "H122"
 }
 
 
 def get_swath_product_id(filename):
+    """
+    Get product identifier from filename.
+
+    Parameters
+    ----------
+    filename : str
+        Filename.
+
+    Returns
+    -------
+    product_id : str
+        Product identifier.
+    """
+    product_id = None
+
     for pattern, swath_product_id in swath_fname_regex_lookup.items():
         if re.match(pattern, filename):
-            return swath_product_id
-    return None
+            product_id = swath_product_id
+
+    return product_id
