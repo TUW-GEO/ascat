@@ -55,7 +55,8 @@ class TemporalSwathAggregator:
         snow_cover_mask=80,
         frozen_soil_mask=80,
         subsurface_scattering_mask=5,
-        surface_soil_moisture_sensitivity=1,
+        ssm_sensitivity_mask=1,
+        no_masking=False,
     ):
         """Initialize the class.
 
@@ -78,9 +79,11 @@ class TemporalSwathAggregator:
         subsurface_scattering_mask : int, optional
             Subsurface scattering probability value above which to mask
             the source data.
-        soil_moisture_sensitivity : float, optional
+        ssm_sensitivity_mask : float, optional
             Soil moisture sensitivity value above which to mask
             the source data.
+        no_masking : boolean, optional
+            Ignore all masks (default: False).
         """
         self.filepath = filepath
 
@@ -88,6 +91,7 @@ class TemporalSwathAggregator:
         self.start_dt = datetime.datetime.strptime(start_dt, fmt)
         self.end_dt = datetime.datetime.strptime(end_dt, fmt)
         self.timedelta = pd.Timedelta(t_delta)
+        self.no_masking = no_masking
 
         agg_methods = [
             "mean", "median", "mode", "std", "min", "max", "argmin", "argmax",
@@ -123,7 +127,7 @@ class TemporalSwathAggregator:
             "snow_cover_probability": snow_cover_mask,
             "frozen_soil_probability": frozen_soil_mask,
             "subsurface_scattering_probability": subsurface_scattering_mask,
-            "surface_soil_moisture_sensitivity": surface_soil_moisture_sensitivity,
+            "surface_soil_moisture_sensitivity": ssm_sensitivity_mask,
         }
 
     def _read_data(self):
@@ -280,22 +284,23 @@ class TemporalSwathAggregator:
 
         global_mask = (ds.surface_flag != 0)
 
-        variable_masks = {
-            "surface_soil_moisture": (
-                (ds["frozen_soil_probability"]
-                 > self.mask_probs["frozen_soil_probability"])
-                | (ds["snow_cover_probability"]
-                   > self.mask_probs["snow_cover_probability"])
-                | (ds["subsurface_scattering_probability"]
-                   > self.mask_probs["subsurface_scattering_probability"])
-                | (ds["surface_soil_moisture_sensitivity"]
-                   < self.mask_probs["surface_soil_moisture_sensitivity"])),
-        }
-
         ds = ds.where(~global_mask, drop=False)
 
-        for var, var_mask in variable_masks.items():
-            ds[var] = ds[var].where(~var_mask, drop=False)
+        if not self.no_masking:
+            variable_masks = {
+                "surface_soil_moisture": (
+                    (ds["frozen_soil_probability"]
+                    > self.mask_probs["frozen_soil_probability"])
+                    | (ds["snow_cover_probability"]
+                    > self.mask_probs["snow_cover_probability"])
+                    | (ds["subsurface_scattering_probability"]
+                    > self.mask_probs["subsurface_scattering_probability"])
+                    | (ds["surface_soil_moisture_sensitivity"]
+                    < self.mask_probs["surface_soil_moisture_sensitivity"])),
+            }
+
+            for var, var_mask in variable_masks.items():
+                ds[var] = ds[var].where(~var_mask, drop=False)
 
         print("grouping data...           ")
 

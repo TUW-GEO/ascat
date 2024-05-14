@@ -102,17 +102,14 @@ def swath_regrid_main(cli_args):
     elif filepath.is_file() and filepath.suffix == ".nc":
         files = [filepath]
     else:
-        files = None
-
-    if files is None:
-        raise ValueError("No files found at the provided filepath.")
+        raise RuntimeError("No files found at the provided filepath")
 
     first_file = files[0]
 
     product_id = get_swath_product_id(str(first_file.name))
 
     if product_id is None:
-        raise RuntimeError("Product identifier not found in filename")
+        raise RuntimeError("Product identifier unknown")
 
     product = swath_io_catalog[product_id]
     src_grid = product.grid
