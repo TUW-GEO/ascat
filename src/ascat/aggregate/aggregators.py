@@ -71,7 +71,7 @@ class TemporalSwathAggregator:
         t_delta : str
             Time period for aggregation (e.g. 1D, 1W, 1M, 1Y, 3M, 4Y, etc.).
         agg : str
-            Aggregation.
+            Aggregation method (e.g. mean, median, std).
         snow_cover_mask : int, optional
             Snow cover probability value above which to mask the source data.
         frozen_soil_mask : int, optional

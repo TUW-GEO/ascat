@@ -60,6 +60,28 @@ Read ASCAT data from different sources into a common format supported by pytesmo
     - ASCAT GDS Level 1 Sigma0 resampled at 12.5 km Swath Grid - Metop
     - ASCAT GDS Level 1 Sigma0 resampled at 25 km Swath Grid - Metop
 
+## Command line interface ##
+
+The latest ASCAT swath files (H122, H29, H129, H121) can be aggregated and/or regridded using a command line interface (CLI) provided by the ascat package.
+
+### Aggregation of ASCAT SSM swath files ###
+
+Surface soil moisture and backscatter40 from ASCAT swath files can be aggregated over a user-defined time period (e.g. 1 day, 10 days, 1 month) choosing one of the following methods: "mean", "median", "mode", "std", "min", "max", "argmin", "argmax", "quantile", "first", "last". The time span for processing is determined by the start and end times specified. Additionally, thresholds can be set for masks - such as those for frozen soil probability, snow cover probability, subsurface scattering probability, and surface soil moisture sensitivity - to filter surface soil moisture data as part of the aggregation process.
+
+> ```bash
+> ascat_swath_agg /path/to/input/h129_v1.0/swaths/ /path/to/output --start_dt 2020-06-15T00:00:00 --end_dt 2020-06-17T00:00:00 --t_delta 1D --agg mean --snow_cover_mask 80 --frozen_soil_mask 80 --subsurface_scattering_mask 10 --ssm_sensitivity_mask 1
+> ```
+
+There is also an option that no masking is applied using the argument ``--no-mask``.
+
+### Regridding of ASCAT SSM swath files ###
+
+ASCAT swath files contain data that are provided on a Discrete Global Grid (DGG) and can be converted to a regular lat/lon grid. Either a single swath file or folder containing the swath files can be used as input argument.
+
+> ```bash
+> ascat_swath_regrid /path/to/input/file /path/to/output 0.1 --grid_store /path/to/tmp/folder --suffix _regrid_0.1deg
+> ```
+
 ## Contribute ##
 
 We are happy if you want to contribute. Please raise an issue explaining what is
