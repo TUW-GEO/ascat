@@ -31,7 +31,6 @@ import xarray as xr
 import numpy as np
 import dask
 import dask.array as da
-from numba import jit, njit
 
 from pyresample.geometry import SwathDefinition, AreaDefinition
 from pyresample import kd_tree
