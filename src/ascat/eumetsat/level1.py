@@ -29,7 +29,6 @@ Readers for ASCAT Level 1b data for various file formats.
 """
 
 import os
-from datetime import timedelta
 from collections import defaultdict
 
 import numpy as np
@@ -78,7 +77,7 @@ class AscatL1bFile:
         else:
             raise RuntimeError("ASCAT Level 1b file format unknown")
 
-    def read(self, toi=None, roi=None, generic=True, to_xarray=False):
+    def read(self, toi=None, roi=None, generic=True, to_xarray=False, **kwargs):
         """
         Read ASCAT Level 1b data.
 
@@ -104,7 +103,7 @@ class AscatL1bFile:
         metadata : dict
             Metadata.
         """
-        data, metadata = self.fid.read(generic=generic, to_xarray=to_xarray)
+        data, metadata = self.fid.read(generic=generic, to_xarray=to_xarray, **kwargs)
 
         if toi:
             data = get_toi_subset(data, toi)

@@ -166,7 +166,7 @@ class AscatL1bEpsFile:
         """
         self.filename = filename
 
-    def read(self, generic=False, to_xarray=False):
+    def read(self, generic=False, to_xarray=False, **kwargs):
         """
         Read ASCAT Level 1b data.
 
@@ -186,7 +186,7 @@ class AscatL1bEpsFile:
         metadata : dict
             Metadata.
         """
-        return read_eps_l1b(self.filename, generic, to_xarray)
+        return read_eps_l1b(self.filename, generic, to_xarray, **kwargs)
 
     def close(self):
         """
@@ -956,7 +956,7 @@ def read_eps_l1b(filename,
             gen_fields_lut = {
                 "inc_angle_full": ("inc", np.float32, (0, 90), float32_nan),
                 "azi_angle_full": ("azi", np.float32, (0, 360), float32_nan),
-                "sigma0_full": ("sig", np.float32, (-35, 35), float32_nan),
+                "sigma0_full": ("sig", np.float32, (-50, 50), float32_nan),
                 "sat_track_azi":
                     ("sat_track_azi", np.float32, (0, 360), float32_nan),
                 "beam_number": ("beam_number", np.int8, (1, 6), int8_nan),
@@ -986,7 +986,7 @@ def read_eps_l1b(filename,
             gen_fields_lut = {
                 "inc_angle_full": ("inc", np.float32, (0, 90), float32_nan),
                 "azi_angle_full": ("azi", np.float32, (0, 360), float32_nan),
-                "sigma0_full": ("sig", np.float32, (-35, 35), float32_nan),
+                "sigma0_full": ("sig", np.float32, (-50, 50), float32_nan),
                 "sat_track_azi":
                     ("sat_track_azi", np.float32, (0, 360), float32_nan),
                 "beam_number": ("beam_number", np.int8, (1, 6), int8_nan),
