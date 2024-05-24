@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.4.1
+=============
+
+- Add keyword to ignore ASCAT Level 1b flag noise out of limits
+
 Version 2.4.0
 =============
 
