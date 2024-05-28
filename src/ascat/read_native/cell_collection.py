@@ -30,7 +30,9 @@ import numpy as np
 import dask.array as da
 
 from ascat.file_handling import MultiFileHandler
-from ascat.read_native.product_info import ProductInfo
+from ascat.read_native.product_info import cell_io_catalog
+from ascat.read_native.product_info import grid_cache
+from ascat.utils import get_grid_gpis
 
 
 class RaggedArrayCell:
@@ -42,15 +44,17 @@ class RaggedArrayCell:
         self.chunks = chunks
         self.ds = None
 
-    def read(self, date_range=None, valid_gpis=None):
+    def read(self, date_range=None, valid_gpis=None, lookup_vector=None):
         ds = xr.open_dataset(self.filename)
         ds = self._ensure_obs(ds)
         ds = self._ensure_indexed(ds)
         ds = ds.chunk({"obs": self.chunks})
         if date_range is not None:
             ds = self._trim_var_range(ds, "time", *date_range)
-        if valid_gpis is not None:
-            ds = self._trim_to_gpis(ds, valid_gpis)
+        if lookup_vector is not None:
+            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
+        elif valid_gpis is not None:
+            ds = self._trim_to_gpis(ds, gpis=valid_gpis)
         # should I do it this way or just return the ds without having it be a class attribute?
         self.ds = ds
         return self.ds
@@ -62,16 +66,15 @@ class RaggedArrayCell:
     def _indexed_or_contiguous(ds):
         if "locationIndex" in ds:
             return "indexed"
-        else:
-            return "contiguous"
+        return "contiguous"
 
     @staticmethod
     def _trim_var_range(ds, var_name, var_min, var_max, end_inclusive=False):
         # if var_name in ds:
         if end_inclusive:
-            mask = ((ds[var_name] >= var_min) & (ds[var_name] <= var_max))
+            mask = (ds[var_name] >= var_min) & (ds[var_name] <= var_max)
         else:
-            mask = ((ds[var_name] >= var_min) & (ds[var_name] < var_max))
+            mask = (ds[var_name] >= var_min) & (ds[var_name] < var_max)
         return ds.sel(obs=mask.compute())
 
     @staticmethod
@@ -144,7 +147,6 @@ class RaggedArrayCell:
         if not ds.chunks:
             ds = ds.chunk({"obs": 1_000_000})
 
-
         ds = ds.sortby(["locationIndex", "time"])
         idxs, sizes = da.unique(ds.locationIndex.data, return_counts=True)
         row_size = da.zeros_like(ds.location_id.data)
@@ -180,7 +182,7 @@ class RaggedArrayCell:
 
         Parameters
         ----------
-        datasets : list of xarray.Dataset
+        data : list of xarray.Dataset
             Datasets to merge.
 
         Returns
@@ -319,7 +321,7 @@ class RaggedArrayCell:
             return None
         if gpis is None and lookup_vector is None:
             return ds
-        elif gpis is None:
+        if gpis is None:
             ds_location_ids = ds["location_id"].data[ds["locationIndex"].data]
             obs_idx = lookup_vector[ds_location_ids]
             locations_idx = da.unique(ds["locationIndex"].data[obs_idx]).compute()
@@ -353,6 +355,7 @@ class RaggedArrayCell:
 
         return ds
 
+
 class OrthoMultiCell:
     """
     Class to read and merge orthomulti cell files.
@@ -364,16 +367,20 @@ class OrthoMultiCell:
         self.chunks = chunks
         self.ds = None
 
-    def read(self, date_range=None, valid_gpis=None):
+    def read(self, date_range=None, valid_gpis=None, lookup_vector=None):
+        if self.ds is not None:
+            self.ds.close()
         ds = xr.open_dataset(self.filename)
         # ds = ds.set_index(locations="location_id")
-        ds = ds.chunk({"time": self.chunks, "locations": self.chunks})
+        ds = ds.chunk(self.chunks)
         # do these after merging?
         if date_range is not None:
             ds = ds.sel(time=slice(*date_range))
         if valid_gpis is not None:
             # ds = ds.sel(locations=valid_gpis)
-            ds = ds.where(ds["location_id"].isin(valid_gpis), drop=True)
+            ds = self._trim_to_gpis(ds, gpis=valid_gpis)
+        elif lookup_vector is not None:
+            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
         # should I do it this way or just return the ds without having it be a class attribute?
         self.ds = ds
         return self.ds
@@ -384,7 +391,7 @@ class OrthoMultiCell:
 
         Parameters
         ----------
-        datasets : list of xarray.Dataset
+        data : list of xarray.Dataset
             Datasets to merge.
 
         Returns
@@ -402,6 +409,39 @@ class OrthoMultiCell:
         )
         return merged_ds
 
+    @staticmethod
+    def _trim_to_gpis(ds, gpis=None, lookup_vector=None):
+        """Trim a dataset to only the gpis in the given list.
+        If any gpis are passed which are not in the dataset, they are ignored.
+
+        Parameters
+        ----------
+        ds : xarray.Dataset
+            Dataset.
+        gpis : list or list-like
+            List of gpis to keep.
+
+        Returns
+        -------
+        xarray.Dataset
+            Dataset with only the gpis in the list.
+        """
+        if ds is None:
+            return None
+        if gpis is None and lookup_vector is None:
+            pass
+
+        elif gpis is None:
+            ds_location_ids = ds["location_id"].data
+            locs_idx = lookup_vector[ds_location_ids]
+            ds = ds.sel(locations=locs_idx)
+        else:
+            # print(gpis)
+            ds = ds.where(ds["location_id"].isin(gpis).compute(), drop=True)
+            # print(ds)
+
+        return ds
+
 
 class CellGridFiles(MultiFileHandler):
     """
@@ -413,7 +453,7 @@ class CellGridFiles(MultiFileHandler):
         cls,
         fn_templ,
         sf_templ,
-        grid,
+        grid_name,
         cls_kwargs=None,
         err=True,
         fn_read_fmt=None,
@@ -435,6 +475,8 @@ class CellGridFiles(MultiFileHandler):
             Filename template (e.g. "{date}_ascat.nc").
         sf_templ : dict, optional
             Subfolder template defined as dictionary (default: None).
+        grid_name : str
+            Name of the grid used by the files as stored in the grid_cache.
         cls_kwargs : dict, optional
             Class keyword arguments (default: None).
         err : bool, optional
@@ -459,7 +501,14 @@ class CellGridFiles(MultiFileHandler):
         self.sf_read_fmt = sf_read_fmt
         self.fn_write_fmt = fn_write_fmt
         self.sf_write_fmt = sf_write_fmt
-        self.grid = grid
+
+        grid_info = grid_cache.fetch_or_store(grid_name)
+        self.grid_name = grid_name
+        self.grid = grid_info["grid"]
+        if (grid_info["attrs"] is not None) and ("grid_sampling_km" in grid_info["attrs"]):
+            self.grid_sampling_km = grid_info["attrs"]["grid_sampling_km"]
+        else:
+            self.grid_sampling_km = None
 
     def _fmt(self, *fmt_args, **fmt_kwargs):
         """
@@ -600,7 +649,8 @@ class CellGridFiles(MultiFileHandler):
         cells : list of int
             Cells.
         """
-        gpis = self.grid.find_nearest_gpi(*coords)
+        # gpis, _ = self.grid.find_nearest_gpi(*coords)
+        gpis = get_grid_gpis(self.grid, coords=coords)
         cells = self._cells_for_location_id(gpis)
         return cells
 
@@ -618,7 +668,8 @@ class CellGridFiles(MultiFileHandler):
         cells : list of int
             Cells.
         """
-        gpis = self.grid.get_bbox_grid_points(*bbox)
+        # gpis = self.grid.get_bbox_grid_points(*bbox)
+        gpis = get_grid_gpis(self.grid, bbox=bbox)
         cells = self._cells_for_location_id(gpis)
         return cells
 
@@ -630,6 +681,7 @@ class CellGridFiles(MultiFileHandler):
             bbox=None,
             # geom=None,
             # mask_and_scale=True,
+            max_coord_dist=np.Inf,
             date_range=None,
             # **kwargs,
     ):
@@ -646,6 +698,9 @@ class CellGridFiles(MultiFileHandler):
             Tuple of (lon, lat) coordinates.
         bbox : tuple
             Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        max_coord_dist : float
+            The maximum distance a coordinate's nearest grid point can be from it to be
+            selected.
         date_range : tuple of np.datetime64
             Tuple of (start, end) dates.
 
@@ -662,30 +717,41 @@ class CellGridFiles(MultiFileHandler):
         )
         if cell is not None:
             valid_gpis = None
-        elif location_id is not None:
-            valid_gpis = location_id
-        elif coords is not None:
-            valid_gpis = self.grid.find_nearest_gpi(*coords)
-        elif bbox is not None:
-            valid_gpis = self.grid.get_bbox_grid_points(*bbox)
+            lookup_vector = None
+        else:
+            valid_gpis, lookup_vector = get_grid_gpis(
+                self.grid,
+                cell,
+                location_id,
+                coords,
+                bbox,
+                max_coord_dist,
+                return_lookup=True
+            )
 
         data = []
 
         for filename in filenames:
             self._open(filename)
-            d = self.fid.read(date_range=date_range, valid_gpis=valid_gpis)
+            d = self.fid.read(
+                date_range=date_range,
+                valid_gpis=valid_gpis,
+                lookup_vector=lookup_vector
+            )
             if d is not None:
                 data.append(d)
 
         if data:
             data = self._merge_data(data)
+            data.attrs["grid_name"] = self.grid_name
+            return data
 
-        return data
+        return None
 
 
 class RaggedArrayFiles(CellGridFiles):
     def __init__(self, root_path, product_id, all_sats=False):
-        grid = ProductInfo(product_id).grid
+        grid_name = cell_io_catalog[product_id.upper()].grid_name
         sf_templ = {"sat_str": "{sat}"} if all_sats else None
         sf_read_fmt = {"sat_str": {"sat": "metop_[abc]"}} if all_sats else None
         init_options = {
@@ -693,16 +759,17 @@ class RaggedArrayFiles(CellGridFiles):
             "cls": RaggedArrayCell,
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
-            "grid": grid,
+            "grid_name": grid_name,
             "fn_read_fmt": lambda cell: {"cell_id": f"{cell:04d}"},
             "sf_read_fmt": sf_read_fmt,
         }
         super().__init__(**init_options)
 
+
 class OrthoMultiArrayFiles(CellGridFiles):
-    def __init__(self, root_path, product_id, grid=None, all_sats=False):
-        if grid is None:
-            grid = ProductInfo(product_id).grid
+    def __init__(self, root_path, product_id, grid_name=None, all_sats=False):
+        if grid_name is None:
+            grid_name = cell_io_catalog[product_id.upper()].grid_name
         sf_templ = {"sat_str": "{sat}"} if all_sats else None
         sf_read_fmt = {"sat_str": {"sat": "metop_[abc]"}} if all_sats else None
         init_options = {
@@ -710,7 +777,7 @@ class OrthoMultiArrayFiles(CellGridFiles):
             "cls": OrthoMultiCell,
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
-            "grid": grid,
+            "grid_name": grid_name,
             "fn_read_fmt": lambda cell: {"cell_id": f"{cell:04d}"},
             "sf_read_fmt": sf_read_fmt,
         }

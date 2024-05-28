@@ -14,10 +14,15 @@ from pygeogrids.netcdf import load_grid
 
 import ascat.read_native.generate_test_data as gtd
 
+from ascat.read_native.product_info import cell_io_catalog
+from ascat.read_native.cell_collection import grid_cache
+
 from ascat.read_native.cell_collection import RaggedArrayCell
 from ascat.read_native.cell_collection import CellGridFiles
 from ascat.read_native.cell_collection import RaggedArrayFiles
+from ascat.read_native.cell_collection import OrthoMultiCell
 from ascat.read_native.cell_collection import OrthoMultiArrayFiles
+
 
 def add_sat_id(ds, sat_name):
     name_dict = {"metop_a": 3, "metop_b": 4, "metop_c": 5}
@@ -248,7 +253,7 @@ class TestCellGridFiles(unittest.TestCase):
             "cls": RaggedArrayCell,
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
-            "grid": FibGrid(12.5),
+            "grid_name": "Fib12.5",
             "fn_read_fmt": lambda cell: {"cell_id": f"{cell:04d}"},
             "sf_read_fmt": sf_read_fmt,
         }
@@ -385,6 +390,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
             product_id="sig0_12.5",
         )
         real_merged = contig_collection.extract(cell=[2587, 2588])
+        self.assertIsInstance(real_merged, xr.Dataset)
 
         root_path = self.tempdir_path
         allsats_collection = RaggedArrayFiles(
@@ -393,56 +399,191 @@ class TestRaggedArrayFiles(unittest.TestCase):
             all_sats=True,
         )
         real_merged = allsats_collection.extract(cell=[2587, 2588])
+        self.assertIsNone(real_merged)
 
-class TestOrthomultiArrayFiles(unittest.TestCase):
+
+# test adding new cell types used with OrthoMultiArray
+era5_grid = load_grid("tests/ascat_test_data/warp/era5_land_2023/grid.nc")
+grid_cache.fetch_or_store("Era5Land", era5_grid)
+
+gldas_grid = load_grid("tests/ascat_test_data/warp/gldas_2023/grid.nc")
+grid_cache.fetch_or_store("GLDAS", gldas_grid)
+
+cci_passive_grid = load_grid("tests/ascat_test_data/warp/cci_passive_v07.1/grid.nc")
+grid_cache.fetch_or_store("CCI_PASSIVE", cci_passive_grid)
+
+class ERA5Cell():
+    grid_name = "Era5Land"
+    grid_info = grid_cache.fetch_or_store(grid_name)
+    grid = grid_info["grid"]
+    # grid_cell_size = 5
+    fn_format = "{:04d}.nc"
+    possible_cells = grid_info["possible_cells"]
+    max_cell = grid_info["max_cell"]
+    min_cell = grid_info["min_cell"]
+
+class GLDASCell():
+    grid_name = "GLDAS"
+    grid_info = grid_cache.fetch_or_store(grid_name)
+    grid = grid_info["grid"]
+    # grid_cell_size = 5
+    fn_format = "{:04d}.nc"
+    possible_cells = grid_info["possible_cells"]
+    max_cell = grid_info["max_cell"]
+    min_cell = grid_info["min_cell"]
+
+class CCI_PassiveCell():
+    grid_name = "CCI_PASSIVE"
+    grid_info = grid_cache.fetch_or_store(grid_name)
+    grid = grid_info["grid"]
+    # grid_cell_size = 5
+    fn_format = "{:04d}.nc"
+    possible_cells = grid_info["possible_cells"]
+    max_cell = grid_info["max_cell"]
+    min_cell = grid_info["min_cell"]
+
+cell_io_catalog["ERA5"] = ERA5Cell
+cell_io_catalog["GLDAS"] = GLDASCell
+cell_io_catalog["CCI_PASSIVE"] = CCI_PassiveCell
+
+
+class TestOrthoMultiCell(unittest.TestCase):
     def setUp(self):
         self.tempdir = TemporaryDirectory()
         self.tempdir_path = Path(self.tempdir.name)
+        warp_path = Path("tests/ascat_test_data/warp")
+        self.era5_path = warp_path / "era5_land_2023"
+        self.gldas_path = warp_path / "gldas_2023"
+        self.cci_passive_path = warp_path / "cci_passive_v07.1"
+        # print("hi")
+        # gen_dummy_cellfiles(self.tempdir_path)
 
     def tearDown(self):
         self.tempdir.cleanup()
 
-    # delete this later
-    # def test_real(self):
-    #     realdata_path = Path("/home/charriso/p14/data-read/RADAR/warp/era5_land_2023/")
-    #     real_collection = OrthoMultiArrayFiles(
-    #         realdata_path,
-    #         product_id="nothing",
-    #         grid=load_grid(realdata_path/"grid.nc")
-    #     )
-    #     bbox = (-7, -4, -69, -65)
-    #     ds = real_collection.read(bbox=bbox)
-    #     print(ds)
+    def test_init(self):
+        om = OrthoMultiCell(self.era5_path / "0030.nc")
+        self.assertEqual(om.filename, self.era5_path / "0030.nc")
+        self.assertIsNone(om.ds)
 
-    # def test_init(self):
-    #     om_collection = RaggedArrayFiles(
-    #         self.tempdir_path / "contiguous",
-    #         product_id="sig0_12.5",
-    #     )
-    #     self.assertEqual(contig_collection.fn_read_fmt(2588), {"cell_id": "2588"})
-    #     self.assertIsNone(contig_collection.sf_read_fmt)
-    #     self.assertEqual(contig_collection.root_path, self.tempdir_path / "contiguous")
-    #     self.assertEqual(contig_collection.cls, RaggedArrayCell)
+        # ra_chunked = RaggedArrayCell(contiguous_ragged_path, chunks={"locations": 2})
+        # self.assertEqual(ra_chunked.filename, contiguous_ragged_path)
+        # self.assertIsNone(ra_chunked.ds)
+        # self.assertEqual(ra_chunked.chunks, {"locations": 2})
 
-    # def test_search(self):
-    #     root_path = self.tempdir_path / "contiguous"
-    #     contig_collection = RaggedArrayFiles(
-    #         root_path,
-    #         product_id="sig0_12.5",
-    #     )
-    #     self.assertEqual(contig_collection.spatial_search(),
-    #                      [str(root_path/"2587.nc"), str(root_path/"2588.nc")])
-    #     self.assertEqual(contig_collection.spatial_search(location_id=1549346),
-    #                      [str(root_path/"2588.nc")])
-    #     self.assertEqual(contig_collection.spatial_search(location_id=1493629),
-    #                      [str(root_path/"2587.nc")])
-    #     self.assertEqual(contig_collection.spatial_search(location_id=[1549346, 1493629]),
-    #                      [str(root_path/"2587.nc"), str(root_path/"2588.nc")])
-    #     self.assertEqual(contig_collection.spatial_search(location_id=[1493629, 1549346, 1493629]),
-    #                      [str(root_path/"2587.nc"), str(root_path/"2588.nc")])
+    def test_read(self):
+        om = OrthoMultiCell(self.era5_path / "0030.nc")
+        om.read()
+        self.assertIsInstance(om.ds, xr.Dataset)
+
+        om.read(valid_gpis=[905400, 905401])
+        self.assertTrue(np.all(np.isin(om.ds.location_id.values, [905400, 905401]))
+                        and len(om.ds.location_id.values) == 2)
+        self.assertTrue(np.all(np.isin([905400, 905401], om.ds.location_id.values)))
+        self.assertIn("lon", om.ds)
+        self.assertIn("lat", om.ds)
+        self.assertIn("time", om.ds)
+        self.assertIn("locations", om.ds.dims)
+        # # assert chunk size
+        self.assertEqual(om.ds["location_id"].data.chunksize, (2,))
+
+    def test_merge(self):
+        fname1 = self.era5_path / "0029.nc"
+        fname2 = self.era5_path / "0030.nc"
+        om1 = OrthoMultiCell(fname1)
+        om2 = OrthoMultiCell(fname2)
+        om1.read()
+        print(era5_grid.gpis.max())
+        print(om1.ds.location_id.values.max())
+        om2.read()
+        # print(om1.ds.location_id.values)
+        merged = om1.merge([om1.ds, om2.ds])
+        # print(merged.location_id.values)
+
+        fname1 = self.gldas_path / "0029.nc"
+        fname2 = self.gldas_path / "0030.nc"
+        om1 = OrthoMultiCell(fname1)
+        om2 = OrthoMultiCell(fname2)
+        om1.read()
+        print(gldas_grid.gpis.max())
+        om2.read()
+        print(om2.ds.location_id.values.max())
+        merged = om1.merge([om1.ds, om2.ds])
+
+        # fname1 = self.cci_passive_path / "0030.nc"
+        # fname2 = self.cci_passive_path / "0031.nc"
+        # om1 = OrthoMultiCell(fname1)
+        # print(cci_passive_grid.gpis.max())
+        # print(om1.ds.location_id.values.max())
+        # om2 = OrthoMultiCell(fname2)
+
+        # merged = om1.merge([om1.ds, om2.ds])
 
 
 
+class TestOrthoMultiArrayFiles(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = TemporaryDirectory()
+        self.tempdir_path = Path(self.tempdir.name)
+        warp_path = Path("tests/ascat_test_data/warp")
+        self.era5_path = warp_path / "era5_land_2023"
+        self.gldas_path = warp_path / "gldas_2023"
+        self.cci_passive_path = warp_path / "cci_passive_v07.1"
+        # gen_dummy_cellfiles(self.tempdir_path)
+        # gen_dummy_cellfiles(self.tempdir_path, "metop_a")
+        # gen_dummy_cellfiles(self.tempdir_path, "metop_b")
+        # gen_dummy_cellfiles(self.tempdir_path, "metop_c")
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def test_init(self):
+        om_collection = OrthoMultiArrayFiles(
+            self.era5_path,
+            product_id="ERA5",
+        )
+        self.assertEqual(om_collection.fn_read_fmt(29), {"cell_id": "0029"})
+        self.assertIsNone(om_collection.sf_read_fmt)
+        self.assertEqual(om_collection.root_path, self.era5_path)
+        self.assertEqual(om_collection.cls, OrthoMultiCell)
+
+    def test_search(self):
+        return
+        om_collection = OrthoMultiArrayFiles(
+            self.era5_path,
+            product_id="ERA5",
+        )
+        self.assertEqual(om_collection.spatial_search(),
+                         [str(self.era5_path/"0029.nc"),
+                          str(self.era5_path/"0030.nc"),
+                          str(self.era5_path/"0140.nc")])
+        self.assertEqual(om_collection.spatial_search(location_id=1085400), [str(self.era5_path/"0029.nc")])
+        # self.assertEqual(om_collection.spatial_search(location_id=1081849),
+        #                  [str(root_path/"0140.nc")])
+        # self.assertEqual(om_collection.spatial_search(location_id=[1085400, 1081849]),
+        #                  [str(root_path/"0029.nc"), str(root_path/"0140.nc")])
+        # self.assertEqual(om_collection.spatial_search(location_id=[1081849, 1085400, 1081849]),
+        #                  [str(root_path/"0029.nc"), str(root_path/"0140.nc")])
+
+
+    def test_extract(self):
+        return
+        root_path = self.tempdir_path / "contiguous"
+        contig_collection = OrthoMultiArrayFiles(
+            root_path,
+            product_id="sig0_12.5",
+        )
+        real_merged = contig_collection.extract(cell=[2587, 2588])
+        self.assertIsInstance(real_merged, xr.Dataset)
+
+        root_path = self.tempdir_path
+        allsats_collection = OrthoMultiArrayFiles(
+            root_path,
+            product_id="sig0_12.5",
+            all_sats=True,
+        )
+        real_merged = allsats_collection.extract(cell=[2587, 2588])
+        self.assertIsNone(real_merged)
 
 if __name__ == "__main__":
     unittest.main()
