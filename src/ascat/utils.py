@@ -307,6 +307,8 @@ def get_grid_gpis(
         location_id=None,
         coords=None,
         bbox=None,
+        max_coord_dist=np.Inf,
+        return_lookup=False,
 ):
     """
     Get grid point indices.
@@ -323,11 +325,15 @@ def get_grid_gpis(
         Tuple of (lon, lat) coordinates.
     bbox : tuple, optional
         Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+    max_coord_dist : float, optional
+        Maximum distance from coordinates to return a gpi.
 
     Returns
     -------
     gpi : int
         Grid point index.
+
+    TODO: Add maximum distance from coordinates to return a gpi.
     """
     if cell is not None:
         gpis, lons, lats = grid.grid_points_for_cell(cell)
@@ -337,14 +343,42 @@ def get_grid_gpis(
             gpis = [gpis]
         gpis = np.array(gpis)
     elif coords is not None:
-        gpis = grid.find_nearest_gpi(*coords)
+        gpis, dist = grid.find_nearest_gpi(*coords)
+        gpis = np.array(gpis)
+        dist = np.array(dist)
+        gpis = gpis[dist <= max_coord_dist]
+
     elif bbox is not None:
         gpis = grid.get_bbox_grid_points(*bbox)
     else:
-        return None
+        gpis = None
+
+    if return_lookup:
+        lookup_vector = gpis_to_lookup(grid, gpis)
+        return gpis, lookup_vector
 
     return gpis
 
+def gpis_to_lookup(grid, gpis):
+    """
+    Create lookup vector from grid point indices.
+
+    Parameters
+    ----------
+    grid : pygeogrids.BasicGrid
+        Grid object.
+    gpis : numpy.ndarray
+        Grid point indices.
+
+    Returns
+    -------
+    lookup_vector : numpy.ndarray
+        Lookup vector.
+    """
+    if gpis is not None:
+        lookup_vector = np.zeros(grid.gpis.max()+1, dtype=bool)
+        lookup_vector[gpis] = 1
+        return lookup_vector
 
 class Spacecraft:
     """
