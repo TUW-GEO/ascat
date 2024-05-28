@@ -27,19 +27,19 @@
 
 from datetime import timedelta
 
-import xarray as xr
-import numpy as np
 import dask
-import dask.array as da
+import numpy as np
+import xarray as xr
 
-from pyresample.geometry import SwathDefinition, AreaDefinition
 from pyresample import kd_tree
+from pyresample.geometry import AreaDefinition
+from pyresample.geometry import SwathDefinition
 
-from fibgrid.realization import FibGrid
-from ascat.file_handling import MultiFileHandler
 from ascat.file_handling import ChronFiles
-from ascat.read_native.product_info import ProductInfo
+from ascat.read_native.product_info import grid_cache
+from ascat.read_native.product_info import swath_io_catalog
 from ascat.utils import get_grid_gpis
+
 
 class SwathFile:
     """
@@ -51,11 +51,15 @@ class SwathFile:
         self.ds = None
 
     def read(self, date_range=None, valid_gpis=None, lookup_vector=None, mask_and_scale=True):
+        """
+        Read the file or a subset of it.
+        """
         ds = xr.open_dataset(
             self.filename,
             mask_and_scale=mask_and_scale,
             engine="netcdf4",
         )
+        ds["location_id"] = ds["location_id"].astype(np.int32)
         if date_range is not None:
             ds = self._trim_var_range(ds, "time", *date_range)
         if lookup_vector is not None:
@@ -64,7 +68,7 @@ class SwathFile:
             ds = self._trim_to_gpis(ds, gpis=valid_gpis)
         # ds = self._ensure_obs(ds)
 
-        ds.chunk({"obs": self.chunks})
+        ds = ds.chunk({"obs": self.chunks})
 
         # should I do it this way or just return the ds without having it be a class attribute?
         self.ds = ds
@@ -87,11 +91,26 @@ class SwathFile:
         if data == []:
             return None
 
+        # [self._preprocess(ds) for ds in data if ds.obs.size > 0]
+        # merged_ds = xr.concat(
+        #     [self._preprocess(ds) for ds in data if ds.obs.size > 0],
+        #     dim="obs",
+        #     combine_attrs=self.combine_attributes,
+        # )
+        ds_to_merge = [self._preprocess(ds) for ds in data if ds.obs.size > 0]
+
+        # if all the datasets are empty in the obs dimension, just return the first one
+        if ds_to_merge == []:
+            return data[0]
+
         merged_ds = xr.concat(
-            [self._preprocess(ds) for ds in data],
+            ds_to_merge,
             dim="obs",
             combine_attrs=self.combine_attributes,
+            data_vars="minimal",
+            coords="minimal",
         )
+
         return merged_ds
 
     @staticmethod
@@ -162,32 +181,33 @@ class SwathFile:
             return None
         if gpis is None and lookup_vector is None:
             return ds
-        elif gpis is None:
+        if gpis is None:
             ds_location_ids = ds["location_id"].data
             obs_idx = lookup_vector[ds_location_ids]
             ds = ds.sel(obs=obs_idx)
 
         # TODO Need to add this case!!!
         # else:
-        #     # first trim out any gpis not in the dataset from the gpi list
-        #     gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
+        #     ds = ds.sel(obs=(da.isin(ds["location_id"], gpis).compute())) #
+            # # first trim out any gpis not in the dataset from the gpi list
+            # gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
 
-        #     # this is a list of the locationIndex values that correspond to the gpis we're keeping
-        #     locations_idx = np.searchsorted(ds["location_id"].values, gpis)
-        #     # this is the indices of the observations that have any of those locationIndex values
-        #     obs_idx = da.isin(ds["locationIndex"], locations_idx).compute()
+            # # this is a list of the locationIndex values that correspond to the gpis we're keeping
+            # locations_idx = np.searchsorted(ds["location_id"].values, gpis)
+            # # this is the indices of the observations that have any of those locationIndex values
+            # obs_idx = da.isin(ds["locationIndex"], locations_idx).compute()
 
-        #     # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
-        #     old_locationIndex = ds["locationIndex"].values
-        #     new_locationIndex = np.searchsorted(
-        #         locations_idx,
-        #         old_locationIndex[da.isin(old_locationIndex, locations_idx)]
-        #     )
+            # # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
+            # old_locationIndex = ds["locationIndex"].values
+            # new_locationIndex = np.searchsorted(
+            #     locations_idx,
+            #     old_locationIndex[da.isin(old_locationIndex, locations_idx)]
+            # )
 
-        #     # then trim out any gpis in the dataset not in gpis
-        #     ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
-        #     # and add the new locationIndex
-        #     ds["locationIndex"] = ("obs", new_locationIndex)
+            # # then trim out any gpis in the dataset not in gpis
+            # ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
+            # # and add the new locationIndex
+            # ds["locationIndex"] = ("obs", new_locationIndex)
 
         return ds
 
@@ -212,27 +232,26 @@ class SwathFile:
         if "global_attributes_flag" in attrs_list[0].keys():
             return None
 
-        else:
-            variable_attrs = attrs_list
-            # this code taken straight from xarray/core/merge.py
-            # Replicates the functionality of "drop_conflicts"
-            # but just for variable attributes
-            result = {}
-            dropped_keys = set()
-            for attrs in variable_attrs:
-                result.update({
-                    key: value
-                    for key, value in attrs.items()
-                    if key not in result and key not in dropped_keys
-                })
-                result = {
-                    key: value
-                    for key, value in result.items()
-                    if key not in attrs or
-                    xr.core.utils.equivalent(attrs[key], value)
-                }
-                dropped_keys |= {key for key in attrs if key not in result}
-            return result
+        variable_attrs = attrs_list
+        # this code taken straight from xarray/core/merge.py
+        # Replicates the functionality of "drop_conflicts"
+        # but just for variable attributes
+        result = {}
+        dropped_keys = set()
+        for attrs in variable_attrs:
+            result.update({
+                key: value
+                for key, value in attrs.items()
+                if key not in result and key not in dropped_keys
+            })
+            result = {
+                key: value
+                for key, value in result.items()
+                if key not in attrs or
+                xr.core.utils.equivalent(attrs[key], value)
+            }
+            dropped_keys |= {key for key in attrs if key not in result}
+        return result
 
     def _close(self):
         """
@@ -255,6 +274,7 @@ class SwathFile:
         """
         self._close()
 
+
 class SwathGridFiles(ChronFiles):
     """
     Class to read and merge multiple swath files.
@@ -268,10 +288,11 @@ class SwathGridFiles(ChronFiles):
     def __init__(
         self,
         root_path,
-        cls,
+        file_class,
         fn_templ,
         sf_templ,
-        grid,
+        grid_name,
+        date_field_fmt,
         cls_kwargs=None,
         err=True,
         fn_read_fmt=None,
@@ -287,7 +308,7 @@ class SwathGridFiles(ChronFiles):
         ----------
         root_path : str
             Root path.
-        cls : class
+        file_class : class
             Class reading/writing files.
         fn_templ : str
             Filename template (e.g. "{date}_ascat.nc").
@@ -310,11 +331,115 @@ class SwathGridFiles(ChronFiles):
         cache_size : int, optional
             Number of files to keep in memory (default=0).
         """
-        super().__init__(root_path, cls, fn_templ, sf_templ, cls_kwargs, err,
+        super().__init__(root_path, file_class, fn_templ, sf_templ, cls_kwargs, err,
                          fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt,
                          cache_size)
 
-        self.grid = grid
+        self.date_field_fmt = date_field_fmt
+        grid_info = grid_cache.fetch_or_store(grid_name)
+        self.grid_name = grid_name
+        self.grid = grid_info["grid"]
+        if "grid_sampling_km" in grid_info["attrs"]:
+            self.grid_sampling_km = grid_info["attrs"]["grid_sampling_km"]
+        else:
+            self.grid_sampling_km = None
+
+    @classmethod
+    def from_product_id(
+            cls,
+            path,
+            product_id,
+    ):
+        """Create a SwathGridFiles object based on a product_id.
+
+        Returns a SwathGridFiles object initialized with an io_class specified
+        by `product_id` (case-insensitive).
+
+        Parameters
+        ----------
+        path : str or Path
+            Path to the swath file collection.
+        product_id : str
+            Identifier for the specific ASCAT product the swath files are part of.
+
+        Raises
+        ------
+        ValueError
+            If product_id is not recognized.
+
+        Examples
+        --------
+        >>> my_swath_collection = SwathFileCollection.from_product_id(
+        ...     "/path/to/swath/files",
+        ...     "H129",
+        ... )
+
+        """
+        product_id = product_id.upper()
+        if product_id in swath_io_catalog:
+            io_class = swath_io_catalog[product_id]
+        else:
+            error_str = f"Product {product_id} not recognized. Valid products are"
+            error_str += f" {', '.join(swath_io_catalog.keys())}."
+            raise ValueError(error_str)
+
+        return cls(
+            path,
+            SwathFile,
+            io_class.fn_pattern,
+            io_class.sf_pattern,
+            # grid=io_class.grid,
+            # grid_sampling_km=io_class.grid_sampling_km,
+            grid_name=io_class.grid_name,
+            date_field_fmt=io_class.date_field_fmt,
+            fn_read_fmt=io_class.fn_read_fmt,
+            sf_read_fmt=io_class.sf_read_fmt,
+            # fn_write_fmt=io_class.fn_write_fmt,
+            # sf_write_fmt=io_class.sf_write_fmt,
+            # cache_size=io_class.cache_size,
+        )
+
+    @classmethod
+    def from_io_class(
+            cls,
+            path,
+            io_class,
+    ):
+        """Create a SwathGridFiles from a given io_class.
+
+        Returns a SwathGridFiles object initialized with the given io_class.
+
+        Parameters
+        ----------
+        path : str or Path
+            Path to the swath file collection.
+        io_class : class
+            Class to use for reading and writing the swath files.
+
+        Examples
+        --------
+        >>> my_swath_collection = SwathFileCollection.from_io_class(
+        ...     "/path/to/swath/files",
+        ...     AscatH129Swath,
+        ... )
+
+        """
+        # enforce the presence of certain class attributes
+        return cls(
+            path,
+            SwathFile,
+            io_class.fn_pattern,
+            io_class.sf_pattern,
+            # grid=io_class.grid,
+            # grid_sampling_km=io_class.grid_sampling_km,
+            grid_name=io_class.grid_name,
+            date_field_fmt=io_class.date_field_fmt,
+            fn_read_fmt=io_class.fn_read_fmt,
+            sf_read_fmt=io_class.sf_read_fmt,
+            # fn_write_fmt=io_class.fn_write_fmt,
+            # sf_write_fmt=io_class.sf_write_fmt,
+            # cache_size=io_class.cache_size,
+        )
 
     def _spatial_filter(
             self,
@@ -381,13 +506,20 @@ class SwathGridFiles(ChronFiles):
                 1000,
                 bbox,
             )
+        else:
+            spatial = None
+
+        if spatial is None:
+            return filenames
 
         filtered_filenames = []
         for filename in filenames:
             lazy_result = dask.delayed(self._check_intersection)(filename, spatial)
             filtered_filenames.append(lazy_result)
 
-        none_filter = lambda list: [l for l in list if l is not None]
+        def none_filter(fname_list):
+            return [l for l in fname_list if l is not None]
+
         filtered_filenames = dask.delayed(none_filter)(filtered_filenames).compute()
 
         return filtered_filenames
@@ -419,9 +551,9 @@ class SwathGridFiles(ChronFiles):
                 neighbours=1,
             )
             valid_input_index, _, _ = n_info[:3]
-            # return np.any(valid_input_index)
             if np.any(valid_input_index):
                 return filename
+        return None
 
     def swath_search(
         self,
@@ -430,7 +562,6 @@ class SwathGridFiles(ChronFiles):
         dt_delta=timedelta(days=1),
         search_date_fmt="%Y%m%d*",
         date_field="date",
-        date_field_fmt="%Y%m%d",
         end_inclusive=True,
         cell=None,
         location_id=None,
@@ -452,8 +583,6 @@ class SwathGridFiles(ChronFiles):
             Search date format.
         date_field : str
             Date field.
-        date_field_fmt : str
-            Date field format.
         end_inclusive : bool
             End date inclusive.
         cell : int or list of int
@@ -476,7 +605,8 @@ class SwathGridFiles(ChronFiles):
             dt_delta,
             search_date_fmt,
             date_field,
-            date_field_fmt,
+            date_field_fmt=self.date_field_fmt,
+            end_inclusive=end_inclusive,
         )
 
         filtered_filenames = self._spatial_filter(
@@ -496,7 +626,6 @@ class SwathGridFiles(ChronFiles):
         dt_delta=timedelta(days=1),
         search_date_fmt="%Y%m%d*",
         date_field="date",
-        date_field_fmt="%Y%m%d",
         end_inclusive=True,
         cell=None,
         location_id=None,
@@ -518,8 +647,6 @@ class SwathGridFiles(ChronFiles):
             Search date format.
         date_field : str
             Date field.
-        date_field_fmt : str
-            Date field format.
         end_inclusive : bool
             End date inclusive.
         cell : int or list of int
@@ -542,7 +669,7 @@ class SwathGridFiles(ChronFiles):
             dt_delta,
             search_date_fmt,
             date_field,
-            date_field_fmt,
+            # self.date_field_fmt,
             end_inclusive,
             cell,
             location_id,
@@ -556,16 +683,34 @@ class SwathGridFiles(ChronFiles):
             coords=coords,
             bbox=bbox
         )
+        lookup_vector = np.zeros(self.grid.gpis.max()+1, dtype=bool)
+        lookup_vector[valid_gpis] = 1
 
         data = []
         for filename in filenames:
             self._open(filename)
             date_range = (np.datetime64(dt_start), np.datetime64(dt_end))
-            d = self.fid.read(date_range=date_range, valid_gpis=valid_gpis)
+
+            # filter by date here or below?
+            d = self.fid.read(
+                # date_range=date_range,
+            )
             if d is not None:
                 data.append(d)
 
         if data:
             data = self._merge_data(data)
 
-        return data
+            data_location_ids = data["location_id"].values
+            obs_idx = lookup_vector[data_location_ids]
+            data = data.sel(obs=obs_idx)
+
+            # still not clear if it's better to filter date here or during fid.read
+            if date_range is not None:
+                mask = (data["time"] >= date_range[0]) & (data["time"] <= date_range[1])
+                data = data.sel(obs=mask.compute())
+
+            data.attrs["grid_name"] = self.grid_name
+
+            return data
+        return None
