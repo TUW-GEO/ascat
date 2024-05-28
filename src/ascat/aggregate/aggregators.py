@@ -37,7 +37,7 @@ import xarray as xr
 from flox.xarray import xarray_reduce
 from dask.array import unique as da_unique
 
-import ascat.read_native.ragged_array_ts as rat
+from ascat.read_native.swath_collection import SwathGridFiles
 from ascat.read_native.xarray_io import get_swath_product_id
 from ascat.read_native.xarray_io import dtype_to_nan
 from ascat.regrid.regrid import regrid_global_raster_ds, grid_to_regular_grid
@@ -114,8 +114,9 @@ class TemporalSwathAggregator:
         product = get_swath_product_id(first_fname)
         self.product = product
 
-        self.collection = rat.SwathFileCollection.from_product_id(
-            Path(filepath), product
+        self.collection = SwathGridFiles.from_product_id(
+            Path(filepath),
+            product
         )
 
         self.grid = self.collection.grid
@@ -146,8 +147,9 @@ class TemporalSwathAggregator:
     def _read_data(self):
         if progress_to_stdout:
             print("constructing dataset, this may take some time...")
-        self.data = self.collection.read(
-            date_range=(self.start_dt, self.end_dt),
+        self.data = self.collection.extract(
+            self.start_dt,
+            self.end_dt,
         )
         if progress_to_stdout:
             print("done constructing dataset")
@@ -189,7 +191,7 @@ class TemporalSwathAggregator:
         """Loop through time steps and write them to file."""
         product_id = self.product.lower().replace("_", "-")
         if self.regrid_degrees is None:
-            grid_sampling = str(self.collection.ioclass.grid_sampling_km) + "km"
+            grid_sampling = str(self.collection.grid_sampling_km) + "km"
         else:
             grid_sampling = str(self.regrid_degrees) + "deg"
 
@@ -249,7 +251,7 @@ class TemporalSwathAggregator:
             for timestep in time_steps:
                 step_start = timestep
                 step_end = timestep + self.timedelta
-                ds_step = self.collection.read(date_range=(step_start, step_end))
+                ds_step = self.collection.extract(step_start, step_end)
                 step_end = step_end - pd.Timedelta("1s")
                 ds_step.attrs["start_time"] = np.datetime64(step_start).astype(str)
                 ds_step.attrs["end_time"] = np.datetime64(step_end).astype(str)
@@ -321,7 +323,7 @@ class TemporalSwathAggregator:
                 print("regridding             ")
             grid_store_path = self.grid_store_path
             if grid_store_path is not None:
-                old_grid_id = f"fib_grid_{self.collection.ioclass.grid_sampling_km}km"
+                old_grid_id = f"fib_grid_{self.collection.grid_sampling_km}km"
                 new_grid_id = f"reg_grid_{self.regrid_degrees}deg"
                 new_grid, old_grid_lut, _ = retrieve_or_store_grid_lut(
                     grid_store_path,
