@@ -548,7 +548,6 @@ class TestOrthoMultiArrayFiles(unittest.TestCase):
         self.assertEqual(om_collection.cls, OrthoMultiCell)
 
     def test_search(self):
-        return
         om_collection = OrthoMultiArrayFiles(
             self.era5_path,
             product_id="ERA5",
@@ -557,33 +556,26 @@ class TestOrthoMultiArrayFiles(unittest.TestCase):
                          [str(self.era5_path/"0029.nc"),
                           str(self.era5_path/"0030.nc"),
                           str(self.era5_path/"0140.nc")])
-        self.assertEqual(om_collection.spatial_search(location_id=1085400), [str(self.era5_path/"0029.nc")])
-        # self.assertEqual(om_collection.spatial_search(location_id=1081849),
-        #                  [str(root_path/"0140.nc")])
-        # self.assertEqual(om_collection.spatial_search(location_id=[1085400, 1081849]),
-        #                  [str(root_path/"0029.nc"), str(root_path/"0140.nc")])
-        # self.assertEqual(om_collection.spatial_search(location_id=[1081849, 1085400, 1081849]),
-        #                  [str(root_path/"0029.nc"), str(root_path/"0140.nc")])
+        self.assertEqual(om_collection.spatial_search(location_id=1085400),
+                         [str(self.era5_path/"0029.nc")])
+        self.assertEqual(om_collection.spatial_search(location_id=1081849),
+                         [str(self.era5_path/"0030.nc")])
+        self.assertEqual(om_collection.spatial_search(location_id=[1085400, 1081849]),
+                         [str(self.era5_path/"0029.nc"),
+                          str(self.era5_path/"0030.nc")])
+        self.assertEqual(om_collection.spatial_search(location_id=[1081849, 1085400, 1081849]),
+                         [str(self.era5_path/"0029.nc"),
+                          str(self.era5_path/"0030.nc")])
 
 
     def test_extract(self):
-        return
-        root_path = self.tempdir_path / "contiguous"
-        contig_collection = OrthoMultiArrayFiles(
-            root_path,
-            product_id="sig0_12.5",
+        om_collection = OrthoMultiArrayFiles(
+            self.era5_path,
+            product_id="ERA5",
         )
-        real_merged = contig_collection.extract(cell=[2587, 2588])
+        real_merged = om_collection.extract(cell=[29, 30])
         self.assertIsInstance(real_merged, xr.Dataset)
 
-        root_path = self.tempdir_path
-        allsats_collection = OrthoMultiArrayFiles(
-            root_path,
-            product_id="sig0_12.5",
-            all_sats=True,
-        )
-        real_merged = allsats_collection.extract(cell=[2587, 2588])
-        self.assertIsNone(real_merged)
 
 if __name__ == "__main__":
     unittest.main()
