@@ -21,8 +21,8 @@ def gen_dummy_swathfiles(directory, sat_name=None):
     if sat_name is not None:
         directory = directory / sat_name
         directory.mkdir(parents=True, exist_ok=True)
-    gtd.swath_ds.to_netcdf(dir / "swath.nc")
-    gtd.swath_ds_2.to_netcdf(dir / "swath_2.nc")
+    gtd.swath_ds.to_netcdf(directory / "swath.nc")
+    gtd.swath_ds_2.to_netcdf(directory / "swath_2.nc")
 
 
 class TestSwathFile(unittest.TestCase):
