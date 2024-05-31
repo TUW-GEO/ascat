@@ -1987,7 +1987,7 @@ def set_flags(data, ignore_noise_ool=False):
 
     if ignore_noise_ool:
         # remove "noise out of limits" as red flag
-        flag_status_bit["flagfield_rf"] = np.array([2, 0, 0, 0, 0, 0, 0, 0])
+        flag_status_bit["flagfield_rf2"] = np.array([2, 0, 0, 0, 0, 0, 0, 0])
 
     f_usable = np.zeros(data["flagfield_rf1"].size, dtype=np.uint8)
 

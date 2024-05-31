@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.4.2
+=============
+
+- Fix typo in flagfield name
+
 Version 2.4.1
 =============
 
