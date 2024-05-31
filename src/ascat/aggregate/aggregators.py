@@ -115,9 +115,7 @@ class TemporalSwathAggregator:
         self.product = product
 
         self.collection = SwathGridFiles.from_product_id(
-            Path(filepath),
-            product
-        )
+            Path(filepath), product)
 
         self.grid = self.collection.grid
         self.data = None
