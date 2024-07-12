@@ -12,8 +12,10 @@ from fibgrid.realization import FibGrid
 
 import ascat.read_native.generate_test_data as gtd
 
+from importlib import reload
 from ascat.read_native.swath_collection import SwathFile
 from ascat.read_native.swath_collection import SwathGridFiles
+from ascat.read_native.cell_collection import RaggedArrayCell
 from ascat.read_native.product_info import AscatH129Swath
 
 
@@ -165,6 +167,7 @@ class TestSwathGridFiles(unittest.TestCase):
         self.assertGreater(len(files), 0)
 
     def test_extract(self):
+        # test extract
         swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
         sf = SwathGridFiles.from_product_id(swath_path, "h129")
         files = sf.search_period(
@@ -188,3 +191,125 @@ class TestSwathGridFiles(unittest.TestCase):
         self.assertGreater(merged_ds.latitude.min(), bbox[0])
         self.assertLess(merged_ds.longitude.max(), bbox[3])
         self.assertGreater(merged_ds.longitude.min(), bbox[2])
+
+        # test extract from main folder
+        swath_path = "tests/ascat_test_data/hsaf/h129/swaths/metop_a/meto2021"
+        sf = SwathGridFiles.from_product_id(swath_path, "h129")
+        files = sf.search_period(
+            datetime(2021, 1, 15),
+            datetime(2021, 1, 30),
+            date_field_fmt="%Y%m%d%H%M%S"
+        )
+        self.assertGreater(len(files), 0)
+        bbox = (-180, -4, -70, 20)
+
+        merged_ds = sf.extract(
+            datetime(2021, 1, 15),
+            datetime(2021, 1, 30),
+            bbox=bbox,
+        )
+
+        merged_ds.load()
+        self.assertLess(merged_ds.time.max(), np.datetime64(datetime(2021, 1, 30)))
+        self.assertGreater(merged_ds.time.min(), np.datetime64(datetime(2021, 1, 15)))
+        self.assertLess(merged_ds.latitude.max(), bbox[1])
+        self.assertGreater(merged_ds.latitude.min(), bbox[0])
+        self.assertLess(merged_ds.longitude.max(), bbox[3])
+        self.assertGreater(merged_ds.longitude.min(), bbox[2])
+
+    def test_stack_to_cell_files(self):
+        return
+        # cell_path = self.tempdir_path / "cell"
+        # cell_path.mkdir(parents=True, exist_ok=True)
+        # swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
+        # swath_path = "ascat_test_data/hsaf/h129/swaths"
+
+        swath_path = "/home/charriso/Projects/ascat/tests/ascat_test_data/hsaf/h129/swaths"
+        sf = SwathGridFiles.from_product_id(swath_path, "h129")
+
+        # sf.stack_to_cell_files("/home/charriso/test_cells/", RaggedArrayCell, datetime(2021, 1, 1), datetime(2021, 2, 1), processes=12, mode="a", chunk=True, load=True)
+
+        sf.stack_to_cell_files(
+            "/home/charriso/test_cells/",
+            RaggedArrayCell,
+            datetime(2021, 1, 1),
+            datetime(2021, 2, 1),
+            fnames=list(Path(swath_path).rglob("*.nc"))[:2],
+            processes=12,
+            # sat="b",
+            mode="w"
+        )
+        return
+
+        # sf.stack_to_cell_files_dask(
+        #     "/home/charriso/test_cells/",
+        #     RaggedArrayCell,
+        #     datetime(2021, 1, 1),
+        #     datetime(2021, 2, 1),
+        #     processes=12,
+        #     # sat="b",
+        #     # mode="a"
+        # )
+        #
+        # ds = sf.extract(
+        #     datetime(2021, 1, 1),
+        #     datetime(2021, 1, 2),
+        #     # sat="[bc]"
+        # )
+        # print("hi")
+        # #############################
+        swath_path = "/home/charriso/p14/data-write/RADAR/hsaf/h129_v1.0/swaths/"
+        sf = SwathGridFiles.from_product_id(swath_path, "h129_v1.0")
+
+        # for f in sf.swath_search(datetime(2021, 1, 1), datetime(2021, 1, 7)):
+        #     with xr.open_dataset(f) as ds:
+        #         if "backscatter_flag" not in ds.variables:
+        #             print(f)
+
+        sf.stack_to_cell_files_2("/home/charriso/test_cells/magic/",
+                               RaggedArrayCell,
+                               datetime(2021, 1, 7),
+                                datetime(2021, 1, 14),
+                               processes=12,
+                                 sat="c",
+                                 mode="a"
+                               )
+
+        # check that the time var in all files in /test_cells/ are monotonic ascending
+        # output_cells = list(Path("/home/charriso/test_cells/").rglob("*.nc"))
+
+        # for cell in output_cells:
+        #     ds = xr.open_dataset(cell)
+        #     if ds.time.size > 1:
+        #         print(cell)
+        # ds = sf.extract(datetime(2021, 1, 1), datetime(2021, 2, 1))
+        # ds = ds.assign_coords(
+        #     {"cell": ("obs", sf.grid.gpi2cell(ds["location_id"].values))}
+        # )
+        # ds = ds.set_xindex("cell")
+        # print(ds)
+        #
+
+# import dask.array as da
+
+# all_cells = np.unique(ds.cell.values)
+
+# def m1(ds, cells):
+#     for c in cells:
+#         ds.sel(cell=c)
+
+# def m2(ds, cells):
+#     for c in cells:
+#         ds.isel(obs=np.where(ds.cell.values==c)[0])
+
+# def m3(ds, cells):
+#     for c in cells:
+#         ds.isel(obs=da.where(ds.cell.values==c)[0].compute())
+
+# def m4(ds, cells):
+#     for c in cells:
+#         ds.where(ds.cell==c, drop=True)
+
+# def m5(ds, cells):
+#     for c in ds.groupby("cell"):
+#         pass

@@ -401,6 +401,19 @@ class TestRaggedArrayFiles(unittest.TestCase):
         real_merged = allsats_collection.extract(cell=[2587, 2588])
         self.assertIsNone(real_merged)
 
+    def test_convert_dir_to_contiguous(self):
+        root_path = self.tempdir_path / "indexed"
+        indexed_collection = RaggedArrayFiles(
+            root_path,
+            product_id="sig0_12.5",
+        )
+        converted_dir = self.tempdir_path / "converted_contiguous"
+        converted_dir.mkdir(parents=True, exist_ok=True)
+        indexed_collection.convert_dir_to_contiguous(converted_dir, num_processes=-1)
+        # show all files in the converted directory
+        # print(list(converted_dir.rglob("*")))
+
+
 
 # test adding new cell types used with OrthoMultiArray
 era5_grid = load_grid("tests/ascat_test_data/warp/era5_land_2023/grid.nc")
