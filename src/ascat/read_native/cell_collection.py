@@ -25,28 +25,34 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import multiprocessing as mp
+from functools import partial
 from pathlib import Path
+
 import xarray as xr
 import numpy as np
 import dask.array as da
+
 
 from ascat.file_handling import MultiFileHandler
 from ascat.read_native.product_info import cell_io_catalog
 from ascat.read_native.product_info import grid_cache
 from ascat.utils import get_grid_gpis
+from ascat.utils import append_to_netcdf
+from ascat.utils import create_variable_encodings
 
 
 class RaggedArrayCell:
     """
     Class to read and merge ragged array cell files.
     """
-    def __init__(self, filename, chunks=1_000_000):
+    def __init__(self, filename, data=None, chunks=1_000_000):
         self.filename = filename
+        self.ds = data
         self.chunks = chunks
-        self.ds = None
 
-    def read(self, date_range=None, valid_gpis=None, lookup_vector=None):
-        ds = xr.open_dataset(self.filename)
+    def read(self, date_range=None, valid_gpis=None, lookup_vector=None, **kwargs):
+        ds = xr.open_dataset(self.filename, **kwargs)
         ds = self._ensure_obs(ds)
         ds = self._ensure_indexed(ds)
         ds = ds.chunk({"obs": self.chunks})
@@ -356,6 +362,60 @@ class RaggedArrayCell:
 
         return ds
 
+    def write(self, filename=None, ra_type="indexed", mode="w", **kwargs):
+        """
+        Write data to a netCDF file.
+
+        Parameters
+        ----------
+        filename : str
+            Output filename.
+        ra_type : str, optional
+            Type of ragged array to write. Default is "contiguous".
+        **kwargs : dict
+            Additional keyword arguments passed to xarray.to_netcdf().
+        """
+        filename = filename or self.filename
+
+        if ra_type not in ["contiguous", "indexed"]:
+            raise ValueError("ra_type must be 'contiguous' or 'indexed'")
+        out_ds = self.ds
+        if ra_type == "contiguous":
+            out_ds = self._ensure_contiguous(out_ds)
+
+        # out_ds = out_ds[self._var_order(out_ds)]
+
+        # custom_variable_attrs = self._kwargs.get(
+        #     "attributes", None) or self.custom_variable_attrs
+        # custom_global_attrs = self._kwargs.get(
+        #     "global_attributes", None) or self.custom_global_attrs
+        # out_ds = self._set_attributes(out_ds, custom_variable_attrs,
+        #                               custom_global_attrs)
+
+        # custom_variable_encodings = kwargs.pop(
+        #     "encoding", None) or self.custom_variable_encodings
+        out_encoding = kwargs.pop("encoding", [])
+        out_encoding = create_variable_encodings(out_ds,
+                                                   out_encoding)
+        #
+        out_ds.encoding["unlimited_dims"] = ["obs"]
+
+        for var, var_encoding in out_encoding.items():
+            if "_FillValue" in var_encoding and "_FillValue" in out_ds[
+                    var].attrs:
+                del out_ds[var].attrs["_FillValue"]
+
+        if mode == "a" and ra_type == "indexed":
+            if not Path(filename).exists():
+                out_ds.to_netcdf(filename, **kwargs)
+            else:
+                append_to_netcdf(filename, out_ds, unlimited_dim="obs")
+            return
+
+        out_ds.to_netcdf(filename,
+                         encoding=out_encoding,
+                         **kwargs)
+
 
 class OrthoMultiCell:
     """
@@ -368,10 +428,10 @@ class OrthoMultiCell:
         self.chunks = chunks
         self.ds = None
 
-    def read(self, date_range=None, valid_gpis=None, lookup_vector=None):
+    def read(self, date_range=None, valid_gpis=None, lookup_vector=None, **kwargs):
         if self.ds is not None:
             self.ds.close()
-        ds = xr.open_dataset(self.filename)
+        ds = xr.open_dataset(self.filename, **kwargs)
         # ds = ds.set_index(locations="location_id")
         ds = ds.chunk(self.chunks)
         # do these after merging?
@@ -685,8 +745,8 @@ class CellGridFiles(MultiFileHandler):
             # mask_and_scale=True,
             max_coord_dist=np.inf,
             date_range=None,
-            # **kwargs,
             sat=None,
+            **kwargs,
     ):
         """
         Read data matching a spatial and temporal criterion.
@@ -740,7 +800,8 @@ class CellGridFiles(MultiFileHandler):
             d = self.fid.read(
                 date_range=date_range,
                 valid_gpis=valid_gpis,
-                lookup_vector=lookup_vector
+                lookup_vector=lookup_vector,
+                **kwargs,
             )
             if d is not None:
                 data.append(d)
@@ -751,6 +812,36 @@ class CellGridFiles(MultiFileHandler):
             return data
 
         return None
+
+    def append_to_disk(self,
+                       out_dir,
+                       cell=None,
+                       location_id=None,
+                       coords=None,
+                       bbox=None,):
+        """
+        Append cell grid files to existing cell grid files on disk.
+
+        Parameters
+        ----------
+        out_dir : str
+            Output directory. Assumed that all files in the directory are compatible
+            with the files being appended to them (in dimensions, variables, naming, etc.).
+        num_processes : int, optional
+            Number of processes to use for conversion.
+            Default: -1 (use all available cores).
+        """
+        filenames = self.spatial_search(
+            cell=cell,
+            location_id=location_id,
+            coords=coords,
+            bbox=bbox
+        )
+
+        for filename in filenames:
+            self._open(filename)
+            self.fid.write(out_dir/filename, mode="a", ra_type="indexed")
+
 
 def _raf_fn_read_fmt(cell, sat=None):
     """
@@ -782,6 +873,109 @@ class RaggedArrayFiles(CellGridFiles):
             "sf_read_fmt": _raf_sf_read_fmt,
         }
         super().__init__(**init_options)
+
+    def _convert_file_to_contiguous(self, filename, out_dir):
+        fid = self.cls(Path(self.root_path)/filename)
+        ds = fid.read()
+        ds = fid._ensure_contiguous(ds)
+        out_filename = Path(out_dir)/Path(filename).name
+        ds.to_netcdf(out_filename)
+        ds.close()
+
+    def convert_dir_to_contiguous(self,
+                                  out_dir,
+                                  cell=None,
+                                  location_id=None,
+                                  coords=None,
+                                  bbox=None,
+                                  num_processes=None):
+        """
+        Convert a directory of indexed ragged array files to contiguous ragged array files.
+
+        Parameters
+        ----------
+        out_dir : str
+            Output directory.
+        num_processes : int, optional
+            Number of processes to use for conversion.
+            Default: -1 (use all available cores).
+        """
+        filenames = self.spatial_search(
+            cell=cell,
+            location_id=location_id,
+            coords=coords,
+            bbox=bbox
+        )
+        if num_processes == 1:
+            for filename in filenames:
+                self._convert_file_to_contiguous(filename, out_dir)
+        else:
+            ctx = mp.get_context("forkserver")
+            pool = ctx.Pool(processes=num_processes)
+            convert_func = partial(
+                self._convert_file_to_contiguous,
+                out_dir=out_dir
+            )
+            pool.map(convert_func, filenames)
+            pool.close()
+            pool.join()
+
+    def extract(
+            self,
+            cell=None,
+            location_id=None,
+            coords=None,
+            bbox=None,
+            # geom=None,
+            # mask_and_scale=True,
+            max_coord_dist=np.inf,
+            date_range=None,
+            sat=None,
+            **kwargs,
+    ):
+        """
+        Read data matching a spatial and temporal criterion.
+
+        Parameters
+        ----------
+        cell : int or list of int
+            Grid cell number to read.
+        location_id : int or list of int
+            Location id.
+        coords : tuple of numeric or tuple of iterable of numeric
+            Tuple of (lon, lat) coordinates.
+        bbox : tuple
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        max_coord_dist : float
+            The maximum distance a coordinate's nearest grid point can be from it to be
+            selected.
+        date_range : tuple of np.datetime64
+            Tuple of (start, end) dates.
+
+        Returns
+        -------
+        filenames : list of str
+            Filenames.
+        """
+        data = super().extract(
+            cell=cell,
+            location_id=location_id,
+            coords=coords,
+            bbox=bbox,
+            max_coord_dist=max_coord_dist,
+            date_range=date_range,
+            sat=sat,
+            **kwargs,
+        )
+        # if data:
+        #     data["location_id"] = data["location_id"][data["locationIndex"]]
+        #     data = data.set_coords(["location_id"])
+        #     data = data.set_xindex(["location_id"],
+        #                            FibGridIndex,
+        #                            spacing=self.grid_sampling_km)
+        return data
+
+
 
 
 class OrthoMultiArrayFiles(CellGridFiles):

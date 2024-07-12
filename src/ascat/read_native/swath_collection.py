@@ -43,6 +43,7 @@ from ascat.file_handling import ChronFiles
 from ascat.read_native.product_info import grid_cache
 from ascat.read_native.product_info import swath_io_catalog
 from ascat.utils import get_grid_gpis
+from ascat.utils import create_variable_encodings
 
 
 class SwathFile:
@@ -297,6 +298,9 @@ class SwathGridFiles(ChronFiles):
         sf_templ,
         grid_name,
         date_field_fmt,
+        cell_fn_format=None,
+        beams_vars=None,
+        ts_dtype=None,
         cls_kwargs=None,
         err=True,
         fn_read_fmt=None,
@@ -362,6 +366,10 @@ class SwathGridFiles(ChronFiles):
         else:
             self.grid_sampling_km = None
 
+        self.cell_fn_format = cell_fn_format
+        self.beams_vars = beams_vars
+        self.ts_dtype = ts_dtype
+
     @classmethod
     def from_product_id(
             cls,
@@ -406,15 +414,14 @@ class SwathGridFiles(ChronFiles):
             SwathFile,
             io_class.fn_pattern,
             io_class.sf_pattern,
-            # grid=io_class.grid,
-            # grid_sampling_km=io_class.grid_sampling_km,
             grid_name=io_class.grid_name,
             date_field_fmt=io_class.date_field_fmt,
             fn_read_fmt=io_class.fn_read_fmt,
             sf_read_fmt=io_class.sf_read_fmt,
+            beams_vars=io_class.beams_vars,
+            ts_dtype=io_class.ts_dtype,
             # fn_write_fmt=io_class.fn_write_fmt,
             # sf_write_fmt=io_class.sf_write_fmt,
-            # cache_size=io_class.cache_size,
         )
 
     @classmethod
@@ -442,21 +449,19 @@ class SwathGridFiles(ChronFiles):
         ... )
 
         """
-        # enforce the presence of certain class attributes
         return cls(
             path,
             SwathFile,
             io_class.fn_pattern,
             io_class.sf_pattern,
-            # grid=io_class.grid,
-            # grid_sampling_km=io_class.grid_sampling_km,
             grid_name=io_class.grid_name,
             date_field_fmt=io_class.date_field_fmt,
+            beams_vars=io_class.beams_vars,
+            ts_dtype=io_class.ts_dtype,
             fn_read_fmt=io_class.fn_read_fmt,
             sf_read_fmt=io_class.sf_read_fmt,
             # fn_write_fmt=io_class.fn_write_fmt,
             # sf_write_fmt=io_class.sf_write_fmt,
-            # cache_size=io_class.cache_size,
         )
 
     def _spatial_filter(
@@ -641,6 +646,56 @@ class SwathGridFiles(ChronFiles):
 
         return filtered_filenames
 
+    def _cell_data_as_indexed_ra(self, ds, cell, dupe_window=None):
+        """Convert swath data for a single cell to indexed format.
+
+        Parameters
+        ----------
+        ds : xarray.Dataset
+            Input dataset.
+
+        Returns
+        -------
+        ds : xarray.Dataset
+            Output dataset.
+        """
+        dupe_window = dupe_window or np.timedelta64(10, "m")
+        # location_id = self.grid
+        ds = ds.drop_vars(["latitude", "longitude", "cell"], errors="ignore")
+        location_id, lon, lat = self.grid.grid_points_for_cell(cell)
+        sorter = np.argsort(location_id)
+        locationIndex = sorter[np.searchsorted(location_id,
+                                               ds["location_id"].values,
+                                               sorter=sorter)]
+
+        ds = ds.assign_coords({"lon": ("locations", lon),
+                               "lat": ("locations", lat),
+                               "alt": ("locations", np.repeat(np.nan,
+                                                              len(location_id)))})
+
+        ds = ds.set_coords(["time"])
+        ds["location_id"] = ("locations", location_id)
+        ds["location_description"] = ("locations", np.repeat("", len(location_id)))
+        ds["locationIndex"] = ("obs", locationIndex)
+
+        # set _FillValue to missing_value (which has been deprecated)
+        for var in ds.variables:
+            if "missing_value" in ds[var].attrs and "_FillValue" not in ds[var].attrs:
+                ds[var].attrs["_FillValue"] = ds[var].attrs.get("missing_value")
+
+        ds = ds.sortby(["locationIndex", "time"])
+
+        # dedupe
+        dupl = np.insert(
+            (abs(ds["time"].values[1:] -
+                 ds["time"].values[:-1]) < dupe_window),
+            0,
+            False,
+        )
+        ds = ds.sel(obs=~dupl)
+
+        return ds
+
     def extract(
         self,
         dt_start,
@@ -754,3 +809,174 @@ class SwathGridFiles(ChronFiles):
             if data:
                 yield self._merge_data(data, load=True, processes=processes)
 
+    def _write_cell(self, in_q):
+        while True:
+            item = in_q.get()
+            if item is None:
+                break
+            cell, cell_obj, dupe_window = item
+            cell_obj.ds = self._cell_data_as_indexed_ra(cell_obj.ds, cell, dupe_window)
+
+            out_encoding = create_variable_encodings(
+                cell_obj.ds, custom_dtypes=self.ts_dtype)
+            cell_obj.write(mode="a", encoding=out_encoding)
+            # cell_obj.write(mode="a")
+
+    def _process_stack(self, ds):
+        # if there are kwargs, use them instead of self.ioclass_kws
+        beam_idx = {"for": 0, "mid": 1, "aft": 2}
+
+        # if any beam has backscatter ds for a record, the record is valid. Drop
+        # observations that don't have any backscatter data.
+        if "backscatter" in ds.variables:
+            if ds["obs"].size > 0:
+                ds = ds.sel(
+                    obs=~da.all(
+                        ds["backscatter"].isnull(),
+                        axis=1
+                    ).compute()
+                )
+
+        # # break the beams dimension variables into separate variables for
+        # # the fore, mid, and aft beams
+        if ds["obs"].size > 0:
+            if "beams" in ds.dims:
+                # if the dataset has a beams dimension and beams_vars is set,
+                # break the beams dimension variables into separate variables
+                # for the fore, mid, and aft beams and remove the beams dimension
+                # along with any beams-dimensional variables that aren't in beams_vars
+                if self.beams_vars:
+                    for var in self.beams_vars:
+                        if var in ds.variables:
+                            for ending, idx in beam_idx.items():
+                                ds[var + "_" + ending] = ds[var].sel(beams=idx)
+
+                    # drop the variables on the beams dimension
+                    ds = ds.drop_dims("beams")
+
+        ds = ds.assign_coords(
+            {"cell": ("obs", self.grid.gpi2cell(ds["location_id"].values))}
+        )
+        return ds
+
+    def stack_to_cell_files(
+            self,
+            out_dir,
+            cell_class,
+            dt_start,
+            dt_end,
+            dt_delta=None,
+            search_date_fmt="%Y%m%d*",
+            date_field="date",
+            end_inclusive=True,
+            cell=None,
+            location_id=None,
+            coords=None,
+            bbox=None,
+            fnames=None,
+            mode="w",
+            processes=1,
+            buffer_memory_mb=None,
+            dupe_window=None,
+            **fmt_kwargs
+        ):
+        """
+        Stack swath files into cell files.
+        This first gets the relevant filenames, then creates one large xarray dataset
+        out of them. The dataset is then split up into separate datasets according to cell.
+        In separate processes, each cell dataset is converted to indexed ragged array format
+        (function _cell_data_as_indexed_ra) and then written to disk (function _cell_to_disk).
+        """
+
+        # is there a better way to do this that doesn't break tests?
+        if mode == "w":
+            # ask user if they want to delete existing files
+            # TODO probably could figure out something different for this.
+            print("Using write mode ('w').")
+            input_str = input(f"Overwrite all existing files in {out_dir}? (y/n) ")
+        elif mode == "a":
+            print("Using append mode ('a').")
+            input_str = input(f"Append data to existing files in {out_dir}? (y/n) ")
+        else:
+            raise ValueError("Invalid mode. Valid modes are 'w' and 'a'.")
+        if input_str.lower() == "n":
+            print("Exiting.")
+            return
+        elif input_str.lower() != "y":
+            raise ValueError("Invalid input. Please enter 'y' or 'n'.")
+
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if mode == "w":
+            [f.unlink() for f in out_dir.glob("*.nc")]
+
+        if fnames is None:
+            fnames = self.swath_search(
+                dt_start, dt_end, dt_delta, search_date_fmt, date_field,
+                end_inclusive, cell, location_id, coords, bbox, **fmt_kwargs,
+            )
+
+        if processes == 1:
+            for ds in self._yield_data_from_files(
+                    fnames,
+                    max_size_mb=buffer_memory_mb,
+                    processes=processes
+            ):
+                ds = self._process_stack(ds)
+                ds = ds.chunk({"obs": 1_000_000})
+                ds.load()
+                for cell in np.unique(ds.cell):
+                    cell_fname = out_dir / f"{cell:04d}.nc"
+                    cell_ds = ds.isel(obs=np.where(ds.cell.values == cell)[0])
+                    cell_obj = cell_class(cell_fname, cell_ds)
+                    cell_obj.ds = self._cell_data_as_indexed_ra(cell_obj.ds, cell, dupe_window)
+                    out_encoding = create_variable_encodings(
+                        cell_obj.ds, custom_dtypes=self.ts_dtype)
+                    cell_obj.write(mode="a", encoding=out_encoding)
+            return
+
+        processor_ps = []
+        num_processors = max(1, processes - 2)  # Ensure at least one processor
+
+        # We could use "fork" here but since we have threads in the subprocesses, it will
+        # throw a warning and eventually stop working in Python 3.14. Instead we set up
+        # a forkserver which is slower to start up but doesn't have this issue.
+        ctx = mp.get_context("forkserver")
+
+        reader_q = ctx.Queue(maxsize=processes)
+
+        # is it bad to have a bunch of processors here when I'm gonna use some more in
+        # _yield_data_from_files?
+        for _ in range(num_processors):
+            p = ctx.Process(target=self._write_cell, args=(reader_q,))
+            p.start()
+            processor_ps.append(p)
+
+        for ds in self._yield_data_from_files(fnames, max_size_mb=buffer_memory_mb):
+            ds = ds.chunk({"obs": 1_000_000})
+            ds = self._process_stack(ds)
+            ds.load()
+            for cell in np.unique(ds.cell):
+                cell_fname = out_dir / f"{cell:04d}.nc"
+                cell_ds = ds.isel(obs=np.where(ds.cell.values == cell)[0])
+                cell_obj = cell_class(cell_fname, cell_ds)
+                reader_q.put((cell, cell_obj, dupe_window))
+
+            # Wait until the processes have finished with this batch before
+            # moving on - ensures that there are no processors trying to
+            # write to the same file at the same time.
+
+            # This is unnecessary in most situations since we're passing cell
+            # data to reader_q in order, but if there are a lot of processors
+            # and relatively few files it would be possible to run into this
+            # issue.
+
+            # We don't use .join() because the forkserver takes a bit to set up
+            # and we would like to just leave it open for the next batch instead
+            # of reopening it.
+
+            while reader_q.qsize() > 0:
+                pass
+
+        [reader_q.put(None) for p in processor_ps]
+        [p.join() for p in processor_ps]
