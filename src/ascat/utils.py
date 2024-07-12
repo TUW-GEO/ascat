@@ -307,7 +307,7 @@ def get_grid_gpis(
         location_id=None,
         coords=None,
         bbox=None,
-        max_coord_dist=np.Inf,
+        max_coord_dist=np.inf,
         return_lookup=False,
 ):
     """

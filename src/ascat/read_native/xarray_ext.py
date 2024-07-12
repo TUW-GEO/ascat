@@ -70,7 +70,7 @@ class SwathAccessor:
             location_id=None,
             coords=None,
             bbox=None,
-            max_coord_dist=np.Inf,
+            max_coord_dist=np.inf,
             # k_nearest_coords=1
     ):
         """
@@ -162,7 +162,7 @@ class IndexedRaggedAccessor:
             location_id=None,
             coords=None,
             bbox=None,
-            max_coord_dist=np.Inf,
+            max_coord_dist=np.inf,
     ):
         """
         Select data based on spatial criteria without trimming the locations dimension.
@@ -187,7 +187,7 @@ class IndexedRaggedAccessor:
             location_id=None,
             coords=None,
             bbox=None,
-            max_coord_dist=np.Inf,
+            max_coord_dist=np.inf,
     ):
         """
         Select data based on spatial criteria and trim the locations dimension to only
@@ -365,7 +365,7 @@ class OrthoMultiAccessor:
             location_id=None,
             coords=None,
             bbox=None,
-            max_coord_dist=np.Inf,
+            max_coord_dist=np.inf,
     ):
         """
         Select data based on spatial criteria without trimming the locations dimension.
@@ -390,7 +390,7 @@ class OrthoMultiAccessor:
             location_id=None,
             coords=None,
             bbox=None,
-            max_coord_dist=np.Inf,
+            max_coord_dist=np.inf,
     ):
         """
         Select data based on spatial criteria and trim the locations dimension to only

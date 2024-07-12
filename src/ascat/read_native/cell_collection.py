@@ -681,7 +681,7 @@ class CellGridFiles(MultiFileHandler):
             bbox=None,
             # geom=None,
             # mask_and_scale=True,
-            max_coord_dist=np.Inf,
+            max_coord_dist=np.inf,
             date_range=None,
             # **kwargs,
     ):
