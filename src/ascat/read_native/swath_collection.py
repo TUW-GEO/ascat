@@ -25,10 +25,13 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import multiprocessing as mp
+
 from datetime import timedelta
 from pathlib import Path
 
 import dask
+import dask.array as da
 import numpy as np
 import xarray as xr
 
@@ -75,33 +78,25 @@ class SwathFile:
         self.ds = ds
         return self.ds
 
-    def merge(self, data):
-        """
-        Merge datasets with different locations dimensions.
-
-        Parameters
-        ----------
-        data : list of xarray.Dataset
-            Datasets to merge.
-
-        Returns
-        -------
-        xarray.Dataset
-            Merged dataset.
-        """
-        if data == []:
+    def merge(self, data, load=False, processes=None):
+        if not data:
             return None
 
-        # [self._preprocess(ds) for ds in data if ds.obs.size > 0]
-        # merged_ds = xr.concat(
-        #     [self._preprocess(ds) for ds in data if ds.obs.size > 0],
-        #     dim="obs",
-        #     combine_attrs=self.combine_attributes,
-        # )
-        ds_to_merge = [self._preprocess(ds) for ds in data if ds.obs.size > 0]
+        if processes == 1:
+            ds_to_merge = [self._preprocess(ds, load=load) for ds in data if ds.obs.size > 0]
+        # Parallelize preprocessing
+        else:
+            ctx = mp.get_context("forkserver")
+            with ctx.Pool(processes) as pool:
+                ds_to_merge = pool.starmap(
+                    self._preprocess_wrapper,
+                    [(ds, load) for ds in data if ds.obs.size > 0]
+                )
 
-        # if all the datasets are empty in the obs dimension, just return the first one
-        if ds_to_merge == []:
+            # Filter out None results (if any)
+            ds_to_merge = [ds for ds in ds_to_merge if ds is not None]
+
+        if not ds_to_merge:
             return data[0]
 
         merged_ds = xr.concat(
@@ -114,8 +109,14 @@ class SwathFile:
 
         return merged_ds
 
+    def _preprocess_wrapper(self, ds, load=False):
+        try:
+            return self._preprocess(ds, load=load)
+        except Exception:
+            return None
+
     @staticmethod
-    def _preprocess(ds):
+    def _preprocess(ds, load=False):
         """Pre-processing to be done on a component dataset so it can be merged with others.
 
         Assumes `ds` is an indexed ragged array. (Re)-calculates the `locationIndex`
@@ -140,6 +141,8 @@ class SwathFile:
             ds["sat_id"] = ("obs",
                             np.repeat(sat_id[sat], ds["location_id"].size))
             del ds.attrs["spacecraft"]
+        if load:
+            ds.load()
         return ds
 
     @staticmethod
@@ -698,21 +701,11 @@ class SwathGridFiles(ChronFiles):
         lookup_vector = np.zeros(self.grid.gpis.max()+1, dtype=bool)
         lookup_vector[valid_gpis] = 1
 
-        data = []
-        for filename in filenames:
-            self._open(filename)
-            date_range = (np.datetime64(dt_start), np.datetime64(dt_end))
+        date_range = (np.datetime64(dt_start), np.datetime64(dt_end))
 
-            # filter by date here or below?
-            d = self.fid.read(
-                # date_range=date_range,
-            )
-            if d is not None:
-                data.append(d)
+        data = self._yield_data_from_files(filenames, processes=processes).__next__()
 
         if data:
-            data = self._merge_data(data)
-
             data_location_ids = data["location_id"].values
             obs_idx = lookup_vector[data_location_ids]
             data = data.sel(obs=obs_idx)
@@ -726,3 +719,38 @@ class SwathGridFiles(ChronFiles):
 
             return data
         return None
+
+    def _yield_data_from_files(self, filenames, max_size_mb=None, processes=None):
+        """
+        Yield data from swath files. If max_size_mb is set, yield data in chunks
+        of at most max_size_mb in size.
+        """
+        data = []
+        if max_size_mb is None:
+            for filename in filenames:
+                self._open(filename)
+
+                d = self.fid.read()
+                if d is not None:
+                    data.append(d)
+            if data:
+                yield self._merge_data(data, processes=processes)
+
+        else:
+            d_size = 0
+            for filename in filenames:
+                self._open(filename)
+
+                d = self.fid.read()
+                if d is not None:
+                    d_size += d.nbytes
+
+                if d_size > max_size_mb * 1024**2:
+                    if data:
+                        yield self._merge_data(data, load=True, processes=processes)
+                    data = []
+                    d_size = d.nbytes
+                data.append(d)
+            if data:
+                yield self._merge_data(data, load=True, processes=processes)
+
