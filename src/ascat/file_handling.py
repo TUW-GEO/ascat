@@ -654,7 +654,7 @@ class ChronFiles(MultiFileHandler):
 
         return date
 
-    def _merge_data(self, data):
+    def _merge_data(self, data, **kwargs):
         """
         Merge datasets after reading period. Needs to be overwritten
         by child class, otherwise data is returned as is.
@@ -663,20 +663,23 @@ class ChronFiles(MultiFileHandler):
         ----------
         data : list
             Data.
+        **kwargs : dict
+            Additional keyword arguments to the fid's merge method.
 
         Returns
         -------
         data : list
             Merged data.
         """
-        return self.fid.merge(data)
+        return self.fid.merge(data, **kwargs)
 
     def search_date(self,
                     timestamp,
                     search_date_fmt="%Y%m%d*",
                     date_field="date",
                     date_field_fmt="%Y%m%d",
-                    return_date=False):
+                    return_date=False,
+                    **fmt_kwargs):
         """
         Search files for given date.
 
@@ -700,11 +703,11 @@ class ChronFiles(MultiFileHandler):
         dates : list of datetime
             Parsed date of filename (only returned if return_date=True).
         """
-        fn_read_fmt, sf_read_fmt, _, _ = self._fmt(timestamp)
+        fn_read_fmt, sf_read_fmt, _, _ = self._fmt(timestamp, **fmt_kwargs)
         fn_read_fmt[date_field] = timestamp.strftime(search_date_fmt)
 
         fs = FileSearch(self.root_path, self.ft.fn_templ, self.ft.sf_templ)
-        key_func = lambda x: self._parse_date(x, date_field, date_field_fmt)
+        def key_func(x): return self._parse_date(x, date_field, date_field_fmt)
         filenames = sorted(fs.search(fn_read_fmt, sf_read_fmt), key=key_func)
 
         if return_date:
@@ -725,6 +728,7 @@ class ChronFiles(MultiFileHandler):
         date_field="date",
         date_field_fmt="%Y%m%d",
         end_inclusive=True,
+        **fmt_kwargs
     ):
         """
         Search files for time period.
@@ -762,7 +766,9 @@ class ChronFiles(MultiFileHandler):
                 search_date_fmt=search_date_fmt,
                 date_field=date_field,
                 date_field_fmt=date_field_fmt,
-                return_date=True)
+                return_date=True,
+                **fmt_kwargs,
+            )
             for f, dt in zip(files, dates):
                 if f not in filenames and dt >= dt_start and dt < dt_end:
                     filenames.append(f)
@@ -779,6 +785,7 @@ class ChronFiles(MultiFileHandler):
         date_field="date",
         date_field_fmt="%Y%m%d",
         end_inclusive=True,
+        fmt_kwargs={},
         **kwargs,
     ):
         """
@@ -809,7 +816,7 @@ class ChronFiles(MultiFileHandler):
         """
         filenames = self.search_period(dt_start - dt_buffer, dt_end, dt_delta,
                                        search_date_fmt, date_field,
-                                       date_field_fmt, end_inclusive)
+                                       date_field_fmt, end_inclusive, **fmt_kwargs)
 
         data = []
 
