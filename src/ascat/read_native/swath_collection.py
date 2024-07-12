@@ -26,6 +26,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from datetime import timedelta
+from pathlib import Path
 
 import dask
 import numpy as np
@@ -331,6 +332,20 @@ class SwathGridFiles(ChronFiles):
         cache_size : int, optional
             Number of files to keep in memory (default=0).
         """
+        # first check if any files directly under root_path contain the ending (make
+        # sure not to iterate through every file - just stop after the first one).
+        # This allows the user to set the root path either at the place necessitated by
+        # the sf_templ or directly at the level of the files. However, the user still
+        # cannot set the root path anywhere else in the directory structure (e.g. within
+        # a satellite but above a year). In order to choose a specific satellite, must
+        # pass that as a fmt_kwarg
+        ending = fn_templ.split(".")[-1]
+        for f in Path(root_path).glob(f"*.{ending}"):
+            if f.is_file():
+                sf_templ = None
+                sf_read_fmt = None
+                break
+
         super().__init__(root_path, file_class, fn_templ, sf_templ, cls_kwargs, err,
                          fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt,
                          cache_size)
@@ -559,7 +574,7 @@ class SwathGridFiles(ChronFiles):
         self,
         dt_start,
         dt_end,
-        dt_delta=timedelta(days=1),
+        dt_delta=None,
         search_date_fmt="%Y%m%d*",
         date_field="date",
         end_inclusive=True,
@@ -567,6 +582,7 @@ class SwathGridFiles(ChronFiles):
         location_id=None,
         coords=None,
         bbox=None,
+        **fmt_kwargs,
     ):
         """
         Search for swath files within a time range and spatial criterion.
@@ -599,6 +615,8 @@ class SwathGridFiles(ChronFiles):
         list of str
             Filenames.
         """
+        dt_delta = dt_delta or timedelta(days=1)
+
         filenames = self.search_period(
             dt_start,
             dt_end,
@@ -607,6 +625,7 @@ class SwathGridFiles(ChronFiles):
             date_field,
             date_field_fmt=self.date_field_fmt,
             end_inclusive=end_inclusive,
+            **fmt_kwargs,
         )
 
         filtered_filenames = self._spatial_filter(
@@ -623,7 +642,7 @@ class SwathGridFiles(ChronFiles):
         self,
         dt_start,
         dt_end,
-        dt_delta=timedelta(days=1),
+        dt_delta=None,
         search_date_fmt="%Y%m%d*",
         date_field="date",
         end_inclusive=True,
@@ -631,6 +650,8 @@ class SwathGridFiles(ChronFiles):
         location_id=None,
         coords=None,
         bbox=None,
+        processes=None,
+        **fmt_kwargs,
     ):
         """
         Extract data from swath files within a time range and spatial criterion.
@@ -664,17 +685,8 @@ class SwathGridFiles(ChronFiles):
             Dataset.
         """
         filenames = self.swath_search(
-            dt_start,
-            dt_end,
-            dt_delta,
-            search_date_fmt,
-            date_field,
-            # self.date_field_fmt,
-            end_inclusive,
-            cell,
-            location_id,
-            coords,
-            bbox,
+            dt_start, dt_end, dt_delta, search_date_fmt, date_field,
+            end_inclusive, cell, location_id, coords, bbox, **fmt_kwargs,
         )
         valid_gpis = get_grid_gpis(
             self.grid,

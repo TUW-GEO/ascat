@@ -25,6 +25,7 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from pathlib import Path
 import xarray as xr
 import numpy as np
 import dask.array as da
@@ -571,6 +572,7 @@ class CellGridFiles(MultiFileHandler):
             # date_field="date",
             # date_field_fmt="%Y%m%d",
             # return_date=False
+            sat=None,
     ):
         """
         Search files for cells matching a spatial criterion.
@@ -613,7 +615,7 @@ class CellGridFiles(MultiFileHandler):
 
         filenames = []
         for c in matched_cells:
-            fn_read_fmt, sf_read_fmt, _, _ = self._fmt(c)
+            fn_read_fmt, sf_read_fmt, _, _ = self._fmt(c, sat)
             filenames += sorted(self.fs.search(fn_read_fmt, sf_read_fmt))
 
         return filenames
@@ -684,6 +686,7 @@ class CellGridFiles(MultiFileHandler):
             max_coord_dist=np.inf,
             date_range=None,
             # **kwargs,
+            sat=None,
     ):
         """
         Read data matching a spatial and temporal criterion.
@@ -714,6 +717,7 @@ class CellGridFiles(MultiFileHandler):
             location_id=location_id,
             coords=coords,
             bbox=bbox,
+            sat=sat,
         )
         if cell is not None:
             valid_gpis = None
@@ -748,20 +752,34 @@ class CellGridFiles(MultiFileHandler):
 
         return None
 
+def _raf_fn_read_fmt(cell, sat=None):
+    """
+    TODO cannot provide this as a lambda function because it breaks multiprocessing for
+    converting to contiguous arrays. can we fix that
+    """
+    return {"cell_id": f"{cell:04d}"}
+
+def _raf_sf_read_fmt(cell, sat=None):
+    if sat is None:
+        return None
+    return {"sat_str": {"sat": sat}}
+
 
 class RaggedArrayFiles(CellGridFiles):
-    def __init__(self, root_path, product_id, all_sats=False):
+    def __init__(self, root_path, product_id):
         grid_name = cell_io_catalog[product_id.upper()].grid_name
-        sf_templ = {"sat_str": "{sat}"} if all_sats else None
-        sf_read_fmt = {"sat_str": {"sat": "metop_[abc]"}} if all_sats else None
+        sf_templ = {"sat_str": "{sat}"} #if all_sats else None
+        # sf_read_fmt = {"sat_str": {"sat": "metop_[abc]"}} if all_sats else None
         init_options = {
             "root_path": root_path,
             "cls": RaggedArrayCell,
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
             "grid_name": grid_name,
-            "fn_read_fmt": lambda cell: {"cell_id": f"{cell:04d}"},
-            "sf_read_fmt": sf_read_fmt,
+            "fn_read_fmt": _raf_fn_read_fmt,
+            # "fn_read_fmt": lambda cell: {"cell_id": f"{cell:04d}"},
+            # "sf_read_fmt": sf_read_fmt,
+            "sf_read_fmt": _raf_sf_read_fmt,
         }
         super().__init__(**init_options)
 

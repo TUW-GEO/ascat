@@ -5,8 +5,7 @@ import re
 import numpy as np
 
 from fibgrid.realization import FibGrid
-from ascat.read_native.xarray_io import grid_cache
-# from ascat.read_native.swath_collection import SwathGridFiles, SwathFile
+
 
 class CellGridCache:
     """
@@ -53,7 +52,6 @@ class AscatH129Cell():
     grid_name = "Fib6.25"
     grid_info = grid_cache.fetch_or_store(grid_name)
     grid = grid_info["grid"]
-    # grid_cell_size = 5
     fn_format = "{:04d}.nc"
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
@@ -64,7 +62,6 @@ class AscatH129v1Cell():
     grid_name = "Fib6.25"
     grid_info = grid_cache.fetch_or_store(grid_name, FibGrid, 6.25)
     grid = grid_info["grid"]
-    # grid_cell_size = 5
     fn_format = "{:04d}.nc"
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
@@ -75,7 +72,6 @@ class AscatH121v1Cell():
     grid_name = "Fib12.5"
     grid_info = grid_cache.fetch_or_store(grid_name, FibGrid, 12.5)
     grid = grid_info["grid"]
-    # grid_cell_size = 5
     fn_format = "{:04d}.nc"
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
@@ -86,7 +82,6 @@ class AscatH122Cell():
     grid_name = "Fib6.25"
     grid_info = grid_cache.fetch_or_store(grid_name, FibGrid, 6.25)
     grid = grid_info["grid"]
-    grid_cell_size = 5
     fn_format = "{:04d}.nc"
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
@@ -97,7 +92,6 @@ class AscatSIG0Cell6250m():
     grid_name = "Fib6.25"
     grid_info = grid_cache.fetch_or_store(grid_name, FibGrid, 6.25)
     grid = grid_info["grid"]
-    # grid_cell_size = 5
     fn_format = "{:04d}.nc"
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
@@ -108,7 +102,6 @@ class AscatSIG0Cell12500m():
     grid_name = "Fib12.5"
     grid_info = grid_cache.fetch_or_store(grid_name, FibGrid, 12.5)
     grid = grid_info["grid"]
-    grid_cell_size = 5
     fn_format = "{:04d}.nc"
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
@@ -118,15 +111,11 @@ class AscatSIG0Cell12500m():
 class AscatH129Swath():
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc"
     sf_pattern = {
-        # "satellite_folder": "metop_[abc]",
+        "satellite_folder": "metop_[abc]",
         "year_folder": "{year}"
     }
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "Fib6.25"
-    # grid_sampling_km = 6.25
-    # grid = grid_cache.fetch_or_store(grid_name, FibGrid,
-    #                                  grid_sampling_km)["grid"]
-    # grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = ["backscatter", "incidence_angle", "azimuth_angle", "kp"]
     ts_dtype = np.dtype([
@@ -161,63 +150,33 @@ class AscatH129Swath():
     ])
 
     @staticmethod
-    def fn_read_fmt(timestamp):
+    def fn_read_fmt(timestamp, sat="[ABC]"):
+        sat = sat.upper()
         return {
             "date": timestamp.strftime("%Y%m%d*"),
-            "sat": "[ABC]",
+            "sat": sat,
             "placeholder": "*",
             "placeholder1": "*"
         }
 
     @staticmethod
-    def sf_read_fmt(timestamp):
+    def sf_read_fmt(timestamp, sat="[abc]"):
+        sat = sat.lower()
         return {
-            # "satellite_folder": {
-            #     "satellite": "metop_[abc]"
-            # },
+            "satellite_folder": {
+                "satellite": f"metop_{sat}"
+            },
             "year_folder": {
                 "year": f"{timestamp.year}"
             },
         }
 
-    # def __init__(
-    #         self,
-    #         root_path,
-    #         fn_templ=fn_pattern,
-    #         sf_templ=sf_pattern,
-    #         grid=grid,
-    #         cls_kwargs=None,
-    #         err=True,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=None,
-    #         sf_write_fmt=None,
-    #         cache_size=0
-    # ):
-    #     super().__init__(
-    #         root_path,
-    #         SwathFile,
-    #         fn_templ,
-    #         sf_templ,
-    #         grid=grid,
-    #         cls_kwargs=cls_kwargs,
-    #         err=err,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=fn_write_fmt,
-    #         sf_write_fmt=sf_write_fmt,
-    #         cache_size=cache_size
-    #     )
 
 class AscatH129v1Swath():
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "Fib6.25"
-    # grid_sampling_km = 6.25
-    # grid = grid_cache.fetch_or_store(grid_name, FibGrid,
-    #                                  grid_sampling_km)["grid"]
-    # grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
     ts_dtype = np.dtype([
@@ -242,53 +201,26 @@ class AscatH129v1Swath():
     ])
 
     @staticmethod
-    def fn_read_fmt(timestamp):
+    def fn_read_fmt(timestamp, sat="[ABC]"):
+        sat = sat.upper()
         return {
             "date": timestamp.strftime("%Y%m%d*"),
-            "sat": "[ABC]",
+            "sat": sat,
             "placeholder": "*",
             "placeholder1": "*"
         }
 
     @staticmethod
-    def sf_read_fmt(timestamp):
+    def sf_read_fmt(timestamp, sat="[abc]"):
+        sat = sat.lower()
         return {
             "satellite_folder": {
-                "satellite": "metop_[abc]"
+                "satellite": f"metop_{sat}"
             },
             "year_folder": {
                 "year": f"{timestamp.year}"
             },
         }
-
-    # def __init__(
-    #         self,
-    #         root_path,
-    #         fn_templ=fn_pattern,
-    #         sf_templ=sf_pattern,
-    #         grid=grid,
-    #         cls_kwargs=None,
-    #         err=True,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=None,
-    #         sf_write_fmt=None,
-    #         cache_size=0
-    # ):
-    #     super().__init__(
-    #         root_path,
-    #         SwathFile,
-    #         fn_templ,
-    #         sf_templ,
-    #         grid=grid,
-    #         cls_kwargs=cls_kwargs,
-    #         err=err,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=fn_write_fmt,
-    #         sf_write_fmt=sf_write_fmt,
-    #         cache_size=cache_size
-    #     )
 
 
 class AscatH121v1Swath():
@@ -296,10 +228,6 @@ class AscatH121v1Swath():
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "Fib12.5"
-    # grid_sampling_km = 12.5
-    # grid = grid_cache.fetch_or_store(grid_name, FibGrid,
-    #                                  grid_sampling_km)["grid"]
-    # grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
     ts_dtype = np.dtype([
@@ -324,63 +252,33 @@ class AscatH121v1Swath():
     ])
 
     @staticmethod
-    def fn_read_fmt(timestamp):
+    def fn_read_fmt(timestamp, sat="[ABC]"):
+        sat = sat.upper()
         return {
             "date": timestamp.strftime("%Y%m%d*"),
-            "sat": "[ABC]",
+            "sat": sat,
             "placeholder": "*",
             "placeholder1": "*"
         }
 
     @staticmethod
-    def sf_read_fmt(timestamp):
+    def sf_read_fmt(timestamp, sat="[abc]"):
+        sat = sat.lower()
         return {
             "satellite_folder": {
-                "satellite": "metop_[abc]"
+                "satellite": f"metop_{sat}"
             },
             "year_folder": {
                 "year": f"{timestamp.year}"
             },
         }
 
-    # def __init__(
-    #         self,
-    #         root_path,
-    #         fn_templ=fn_pattern,
-    #         sf_templ=sf_pattern,
-    #         grid=grid,
-    #         cls_kwargs=None,
-    #         err=True,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=None,
-    #         sf_write_fmt=None,
-    #         cache_size=0
-    # ):
-    #     super().__init__(
-    #         root_path,
-    #         SwathFile,
-    #         fn_templ,
-    #         sf_templ,
-    #         grid=grid,
-    #         cls_kwargs=cls_kwargs,
-    #         err=err,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=fn_write_fmt,
-    #         sf_write_fmt=sf_write_fmt,
-    #         cache_size=cache_size
-    #     )
 
 class AscatH122Swath():
     fn_pattern = "ascat_ssm_nrt_6.25km_{placeholder}Z_{date}Z_metop-{sat}_h122.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "Fib6.25"
-    # grid_sampling_km = 6.25
-    # grid = grid_cache.fetch_or_store(grid_name, FibGrid,
-    #                                  grid_sampling_km)["grid"]
-    # grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
     ts_dtype = np.dtype([
@@ -410,52 +308,25 @@ class AscatH122Swath():
     ])
 
     @staticmethod
-    def fn_read_fmt(timestamp):
+    def fn_read_fmt(timestamp, sat="[ABC]"):
+        sat = sat.upper()
         return {
             "date": timestamp.strftime("%Y%m%d*"),
-            "sat": "[ABC]",
+            "sat": sat,
             "placeholder": "*"
         }
 
     @staticmethod
-    def sf_read_fmt(timestamp):
+    def sf_read_fmt(timestamp, sat="[abc]"):
+        sat = sat.lower()
         return {
             "satellite_folder": {
-                "satellite": "metop_[abc]"
+                "satellite": f"metop_{sat}"
             },
             "year_folder": {
                 "year": f"{timestamp.year}"
             },
         }
-
-    # def __init__(
-    #         self,
-    #         root_path,
-    #         fn_templ=fn_pattern,
-    #         sf_templ=sf_pattern,
-    #         grid=grid,
-    #         cls_kwargs=None,
-    #         err=True,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=None,
-    #         sf_write_fmt=None,
-    #         cache_size=0
-    # ):
-    #     super().__init__(
-    #         root_path,
-    #         SwathFile,
-    #         fn_templ,
-    #         sf_templ,
-    #         grid=grid,
-    #         cls_kwargs=cls_kwargs,
-    #         err=err,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=fn_write_fmt,
-    #         sf_write_fmt=sf_write_fmt,
-    #         cache_size=cache_size
-    #     )
 
 
 class AscatSIG0Swath6250m():
@@ -466,10 +337,6 @@ class AscatSIG0Swath6250m():
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "Fib6.25"
-    # grid_sampling_km = 6.25
-    # grid = grid_cache.fetch_or_store(grid_name, FibGrid,
-    #                                  grid_sampling_km)["grid"]
-    # grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = [
         "backscatter",
@@ -528,7 +395,7 @@ class AscatSIG0Swath6250m():
     ])
 
     @staticmethod
-    def fn_read_fmt(timestamp):
+    def fn_read_fmt(timestamp, sat="[ABC]"):
         """
         Format a timestamp to search as YYYYMMDD*, for use in a regex
         that will match all files covering a single given date.
@@ -543,52 +410,25 @@ class AscatSIG0Swath6250m():
         dict
             Dictionary of formatted strings
         """
+        sat = sat.upper()
         return {
             "date": timestamp.strftime("%Y%m%d*"),
-            "sat": "[ABC]",
+            "sat": sat,
             "placeholder": "*",
             "placeholder1": "*"
         }
 
     @staticmethod
-    def sf_read_fmt(timestamp):
+    def sf_read_fmt(timestamp, sat="[abc]"):
+        sat = sat.lower()
         return {
             "satellite_folder": {
-                "satellite": "metop_[abc]"
+                "satellite": f"metop_{sat}"
             },
             "year_folder": {
                 "year": f"{timestamp.year}"
             },
         }
-
-    # def __init__(
-    #         self,
-    #         root_path,
-    #         fn_templ=fn_pattern,
-    #         sf_templ=sf_pattern,
-    #         grid=grid,
-    #         cls_kwargs=None,
-    #         err=True,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=None,
-    #         sf_write_fmt=None,
-    #         cache_size=0
-    # ):
-    #     super().__init__(
-    #         root_path,
-    #         SwathFile,
-    #         fn_templ,
-    #         sf_templ,
-    #         grid=grid,
-    #         cls_kwargs=cls_kwargs,
-    #         err=err,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=fn_write_fmt,
-    #         sf_write_fmt=sf_write_fmt,
-    #         cache_size=cache_size
-    #     )
 
 
 class AscatSIG0Swath12500m():
@@ -599,10 +439,6 @@ class AscatSIG0Swath12500m():
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "Fib12.5"
-    # grid_sampling_km = 12.5
-    # grid = grid_cache.fetch_or_store(grid_name, FibGrid,
-    #                                  grid_sampling_km)["grid"]
-    # grid_cell_size = 5
     cell_fn_format = "{:04d}.nc"
     beams_vars = [
         "backscatter",
@@ -661,7 +497,7 @@ class AscatSIG0Swath12500m():
     ])
 
     @staticmethod
-    def fn_read_fmt(timestamp):
+    def fn_read_fmt(timestamp, sat="[ABC]"):
         """
         Format a timestamp to search as YYYYMMDD*, for use in a regex
         that will match all files covering a single given date.
@@ -676,52 +512,25 @@ class AscatSIG0Swath12500m():
         dict
             Dictionary of formatted strings
         """
+        sat = sat.upper()
         return {
             "date": timestamp.strftime("%Y%m%d*"),
-            "sat": "[ABC]",
+            "sat": sat,
             "placeholder": "*",
             "placeholder1": "*"
         }
 
     @staticmethod
-    def sf_read_fmt(timestamp):
+    def sf_read_fmt(timestamp, sat="[abc]"):
+        sat = sat.lower()
         return {
             "satellite_folder": {
-                "satellite": "metop_[abc]"
+                "satellite": f"metop_{sat}"
             },
             "year_folder": {
                 "year": f"{timestamp.year}"
             },
         }
-
-    # def __init__(
-    #         self,
-    #         root_path,
-    #         fn_templ=fn_pattern,
-    #         sf_templ=sf_pattern,
-    #         grid=grid,
-    #         cls_kwargs=None,
-    #         err=True,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=None,
-    #         sf_write_fmt=None,
-    #         cache_size=0
-    # ):
-    #     super().__init__(
-    #         root_path,
-    #         SwathFile,
-    #         fn_templ,
-    #         sf_templ,
-    #         grid=grid,
-    #         cls_kwargs=cls_kwargs,
-    #         err=err,
-    #         fn_read_fmt=fn_read_fmt,
-    #         sf_read_fmt=sf_read_fmt,
-    #         fn_write_fmt=fn_write_fmt,
-    #         sf_write_fmt=sf_write_fmt,
-    #         cache_size=cache_size
-    #     )
 
 
 cell_io_catalog = {
