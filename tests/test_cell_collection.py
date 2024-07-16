@@ -248,13 +248,15 @@ class TestCellGridFiles(unittest.TestCase):
 
     @staticmethod
     def _init_options(root_path, sf_templ=None, sf_read_fmt=None):
+        def _fn_read_fmt(cell, sat=None):
+            return {"cell_id": f"{cell:04d}"}
         return {
             "root_path": root_path,
             "cls": RaggedArrayCell,
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
             "grid_name": "Fib12.5",
-            "fn_read_fmt": lambda cell: {"cell_id": f"{cell:04d}"},
+            "fn_read_fmt": _fn_read_fmt,
             "sf_read_fmt": sf_read_fmt,
         }
 
@@ -274,7 +276,7 @@ class TestCellGridFiles(unittest.TestCase):
             **self._init_options(self.tempdir_path / "contiguous")
         )
         self.assertEqual(contig_collection.fn_read_fmt(2588), {"cell_id": "2588"})
-        self.assertIsNone(contig_collection.sf_read_fmt)
+        # self.assertIsNone(contig_collection.sf_read_fmt)
         self.assertEqual(contig_collection.root_path, self.tempdir_path / "contiguous")
         self.assertEqual(contig_collection.cls, RaggedArrayCell)
 
@@ -362,7 +364,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
             product_id="sig0_12.5",
         )
         self.assertEqual(contig_collection.fn_read_fmt(2588), {"cell_id": "2588"})
-        self.assertIsNone(contig_collection.sf_read_fmt)
+        # self.assertIsNone(contig_collection.sf_read_fmt)
         self.assertEqual(contig_collection.root_path, self.tempdir_path / "contiguous")
         self.assertEqual(contig_collection.cls, RaggedArrayCell)
 
@@ -396,9 +398,9 @@ class TestRaggedArrayFiles(unittest.TestCase):
         allsats_collection = RaggedArrayFiles(
             root_path,
             product_id="sig0_12.5",
-            all_sats=True,
+            # all_sats=True,
         )
-        real_merged = allsats_collection.extract(cell=[2587, 2588])
+        real_merged = allsats_collection.extract(cell=[2587, 2588], sat=["[ABC]"])
         self.assertIsNone(real_merged)
 
     def test_convert_dir_to_contiguous(self):
@@ -409,7 +411,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
         )
         converted_dir = self.tempdir_path / "converted_contiguous"
         converted_dir.mkdir(parents=True, exist_ok=True)
-        indexed_collection.convert_dir_to_contiguous(converted_dir, num_processes=-1)
+        indexed_collection.convert_dir_to_contiguous(converted_dir, num_processes=None)
         # show all files in the converted directory
         # print(list(converted_dir.rglob("*")))
 

@@ -116,33 +116,81 @@ class TestSwathGridFiles(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_init(self):
-        swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
+
+        def _fn_read_fmt(timestamp, sat="[ABC]"):
+            sat = sat.upper()
+            return {
+                "date": timestamp.strftime("%Y%m%d*"),
+                "sat": sat,
+                "placeholder": "*",
+                "placeholder1": "*"
+            }
+
+        def _sf_read_fmt(timestamp, sat="[abc]"):
+            sat = sat.lower()
+            output_fmt = {
+                "satellite_folder": {
+                    "satellite": f"metop_{sat}"
+                },
+                "year_folder": {
+                    "year": f"{timestamp.year}"
+                },
+            }
+            # if sat is not None:
+            #     output_fmt["sat_folder"] = {
+            #         "sat": f"metop_{sat.lower()}"
+            #     }
+
+            return output_fmt
+
+        # we can create a SwathGridFiles object that points directly to a directory
+        # and read the files within it, without passing a "sat" argument to
+        # sf.search_period().
+        swath_path = "tests/ascat_test_data/hsaf/h129/swaths/metop_a/2021"
+
         sf = SwathGridFiles(
             swath_path,
             file_class=SwathFile,
             fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc",
-            sf_templ={"year_folder": "{year}"},
+            sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}"},
             date_field_fmt="%Y%m%d%H%M%S",
-            # grid=grid,
             grid_name="Fib6.25",
-            # grid_sampling_km=6.25,
-            fn_read_fmt=lambda timestamp: {
-                "date": timestamp.strftime("%Y%m%d*"),
-                "sat": "[ABC]",
-                "placeholder": "*",
-                "placeholder1": "*"
-            },
-            sf_read_fmt=lambda timestamp: {
-                "year_folder": {
-                    "year": f"{timestamp.year}"
-                },
-            },
+            fn_read_fmt=_fn_read_fmt,
+            sf_read_fmt=_sf_read_fmt,
         )
 
         files = sf.search_period(
             datetime(2021, 1, 15),
             datetime(2021, 1, 30),
-            date_field_fmt="%Y%m%d%H%M%S"
+            date_field_fmt="%Y%m%d%H%M%S",
+            # sat="a"
+        )
+        self.assertGreater(len(files), 0)
+
+        # We can also set the path to the root of the product directory and
+        # optionally specify "sat" to search_period() to filter the files by
+        # satellite.
+        # This would be a regex, so if we just wanted metop b and c we could
+        # pass sat="[bc]".
+        # The default value is "[abc]" which will take all three (or whatever
+        # is available)
+        swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
+        sf = SwathGridFiles(
+            swath_path,
+            file_class=SwathFile,
+            fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc",
+            sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}"},
+            date_field_fmt="%Y%m%d%H%M%S",
+            grid_name="Fib6.25",
+            fn_read_fmt = _fn_read_fmt,
+            sf_read_fmt = _sf_read_fmt
+        )
+
+        files = sf.search_period(
+            datetime(2021, 1, 15),
+            datetime(2021, 1, 30),
+            date_field_fmt="%Y%m%d%H%M%S",
+            sat="a",
         )
         self.assertGreater(len(files), 0)
 
@@ -193,7 +241,7 @@ class TestSwathGridFiles(unittest.TestCase):
         self.assertGreater(merged_ds.longitude.min(), bbox[2])
 
         # test extract from main folder
-        swath_path = "tests/ascat_test_data/hsaf/h129/swaths/metop_a/meto2021"
+        swath_path = "tests/ascat_test_data/hsaf/h129/swaths/metop_a/2021"
         sf = SwathGridFiles.from_product_id(swath_path, "h129")
         files = sf.search_period(
             datetime(2021, 1, 15),

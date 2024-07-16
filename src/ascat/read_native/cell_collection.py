@@ -977,6 +977,8 @@ class RaggedArrayFiles(CellGridFiles):
 
 
 
+def _omaf_fn_read_fmt(cell, sat=None):
+    return {"cell_id": f"{cell:04d}"}
 
 class OrthoMultiArrayFiles(CellGridFiles):
     def __init__(self, root_path, product_id, grid_name=None, all_sats=False):
@@ -990,7 +992,7 @@ class OrthoMultiArrayFiles(CellGridFiles):
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
             "grid_name": grid_name,
-            "fn_read_fmt": lambda cell: {"cell_id": f"{cell:04d}"},
+            "fn_read_fmt": _omaf_fn_read_fmt,
             "sf_read_fmt": sf_read_fmt,
         }
         super().__init__(**init_options)
