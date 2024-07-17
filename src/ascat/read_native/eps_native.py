@@ -1622,7 +1622,7 @@ def read_smx_fmv_12(eps_file):
 
     fields = [("longitude", long_nan, long_nan),
               ("latitude", long_nan, long_nan),
-              ("swath_indicator", int8_nan, uint8_nan),
+              ("swath_indicator", uint8_nan, uint8_nan),
               ("soil_moisture", uint_nan, uint_nan),
               ("soil_moisture_error", uint_nan, uint_nan),
               ("sigma40", long_nan, long_nan),
