@@ -43,6 +43,7 @@ from datetime import timedelta
 
 from ascat.utils import get_toi_subset, get_roi_subset
 from ascat.utils import get_bit, set_bit
+from ascat.utils import dtype_to_nan
 
 short_cds_time = np.dtype([("day", ">u2"), ("time", ">u4")])
 long_cds_time = np.dtype([("day", ">u2"), ("ms", ">u4"), ("mms", ">u2")])
@@ -793,9 +794,11 @@ def conv_epsl1bszf_generic(data, metadata, gen_fields_lut, skip_fields):
                                    (data[new_name] > valid_range[1]))
             data[new_name].set_fill_value(nan_val)
         else:
+            invalid = data[var_name] == dtype_to_nan[np.dtype(data[var_name].dtype)]
             data[new_name] = np.ma.array(data.pop(var_name).astype(new_dtype))
             data[new_name].mask = ((data[new_name] < valid_range[0]) |
-                                   (data[new_name] > valid_range[1]))
+                                   (data[new_name] > valid_range[1]) |
+                                   invalid)
             data[new_name].set_fill_value(nan_val)
 
     return data
@@ -817,12 +820,15 @@ def conv_epsl1bszx_generic(data, metadata):
     data : dict of numpy.ndarray
         Converted dataset.
     """
+    # template - "old_var_name": ("new_name", new dtype )
     gen_fields_lut = {
         "inc_angle_trip": ("inc", np.float32, uint_nan),
         "azi_angle_trip": ("azi", np.float32, int_nan),
         "sigma0_trip": ("sig", np.float32, long_nan),
         "kp": ("kp", np.float32, uint_nan),
-        "f_kp": ("kp_quality", np.uint8, uint8_nan)
+        "f_kp": ("kp_quality", np.uint8, None), # "f_kp": ("kp_quality", np.int8, uint8_nan),
+        "f_usable": ("f_usable", np.int8, uint8_nan),
+        "swath_indicator": ("swath_indicator", np.int8, uint8_nan),
     }
 
     skip_fields = ["flagfield_rf1", "f_f", "f_v", "f_oa", "f_sa", "f_tel"]
@@ -832,9 +838,11 @@ def conv_epsl1bszx_generic(data, metadata):
             data.pop(var_name)
 
     for var_name, (new_name, new_dtype, nan_val) in gen_fields_lut.items():
+        invalid = data[var_name] == nan_val
         data[new_name] = data.pop(var_name).astype(new_dtype)
         if nan_val is not None:
-            data[new_name][data[new_name] == nan_val] = float32_nan
+            new_nan_val = dtype_to_nan[np.dtype(new_dtype)]
+            data[new_name][invalid] = new_nan_val
 
     data["sat_id"] = np.repeat(metadata["sat_id"], data["time"].size)
 
@@ -879,7 +887,8 @@ def conv_epsl2szx_generic(data, metadata):
         "frozen_soil_probability": ("frozen_prob", np.uint8, None),
         "innudation_or_wetland": ("wetland", np.uint8, None),
         "topographical_complexity": ("topo", np.uint8, None),
-        "kp": ("kp", np.float32, uint_nan)
+        "kp": ("kp", np.float32, uint_nan),
+        "swath_indicator": ("swath_indicator", np.int8, uint8_nan)
     }
 
     skip_fields = ["flagfield_rf1", "f_f", "f_v", "f_oa", "f_sa", "f_tel"]
@@ -889,9 +898,11 @@ def conv_epsl2szx_generic(data, metadata):
             data.pop(var_name)
 
     for var_name, (new_name, new_dtype, nan_val) in gen_fields_lut.items():
+        invalid = data[var_name] == nan_val
         data[new_name] = data.pop(var_name).astype(new_dtype)
         if nan_val is not None:
-            data[new_name][data[new_name] == nan_val] = float32_nan
+            new_nan_val = dtype_to_nan[np.dtype(new_dtype)]
+            data[new_name][invalid] = new_nan_val
 
     data["sat_id"] = np.repeat(metadata["sat_id"], data["time"].size)
 
@@ -1321,7 +1332,7 @@ def read_szx_fmv_11(eps_file):
         data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
     fields = [("longitude", long_nan), ("latitude", long_nan),
-              ("swath_indicator", int8_nan)]
+              ("swath_indicator", uint8_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].flatten()
@@ -1330,7 +1341,7 @@ def read_szx_fmv_11(eps_file):
 
     fields = [("sigma0_trip", long_nan), ("inc_angle_trip", uint_nan),
               ("azi_angle_trip", int_nan), ("kp", uint_nan),
-              ("f_kp", int8_nan), ("f_usable", int8_nan), ("f_f", uint_nan),
+              ("f_kp", uint8_nan), ("f_usable", uint8_nan), ("f_f", uint_nan),
               ("f_v", uint_nan), ("f_oa", uint_nan), ("f_sa", uint_nan),
               ("f_tel", uint_nan), ("f_land", uint_nan)]
 
@@ -1406,7 +1417,7 @@ def read_szx_fmv_12(eps_file):
         data[f] = raw_data[f.upper()].flatten()[idx_nodes]
 
     fields = [("longitude", long_nan), ("latitude", long_nan),
-              ("swath indicator", int8_nan)]
+              ("swath indicator", uint8_nan)]
 
     for f, nan_val in fields:
         data[f] = raw_data[f.upper()].flatten()
@@ -1415,8 +1426,8 @@ def read_szx_fmv_12(eps_file):
 
     fields = [("sigma0_trip", long_nan), ("inc_angle_trip", uint_nan),
               ("azi_angle_trip", int_nan), ("kp", uint_nan),
-              ("num_val_trip", ulong_nan), ("f_kp", int8_nan),
-              ("f_usable", int8_nan), ("f_f", uint_nan), ("f_v", uint_nan),
+              ("num_val_trip", ulong_nan), ("f_kp", uint8_nan),
+              ("f_usable", uint8_nan), ("f_f", uint_nan), ("f_v", uint_nan),
               ("f_oa", uint_nan), ("f_sa", uint_nan), ("f_tel", uint_nan),
               ("f_ref", uint_nan), ("f_land", uint_nan)]
 
@@ -1546,7 +1557,7 @@ def read_szf_fmv_12(eps_file, ignore_noise_ool=False):
     fields = [("longitude_full", long_nan), ("latitude_full", long_nan),
               ("sigma0_full", long_nan), ("inc_angle_full", uint_nan),
               ("azi_angle_full", int_nan), ("land_frac", uint_nan),
-              ("flagfield_gen2", int8_nan)]
+              ("flagfield_gen2", uint8_nan)]
 
     for f, nan_val in fields:
         data[f] = eps_file.mdr[f.upper()].flatten()
@@ -1622,7 +1633,7 @@ def read_smx_fmv_12(eps_file):
 
     fields = [("longitude", long_nan, long_nan),
               ("latitude", long_nan, long_nan),
-              ("swath_indicator", int8_nan, int8_nan),
+              ("swath_indicator", uint8_nan, uint8_nan),
               ("soil_moisture", uint_nan, uint_nan),
               ("soil_moisture_error", uint_nan, uint_nan),
               ("sigma40", long_nan, long_nan),
@@ -1861,7 +1872,7 @@ def read_szx_fmv_13(eps_file):
 
     fields = [("sigma0_trip", long_nan), ("inc_angle_trip", uint_nan),
               ("azi_angle_trip", int_nan), ("kp", uint_nan),
-              ("num_val_trip", ulong_nan), ("f_kp", int8_nan),
+              ("num_val_trip", ulong_nan), ("f_kp", uint8_nan),
               ("f_usable", int8_nan), ("land_frac", uint_nan)]
 
     for f, nan_val in fields:

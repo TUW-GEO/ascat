@@ -107,7 +107,7 @@ class AscatL1bHdf5File:
                       "FORMAT_MAJOR_VERSION", "FORMAT_MINOR_VERSION"]
 
             for f in fields:
-                pos = np.core.defchararray.startswith(
+                pos = np.char.startswith(
                     mdr_metadata["MPHR/MPHR_TABLE"]["EntryName"], f.encode())
                 var = mdr_metadata["MPHR/MPHR_TABLE"]["EntryValue"][
                     pos][0].decode()

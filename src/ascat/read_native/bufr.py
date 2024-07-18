@@ -266,7 +266,7 @@ def conv_bufrl1b_generic(data, metadata):
                                     data.pop(f[2]))).T.astype(new_dtype)
         if nan_val is not None:
             valid = data[new_name] != nan_val
-            data[new_name][~valid] = float32_nan
+            data[new_name][~valid] = nan_val_dict[new_dtype]
             data[new_name][valid] *= s
 
     if data['node_num'].max() == 82:
