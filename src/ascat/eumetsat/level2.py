@@ -379,26 +379,26 @@ class AscatL2EpsFileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _merge_data(self, data):
-        """
-        Merge data.
+    # def _merge_data(self, data):
+    #     """
+    #     Merge data.
 
-        Parameters
-        ----------
-        data : list
-            List of array.
+    #     Parameters
+    #     ----------
+    #     data : list
+    #         List of array.
 
-        Returns
-        -------
-        data : numpy.ndarray
-            Data.
-        """
-        if type(data) == list:
-            if type(data[0]) == tuple:
-                metadata = [element[1] for element in data]
-                data = np.hstack([element[0] for element in data])
-                data = (data, metadata)
-            else:
-                data = np.hstack(data)
+    #     Returns
+    #     -------
+    #     data : numpy.ndarray
+    #         Data.
+    #     """
+    #     if type(data) == list:
+    #         if type(data[0]) == tuple:
+    #             metadata = [element[1] for element in data]
+    #             data = np.hstack([element[0] for element in data])
+    #             data = (data, metadata)
+    #         else:
+    #             data = np.hstack(data)
 
-        return data
+    #     return data
