@@ -412,6 +412,18 @@ class TestRaggedArrayFiles(unittest.TestCase):
         converted_dir = self.tempdir_path / "converted_contiguous"
         converted_dir.mkdir(parents=True, exist_ok=True)
         indexed_collection.convert_dir_to_contiguous(converted_dir, num_processes=None)
+
+        converted_collection = RaggedArrayFiles(
+            converted_dir,
+            product_id="sig0_12.5",
+        )
+
+        ref_data = indexed_collection.extract().load()
+        converted_data = converted_collection.extract().load()
+
+        xr.testing.assert_equal(ref_data, converted_data)
+
+
         # show all files in the converted directory
         # print(list(converted_dir.rglob("*")))
 
