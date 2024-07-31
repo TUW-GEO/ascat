@@ -732,6 +732,55 @@ class CellGridFiles(MultiFileHandler):
         cells = self._cells_for_location_id(gpis)
         return cells
 
+    def _apply_func_to_file(self, filename, func, out_dir, **write_kwargs):
+        fid = self.cls(Path(self.root_path)/filename)
+        ds = fid.read(mask_and_scale=True)
+        if func is not None:
+            fid.ds = func(ds)
+        out_filename = out_dir / Path(filename).relative_to(self.root_path)
+        fid.write(out_filename, **write_kwargs)
+        # out_filename = Path(out_dir)/Path(filename).name
+        # ds.to_netcdf(out_filename)
+        ds.close()
+
+    def reprocess(self,
+                  out_dir,
+                  func,
+                  cell=None,
+                  location_id=None,
+                  coords=None,
+                  bbox=None,
+                  num_processes=1,
+                  write_kwargs=None,
+                  **kwargs):
+        """
+        Reprocess all files into a new directory, preserving subdirectory structure,
+        by reading them in as xarrays and applying function "func" to them.
+        """
+        write_kwargs = write_kwargs or {}
+
+        filenames = self.spatial_search(
+            cell=cell,
+            location_id=location_id,
+            coords=coords,
+            bbox=bbox
+        )
+
+        if num_processes == 1:
+            for filename in filenames:
+                self._apply_func_to_file(filename, func, out_dir, **write_kwargs)
+        else:
+            ctx = mp.get_context("forkserver")
+            pool = ctx.Pool(processes=num_processes)
+            convert_func = partial(
+                self._apply_func_to_file,
+                func=func,
+                out_dir=out_dir
+            )
+            pool.map(convert_func, filenames)
+            pool.close()
+            pool.join()
+
     def extract(
             self,
             cell=None,
