@@ -920,14 +920,6 @@ class RaggedArrayFiles(CellGridFiles):
         }
         super().__init__(**init_options)
 
-    def _convert_file_to_contiguous(self, filename, out_dir):
-        fid = self.cls(Path(self.root_path)/filename)
-        ds = fid.read()
-        ds = fid._ensure_contiguous(ds)
-        out_filename = Path(out_dir)/Path(filename).name
-        ds.to_netcdf(out_filename)
-        ds.close()
-
     def convert_dir_to_contiguous(self,
                                   out_dir,
                                   cell=None,
@@ -946,25 +938,36 @@ class RaggedArrayFiles(CellGridFiles):
             Number of processes to use for conversion.
             Default: -1 (use all available cores).
         """
-        filenames = self.spatial_search(
-            cell=cell,
-            location_id=location_id,
-            coords=coords,
-            bbox=bbox
-        )
-        if num_processes == 1:
-            for filename in filenames:
-                self._convert_file_to_contiguous(filename, out_dir)
-        else:
-            ctx = mp.get_context("forkserver")
-            pool = ctx.Pool(processes=num_processes)
-            convert_func = partial(
-                self._convert_file_to_contiguous,
-                out_dir=out_dir
-            )
-            pool.map(convert_func, filenames)
-            pool.close()
-            pool.join()
+
+        # filenames = self.spatial_search(
+        #     cell=cell,
+        #     location_id=location_id,
+        #     coords=coords,
+        #     bbox=bbox
+        # )
+        # if num_processes == 1:
+        #     for filename in filenames:
+        #         self._apply_func_to_file(filename, func, out_dir)
+        # else:
+        #     ctx = mp.get_context("forkserver")
+        #     pool = ctx.Pool(processes=num_processes)
+        #     convert_func = partial(
+        #         self._apply_func_to_file,
+        #         func=func,
+        #         out_dir=out_dir
+        #     )
+        #     pool.map(convert_func, filenames)
+        #     pool.close()
+        #     pool.join()
+
+        self.reprocess(out_dir,
+                       None,
+                       cell=cell,
+                       location_id=location_id,
+                       coords=coords,
+                       bbox=bbox,
+                       num_processes=num_processes,
+                       write_kwargs={"ra_type": "contiguous"})
 
     def extract(
             self,
