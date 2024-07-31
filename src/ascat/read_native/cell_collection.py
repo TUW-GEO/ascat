@@ -496,9 +496,7 @@ class OrthoMultiCell:
             locs_idx = lookup_vector[ds_location_ids]
             ds = ds.sel(locations=locs_idx)
         else:
-            # print(gpis)
             ds = ds.where(ds["location_id"].isin(gpis).compute(), drop=True)
-            # print(ds)
 
         return ds
 
