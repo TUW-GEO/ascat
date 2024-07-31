@@ -394,9 +394,8 @@ class RaggedArrayCell:
 
         # custom_variable_encodings = kwargs.pop(
         #     "encoding", None) or self.custom_variable_encodings
-        out_encoding = kwargs.pop("encoding", [])
-        out_encoding = create_variable_encodings(out_ds,
-                                                   out_encoding)
+        out_encoding = kwargs.pop("encoding", {})
+        out_encoding = create_variable_encodings(out_ds, out_encoding)
         #
         out_ds.encoding["unlimited_dims"] = ["obs"]
 
