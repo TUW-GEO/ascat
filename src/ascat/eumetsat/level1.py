@@ -396,56 +396,56 @@ class AscatL1bEpsFileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _merge_data(self, data):
-        """
-        Merge data.
+    # def _merge_data(self, data):
+    #     """
+    #     Merge data.
 
-        Parameters
-        ----------
-        data : list
-            List of array.
+    #     Parameters
+    #     ----------
+    #     data : list
+    #         List of array.
 
-        Returns
-        -------
-        data : numpy.ndarray
-            Data.
-        """
-        metadata = {}
+    #     Returns
+    #     -------
+    #     data : numpy.ndarray
+    #         Data.
+    #     """
+    #     metadata = {}
 
-        left_beams = ["lf-vv", "lm-vv", "la-vv"]
-        right_beams = ["rf-vv", "rm-vv", "ra-vv"]
-        all_beams = left_beams + right_beams
+    #     left_beams = ["lf-vv", "lm-vv", "la-vv"]
+    #     right_beams = ["rf-vv", "rm-vv", "ra-vv"]
+    #     all_beams = left_beams + right_beams
 
-        if self.product == "szf":
-            if type(data) == list:
-                if type(data[0]) == tuple:
-                    metadata = [element[1] for element in data]
-                    merged_data = defaultdict(list)
-                    for beam in all_beams:
-                        for d in data:
-                            merged_data[beam].append(d[0].pop(beam))
-                        merged_data[beam] = np.hstack(merged_data[beam])
-                else:
-                    merged_data = defaultdict(list)
-                    for beam in all_beams:
-                        for d in data:
-                            merged_data[beam].append(d.pop(beam))
-                        merged_data[beam] = np.hstack(merged_data[beam])
-            else:
-                merged_data = data
-        else:
-            if type(data) == list:
-                if type(data[0]) == tuple:
-                    metadata = [element[1] for element in data]
-                    merged_data = np.hstack([element[0] for element in data])
-                else:
-                    merged_data = np.hstack(data)
-            else:
-                merged_data = data
+    #     if self.product == "szf":
+    #         if type(data) == list:
+    #             if type(data[0]) == tuple:
+    #                 metadata = [element[1] for element in data]
+    #                 merged_data = defaultdict(list)
+    #                 for beam in all_beams:
+    #                     for d in data:
+    #                         merged_data[beam].append(d[0].pop(beam))
+    #                     merged_data[beam] = np.hstack(merged_data[beam])
+    #             else:
+    #                 merged_data = defaultdict(list)
+    #                 for beam in all_beams:
+    #                     for d in data:
+    #                         merged_data[beam].append(d.pop(beam))
+    #                     merged_data[beam] = np.hstack(merged_data[beam])
+    #         else:
+    #             merged_data = data
+    #     else:
+    #         if type(data) == list:
+    #             if type(data[0]) == tuple:
+    #                 metadata = [element[1] for element in data]
+    #                 merged_data = np.hstack([element[0] for element in data])
+    #             else:
+    #                 merged_data = np.hstack(data)
+    #         else:
+    #             merged_data = data
 
-        merged_data = (merged_data, metadata)
+    #     merged_data = (merged_data, metadata)
 
-        return merged_data
+    #     return merged_data
 
 
 class AscatL1bHdf5FileList(ChronFiles):

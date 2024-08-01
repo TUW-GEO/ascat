@@ -187,7 +187,74 @@ class AscatL1bEpsFile:
         metadata : dict
             Metadata.
         """
-        return read_eps_l1b(self.filename, generic, to_xarray, **kwargs)
+        if isinstance(self.filename, list):
+            data = []
+            metadata = []
+            for filename in self.filename:
+                data_ = read_eps_l1b(
+                    filename, generic, to_xarray, **kwargs)
+                data.append(data_)
+            data = self.merge(data)
+            return data
+
+        else:
+            return read_eps_l1b(self.filename, generic, to_xarray, **kwargs)
+
+    def merge(self, data):
+        """
+        Merge data.
+
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            Data.
+        """
+        ptype = data[0][1]["product_type"]
+        metadata = {}
+
+        left_beams = ["lf-vv", "lm-vv", "la-vv"]
+        right_beams = ["rf-vv", "rm-vv", "ra-vv"]
+        all_beams = left_beams + right_beams
+
+        if ptype == "szf":
+            if isinstance(data, list):
+                if isinstance(data[0], tuple):
+                    metadata = [element[1] for element in data]
+                    merged_data = defaultdict(list)
+                    for beam in all_beams:
+                        for d in data:
+                            merged_data[beam].append(d[0].pop(beam))
+                        merged_data[beam] = np.hstack(merged_data[beam])
+                else:
+                    merged_data = defaultdict(list)
+                    for beam in all_beams:
+                        for d in data:
+                            merged_data[beam].append(d.pop(beam))
+                        merged_data[beam] = np.hstack(merged_data[beam])
+            else:
+                merged_data = data
+        else:
+            if isinstance(data, list):
+                if isinstance(data[0], tuple):
+                    metadata = [element[1] for element in data]
+                    merged_data = np.hstack([element[0] for element in data])
+                else:
+                    merged_data = np.hstack(data)
+            else:
+                merged_data = data
+
+        merged_data = (merged_data, metadata)
+
+        return merged_data
+
+
+    def to_xarray(self, data, metadata):
+        pass
 
     def close(self):
         """
@@ -232,7 +299,43 @@ class AscatL2EpsFile:
         metadata : dict
             Metadata.
         """
-        return read_eps_l2(self.filename, generic, to_xarray)
+        if isinstance(self.filename, list):
+            data = []
+            metadata = []
+            for filename in self.filename:
+                data_ = read_eps_l2(filename, generic, to_xarray)
+                data.append(data_)
+            data = self.merge(data)
+            return data
+
+        else:
+            return read_eps_l2(self.filename, generic, to_xarray)
+
+    def merge(self, data):
+        """
+        Merge data.
+
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            Data.
+        """
+        if isinstance(data, list):
+            # print(type(data))
+            # print(data)
+            if isinstance(data[0], tuple):
+                metadata = [element[1] for element in data]
+                data = np.hstack([element[0] for element in data])
+                data = (data, metadata)
+            else:
+                data = np.hstack(data)
+
+        return data
 
     def close(self):
         """
@@ -915,7 +1018,8 @@ def read_eps_l1b(filename,
                  full=True,
                  unsafe=False,
                  scale_mdr=True,
-                 ignore_noise_ool=False):
+                 ignore_noise_ool=False,
+                 return_ptype=False):
     """
     Level 1b reader and data preparation.
 
@@ -1152,11 +1256,13 @@ def read_eps_l1b(filename,
                            " Format major version: {:2}".format(ptype, fmv))
 
     metadata["filename"] = os.path.basename(filename)
+    if return_ptype:
+        metadata["product_type"] = ptype
 
     return ds, metadata
 
 
-def read_eps_l2(filename, generic=False, to_xarray=False):
+def read_eps_l2(filename, generic=False, to_xarray=False, return_ptype=False):
     """
     Level 2 reader and data preparation.
 
@@ -1237,6 +1343,9 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
     else:
         raise ValueError("Format not supported. Product type {:1}"
                          " Format major version: {:2}".format(ptype, fmv))
+
+    if return_ptype:
+        metadata["product_type"] = ptype
 
     return data, metadata
 
