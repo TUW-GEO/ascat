@@ -732,13 +732,13 @@ class CellGridFiles(MultiFileHandler):
         cells = self._cells_for_location_id(gpis)
         return cells
 
-    def _apply_func_to_file(self, filename, func, out_dir, fn_kwargs=None, write_kwargs=None):
-        fn_kwargs = fn_kwargs or {}
+    def _apply_func_to_file(self, filename, func, out_dir, func_kwargs=None, write_kwargs=None):
+        func_kwargs = func_kwargs or {}
         write_kwargs = write_kwargs or {}
         fid = self.cls(Path(self.root_path)/filename)
         ds = fid.read(mask_and_scale=True)
         if func is not None:
-            fid.ds = func(ds, **fn_kwargs)
+            fid.ds = func(ds, **func_kwargs)
         out_filename = out_dir / Path(filename).relative_to(self.root_path)
         fid.write(out_filename, **write_kwargs)
         # out_filename = Path(out_dir)/Path(filename).name
