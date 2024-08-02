@@ -283,11 +283,6 @@ class SwathFile:
 class SwathGridFiles(ChronFiles):
     """
     Class to read and merge multiple swath files.
-
-    TODO
-    ----
-    - Override all existing methods to make sense, even if they're not
-        very useful in this case.
     """
 
     def __init__(

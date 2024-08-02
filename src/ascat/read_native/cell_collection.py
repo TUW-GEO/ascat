@@ -1066,12 +1066,6 @@ class RaggedArrayFiles(CellGridFiles):
             sat=sat,
             **kwargs,
         )
-        # if data:
-        #     data["location_id"] = data["location_id"][data["locationIndex"]]
-        #     data = data.set_coords(["location_id"])
-        #     data = data.set_xindex(["location_id"],
-        #                            FibGridIndex,
-        #                            spacing=self.grid_sampling_km)
         return data
 
 

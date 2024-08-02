@@ -357,8 +357,6 @@ def get_grid_gpis(
     -------
     gpi : int
         Grid point index.
-
-    TODO: Add maximum distance from coordinates to return a gpi.
     """
     if cell is not None:
         gpis, lons, lats = grid.grid_points_for_cell(cell)

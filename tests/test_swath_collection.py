@@ -12,7 +12,6 @@ from fibgrid.realization import FibGrid
 
 import ascat.read_native.generate_test_data as gtd
 
-from importlib import reload
 from ascat.read_native.swath_collection import SwathFile
 from ascat.read_native.swath_collection import SwathGridFiles
 from ascat.read_native.cell_collection import RaggedArrayCell
