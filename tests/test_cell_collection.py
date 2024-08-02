@@ -359,7 +359,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_init(self):
-        contig_collection = RaggedArrayFiles(
+        contig_collection = RaggedArrayFiles.from_product_id(
             self.tempdir_path / "contiguous",
             product_id="sig0_12.5",
         )
@@ -370,7 +370,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
 
     def test_search(self):
         root_path = self.tempdir_path / "contiguous"
-        contig_collection = RaggedArrayFiles(
+        contig_collection = RaggedArrayFiles.from_product_id(
             root_path,
             product_id="sig0_12.5",
         )
@@ -387,7 +387,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
 
     def test_extract(self):
         root_path = self.tempdir_path / "contiguous"
-        contig_collection = RaggedArrayFiles(
+        contig_collection = RaggedArrayFiles.from_product_id(
             root_path,
             product_id="sig0_12.5",
         )
@@ -395,7 +395,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
         self.assertIsInstance(real_merged, xr.Dataset)
 
         root_path = self.tempdir_path
-        allsats_collection = RaggedArrayFiles(
+        allsats_collection = RaggedArrayFiles.from_product_id(
             root_path,
             product_id="sig0_12.5",
             # all_sats=True,
@@ -405,7 +405,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
 
     def test_convert_dir_to_contiguous(self):
         root_path = self.tempdir_path / "indexed"
-        indexed_collection = RaggedArrayFiles(
+        indexed_collection = RaggedArrayFiles.from_product_id(
             root_path,
             product_id="sig0_12.5",
         )
@@ -413,7 +413,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
         converted_dir.mkdir(parents=True, exist_ok=True)
         indexed_collection.convert_dir_to_contiguous(converted_dir, num_processes=None)
 
-        converted_collection = RaggedArrayFiles(
+        converted_collection = RaggedArrayFiles.from_product_id(
             converted_dir,
             product_id="sig0_12.5",
         )
@@ -565,17 +565,18 @@ class TestOrthoMultiArrayFiles(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_init(self):
-        om_collection = OrthoMultiArrayFiles(
+        om_collection = OrthoMultiArrayFiles.from_product_id(
             self.era5_path,
             product_id="ERA5",
         )
         self.assertEqual(om_collection.fn_read_fmt(29), {"cell_id": "0029"})
-        self.assertIsNone(om_collection.sf_read_fmt)
+        self.assertIsNone(om_collection.sf_read_fmt(29))
+        self.assertEqual(om_collection.sf_read_fmt(29, "metop_a"), {"sat_str": {"sat": "metop_a"}})
         self.assertEqual(om_collection.root_path, self.era5_path)
         self.assertEqual(om_collection.cls, OrthoMultiCell)
 
     def test_search(self):
-        om_collection = OrthoMultiArrayFiles(
+        om_collection = OrthoMultiArrayFiles.from_product_id(
             self.era5_path,
             product_id="ERA5",
         )
@@ -596,7 +597,7 @@ class TestOrthoMultiArrayFiles(unittest.TestCase):
 
 
     def test_extract(self):
-        om_collection = OrthoMultiArrayFiles(
+        om_collection = OrthoMultiArrayFiles.from_product_id(
             self.era5_path,
             product_id="ERA5",
         )

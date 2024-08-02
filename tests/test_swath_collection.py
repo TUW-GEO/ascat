@@ -227,8 +227,7 @@ class TestSwathGridFiles(unittest.TestCase):
         bbox = (-180, -4, -70, 20)
 
         merged_ds = sf.extract(
-            datetime(2021, 1, 15),
-            datetime(2021, 1, 30),
+            (datetime(2021, 1, 15), datetime(2021, 1, 30)),
             bbox=bbox,
         )
 
@@ -252,8 +251,7 @@ class TestSwathGridFiles(unittest.TestCase):
         bbox = (-180, -4, -70, 20)
 
         merged_ds = sf.extract(
-            datetime(2021, 1, 15),
-            datetime(2021, 1, 30),
+            (datetime(2021, 1, 15), datetime(2021, 1, 30)),
             bbox=bbox,
         )
 
@@ -280,8 +278,7 @@ class TestSwathGridFiles(unittest.TestCase):
         sf.stack_to_cell_files(
             "/home/charriso/test_cells/",
             RaggedArrayCell,
-            datetime(2021, 1, 1),
-            datetime(2021, 2, 1),
+            (datetime(2021, 1, 1), datetime(2021, 2, 1)),
             fnames=list(Path(swath_path).rglob("*.nc"))[:2],
             processes=12,
             # sat="b",
@@ -315,13 +312,12 @@ class TestSwathGridFiles(unittest.TestCase):
         #             print(f)
 
         sf.stack_to_cell_files_2("/home/charriso/test_cells/magic/",
-                               RaggedArrayCell,
-                               datetime(2021, 1, 7),
-                                datetime(2021, 1, 14),
-                               processes=12,
+                                 RaggedArrayCell,
+                                 (datetime(2021, 1, 7), datetime(2021, 1, 14)),
+                                 processes=12,
                                  sat="c",
                                  mode="a"
-                               )
+                                 )
 
         # check that the time var in all files in /test_cells/ are monotonic ascending
         # output_cells = list(Path("/home/charriso/test_cells/").rglob("*.nc"))

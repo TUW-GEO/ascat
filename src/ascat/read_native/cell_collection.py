@@ -568,6 +568,19 @@ class CellGridFiles(MultiFileHandler):
         else:
             self.grid_sampling_km = None
 
+    @classmethod
+    def from_product_id(cls, root_path, product_id):
+        """
+        Create a new CellFiles object from a product_id.
+        """
+        product_id = product_id.upper()
+        if product_id in cell_io_catalog:
+            product_class = cell_io_catalog[product_id]
+            return cls.from_product_class(root_path, product_class)
+        error_str = f"Product {product_id} not recognized. Valid products are"
+        error_str += f" {', '.join(cell_io_catalog.keys())}."
+        raise ValueError(error_str)
+
     def _fmt(self, *fmt_args, **fmt_kwargs):
         """
         Format filenames/filepaths.
@@ -922,22 +935,13 @@ class CellGridFiles(MultiFileHandler):
             self.fid.write(out_dir/filename, mode="a", ra_type="indexed")
 
 
-def _raf_fn_read_fmt(cell, sat=None):
-    """
-    TODO cannot provide this as a lambda function because it breaks multiprocessing for
-    converting to contiguous arrays. can we fix that
-    """
-    return {"cell_id": f"{cell:04d}"}
-
-def _raf_sf_read_fmt(cell, sat=None):
-    if sat is None:
-        return None
-    return {"sat_str": {"sat": sat}}
-
-
 class RaggedArrayFiles(CellGridFiles):
-    def __init__(self, root_path, product_id):
-        grid_name = cell_io_catalog[product_id.upper()].grid_name
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @classmethod
+    def from_product_class(cls, root_path, product_class):
+        grid_name = product_class.grid_name
         sf_templ = {"sat_str": "{sat}"} #if all_sats else None
         # sf_read_fmt = {"sat_str": {"sat": "metop_[abc]"}} if all_sats else None
         init_options = {
@@ -946,12 +950,25 @@ class RaggedArrayFiles(CellGridFiles):
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
             "grid_name": grid_name,
-            "fn_read_fmt": _raf_fn_read_fmt,
-            # "fn_read_fmt": lambda cell: {"cell_id": f"{cell:04d}"},
-            # "sf_read_fmt": sf_read_fmt,
-            "sf_read_fmt": _raf_sf_read_fmt,
+            "fn_read_fmt": cls._fn_read_fmt,
+            "sf_read_fmt": cls._sf_read_fmt,
         }
-        super().__init__(**init_options)
+        return cls(**init_options)
+
+    @staticmethod
+    def _fn_read_fmt(cell, sat=None):
+        """
+        TODO cannot provide this as a lambda function because it breaks multiprocessing for
+        converting to contiguous arrays. can we fix that
+        """
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def _sf_read_fmt(cell, sat=None):
+        if sat is None:
+            return None
+        return {"sat_str": {"sat": sat}}
+
 
     def convert_dir_to_contiguous(self,
                                   out_dir,
@@ -1059,22 +1076,33 @@ class RaggedArrayFiles(CellGridFiles):
 
 
 
-def _omaf_fn_read_fmt(cell, sat=None):
-    return {"cell_id": f"{cell:04d}"}
 
 class OrthoMultiArrayFiles(CellGridFiles):
-    def __init__(self, root_path, product_id, grid_name=None, all_sats=False):
-        if grid_name is None:
-            grid_name = cell_io_catalog[product_id.upper()].grid_name
-        sf_templ = {"sat_str": "{sat}"} if all_sats else None
-        sf_read_fmt = {"sat_str": {"sat": "metop_[abc]"}} if all_sats else None
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @classmethod
+    def from_product_class(cls, root_path, product_class):#, all_sats=False):
+        grid_name = product_class.grid_name
+        sf_templ = {"sat_str": "{sat}"} #if all_sats else None
+        # sf_read_fmt = {"sat_str": {"sat": "metop_[abc]"}} #if all_sats else None
         init_options = {
             "root_path": root_path,
             "cls": OrthoMultiCell,
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
             "grid_name": grid_name,
-            "fn_read_fmt": _omaf_fn_read_fmt,
-            "sf_read_fmt": sf_read_fmt,
+            "fn_read_fmt": cls._fn_read_fmt,
+            "sf_read_fmt": cls._sf_read_fmt,
         }
-        super().__init__(**init_options)
+        return cls(**init_options)
+
+    @staticmethod
+    def _fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def _sf_read_fmt(cell, sat=None):
+        if sat is None:
+            return None
+        return {"sat_str": {"sat": sat}}

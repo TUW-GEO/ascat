@@ -711,8 +711,9 @@ class SwathGridFiles(ChronFiles):
 
     def extract(
         self,
-        dt_start,
-        dt_end,
+        # dt_start,
+        # dt_end,
+        date_range,
         dt_delta=None,
         search_date_fmt="%Y%m%d*",
         date_field="date",
@@ -756,6 +757,7 @@ class SwathGridFiles(ChronFiles):
         xarray.Dataset
             Dataset.
         """
+        dt_start, dt_end = date_range
         filenames = self.swath_search(
             dt_start, dt_end, dt_delta, search_date_fmt, date_field,
             end_inclusive, cell, location_id, coords, bbox, geom, **fmt_kwargs,
@@ -878,8 +880,9 @@ class SwathGridFiles(ChronFiles):
             self,
             out_dir,
             cell_class,
-            dt_start,
-            dt_end,
+            # dt_start,
+            # dt_end,
+            date_range,
             dt_delta=None,
             search_date_fmt="%Y%m%d*",
             date_field="date",
