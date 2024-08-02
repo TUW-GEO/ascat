@@ -471,7 +471,7 @@ class SwathGridFiles(ChronFiles):
             location_id=None,
             coords=None,
             bbox=None,
-            # geom=None,
+            geom=None,
             # mask_and_scale=True,
             # date_range=None,
             # **kwargs,
@@ -518,8 +518,17 @@ class SwathGridFiles(ChronFiles):
                 lats=[coords[1]],
                 lons=[coords[0]],
             )
-        elif bbox is not None:
-            bbox = (bbox[2], bbox[0], bbox[3], bbox[1])
+        elif (bbox or geom) is not None:
+            if bbox is not None:
+                # AreaDefinition expects (lonmin, latmin, lonmax, latmax)
+                # but bbox is (latmin, latmax, lonmin, lonmax)
+                bbox = (bbox[2], bbox[0], bbox[3], bbox[1])
+            else:
+                # If we get a geometry just take its bounding box and check
+                # that intersection.
+                #
+                # shapely.geometry.bounds is already in the correct order
+                bbox = geom.bounds
             spatial = AreaDefinition(
                 "bbox",
                 "",
@@ -590,6 +599,7 @@ class SwathGridFiles(ChronFiles):
         location_id=None,
         coords=None,
         bbox=None,
+        geom=None,
         **fmt_kwargs,
     ):
         """
@@ -617,6 +627,8 @@ class SwathGridFiles(ChronFiles):
             Tuple of (lon, lat) coordinates.
         bbox : tuple
             Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        geom : shapely.geometry
+            Geometry.
 
         Returns
         -------
@@ -642,6 +654,7 @@ class SwathGridFiles(ChronFiles):
             location_id=location_id,
             coords=coords,
             bbox=bbox,
+            geom=geom,
         )
 
         return filtered_filenames
@@ -708,6 +721,7 @@ class SwathGridFiles(ChronFiles):
         location_id=None,
         coords=None,
         bbox=None,
+        geom=None,
         processes=None,
         **fmt_kwargs,
     ):
@@ -744,14 +758,15 @@ class SwathGridFiles(ChronFiles):
         """
         filenames = self.swath_search(
             dt_start, dt_end, dt_delta, search_date_fmt, date_field,
-            end_inclusive, cell, location_id, coords, bbox, **fmt_kwargs,
+            end_inclusive, cell, location_id, coords, bbox, geom, **fmt_kwargs,
         )
         valid_gpis = get_grid_gpis(
             self.grid,
             cell=cell,
             location_id=location_id,
             coords=coords,
-            bbox=bbox
+            bbox=bbox,
+            geom=geom,
         )
         lookup_vector = np.zeros(self.grid.gpis.max()+1, dtype=bool)
         lookup_vector[valid_gpis] = 1

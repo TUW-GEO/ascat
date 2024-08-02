@@ -34,6 +34,8 @@ import xarray as xr
 
 import netCDF4
 
+from shapely.geometry import Point
+
 int8_nan = np.iinfo(np.int8).max
 uint8_nan = np.iinfo(np.uint8).max
 int16_nan = np.iinfo(np.int16).max
@@ -329,6 +331,7 @@ def get_grid_gpis(
         location_id=None,
         coords=None,
         bbox=None,
+        geom=None,
         max_coord_dist=np.inf,
         return_lookup=False,
 ):
@@ -372,6 +375,23 @@ def get_grid_gpis(
 
     elif bbox is not None:
         gpis = grid.get_bbox_grid_points(*bbox)
+    elif geom is not None:
+        lonmin, latmin, lonmax, latmax = geom.bounds
+        bbox_gpis, bbox_lats, bbox_lons = grid.get_bbox_grid_points(
+            latmin,
+            latmax,
+            lonmin,
+            lonmax,
+            both=True
+        )
+        if len(bbox_gpis) > 0:
+            gpis = [
+                gpi
+                for gpi, lat, lon in zip(bbox_gpis, bbox_lats, bbox_lons)
+                if geom.contains(Point(lon, lat))
+            ]
+        else:
+            gpis = None
     else:
         gpis = None
 

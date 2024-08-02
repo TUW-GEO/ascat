@@ -620,7 +620,7 @@ class CellGridFiles(MultiFileHandler):
             location_id=None,
             coords=None,
             bbox=None,
-            # geom=None,
+            geom=None,
             # mask_and_scale=True,
             # date_range=None,
             # **kwargs,
@@ -664,6 +664,8 @@ class CellGridFiles(MultiFileHandler):
             matched_cells = self._cells_for_coords(coords)
         elif bbox is not None:
             matched_cells = self._cells_for_bbox(bbox)
+        elif geom is not None:
+            matched_cells = self._cells_for_geom(geom)
         else:
             matched_cells = self.grid.arrcell
 
@@ -732,6 +734,25 @@ class CellGridFiles(MultiFileHandler):
         cells = self._cells_for_location_id(gpis)
         return cells
 
+    def _cells_for_geom(self, geom):
+        """
+        Get cells for bounding box.
+
+        Parameters
+        ----------
+        bbox : tuple
+            Bounding box.
+
+        Returns
+        -------
+        cells : list of int
+            Cells.
+        """
+        gpis = get_grid_gpis(self.grid, geom=geom)
+        cells = self._cells_for_location_id(gpis)
+        return cells
+
+
     def _apply_func_to_file(self, filename, func, out_dir, func_kwargs=None, write_kwargs=None):
         func_kwargs = func_kwargs or {}
         write_kwargs = write_kwargs or {}
@@ -797,7 +818,7 @@ class CellGridFiles(MultiFileHandler):
             location_id=None,
             coords=None,
             bbox=None,
-            # geom=None,
+            geom=None,
             # mask_and_scale=True,
             max_coord_dist=np.inf,
             date_range=None,
@@ -833,6 +854,7 @@ class CellGridFiles(MultiFileHandler):
             location_id=location_id,
             coords=coords,
             bbox=bbox,
+            geom=geom,
             sat=sat,
         )
         if cell is not None:
@@ -845,6 +867,7 @@ class CellGridFiles(MultiFileHandler):
                 location_id,
                 coords,
                 bbox,
+                geom,
                 max_coord_dist,
                 return_lookup=True
             )
