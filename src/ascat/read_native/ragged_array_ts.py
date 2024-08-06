@@ -941,7 +941,7 @@ class CellFileCollection:
             start_date = dt.strptime(match.group("date1"), self.dir_date_format)
             end_date = dt.strptime(match.group("date2"), self.dir_date_format)
             return np.datetime64(start_date, "ns"), np.datetime64(end_date, "ns")
-        except ValueError:
+        except Exception:
             warnings.warn(
                 f"Could not determine date range for collection '{self.path.stem}'"
                 " from directory name."
