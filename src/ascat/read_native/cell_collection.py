@@ -642,7 +642,7 @@ class CellGridFiles(MultiFileHandler):
             # date_field="date",
             # date_field_fmt="%Y%m%d",
             # return_date=False
-            sat=None,
+            fmt_kwargs=None,
     ):
         """
         Search files for cells matching a spatial criterion.
@@ -663,6 +663,7 @@ class CellGridFiles(MultiFileHandler):
         filenames : list of str
             Filenames.
         """
+        fmt_kwargs = fmt_kwargs or {}
         if cell is not None:
             # guarantee cell is a list
             matched_cells = cell
@@ -687,7 +688,7 @@ class CellGridFiles(MultiFileHandler):
 
         filenames = []
         for c in matched_cells:
-            fn_read_fmt, sf_read_fmt, _, _ = self._fmt(c, sat)
+            fn_read_fmt, sf_read_fmt, _, _ = self._fmt(c, **fmt_kwargs)
             filenames += sorted(self.fs.search(fn_read_fmt, sf_read_fmt))
 
         return filenames
@@ -835,7 +836,7 @@ class CellGridFiles(MultiFileHandler):
             # mask_and_scale=True,
             max_coord_dist=np.inf,
             date_range=None,
-            sat=None,
+            fmt_kwargs=None,
             **kwargs,
     ):
         """
@@ -868,7 +869,7 @@ class CellGridFiles(MultiFileHandler):
             coords=coords,
             bbox=bbox,
             geom=geom,
-            sat=sat,
+            fmt_kwargs=fmt_kwargs,
         )
         if cell is not None:
             valid_gpis = None
@@ -942,33 +943,19 @@ class RaggedArrayFiles(CellGridFiles):
     @classmethod
     def from_product_class(cls, root_path, product_class):
         grid_name = product_class.grid_name
-        sf_templ = {"sat_str": "{sat}"} #if all_sats else None
-        # sf_read_fmt = {"sat_str": {"sat": "metop_[abc]"}} if all_sats else None
+        sf_templ = product_class.sf_pattern or {"sat_str": "{sat}"}
         init_options = {
             "root_path": root_path,
             "cls": RaggedArrayCell,
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
             "grid_name": grid_name,
-            "fn_read_fmt": cls._fn_read_fmt,
-            "sf_read_fmt": cls._sf_read_fmt,
+            # "fn_read_fmt": cls._fn_read_fmt,
+            # "sf_read_fmt": cls._sf_read_fmt,
+            "fn_read_fmt": product_class.fn_read_fmt,
+            "sf_read_fmt": product_class.sf_read_fmt,
         }
         return cls(**init_options)
-
-    @staticmethod
-    def _fn_read_fmt(cell, sat=None):
-        """
-        TODO cannot provide this as a lambda function because it breaks multiprocessing for
-        converting to contiguous arrays. can we fix that
-        """
-        return {"cell_id": f"{cell:04d}"}
-
-    @staticmethod
-    def _sf_read_fmt(cell, sat=None):
-        if sat is None:
-            return None
-        return {"sat_str": {"sat": sat}}
-
 
     def convert_dir_to_contiguous(self,
                                   out_dir,
@@ -1029,7 +1016,7 @@ class RaggedArrayFiles(CellGridFiles):
             # mask_and_scale=True,
             max_coord_dist=np.inf,
             date_range=None,
-            sat=None,
+            fmt_kwargs=None,
             **kwargs,
     ):
         """
@@ -1063,7 +1050,7 @@ class RaggedArrayFiles(CellGridFiles):
             bbox=bbox,
             max_coord_dist=max_coord_dist,
             date_range=date_range,
-            sat=sat,
+            fmt_kwargs=fmt_kwargs,
             **kwargs,
         )
         return data
@@ -1086,17 +1073,17 @@ class OrthoMultiArrayFiles(CellGridFiles):
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
             "grid_name": grid_name,
-            "fn_read_fmt": cls._fn_read_fmt,
-            "sf_read_fmt": cls._sf_read_fmt,
+            "fn_read_fmt": product_class.fn_read_fmt,
+            "sf_read_fmt": product_class.sf_read_fmt,
         }
         return cls(**init_options)
 
-    @staticmethod
-    def _fn_read_fmt(cell, sat=None):
-        return {"cell_id": f"{cell:04d}"}
+    # @staticmethod
+    # def _fn_read_fmt(cell, sat=None):
+    #     return {"cell_id": f"{cell:04d}"}
 
-    @staticmethod
-    def _sf_read_fmt(cell, sat=None):
-        if sat is None:
-            return None
-        return {"sat_str": {"sat": sat}}
+    # @staticmethod
+    # def _sf_read_fmt(cell, sat=None):
+    #     if sat is None:
+    #         return None
+    #     return {"sat_str": {"sat": sat}}

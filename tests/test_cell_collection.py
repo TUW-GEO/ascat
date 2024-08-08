@@ -14,7 +14,8 @@ from pygeogrids.netcdf import load_grid
 
 import ascat.read_native.generate_test_data as gtd
 
-from ascat.read_native.product_info import cell_io_catalog
+# from ascat.read_native.product_info import cell_io_catalog
+from ascat.read_native.product_info import register_cell_grid_reader
 from ascat.read_native.cell_collection import grid_cache
 
 from ascat.read_native.cell_collection import RaggedArrayCell
@@ -400,7 +401,8 @@ class TestRaggedArrayFiles(unittest.TestCase):
             product_id="sig0_12.5",
             # all_sats=True,
         )
-        real_merged = allsats_collection.extract(cell=[2587, 2588], sat=["[ABC]"])
+        real_merged = allsats_collection.extract(cell=[2587, 2588],
+                                                 fmt_kwargs={"sat": ["[ABC]"]})
         self.assertIsNone(real_merged)
 
     def test_convert_dir_to_contiguous(self):
@@ -430,48 +432,70 @@ class TestRaggedArrayFiles(unittest.TestCase):
 
 
 # test adding new cell types used with OrthoMultiArray
-era5_grid = load_grid("tests/ascat_test_data/warp/era5_land_2023/grid.nc")
-grid_cache.fetch_or_store("Era5Land", era5_grid)
-
-gldas_grid = load_grid("tests/ascat_test_data/warp/gldas_2023/grid.nc")
-grid_cache.fetch_or_store("GLDAS", gldas_grid)
-
-cci_passive_grid = load_grid("tests/ascat_test_data/warp/cci_passive_v07.1/grid.nc")
-grid_cache.fetch_or_store("CCI_PASSIVE", cci_passive_grid)
-
 class ERA5Cell():
     grid_name = "Era5Land"
-    grid_info = grid_cache.fetch_or_store(grid_name)
-    grid = grid_info["grid"]
-    # grid_cell_size = 5
+    grid_info = None
+    grid = None
     fn_format = "{:04d}.nc"
-    possible_cells = grid_info["possible_cells"]
-    max_cell = grid_info["max_cell"]
-    min_cell = grid_info["min_cell"]
+    possible_cells = None
+    max_cell = None
+    min_cell = None
+
+    @staticmethod
+    def fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def sf_read_fmt(cell, sat=None):
+        if sat is None:
+            return None
+        return {"sat_str": {"sat": sat}}
 
 class GLDASCell():
     grid_name = "GLDAS"
-    grid_info = grid_cache.fetch_or_store(grid_name)
-    grid = grid_info["grid"]
-    # grid_cell_size = 5
+    grid_info = None
+    grid = None
     fn_format = "{:04d}.nc"
-    possible_cells = grid_info["possible_cells"]
-    max_cell = grid_info["max_cell"]
-    min_cell = grid_info["min_cell"]
+    possible_cells = None
+    max_cell = None
+    min_cell = None
+
+    @staticmethod
+    def fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def sf_read_fmt(cell, sat=None):
+        if sat is None:
+            return None
+        return {"sat_str": {"sat": sat}}
 
 class CCI_PassiveCell():
     grid_name = "CCI_PASSIVE"
-    grid_info = grid_cache.fetch_or_store(grid_name)
-    grid = grid_info["grid"]
-    # grid_cell_size = 5
+    grid_info = None
+    grid = None
     fn_format = "{:04d}.nc"
-    possible_cells = grid_info["possible_cells"]
-    max_cell = grid_info["max_cell"]
-    min_cell = grid_info["min_cell"]
+    possible_cells = None
+    max_cell = None
+    min_cell = None
 
-cell_io_catalog["ERA5"] = ERA5Cell
-cell_io_catalog["GLDAS"] = GLDASCell
-cell_io_catalog["CCI_PASSIVE"] = CCI_PassiveCell
+    @staticmethod
+    def fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def sf_read_fmt(cell, sat=None):
+        if sat is None:
+            return None
+        return {"sat_str": {"sat": sat}}
+
+era5_grid = load_grid("tests/ascat_test_data/warp/era5_land_2023/grid.nc")
+gldas_grid = load_grid("tests/ascat_test_data/warp/gldas_2023/grid.nc")
+cci_passive_grid = load_grid("tests/ascat_test_data/warp/cci_passive_v07.1/grid.nc")
+
+register_cell_grid_reader(ERA5Cell, era5_grid, "ERA5")
+register_cell_grid_reader(GLDASCell, gldas_grid, "GLDAS")
+register_cell_grid_reader(CCI_PassiveCell, cci_passive_grid, "CCI_PASSIVE")
 
 
 class TestOrthoMultiCell(unittest.TestCase):

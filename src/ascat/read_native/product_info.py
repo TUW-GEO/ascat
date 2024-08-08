@@ -6,6 +6,11 @@ import numpy as np
 
 from fibgrid.realization import FibGrid
 
+from pygeogrids.grids import BasicGrid
+from pygeogrids.netcdf import load_grid
+
+from pathlib import Path
+
 
 class CellGridCache:
     """
@@ -46,8 +51,86 @@ grid_cache = CellGridCache()
 grid_cache.fetch_or_store("Fib6.25", FibGrid(6.25), {"grid_sampling_km": 6.25})
 grid_cache.fetch_or_store("Fib12.5", FibGrid(12.5), {"grid_sampling_km": 12.5})
 
+def register_cell_grid_reader(reader_class, grid, product_id):
+    """
+    Register a reader class for a specific grid.
+
+    Parameters
+    ----------
+    reader_class: class
+        Class to register
+    grid: pygeogrids.BasicGrid
+        Grid object to register the class for
+    """
+    if isinstance(grid, (str, Path)):
+        grid = load_grid(grid)
+    elif not isinstance(grid, BasicGrid):
+        raise ValueError("grid must be a BasicGrid object or a string or Path to a grid file.")
+
+    reader_class.grid_info = grid_cache.fetch_or_store(reader_class.grid_name, grid)
+    reader_class.grid = reader_class.grid_info["grid"]
+    reader_class.possible_cells = reader_class.grid_info["possible_cells"]
+    reader_class.max_cell = reader_class.grid_info["max_cell"]
+    reader_class.min_cell = reader_class.grid_info["min_cell"]
+    cell_io_catalog[product_id] = reader_class
+
+def register_swath_grid_reader(reader_class, grid, product_id):
+    """
+    Register a reader class for a specific grid.
+
+    Parameters
+    ----------
+    reader_class: class
+        Class to register
+    grid: pygeogrids.BasicGrid
+        Grid object to register the class for
+    """
+    if isinstance(grid, (str, Path)):
+        grid = load_grid(grid)
+    elif not isinstance(grid, pygeogrids.BasicGrid):
+        raise ValueError("grid must be a BasicGrid object or a string or Path to a grid file.")
+
+    grid_cache.fetch_or_store(reader_class.grid_name, grid)
+    swath_io_catalog[product_id] = reader_class
 
 # Define dataset-specific classes.
+
+class ErsHCell():
+    grid_name = "ERS-H"
+    grid_info = None
+    grid = None
+    fn_format = "{:04d}.nc"
+    possible_cells = None
+    max_cell = None
+    min_cell = None
+    sf_pattern = {"satellite_folder": "ERS-{sat}_WindScatt", "res_folder": "{res}"}
+
+    @staticmethod
+    def fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def sf_read_fmt(cell, sat=None):
+        return {"satellite_folder": {"sat": sat}, "res_folder": {"res": "H"}}
+
+class ErsNCell():
+    grid_name = "ERS-N"
+    grid_info = None
+    grid = None
+    fn_format = "{:04d}.nc"
+    possible_cells = None
+    max_cell = None
+    min_cell = None
+    sf_pattern = {"satellite_folder": "ERS-{sat}_WindScatt", "res_folder": "{res}"}
+
+    @staticmethod
+    def fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def sf_read_fmt(cell, sat=None):
+        return {"satellite_folder": {"sat": sat}, "res_folder": {"res": "H"}}
+
 class AscatH129Cell():
     grid_name = "Fib6.25"
     grid_info = grid_cache.fetch_or_store(grid_name)
@@ -56,7 +139,16 @@ class AscatH129Cell():
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
     min_cell = grid_info["min_cell"]
+    sf_pattern = {"sat_str": "{sat}"}
 
+    @staticmethod
+    def fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def sf_read_fmt(cell, sat=None):
+        if sat is not None:
+            return {"sat_str": {"sat": sat}}
 
 class AscatH129v1Cell():
     grid_name = "Fib6.25"
@@ -66,7 +158,16 @@ class AscatH129v1Cell():
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
     min_cell = grid_info["min_cell"]
+    sf_pattern = {"sat_str": "{sat}"}
 
+    @staticmethod
+    def fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def sf_read_fmt(cell, sat=None):
+        if sat is not None:
+            return {"sat_str": {"sat": sat}}
 
 class AscatH121v1Cell():
     grid_name = "Fib12.5"
@@ -76,7 +177,16 @@ class AscatH121v1Cell():
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
     min_cell = grid_info["min_cell"]
+    sf_pattern = {"sat_str": "{sat}"}
 
+    @staticmethod
+    def fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def sf_read_fmt(cell, sat=None):
+        if sat is not None:
+            return {"sat_str": {"sat": sat}}
 
 class AscatH122Cell():
     grid_name = "Fib6.25"
@@ -86,7 +196,16 @@ class AscatH122Cell():
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
     min_cell = grid_info["min_cell"]
+    sf_pattern = {"sat_str": "{sat}"}
 
+    @staticmethod
+    def fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def sf_read_fmt(cell, sat=None):
+        if sat is not None:
+            return {"sat_str": {"sat": sat}}
 
 class AscatSIG0Cell6250m():
     grid_name = "Fib6.25"
@@ -96,7 +215,16 @@ class AscatSIG0Cell6250m():
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
     min_cell = grid_info["min_cell"]
+    sf_pattern = {"sat_str": "{sat}"}
 
+    @staticmethod
+    def fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def sf_read_fmt(cell, sat=None):
+        if sat is not None:
+            return {"sat_str": {"sat": sat}}
 
 class AscatSIG0Cell12500m():
     grid_name = "Fib12.5"
@@ -106,6 +234,16 @@ class AscatSIG0Cell12500m():
     possible_cells = grid_info["possible_cells"]
     max_cell = grid_info["max_cell"]
     min_cell = grid_info["min_cell"]
+    sf_pattern = {"sat_str": "{sat}"}
+
+    @staticmethod
+    def fn_read_fmt(cell, sat=None):
+        return {"cell_id": f"{cell:04d}"}
+
+    @staticmethod
+    def sf_read_fmt(cell, sat=None):
+        if sat is not None:
+            return {"sat_str": {"sat": sat}}
 
 
 class AscatH129Swath():
