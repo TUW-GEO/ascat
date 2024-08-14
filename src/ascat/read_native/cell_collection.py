@@ -29,6 +29,8 @@ import multiprocessing as mp
 from functools import partial
 from pathlib import Path
 
+from tqdm import tqdm
+
 import xarray as xr
 import numpy as np
 import dask.array as da
@@ -52,7 +54,11 @@ class RaggedArrayCell:
         self.chunks = chunks
 
     def read(self, date_range=None, valid_gpis=None, lookup_vector=None, **kwargs):
+        # preprocessor = kwargs.pop("preprocessor", False)
         ds = xr.open_dataset(self.filename, **kwargs)
+        # if preprocessor:
+        #     ds = preprocessor(ds)
+
         ds = self._ensure_obs(ds)
         ds = self._ensure_indexed(ds)
         ds = ds.chunk({"obs": self.chunks})
@@ -155,9 +161,11 @@ class RaggedArrayCell:
             ds = ds.chunk({"obs": 1_000_000})
 
         ds = ds.sortby(["locationIndex", "time"])
-        idxs, sizes = da.unique(ds.locationIndex.data, return_counts=True)
+        # idxs, sizes = da.unique(ds.locationIndex.data, return_counts=True)
+        idxs, sizes = np.unique(ds.locationIndex.values, return_counts=True)
         row_size = da.zeros_like(ds.location_id.data)
-        row_size[idxs.compute()] = sizes.compute()
+        # row_size[idxs.compute()] = sizes.compute()
+        row_size[idxs] = sizes
         ds["row_size"] = ("locations", row_size)
         ds = ds.drop_vars(["locationIndex"])
         return ds
@@ -362,7 +370,12 @@ class RaggedArrayCell:
 
         return ds
 
-    def write(self, filename=None, ra_type="indexed", mode="w", **kwargs):
+    def write(self,
+              filename=None,
+              ra_type="indexed",
+              mode="w",
+              postprocessor=None,
+              **kwargs):
         """
         Write data to a netCDF file.
 
@@ -382,6 +395,9 @@ class RaggedArrayCell:
         out_ds = self.ds
         if ra_type == "contiguous":
             out_ds = self._ensure_contiguous(out_ds)
+
+        if postprocessor is not None:
+            out_ds = postprocessor(out_ds)
 
         # out_ds = out_ds[self._var_order(out_ds)]
 
@@ -934,6 +950,41 @@ class CellGridFiles(MultiFileHandler):
         for filename in filenames:
             self._open(filename)
             self.fid.write(out_dir/filename, mode="a", ra_type="indexed")
+
+    def _merge_cell_out(self, cell, out_dir, fmt_kwargs, **write_kwargs):
+        data = self.extract(cell=cell, fmt_kwargs=fmt_kwargs)
+        if data is not None:
+            fid = self.cls(None, data=data)
+            filename = self.ft.build_basename(self.fn_read_fmt(cell))
+            fid.write(out_dir/filename, **write_kwargs)
+
+    def merge_out(self,
+                  out_dir,
+                  cells=None,
+                  num_processes=1,
+                  fmt_kwargs=None,
+                  **write_kwargs):
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        cells = cells or self.grid.get_cells()
+        if num_processes == 1:
+            for cell in cells:
+                self._merge_cell_out(cell, out_dir, fmt_kwargs, **write_kwargs)
+        else:
+            ctx = mp.get_context("forkserver")
+            with ctx.Pool(processes=num_processes) as pool:
+            # pool = ctx.Pool(processes=num_processes)
+                _merge_func = partial(
+                    self._merge_cell_out,
+                    out_dir=out_dir,
+                    fmt_kwargs=fmt_kwargs,
+                    **write_kwargs
+                )
+                r = list(tqdm(pool.imap_unordered(_merge_func, cells, chunksize=2),
+                              total = len(cells)))
+
+
+
 
 
 class RaggedArrayFiles(CellGridFiles):
