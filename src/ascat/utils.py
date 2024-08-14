@@ -36,21 +36,23 @@ import netCDF4
 
 from shapely.geometry import Point
 
-int8_nan = np.iinfo(np.int8).max
+int8_nan = np.iinfo(np.int8).min
 uint8_nan = np.iinfo(np.uint8).max
-int16_nan = np.iinfo(np.int16).max
-uint8_nan = np.iinfo(np.uint8).max
-int32_nan = np.iinfo(np.int32).max
+int16_nan = np.iinfo(np.int16).min
+uint16_nan = np.iinfo(np.uint16).max
+int32_nan = np.iinfo(np.int32).min
 int64_nan = np.iinfo(np.int64).max
-float32_nan = -999999.
-float64_nan = -999999.
+# float32_nan = -999999.
+# float64_nan = -999999.
+float32_nan = np.finfo(np.float32).min
+float64_nan = np.finfo(np.float64).min
 dtype_to_nan = {
     np.dtype('int8'): int8_nan,
     np.dtype('uint8'): uint8_nan,
     np.dtype('float32'): float32_nan,
     np.dtype('float64'): float64_nan,
     np.dtype('int16'): int16_nan,
-    np.dtype('uint16'): uint8_nan,
+    np.dtype('uint16'): uint16_nan,
     np.dtype('int32'): int32_nan,
     np.dtype('int64'): int64_nan,
     np.dtype('<U1'): None,
