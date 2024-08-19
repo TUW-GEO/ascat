@@ -972,16 +972,18 @@ class CellGridFiles(MultiFileHandler):
                 self._merge_cell_out(cell, out_dir, fmt_kwargs, **write_kwargs)
         else:
             ctx = mp.get_context("forkserver")
-            with ctx.Pool(processes=num_processes) as pool:
-            # pool = ctx.Pool(processes=num_processes)
-                _merge_func = partial(
-                    self._merge_cell_out,
-                    out_dir=out_dir,
-                    fmt_kwargs=fmt_kwargs,
-                    **write_kwargs
-                )
-                r = list(tqdm(pool.imap_unordered(_merge_func, cells, chunksize=2),
-                              total = len(cells)))
+            # with ctx.Pool(processes=num_processes) as pool:
+            pool = ctx.Pool(processes=num_processes)
+            _merge_func = partial(
+                self._merge_cell_out,
+                out_dir=out_dir,
+                fmt_kwargs=fmt_kwargs,
+                **write_kwargs
+            )
+            r = list(tqdm(pool.imap_unordered(_merge_func, cells, chunksize=2),
+                            total = len(cells)))
+            pool.close()
+            pool.join()
 
 
 
