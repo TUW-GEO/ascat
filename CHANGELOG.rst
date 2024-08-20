@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.4.3
+=============
+
+- Fix datatype cast issue
+
 Version 2.4.2
 =============
 
