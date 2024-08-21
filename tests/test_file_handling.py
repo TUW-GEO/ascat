@@ -40,7 +40,7 @@ import numpy as np
 from ascat.file_handling import FilenameTemplate
 from ascat.file_handling import FileSearch
 from ascat.file_handling import ChronFiles
-from ascat.file_handling import Csv
+from ascat.file_handling import CsvFile
 from ascat.file_handling import CsvFiles
 
 
@@ -57,7 +57,7 @@ def generate_test_data():
 
             filename = tmpdir / "temperature" / tile / f"202201{num}_ascat.csv"
 
-            csv_file = Csv(filename, mode="w")
+            csv_file = CsvFile(filename, mode="w")
             file_dates = [
                 datetime.strptime(f"202201{num}", "%Y%m%d") +
                 timedelta(seconds=(3600 * i + seconds))
@@ -99,7 +99,7 @@ def generate_test_data():
                     "%H%M%S"), file_dates[-2].strftime("%H%M%S")
                 filename = folder / Path(f"ascat_{d1}_{t1}-{d2}_{t2}.csv")
 
-                csv_file = Csv(filename, mode="w")
+                csv_file = CsvFile(filename, mode="w")
                 file_precips = random.choices(
                     range(0, 5), k=len(file_dates) - 1)
                 dtype = np.dtype([("date", "datetime64[s]"),
@@ -435,7 +435,7 @@ class TestChronFiles(CustomTestCase):
         """
         Setup test.
         """
-        cls = Csv
+        cls = CsvFile
         fn_templ = "{date}_ascat.csv"
         sf_templ = {"variables": "{variable}", "tiles": "{tile}"}
         cls_kwargs = None
