@@ -37,7 +37,6 @@ import h5py
 import numpy as np
 import xarray as xr
 
-from ascat.utils import mask_dtype_nans
 from ascat.read_native import AscatFile
 from ascat.read_native.eps_native import set_flags
 
@@ -169,7 +168,6 @@ class AscatL1bHdf5File(AscatFile):
 
                 ds[beam] = xr.Dataset(sub_data, coords=coords,
                                       attrs=metadata)
-                ds[beam] = mask_dtype_nans(ds[beam])
             else:
                 # collect dtype info
                 dtype = []

@@ -27,6 +27,7 @@
 
 from ascat.file_handling import Filenames
 from ascat.utils import get_toi_subset, get_roi_subset
+from ascat.utils import mask_dtype_nans
 
 
 class AscatFile(Filenames):
@@ -80,9 +81,15 @@ class AscatFile(Filenames):
         and implement if necessary.
         """
         if generic is None:
-            generic = self.read_generic
+            if to_xarray:
+                generic = True
+            else:
+                generic = self.read_generic
 
         data, metadata = super().read(generic=generic, to_xarray=to_xarray, **kwargs)
+
+        if to_xarray and generic:
+            data = mask_dtype_nans(data)
 
         if toi:
             data = get_toi_subset(data, toi)

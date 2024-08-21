@@ -38,7 +38,6 @@ import xarray as xr
 
 from ascat.utils import tmp_unzip
 from ascat.utils import daterange
-from ascat.utils import mask_dtype_nans
 from ascat.file_handling import ChronFiles
 from ascat.read_native import AscatFile
 
@@ -166,7 +165,6 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
             coords[cf] = data.pop(cf)
 
         data = xr.Dataset(data, coords=coords, attrs=metadata)
-        data = mask_dtype_nans(data)
     else:
         ds = np.empty(num_records, dtype=np.dtype(dtype))
         for k, v in data.items():

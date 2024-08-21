@@ -44,7 +44,6 @@ from datetime import timedelta
 from ascat.utils import get_toi_subset, get_roi_subset
 from ascat.utils import get_bit, set_bit
 from ascat.utils import dtype_to_nan
-from ascat.utils import mask_dtype_nans
 from ascat.read_native import AscatFile
 
 short_cds_time = np.dtype([("day", ">u2"), ("time", ">u4")])
@@ -1119,7 +1118,6 @@ def read_eps_l1b(filename,
                     coords[cf] = sub_data.pop(cf)
 
                 ds[beam] = xr.Dataset(sub_data, coords=coords, attrs=metadata)
-                ds[beam] = mask_dtype_nans(ds[beam])
             else:
                 # collect dtype info
                 dtype = []
@@ -1191,7 +1189,6 @@ def read_eps_l1b(filename,
                 coords[cf] = data.pop(cf)
 
             ds = xr.Dataset(data, coords=coords, attrs=metadata)
-            ds = mask_dtype_nans(ds)
         else:
             # collect dtype info
             dtype = []
@@ -1280,7 +1277,6 @@ def read_eps_l2(filename, generic=False, to_xarray=False, return_ptype=False):
                 coords[cf] = data.pop(cf)
 
             data = xr.Dataset(data, coords=coords, attrs=metadata)
-            data = mask_dtype_nans(data)
 
         else:
             # collect dtype info
