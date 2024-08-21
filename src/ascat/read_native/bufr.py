@@ -312,12 +312,12 @@ def conv_bufrl1b_generic(data, metadata):
     return data
 
 
-class AscatL2BufrFile():
+class AscatL2BufrFile(AscatFile):
     """
     Read ASCAT Level 2 file in BUFR format.
     """
 
-    def __init__(self, filename):
+    def __init__(self, filename, **kwargs):
         """
         Initialize AscatL2BufrFile.
 
@@ -326,10 +326,11 @@ class AscatL2BufrFile():
         filename: str
             Filename.
         """
-        if os.path.splitext(filename)[1] == '.gz':
-            self.filename = tmp_unzip(filename)
-        else:
-            self.filename = filename
+        super().__init__(filename, **kwargs)
+
+        for i, fname in enumerate(self.filenames):
+            if os.path.splitext(fname)[1] == '.gz':
+                self.filenames[i] = tmp_unzip(fname)
 
         self.msg_name_lookup = {
             4: "Satellite Identifier",
@@ -380,9 +381,9 @@ class AscatL2BufrFile():
             82: "Topographic Complexity",
         }
 
-    def read(self, generic=False, to_xarray=False):
+    def _read(self, filename, generic=False, to_xarray=False):
         """
-        Read ASCAT Level 2 data.
+        Read one ASCAT Level 2 BUFR file.
 
         Parameters
         ----------
@@ -400,7 +401,7 @@ class AscatL2BufrFile():
         metadata : dict
             Metadata.
         """
-        df = pdbufr.read_bufr(self.filename, columns="data", flat=True)
+        df = pdbufr.read_bufr(filename, columns="data", flat=True)
 
         col_rename = {}
         for i, col in enumerate(df.columns.to_list()):
@@ -432,7 +433,7 @@ class AscatL2BufrFile():
         metadata = {}
         metadata['platform_id'] = data['Satellite Identifier'][0].astype(int)
         metadata['orbit_start'] = np.uint32(data['Orbit Number'][0])
-        metadata['filename'] = os.path.basename(self.filename)
+        metadata['filename'] = os.path.basename(filename)
 
         # add/rename/remove fields according to generic format
         if generic:
@@ -483,8 +484,30 @@ class AscatL2BufrFile():
 
         return data, metadata
 
-    def close(self):
-        pass
+    def _merge(self, data):
+        """
+        Merge data.
+
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : numpy.ndarray or xarray.Dataset
+            Data.
+        """
+        if isinstance(data[0], tuple):
+            data, metadata = zip(*data)
+            if isinstance(data[0], xr.Dataset):
+                data = xr.concat(data, dim="obs")
+            else:
+                data = np.hstack(data)
+            data = (data, metadata)
+        else:
+            data = np.hstack(data)
+        return data
 
 
 def conv_bufrl2_generic(data, metadata):

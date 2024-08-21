@@ -262,12 +262,12 @@ class AscatL1bNcFile(AscatFile):
         return data
 
 
-class AscatL2NcFile:
+class AscatL2NcFile(AscatFile):
     """
     Read ASCAT Level 2 file in NetCDF format.
     """
 
-    def __init__(self, filename):
+    def __init__(self, filename, **kwargs):
         """
         Initialize AscatL2NcFile.
 
@@ -276,14 +276,14 @@ class AscatL2NcFile:
         filename : str
             Filename.
         """
-        if os.path.splitext(filename)[1] == '.gz':
-            self.filename = tmp_unzip(filename)
-        else:
-            self.filename = filename
+        super().__init__(filename, **kwargs)
+        for i, fname in enumerate(self.filenames):
+            if os.path.splitext(fname)[1] == '.gz':
+                self.filenames[i] = tmp_unzip(fname)
 
-    def read(self, generic=False, to_xarray=False):
+    def _read(self, filename, generic=False, to_xarray=False):
         """
-        Read ASCAT Level 2 data.
+        Read one ASCAT Level 2 NetCDF4 file.
 
         Parameters
         ----------
@@ -328,35 +328,44 @@ class AscatL2NcFile:
 
         skip_fields = ['abs_line_number']
 
-        data, metadata = read_nc(self.filename, generic, to_xarray,
+        data, metadata = read_nc(filename, generic, to_xarray,
                                  skip_fields, gen_fields_lut)
 
         return data, metadata
 
-    def close(self):
+    def _merge(self, data):
         """
-        Close file.
+        Merge data.
+
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            Data.
         """
-        pass
+        if isinstance(data[0], tuple):
+            data, metadata = zip(*data)
+            if isinstance(data[0], xr.Dataset):
+                data = xr.concat(data, dim="obs")
+            else:
+                data = np.hstack(data)
+            data = (data, metadata)
+        else:
+            data = np.hstack(data)
+
+        return data
 
 
-class AscatSsmNcSwathFile:
+class AscatSsmNcSwathFile(AscatFile):
     """
     Class reading ASCAT Surface Soil Moisture Netcdf swath file.
     """
 
-    def __init__(self, filename):
-        """
-        Initialize object.
-
-        Parameters
-        ----------
-        filename : str
-            Filename.
-        """
-        self.filename = filename
-
-    def read(self, mask_and_scale=None, sel_dt=None):
+    def _read(self, filename, mask_and_scale=None, sel_dt=None):
         """
         Read/load data from NetCDF file.
 

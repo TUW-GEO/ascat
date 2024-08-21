@@ -241,25 +241,14 @@ class AscatL1bEpsFile(AscatFile):
         return merged_data
 
 
-class AscatL2EpsFile:
+class AscatL2EpsFile(AscatFile):
     """
     ASCAT Level 2 EPS Native reader class.
     """
 
-    def __init__(self, filename):
+    def _read(self, filename, generic=False, to_xarray=False, **kwargs):
         """
-        Initialize AscatL2EpsFile.
-
-        Parameters
-        ----------
-        filename : str
-            Filename.
-        """
-        self.filename = filename
-
-    def read(self, generic=False, to_xarray=False):
-        """
-        Read ASCAT Level 2 data.
+        Read one ASCAT Level 2 EPS file.
 
         Returns
         -------
@@ -277,19 +266,9 @@ class AscatL2EpsFile:
         metadata : dict
             Metadata.
         """
-        if isinstance(self.filename, list):
-            data = []
-            metadata = []
-            for filename in self.filename:
-                data_ = read_eps_l2(filename, generic, to_xarray)
-                data.append(data_)
-            data = self.merge(data)
-            return data
+        return read_eps_l2(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
-        else:
-            return read_eps_l2(self.filename, generic, to_xarray)
-
-    def merge(self, data):
+    def _merge(self, data):
         """
         Merge data.
 
@@ -303,23 +282,18 @@ class AscatL2EpsFile:
         data : numpy.ndarray
             Data.
         """
-        if isinstance(data, list):
-            # print(type(data))
-            # print(data)
-            if isinstance(data[0], tuple):
-                metadata = [element[1] for element in data]
-                data = np.hstack([element[0] for element in data])
-                data = (data, metadata)
+        if isinstance(data[0], tuple):
+            data, metadata = zip(*data)
+            if isinstance(data[0], xr.Dataset):
+                print(data)
+                data = xr.concat(data, dim="obs")
             else:
                 data = np.hstack(data)
+            data = (data, metadata)
+        else:
+            data = np.hstack(data)
 
         return data
-
-    def close(self):
-        """
-        Close file.
-        """
-        pass
 
 
 class EPSProduct:
