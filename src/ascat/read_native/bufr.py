@@ -40,6 +40,7 @@ except ImportError:
     pass
 
 from ascat.utils import tmp_unzip
+from ascat.utils import mask_dtype_nans
 
 bufr_nan = 1.7e+38
 float32_nan = -999999.
@@ -175,6 +176,7 @@ class AscatL1bBufrFile:
                 coords[cf] = data.pop(cf)
 
             data = xr.Dataset(data, coords=coords, attrs=metadata)
+            data = mask_dtype_nans(data)
         else:
             # collect dtype info
             dtype = []
@@ -431,6 +433,7 @@ class AscatL2BufrFile():
                 coords[cf] = data.pop(cf)
 
             data = xr.Dataset(data, coords=coords, attrs=metadata)
+            data = mask_dtype_nans(data)
         else:
             # collect dtype info
             dtype = []
