@@ -58,6 +58,16 @@ dtype_to_nan = {
     np.dtype('O'): None,
 }
 
+def mask_dtype_nans(ds):
+    """
+    Mask NaNs in a dataset based on the dtypes of its variables.
+    """
+    for var in ds.data_vars:
+        if ds[var].dtype in dtype_to_nan and ~ds[var].isnull().any():
+            ds[var] = ds[var].where(ds[var] != dtype_to_nan[ds[var].dtype])
+    return ds
+
+
 def get_bit(a, bit_pos):
     """
     Returns 1 or 0 if bit is set or not.
