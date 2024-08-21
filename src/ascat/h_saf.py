@@ -42,6 +42,7 @@ except ImportError:
         'pygrib can not be imported GRIB files (H14) can not be read.')
 
 from ascat.file_handling import ChronFiles
+from ascat.file_handling import Filenames
 from ascat.eumetsat.level2 import AscatL2File
 from ascat.read_native.cdr import AscatGriddedNcTs
 
@@ -129,7 +130,7 @@ class AscatNrtBufrFileList(ChronFiles):
         return np.hstack(data)
 
 
-class H14Grib:
+class H14Grib(Filenames):
     """
     Class reading H14 soil moisture in GRIB format.
     """
@@ -150,7 +151,7 @@ class H14Grib:
         metadata_fields: list, optional
             fields of the message to put into the metadata dictionary.
         """
-        self.filename = filename
+        super().__init__(filename)
         self.expand_grid = expand_grid
         self.metadata_fields = metadata_fields
         self.pygrib1 = True
@@ -158,7 +159,7 @@ class H14Grib:
         if int(pygrib.__version__[0]) > 1:
             self.pygrib1 = False
 
-    def read(self, timestamp=None):
+    def _read(self, filename, timestamp=None):
         """
         Read specific image for given datetime timestamp.
 
@@ -194,7 +195,7 @@ class H14Grib:
         data = {}
         metadata = {}
 
-        with pygrib.open(self.filename) as grb:
+        with pygrib.open(filename) as grb:
             for i, message in enumerate(grb):
                 message.expand_grid(self.expand_grid)
                 if i == 1:
@@ -211,9 +212,6 @@ class H14Grib:
                 metadata[param_names[message['parameterName']]] = md
 
         return data
-
-    def close(self):
-        pass
 
 
 class H14GribFileList(ChronFiles):
