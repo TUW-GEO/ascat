@@ -25,6 +25,8 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import os
+
 from datetime import timedelta
 from gzip import GzipFile
 from tempfile import NamedTemporaryFile
@@ -381,6 +383,26 @@ def get_roi_subset(ds, roi):
 
     return ds
 
+def get_file_format(filename):
+    """
+    Try to guess the file format from the extension.
+
+    Parameters
+    ----------
+    filename : str
+        File name.
+
+    Returns
+    -------
+    file_format : str
+        File format indicator.
+    """
+    if os.path.splitext(filename)[1] == ".gz":
+        file_format = os.path.splitext(os.path.splitext(filename)[0])[1]
+    else:
+        file_format = os.path.splitext(filename)[1]
+
+    return file_format
 
 class Spacecraft:
     """
