@@ -284,7 +284,6 @@ class AscatL2EpsFile(AscatFile):
         if isinstance(data[0], tuple):
             data, metadata = zip(*data)
             if isinstance(data[0], xr.Dataset):
-                print(data)
                 data = xr.concat(data, dim="obs")
             else:
                 data = np.hstack(data)
