@@ -1107,6 +1107,8 @@ def read_eps_l1b(filename,
                         dim = ["obs"]
                     elif len(data[var_name].shape) == 2:
                         dim = ["obs", "echo"]
+                    if var_name == "time":
+                        data[var_name] = data[var_name].astype("datetime64[ns]")
 
                     sub_data[var_name] = (dim, data[var_name][subset])
 
@@ -1179,6 +1181,8 @@ def read_eps_l1b(filename,
                     dim = ["obs"]
                 elif len(data[k].shape) == 2:
                     dim = ["obs", "beam"]
+                if k == "time":
+                    data[k] = data[k].astype("datetime64[ns]")
 
                 data[k] = (dim, data[k])
 
@@ -1267,6 +1271,8 @@ def read_eps_l2(filename, generic=False, to_xarray=False, return_ptype=False):
                     dim = ["obs"]
                 elif len(data[k].shape) == 2:
                     dim = ["obs", "beam"]
+                if k == "time":
+                    data[k] = data[k].astype("datetime64[ns]")
 
                 data[k] = (dim, data[k])
 
