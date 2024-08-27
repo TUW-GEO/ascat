@@ -534,6 +534,7 @@ class CellGridFiles(MultiFileHandler):
         sf_read_fmt=None,
         fn_write_fmt=None,
         sf_write_fmt=None,
+        fmt_kwargs=None,
         cache_size=0,
     ):
         """
@@ -575,6 +576,7 @@ class CellGridFiles(MultiFileHandler):
         self.sf_read_fmt = sf_read_fmt
         self.fn_write_fmt = fn_write_fmt
         self.sf_write_fmt = sf_write_fmt
+        self.fmt_kwargs = fmt_kwargs or {}
 
         grid_info = grid_cache.fetch_or_store(grid_name)
         self.grid_name = grid_name
@@ -585,14 +587,14 @@ class CellGridFiles(MultiFileHandler):
             self.grid_sampling_km = None
 
     @classmethod
-    def from_product_id(cls, root_path, product_id):
+    def from_product_id(cls, root_path, product_id, **kwargs):
         """
         Create a new CellFiles object from a product_id.
         """
         product_id = product_id.upper()
         if product_id in cell_io_catalog:
             product_class = cell_io_catalog[product_id]
-            return cls.from_product_class(root_path, product_class)
+            return cls.from_product_class(root_path, product_class, **kwargs)
         error_str = f"Product {product_id} not recognized. Valid products are"
         error_str += f" {', '.join(cell_io_catalog.keys())}."
         raise ValueError(error_str)
@@ -679,7 +681,7 @@ class CellGridFiles(MultiFileHandler):
         filenames : list of str
             Filenames.
         """
-        fmt_kwargs = fmt_kwargs or {}
+        fmt_kwargs = fmt_kwargs or self.fmt_kwargs
         if cell is not None:
             # guarantee cell is a list
             matched_cells = cell
@@ -879,6 +881,7 @@ class CellGridFiles(MultiFileHandler):
         filenames : list of str
             Filenames.
         """
+        fmt_kwargs = fmt_kwargs or self.fmt_kwargs
         filenames = self.spatial_search(
             cell=cell,
             location_id=location_id,
@@ -967,6 +970,7 @@ class CellGridFiles(MultiFileHandler):
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         cells = cells or self.grid.get_cells()
+        fmt_kwargs = fmt_kwargs or self.fmt_kwargs
         if num_processes == 1:
             for cell in cells:
                 self._merge_cell_out(cell, out_dir, fmt_kwargs, **write_kwargs)
@@ -990,24 +994,27 @@ class CellGridFiles(MultiFileHandler):
 
 
 class RaggedArrayFiles(CellGridFiles):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
     @classmethod
-    def from_product_class(cls, root_path, product_class):
-        grid_name = product_class.grid_name
-        sf_templ = product_class.sf_pattern or {"sat_str": "{sat}"}
+    def from_product_class(cls, root_path, product_class, **kwargs):
+        # if anything in kwargs, it will overwrite the defaults
+        grid_name = kwargs.pop("grid_name", product_class.grid_name)
+        sf_templ = kwargs.pop("sf_pattern", product_class.sf_pattern) \
+                    or {"sat_str": "{sat}"}
+        fn_read_fmt = kwargs.pop("fn_read_fmt", product_class.fn_read_fmt)
+        sf_read_fmt = kwargs.pop("sf_read_fmt", product_class.sf_read_fmt)
+
         init_options = {
             "root_path": root_path,
             "cls": RaggedArrayCell,
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
             "grid_name": grid_name,
-            # "fn_read_fmt": cls._fn_read_fmt,
-            # "sf_read_fmt": cls._sf_read_fmt,
-            "fn_read_fmt": product_class.fn_read_fmt,
-            "sf_read_fmt": product_class.sf_read_fmt,
+            "fn_read_fmt": fn_read_fmt,
+            "sf_read_fmt": sf_read_fmt,
         }
+        # we want any kwargs to override the defaults from the product class
+        init_options = {**init_options, **kwargs}
         return cls(**init_options)
 
     def convert_dir_to_contiguous(self,
@@ -1129,6 +1136,7 @@ class OrthoMultiArrayFiles(CellGridFiles):
             "fn_read_fmt": product_class.fn_read_fmt,
             "sf_read_fmt": product_class.sf_read_fmt,
         }
+        init_options = {**init_options}
         return cls(**init_options)
 
     # @staticmethod
