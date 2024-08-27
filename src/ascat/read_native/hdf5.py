@@ -218,7 +218,9 @@ class AscatL1bHdf5File(AscatFile):
             for d in data:
                 merged_data[beam].append(d.pop(beam))
             if isinstance(merged_data[beam][0], xr.Dataset):
-                merged_data[beam] = xr.concat(merged_data[beam], dim="obs")
+                merged_data[beam] = xr.concat(merged_data[beam],
+                                              dim="obs",
+                                              combine_attrs="drop_conflicts")
             else:
                 merged_data[beam] = np.hstack(merged_data[beam])
 

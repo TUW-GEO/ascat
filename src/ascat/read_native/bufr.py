@@ -212,7 +212,9 @@ class AscatL1bBufrFile(AscatFile):
         if isinstance(data[0], tuple):
             data, metadata = zip(*data)
             if isinstance(data[0], xr.Dataset):
-                data = xr.concat(data, dim="obs")
+                data = xr.concat(data,
+                                 dim="obs",
+                                 combine_attrs="drop_conflicts")
             else:
                 data = np.hstack(data)
             data = (data, metadata)
@@ -498,7 +500,9 @@ class AscatL2BufrFile(AscatFile):
         if isinstance(data[0], tuple):
             data, metadata = zip(*data)
             if isinstance(data[0], xr.Dataset):
-                data = xr.concat(data, dim="obs")
+                data = xr.concat(data,
+                                 dim="obs",
+                                 combine_attrs="drop_conflicts")
             else:
                 data = np.hstack(data)
             data = (data, metadata)

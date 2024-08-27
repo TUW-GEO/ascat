@@ -148,7 +148,9 @@ class AscatL1bEpsSzfFile(AscatFile):
             for d in data:
                 merged_data[beam].append(d.pop(beam))
             if isinstance(merged_data[beam][0], xr.Dataset):
-                merged_data[beam] = xr.concat(merged_data[beam], dim="obs")
+                merged_data[beam] = xr.concat(merged_data[beam],
+                                              dim="obs",
+                                              combine_attrs="drop_conflicts")
             else:
                 merged_data[beam] = np.hstack(merged_data[beam])
 
@@ -213,12 +215,14 @@ class AscatL1bEpsFile(AscatFile):
                     for d in data:
                         merged_data[beam].append(d.pop(beam))
                     if isinstance(merged_data[beam][0], xr.Dataset):
-                        merged_data[beam] = xr.concat(merged_data[beam], dim="obs")
+                        merged_data[beam] = xr.concat(merged_data[beam],
+                                                      dim="obs",
+                                                      combine_attrs="drop_conflicts")
                     else:
                         merged_data[beam] = np.hstack(merged_data[beam])
             else:
                 if isinstance(merged_data[beam][0], xr.Dataset):
-                    merged_data = xr.concat(data, dim="obs")
+                    merged_data = xr.concat(data, dim="obs", combine_attrs="drop_conflicts")
                 else:
                     merged_data = np.hstack(data)
 
@@ -284,7 +288,7 @@ class AscatL2EpsFile(AscatFile):
         if isinstance(data[0], tuple):
             data, metadata = zip(*data)
             if isinstance(data[0], xr.Dataset):
-                data = xr.concat(data, dim="obs")
+                data = xr.concat(data, dim="obs", combine_attrs="drop_conflicts")
             else:
                 data = np.hstack(data)
             data = (data, metadata)

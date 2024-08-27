@@ -250,7 +250,9 @@ class AscatL1bNcFile(AscatFile):
         if isinstance(data[0], tuple):
             data, metadata = zip(*data)
             if isinstance(data[0], xr.Dataset):
-                data = xr.concat(data, dim="obs")
+                data = xr.concat(data,
+                                 dim="obs",
+                                 combine_attrs="drop_conflicts")
             else:
                 data = np.hstack(data)
             data = (data, metadata)
@@ -348,7 +350,9 @@ class AscatL2NcFile(AscatFile):
         if isinstance(data[0], tuple):
             data, metadata = zip(*data)
             if isinstance(data[0], xr.Dataset):
-                data = xr.concat(data, dim="obs")
+                data = xr.concat(data,
+                                 dim="obs",
+                                 combine_attrs="drop_conflicts")
             else:
                 data = np.hstack(data)
             data = (data, metadata)
@@ -602,7 +606,9 @@ class AscatSsmNcSwathFileList(ChronFiles):
                 print(f"Error reading: {self.fid.filename}")
 
         if merged_data:
-            merged_data = xr.concat(merged_data, dim="obs")
+            merged_data = xr.concat(merged_data,
+                                    dim="obs",
+                                    combine_attrs="drop_conflicts")
         else:
             merged_data = None
 
