@@ -859,7 +859,7 @@ class CellGridFiles(MultiFileHandler):
         )
 
         if num_processes == 1:
-            for filename in filenames:
+            for filename in tqdm(filenames):
                 self._apply_func_to_file(filename,
                                          func,
                                          out_dir,
@@ -877,7 +877,9 @@ class CellGridFiles(MultiFileHandler):
                 write_kwargs=write_kwargs,
                 write_func=write_func,
             )
-            pool.map(convert_func, filenames)
+            r = list(tqdm(pool.imap(convert_func, filenames, chunksize=2),
+                               total=len(filenames)))
+
             pool.close()
             pool.join()
 
@@ -1010,7 +1012,7 @@ class CellGridFiles(MultiFileHandler):
         cells = cells or self.grid.get_cells()
         fmt_kwargs = fmt_kwargs or self.fmt_kwargs
         if num_processes == 1:
-            for cell in cells:
+            for cell in tqdm(cells):
                 self._merge_cell_out(cell, out_dir, fmt_kwargs, **write_kwargs)
         else:
             ctx = mp.get_context("forkserver")
