@@ -830,7 +830,9 @@ class CellGridFiles(MultiFileHandler):
             fid.write(out_filename, **write_kwargs)
         # out_filename = Path(out_dir)/Path(filename).name
         # ds.to_netcdf(out_filename)
+        fid.ds.close()
         ds.close()
+        return
 
     def reprocess(self,
                   out_dir,
@@ -877,8 +879,10 @@ class CellGridFiles(MultiFileHandler):
                 write_kwargs=write_kwargs,
                 write_func=write_func,
             )
-            r = list(tqdm(pool.imap(convert_func, filenames, chunksize=2),
-                               total=len(filenames)))
+            r = list(tqdm(pool.imap_unordered(convert_func,
+                                              filenames,
+                                              chunksize=2),
+                          total=len(filenames)))
 
             pool.close()
             pool.join()
