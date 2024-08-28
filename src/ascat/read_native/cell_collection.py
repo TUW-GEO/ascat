@@ -60,14 +60,14 @@ class RaggedArrayCell:
             ds = preprocessor(ds)
 
         ds = self._ensure_obs(ds)
-        ds = self._ensure_indexed(ds)
         ds = ds.chunk({"obs": self.chunks})
-        if date_range is not None:
-            ds = self._trim_var_range(ds, "time", *date_range)
         if lookup_vector is not None:
             ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
         elif valid_gpis is not None:
             ds = self._trim_to_gpis(ds, gpis=valid_gpis)
+        ds = self._ensure_indexed(ds)
+        if date_range is not None:
+            ds = self._trim_var_range(ds, "time", *date_range)
         # should I do it this way or just return the ds without having it be a class attribute?
         self.ds = ds
         return self.ds
@@ -315,8 +315,7 @@ class RaggedArrayCell:
 
         return ds
 
-    @staticmethod
-    def _trim_to_gpis(ds, gpis=None, lookup_vector=None):
+    def _trim_to_gpis(self, ds, gpis=None, lookup_vector=None):
         """Trim a dataset to only the gpis in the given list.
         If any gpis are passed which are not in the dataset, they are ignored.
 
@@ -333,40 +332,64 @@ class RaggedArrayCell:
             Dataset with only the gpis in the list.
         """
         if ds is None:
-            return None
+            return
         if gpis is None and lookup_vector is None:
             return ds
-        if gpis is None:
-            ds_location_ids = ds["location_id"].data[ds["locationIndex"].data]
-            obs_idx = lookup_vector[ds_location_ids]
-            locations_idx = da.unique(ds["locationIndex"].data[obs_idx]).compute()
+        if len(gpis) == 0 and (lookup_vector is None or len(lookup_vector)==0):
+            return ds
+        if self._indexed_or_contiguous(ds) == "indexed":
+            if gpis is None:
+                ds_location_ids = ds["location_id"].data[ds["locationIndex"].data]
+                obs_idx = lookup_vector[ds_location_ids]
+                locations_idx = da.unique(ds["locationIndex"].data[obs_idx]).compute()
 
-            # then trim out any gpis in the dataset not in gpis
-            ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
-            new_locationIndex = np.searchsorted(ds["location_id"].data, ds_location_ids[obs_idx])
-            # and add the new locationIndex
-            ds["locationIndex"] = ("obs", new_locationIndex)
+                # then trim out any gpis in the dataset not in gpis
+                ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
+                new_locationIndex = np.searchsorted(ds["location_id"].data, ds_location_ids[obs_idx])
+                # and add the new locationIndex
+                ds["locationIndex"] = ("obs", new_locationIndex)
 
-        else:
-            # first trim out any gpis not in the dataset from the gpi list
-            gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
+            else:
+                # first trim out any gpis not in the dataset from the gpi list
+                gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
 
-            # this is a list of the locationIndex values that correspond to the gpis we're keeping
-            locations_idx = np.searchsorted(ds["location_id"].values, gpis)
-            # this is the indices of the observations that have any of those locationIndex values
-            obs_idx = da.isin(ds["locationIndex"], locations_idx).compute()
+                # this is a list of the locationIndex values that correspond to the gpis we're keeping
+                locations_idx = np.searchsorted(ds["location_id"].values, gpis)
+                # this is the indices of the observations that have any of those locationIndex values
+                obs_idx = da.isin(ds["locationIndex"], locations_idx).compute()
 
-            # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
-            old_locationIndex = ds["locationIndex"].values
-            new_locationIndex = np.searchsorted(
-                locations_idx,
-                old_locationIndex[da.isin(old_locationIndex, locations_idx)]
-            )
+                # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
+                old_locationIndex = ds["locationIndex"].values
+                new_locationIndex = np.searchsorted(
+                    locations_idx,
+                    old_locationIndex[da.isin(old_locationIndex, locations_idx)]
+                )
 
-            # then trim out any gpis in the dataset not in gpis
-            ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
-            # and add the new locationIndex
-            ds["locationIndex"] = ("obs", new_locationIndex)
+                # then trim out any gpis in the dataset not in gpis
+                ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
+                # and add the new locationIndex
+                ds["locationIndex"] = ("obs", new_locationIndex)
+        if self._indexed_or_contiguous(ds) == "contiguous":
+            if len(gpis) == 1:
+                idx = np.where(ds.location_id==gpis[0])[0][0]
+                start = int(ds.row_size.isel(locations=slice(0,idx)).sum().values)
+                end = int(start + ds.row_size.isel(locations=idx).values)
+                return ds.isel(obs=slice(start, end), locations=idx)
+            else:
+                if lookup_vector is None:
+                    idxs = np.where(np.isin(timeseries.location_id, gpis))[0]
+                else:
+                    idxs = np.where(
+                        lookup_vector[np.repeat(timeseries.location_id, timeseries.row_size)]
+                    )[0]
+                if idxs.size > 0:
+                    starts = [int(timeseries.row_size.isel(locations=slice(0,i)).sum().values)
+                                for i in idxs]
+                    ends = [int(start + timeseries.row_size.isel(locations=i).values)
+                            for start, i in zip(starts, idxs)]
+                    obs = np.concatenate([range(start, end) for start, end in zip(starts, ends)])
+                    locations = [i for i in idxs]
+                    return timeseries.isel(obs=obs, locations=locations)
 
         return ds
 
