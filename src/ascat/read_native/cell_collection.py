@@ -54,10 +54,10 @@ class RaggedArrayCell:
         self.chunks = chunks
 
     def read(self, date_range=None, valid_gpis=None, lookup_vector=None, **kwargs):
-        # preprocessor = kwargs.pop("preprocessor", False)
+        preprocessor = kwargs.pop("preprocessor", False)
         ds = xr.open_dataset(self.filename, **kwargs)
-        # if preprocessor:
-        #     ds = preprocessor(ds)
+        if preprocessor:
+            ds = preprocessor(ds)
 
         ds = self._ensure_obs(ds)
         ds = self._ensure_indexed(ds)
@@ -535,6 +535,7 @@ class CellGridFiles(MultiFileHandler):
         fn_write_fmt=None,
         sf_write_fmt=None,
         fmt_kwargs=None,
+        read_kwargs=None,
         cache_size=0,
     ):
         """
@@ -577,6 +578,7 @@ class CellGridFiles(MultiFileHandler):
         self.fn_write_fmt = fn_write_fmt
         self.sf_write_fmt = sf_write_fmt
         self.fmt_kwargs = fmt_kwargs or {}
+        self.read_kwargs = read_kwargs or {}
 
         grid_info = grid_cache.fetch_or_store(grid_name)
         self.grid_name = grid_name
@@ -913,7 +915,8 @@ class CellGridFiles(MultiFileHandler):
                 date_range=date_range,
                 valid_gpis=valid_gpis,
                 lookup_vector=lookup_vector,
-                **kwargs,
+                **{**self.read_kwargs,
+                   **kwargs},
             )
             if d is not None:
                 data.append(d)
