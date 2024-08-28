@@ -50,6 +50,7 @@ class CellGridCache:
 grid_cache = CellGridCache()
 grid_cache.fetch_or_store("Fib6.25", FibGrid(6.25), {"grid_sampling_km": 6.25})
 grid_cache.fetch_or_store("Fib12.5", FibGrid(12.5), {"grid_sampling_km": 12.5})
+grid_cache.fetch_or_store("Fib25", FibGrid(25), {"grid_sampling_km": 25})
 
 def register_cell_grid_reader(reader_class, grid, product_id):
     """
@@ -96,9 +97,9 @@ def register_swath_grid_reader(reader_class, grid, product_id):
 # Define dataset-specific classes.
 
 class ErsHCell():
-    grid_name = "ERS-H"
-    grid_info = None
-    grid = None
+    grid_name = "Fib12.5"
+    grid_info = grid_cache.fetch_or_store(grid_name)
+    grid = FibGrid(12.5)
     fn_format = "{:04d}.nc"
     possible_cells = None
     max_cell = None
@@ -114,9 +115,9 @@ class ErsHCell():
         return {"satellite_folder": {"sat": sat}, "res_folder": {"res": "H"}}
 
 class ErsNCell():
-    grid_name = "ERS-N"
-    grid_info = None
-    grid = None
+    grid_name = "Fib25"
+    grid_info = grid_cache.fetch_or_store(grid_name)
+    grid = FibGrid(25)
     fn_format = "{:04d}.nc"
     possible_cells = None
     max_cell = None
@@ -678,6 +679,8 @@ cell_io_catalog = {
     "H122": AscatH122Cell,
     "SIG0_6.25": AscatSIG0Cell6250m,
     "SIG0_12.5": AscatSIG0Cell12500m,
+    "ERSH": ErsHCell,
+    "ERSN": ErsNCell,
 }
 
 swath_io_catalog = {
