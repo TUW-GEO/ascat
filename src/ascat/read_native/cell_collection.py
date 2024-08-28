@@ -787,7 +787,13 @@ class CellGridFiles(MultiFileHandler):
         return cells
 
 
-    def _apply_func_to_file(self, filename, func, out_dir, func_kwargs=None, write_kwargs=None):
+    def _apply_func_to_file(self,
+                            filename,
+                            func,
+                            out_dir,
+                            func_kwargs=None,
+                            write_kwargs=None,
+                            write_func=None):
         func_kwargs = func_kwargs or {}
         write_kwargs = write_kwargs or {}
         fid = self.cls(Path(self.root_path)/filename)
@@ -795,7 +801,10 @@ class CellGridFiles(MultiFileHandler):
         if func is not None:
             fid.ds = func(ds, **func_kwargs)
         out_filename = out_dir / Path(filename).relative_to(self.root_path)
-        fid.write(out_filename, **write_kwargs)
+        if write_func is not None:
+            write_func(fid.ds, out_filename, **write_kwargs)
+        else:
+            fid.write(out_filename, **write_kwargs)
         # out_filename = Path(out_dir)/Path(filename).name
         # ds.to_netcdf(out_filename)
         ds.close()
@@ -809,6 +818,7 @@ class CellGridFiles(MultiFileHandler):
                   bbox=None,
                   num_processes=1,
                   write_kwargs=None,
+                  write_func=None,
                   **func_kwargs):
         """
         Reprocess all files into a new directory, preserving subdirectory structure,
@@ -831,7 +841,8 @@ class CellGridFiles(MultiFileHandler):
                                          func,
                                          out_dir,
                                          func_kwargs,
-                                         write_kwargs)
+                                         write_kwargs,
+                                         write_func)
         else:
             ctx = mp.get_context("forkserver")
             pool = ctx.Pool(processes=num_processes)
@@ -840,7 +851,8 @@ class CellGridFiles(MultiFileHandler):
                 func=func,
                 out_dir=out_dir,
                 func_kwargs=func_kwargs,
-                write_kwargs=write_kwargs
+                write_kwargs=write_kwargs,
+                write_func=write_func,
             )
             pool.map(convert_func, filenames)
             pool.close()
