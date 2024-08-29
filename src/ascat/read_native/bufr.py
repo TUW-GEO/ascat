@@ -40,6 +40,7 @@ except ImportError:
     pass
 
 from ascat.utils import tmp_unzip
+from ascat.utils import mask_dtype_nans
 from ascat.read_native import AscatFile
 
 bufr_nan = 1.7e+38
@@ -54,7 +55,6 @@ nan_val_dict = {
     np.uint16: uint16_nan,
     np.int32: int32_nan
 }
-
 
 class AscatL1bBufrFile(AscatFile):
     """
@@ -177,6 +177,8 @@ class AscatL1bBufrFile(AscatFile):
                 coords[cf] = data.pop(cf)
 
             data = xr.Dataset(data, coords=coords, attrs=metadata)
+            if generic:
+                data = mask_dtype_nans(data)
         else:
             # collect dtype info
             dtype = []
@@ -221,6 +223,13 @@ class AscatL1bBufrFile(AscatFile):
         else:
             data = np.hstack(data)
         return data
+
+class AscatL1bBufrFileGeneric(AscatL1bBufrFile):
+    """
+    The same as AscatL1bBufrFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 
 def conv_bufrl1b_generic(data, metadata):
@@ -455,6 +464,8 @@ class AscatL2BufrFile(AscatFile):
                 coords[cf] = data.pop(cf)
 
             data = xr.Dataset(data, coords=coords, attrs=metadata)
+            if generic:
+                data = mask_dtype_nans(data)
         else:
             # collect dtype info
             dtype = []
@@ -510,6 +521,12 @@ class AscatL2BufrFile(AscatFile):
             data = np.hstack(data)
         return data
 
+class AscatL2BufrFileGeneric(AscatL2BufrFile):
+    """
+    The same as AscatL1bBufrFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 def conv_bufrl2_generic(data, metadata):
     """

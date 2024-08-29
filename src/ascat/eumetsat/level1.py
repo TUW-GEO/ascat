@@ -30,10 +30,10 @@ Readers for ASCAT Level 1b data for various file formats.
 
 from pathlib import Path
 
-from ascat.read_native.nc import AscatL1bNcFile
-from ascat.read_native.hdf5 import AscatL1bHdf5File
-from ascat.read_native.bufr import AscatL1bBufrFile
-from ascat.read_native.eps_native import AscatL1bEpsFile
+from ascat.read_native.nc import AscatL1bNcFileGeneric
+from ascat.read_native.hdf5 import AscatL1bHdf5FileGeneric
+from ascat.read_native.bufr import AscatL1bBufrFileGeneric
+from ascat.read_native.eps_native import AscatL1bEpsFileGeneric
 from ascat.utils import get_file_format
 from ascat.file_handling import ChronFiles
 
@@ -43,7 +43,7 @@ class AscatL1bFile:
     Class reading ASCAT Level 1b files.
     """
 
-    def __new__(cls, filename, file_format=None, read_generic=True):
+    def __new__(cls, filename, file_format=None):
         """
         Return an instance of the appropriate ASCAT Level 1b file reader.
 
@@ -62,15 +62,16 @@ class AscatL1bFile:
                 file_format = get_file_format(filename[0])
 
         if file_format in [".nat", ".nat.gz"]:
-            return AscatL1bEpsFile(filename, read_generic=read_generic)
+            return AscatL1bEpsFileGeneric(filename)
         elif file_format in [".nc", ".nc.gz"]:
-            return AscatL1bNcFile(filename, read_generic=read_generic)
+            return AscatL1bNcFileGeneric(filename)
         elif file_format in [".bfr", ".bfr.gz", ".buf", "buf.gz"]:
-            return AscatL1bBufrFile(filename, read_generic=read_generic)
+            return AscatL1bBufrFileGeneric(filename)
         elif file_format in [".h5", ".h5.gz"]:
-            return AscatL1bHdf5File(filename, read_generic=read_generic)
+            return AscatL1bHdf5FileGeneric(filename)
         else:
             raise RuntimeError("ASCAT Level 1b file format unknown")
+
 
 
 class AscatL1bBufrFileList(ChronFiles):

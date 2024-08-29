@@ -44,6 +44,7 @@ from datetime import timedelta
 from ascat.utils import get_toi_subset, get_roi_subset
 from ascat.utils import get_bit, set_bit
 from ascat.utils import dtype_to_nan
+from ascat.utils import mask_dtype_nans
 from ascat.read_native import AscatFile
 
 short_cds_time = np.dtype([("day", ">u2"), ("time", ">u4")])
@@ -158,7 +159,6 @@ class AscatL1bEpsSzfFile(AscatFile):
 
         return merged_data
 
-
 class AscatL1bEpsFile(AscatFile):
     """
     ASCAT Level 1b EPS Native reader class.
@@ -243,6 +243,13 @@ class AscatL1bEpsFile(AscatFile):
 
         return merged_data
 
+class AscatL1bEpsFileGeneric(AscatL1bEpsFile):
+    """
+    The same as AscatL1bEpsFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
+
 
 class AscatL2EpsFile(AscatFile):
     """
@@ -297,6 +304,12 @@ class AscatL2EpsFile(AscatFile):
 
         return data
 
+class AscatL2EpsFileGeneric(AscatL2EpsFile):
+    """
+    The same as AscatL1bEpsFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 class EPSProduct:
     """
@@ -1123,6 +1136,8 @@ def read_eps_l1b(filename,
                     coords[cf] = sub_data.pop(cf)
 
                 ds[beam] = xr.Dataset(sub_data, coords=coords, attrs=metadata)
+                if generic:
+                    data = mask_dtype_nans(data)
             else:
                 # collect dtype info
                 dtype = []
@@ -1196,6 +1211,8 @@ def read_eps_l1b(filename,
                 coords[cf] = data.pop(cf)
 
             ds = xr.Dataset(data, coords=coords, attrs=metadata)
+            if generic:
+                data = mask_dtype_nans(data)
         else:
             # collect dtype info
             dtype = []
@@ -1286,6 +1303,8 @@ def read_eps_l2(filename, generic=False, to_xarray=False, return_ptype=False):
                 coords[cf] = data.pop(cf)
 
             data = xr.Dataset(data, coords=coords, attrs=metadata)
+            if generic:
+                data = mask_dtype_nans(data)
 
         else:
             # collect dtype info

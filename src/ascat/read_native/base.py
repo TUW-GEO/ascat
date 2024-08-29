@@ -34,7 +34,7 @@ class AscatFile(Filenames):
     """
     Class reading ASCAT files.
     """
-    def __init__(self, filename, read_generic=False):
+    def __init__(self, filename):
         """
         Initialize AscatFile.
 
@@ -42,14 +42,10 @@ class AscatFile(Filenames):
         ----------
         filename : str
             Filename.
-        read_generic : boolean, optional
-            Convert original data field names to generic field names by default when
-            reading (default: False).
         """
         super().__init__(filename)
-        self.read_generic = read_generic
 
-    def read(self, toi=None, roi=None, generic=None, to_xarray=False, **kwargs):
+    def read(self, toi=None, roi=None, **kwargs):
         """
         Read ASCAT Level 1b data.
 
@@ -61,12 +57,6 @@ class AscatFile(Filenames):
         roi : tuple of 4 float, optional
             Filter data for region of interest (default: None).
             e.g. latmin, lonmin, latmax, lonmax
-        generic : boolean, optional
-            Convert original data field names to generic field names. Defaults
-            to the value of self.read_generic.
-        to_xarray : boolean, optional
-            Convert data to xarray.Dataset otherwise numpy.ndarray will be
-            returned (default: False).
 
         Returns
         -------
@@ -74,22 +64,8 @@ class AscatFile(Filenames):
             ASCAT data.
         metadata : dict
             Metadata.
-
-        Notes
-        -----
-        TODO Figure out if subsetting should be done before or after merging,
-        and implement if necessary.
         """
-        if generic is None:
-            if to_xarray:
-                generic = True
-            else:
-                generic = self.read_generic
-
-        data, metadata = super().read(generic=generic, to_xarray=to_xarray, **kwargs)
-
-        if to_xarray and generic:
-            data = mask_dtype_nans(data)
+        data, metadata = super().read(**kwargs)
 
         if toi:
             data = get_toi_subset(data, toi)

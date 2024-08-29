@@ -38,6 +38,7 @@ import xarray as xr
 
 from ascat.utils import tmp_unzip
 from ascat.utils import daterange
+from ascat.utils import mask_dtype_nans
 from ascat.file_handling import ChronFiles
 from ascat.read_native import AscatFile
 
@@ -165,6 +166,8 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
             coords[cf] = data.pop(cf)
 
         data = xr.Dataset(data, coords=coords, attrs=metadata)
+        if generic:
+            data = mask_dtype_nans(data)
     else:
         ds = np.empty(num_records, dtype=np.dtype(dtype))
         for k, v in data.items():
@@ -260,6 +263,13 @@ class AscatL1bNcFile(AscatFile):
             data = np.hstack(data)
 
         return data
+
+class AscatL1bNcFileGeneric(AscatL1bNcFile):
+    """
+    The same as AscatL1bNcFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 
 class AscatL2NcFile(AscatFile):
@@ -360,6 +370,13 @@ class AscatL2NcFile(AscatFile):
             data = np.hstack(data)
 
         return data
+
+class AscatL2NcFileGeneric(AscatL2NcFile):
+    """
+    The same as AscatL1bNcFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 
 class AscatSsmNcSwathFile(AscatFile):

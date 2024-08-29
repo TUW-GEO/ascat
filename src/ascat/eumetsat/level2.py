@@ -33,9 +33,9 @@ from pathlib import Path
 
 import numpy as np
 
-from ascat.read_native.nc import AscatL2NcFile
-from ascat.read_native.bufr import AscatL2BufrFile
-from ascat.read_native.eps_native import AscatL2EpsFile
+from ascat.read_native.nc import AscatL2NcFileGeneric
+from ascat.read_native.bufr import AscatL2BufrFileGeneric
+from ascat.read_native.eps_native import AscatL2EpsFileGeneric
 from ascat.utils import get_toi_subset, get_roi_subset
 from ascat.utils import get_file_format
 from ascat.file_handling import ChronFiles
@@ -46,7 +46,7 @@ class AscatL2File:
     Class reading ASCAT Level 2 files.
     """
 
-    def __new__(cls, filename, file_format=None, read_generic=True):
+    def __new__(cls, filename, file_format=None):
         """
         Initialize AscatL2File.
 
@@ -66,11 +66,11 @@ class AscatL2File:
                 file_format = get_file_format(filename[0])
 
         if file_format in [".nat", ".nat.gz"]:
-            return AscatL2EpsFile(filename, read_generic=read_generic)
+            return AscatL2EpsFileGeneric(filename)
         elif file_format in [".nc", ".nc.gz"]:
-            return AscatL2NcFile(filename, read_generic=read_generic)
+            return AscatL2NcFileGeneric(filename)
         elif file_format in [".bfr", ".bfr.gz", ".buf", "buf.gz"]:
-            return AscatL2BufrFile(filename, read_generic=read_generic)
+            return AscatL2BufrFileGeneric(filename)
         else:
             raise RuntimeError("ASCAT Level 2 file format unknown")
 
