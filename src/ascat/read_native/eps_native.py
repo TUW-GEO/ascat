@@ -1707,14 +1707,14 @@ def read_smx_fmv_12(eps_file):
                                  raw_data["UTC_LINE_NODES"].flatten()["time"])
     data["jd"] = ascat_time[idx_nodes]
 
-    fields = [("sigma0_trip", long_nan), ("inc_angle_trip", uint_nan),
-              ("azi_angle_trip", int_nan), ("kp", uint_nan),
-              ("f_land", uint_nan)]
+    fields = [("sigma0_trip", long_nan, long_nan), ("inc_angle_trip", uint_nan, uint_nan),
+              ("azi_angle_trip", int_nan, int_nan), ("kp", uint_nan, uint_nan),
+              ("f_land", uint_nan, float32_nan)]
 
-    for f, nan_val in fields:
+    for f, nan_val, new_nan_val in fields:
         data[f] = raw_data[f.upper()].reshape(n_records, 3)
         valid = raw_unscaled[f.upper()].reshape(n_records, 3) != nan_val
-        data[f][~valid] = nan_val
+        data[f][~valid] = new_nan_val
 
     fields = ["sat_track_azi", "abs_line_number"]
     for f in fields:
