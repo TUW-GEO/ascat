@@ -143,6 +143,13 @@ class Test_AscatL2NcFile(unittest.TestCase):
         nptest.assert_allclose(
             data['mean_soil_moisture'][:25], ssm_mean_should, atol=1e-5)
 
+        data, metadata = self.reader.read(generic=True)
+        nptest.assert_allclose(data['lat'][:25], lats_should, atol=1e-5)
+        nptest.assert_allclose(
+            data['sm'][:25], ssm_should, atol=1e-5)
+        nptest.assert_allclose(
+            data['sm_mean'][:25], ssm_mean_should, atol=1e-5)
+
 
 @pytest.mark.skipif(sys.platform == 'win32', reason="Does not work on Windows")
 class Test_AscatL2NcFile_AscatL2BufrFile(unittest.TestCase):

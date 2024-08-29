@@ -30,35 +30,25 @@
 Readers for ASCAT Level 1b in HDF5 format.
 """
 
+from collections import defaultdict
 from collections import OrderedDict
 
 import h5py
 import numpy as np
 import xarray as xr
 
+from ascat.utils import mask_dtype_nans
+from ascat.read_native import AscatFile
 from ascat.read_native.eps_native import set_flags
 
-
-class AscatL1bHdf5File:
-
+class AscatL1bHdf5File(AscatFile):
     """
     Class reading ASCAT Level 1b file in HDF5 format.
     """
 
-    def __init__(self, filename):
+    def _read(self, filename, generic=False, to_xarray=False):
         """
-        Initialize AscatL1bHdf5File.
-
-        Parameters
-        ----------
-        filename : str
-            Filename.
-        """
-        self.filename = filename
-
-    def read(self, generic=False, to_xarray=False):
-        """
-        Read ASCAT Level 1b data.
+        Read one ASCAT Level 1b HDF5 file.
 
         Parameters
         ----------
@@ -84,7 +74,7 @@ class AscatL1bHdf5File:
         mdr_descr_path = root + "DATA/MDR_1B_FULL_ASCA_Level_1_DESCR"
         metadata_path = root + "METADATA"
 
-        with h5py.File(self.filename, mode="r") as fid:
+        with h5py.File(filename, mode="r") as fid:
             mdr = fid[mdr_path]
             mdr_descr = fid[mdr_descr_path]
             mdr_metadata = fid[metadata_path]
@@ -143,6 +133,7 @@ class AscatL1bHdf5File:
         # 4 Right Fore Antenna, 5 Right Mid Antenna, 6 Right Aft Antenna
         left_beams = ["lf-vv", "lm-vv", "la-vv"]
         right_beams = ["rf-vv", "rm-vv", "ra-vv"]
+
         all_beams = left_beams + right_beams
 
         ds = OrderedDict()
@@ -176,6 +167,8 @@ class AscatL1bHdf5File:
 
                 ds[beam] = xr.Dataset(sub_data, coords=coords,
                                       attrs=metadata)
+                if generic:
+                    data = mask_dtype_nans(data)
             else:
                 # collect dtype info
                 dtype = []
@@ -199,11 +192,49 @@ class AscatL1bHdf5File:
 
         return ds, metadata
 
-    def close(self):
+    def _merge(self, data):
         """
-        Close file.
+        Merge data.
+
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            Data.
         """
-        pass
+        left_beams = ["lf-vv", "lm-vv", "la-vv"]
+        right_beams = ["rf-vv", "rm-vv", "ra-vv"]
+        all_beams = left_beams + right_beams
+
+        metadata = {}
+
+        if isinstance(data[0], tuple):
+            data, metadata = zip(*data)
+        merged_data = defaultdict(list)
+        for beam in all_beams:
+            for d in data:
+                merged_data[beam].append(d.pop(beam))
+            if isinstance(merged_data[beam][0], xr.Dataset):
+                merged_data[beam] = xr.concat(merged_data[beam],
+                                              dim="obs",
+                                              combine_attrs="drop_conflicts")
+            else:
+                merged_data[beam] = np.hstack(merged_data[beam])
+
+        merged_data = (merged_data, metadata)
+
+        return merged_data
+
+class AscatL1bHdf5FileGeneric(AscatL1bHdf5File):
+    """
+    The same as AscatL1bHdf5File but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 
 def conv_hdf5l1b_generic(data, metadata):

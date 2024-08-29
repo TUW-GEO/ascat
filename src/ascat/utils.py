@@ -25,6 +25,8 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import os
+
 from datetime import timedelta
 from gzip import GzipFile
 from tempfile import NamedTemporaryFile
@@ -57,6 +59,16 @@ dtype_to_nan = {
     np.dtype('<U1'): None,
     np.dtype('O'): None,
 }
+
+def mask_dtype_nans(ds):
+    """
+    Mask NaNs in a dataset based on the dtypes of its variables.
+    """
+    for var in ds.data_vars:
+        if ds[var].dtype in dtype_to_nan and ~ds[var].isnull().any():
+            ds[var] = ds[var].where(ds[var] != dtype_to_nan[ds[var].dtype])
+    return ds
+
 
 def get_bit(a, bit_pos):
     """
@@ -371,6 +383,26 @@ def get_roi_subset(ds, roi):
 
     return ds
 
+def get_file_format(filename):
+    """
+    Try to guess the file format from the extension.
+
+    Parameters
+    ----------
+    filename : str
+        File name.
+
+    Returns
+    -------
+    file_format : str
+        File format indicator.
+    """
+    if os.path.splitext(filename)[1] == ".gz":
+        file_format = os.path.splitext(os.path.splitext(filename)[0])[1]
+    else:
+        file_format = os.path.splitext(filename)[1]
+
+    return file_format
 
 class Spacecraft:
     """

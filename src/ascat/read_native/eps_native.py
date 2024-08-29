@@ -44,44 +44,35 @@ from datetime import timedelta
 from ascat.utils import get_toi_subset, get_roi_subset
 from ascat.utils import get_bit, set_bit
 from ascat.utils import dtype_to_nan
+from ascat.utils import mask_dtype_nans
+from ascat.utils import int8_nan, uint8_nan
+from ascat.utils import int16_nan, uint16_nan
+from ascat.utils import int32_nan, uint32_nan
+from ascat.utils import float32_nan
+from ascat.read_native import AscatFile
 
 short_cds_time = np.dtype([("day", ">u2"), ("time", ">u4")])
 long_cds_time = np.dtype([("day", ">u2"), ("ms", ">u4"), ("mms", ">u2")])
 
-long_nan = np.iinfo(np.int32).min
-ulong_nan = np.iinfo(np.uint32).max
-int_nan = np.iinfo(np.int16).min
-uint_nan = np.iinfo(np.uint16).max
-int8_nan = np.iinfo(np.int8).min
-uint8_nan = np.iinfo(np.uint8).max
-int32_nan = np.iinfo(np.int32).min
-uint32_nan = np.iinfo(np.uint32).max
-float32_nan = -999999.
+
+long_nan = int32_nan
+ulong_nan = uint32_nan
+int_nan = int16_nan
+uint_nan = uint16_nan
 
 # 2000-01-01 00:00:00
 julian_epoch = 2451544.5
 
 
-class AscatL1bEpsSzfFile:
+class AscatL1bEpsSzfFile(AscatFile):
     """
     Class reading ASCAT Level 1b file in EPS Native format.
     """
 
-    def __init__(self, filename):
-        """
-        Initialize AscatL1bEpsFile.
-
-        Parameters
-        ----------
-        filename : str
-            Filename.
-        """
-        self.filename = filename
-
-    def read(self, toi=None, roi=None, generic=True, to_xarray=False,
+    def _read(self, filename, toi=None, roi=None, generic=True, to_xarray=False,
              ignore_noise_ool=False):
         """
-        Read ASCAT Level 1b data.
+        Read one ASCAT Level 1b EPS Szf file.
 
         Parameters
         ----------
@@ -106,9 +97,15 @@ class AscatL1bEpsSzfFile:
             ASCAT data.
         metadata : dict
             Metadata.
+
+        Notes
+        -----
+        TODO Decide whether to do subsetting here (per file) or later
+        (after merging). At the moment the possibility is here but it is not used
+        by super().read()
         """
         data, metadata = read_eps_l1b(
-            self.filename,
+            filename,
             generic,
             to_xarray,
             full=False,
@@ -124,52 +121,52 @@ class AscatL1bEpsSzfFile:
 
         return data, metadata
 
-    def read_period(self, dt_start, dt_end, **kwargs):
+    def _merge(self, data):
         """
-        Read interval.
+        Merge data.
 
         Parameters
         ----------
-        dt_start : datetime
-            Start datetime.
-        dt_end : datetime
-            End datetime.
+        data : list
+            List of array.
 
         Returns
         -------
-        data : xarray.Dataset or numpy.ndarray
-            ASCAT data.
-        metadata : dict
-            Metadata.
+        data : numpy.ndarray
+            Data.
         """
-        return self.read(toi=(dt_start, dt_end), **kwargs)
+        metadata = {}
 
-    def close(self):
-        """
-        Close file.
-        """
-        pass
+        left_beams = ["lf-vv", "lm-vv", "la-vv"]
+        right_beams = ["rf-vv", "rm-vv", "ra-vv"]
+        all_beams = left_beams + right_beams
 
+        if isinstance(data[0], tuple):
+            data, metadata = zip(*data)
 
-class AscatL1bEpsFile:
+        merged_data = defaultdict(list)
+        for beam in all_beams:
+            for d in data:
+                merged_data[beam].append(d.pop(beam))
+            if isinstance(merged_data[beam][0], xr.Dataset):
+                merged_data[beam] = xr.concat(merged_data[beam],
+                                              dim="obs",
+                                              combine_attrs="drop_conflicts")
+            else:
+                merged_data[beam] = np.hstack(merged_data[beam])
+
+        merged_data = (merged_data, metadata)
+
+        return merged_data
+
+class AscatL1bEpsFile(AscatFile):
     """
     ASCAT Level 1b EPS Native reader class.
     """
 
-    def __init__(self, filename):
+    def _read(self, filename, generic=False, to_xarray=False, **kwargs):
         """
-        Initialize AscatL1bEpsFile.
-
-        Parameters
-        ----------
-        filename : str
-            Filename.
-        """
-        self.filename = filename
-
-    def read(self, generic=False, to_xarray=False, **kwargs):
-        """
-        Read ASCAT Level 1b data.
+        Read one ASCAT Level 1b EPS file.
 
         Parameters
         ----------
@@ -187,34 +184,81 @@ class AscatL1bEpsFile:
         metadata : dict
             Metadata.
         """
-        return read_eps_l1b(self.filename, generic, to_xarray, **kwargs)
+        return read_eps_l1b(filename, generic, to_xarray, return_ptype=True, **kwargs)
 
-    def close(self):
+    def _merge(self, data):
         """
-        Close file.
+        Merge data.
+
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : xarray.Dataset or numpy.ndarray
+            Data.
         """
-        pass
+        ptype = data[0][1]["product_type"]
+        metadata = {}
+
+        left_beams = ["lf-vv", "lm-vv", "la-vv"]
+        right_beams = ["rf-vv", "rm-vv", "ra-vv"]
+        all_beams = left_beams + right_beams
+
+        if isinstance(data[0], tuple):
+            data, metadata = zip(*data)
+            if ptype == "szf":
+                merged_data = defaultdict(list)
+                for beam in all_beams:
+                    for d in data:
+                        merged_data[beam].append(d.pop(beam))
+                    if isinstance(merged_data[beam][0], xr.Dataset):
+                        merged_data[beam] = xr.concat(merged_data[beam],
+                                                      dim="obs",
+                                                      combine_attrs="drop_conflicts")
+                    else:
+                        merged_data[beam] = np.hstack(merged_data[beam])
+            else:
+                if isinstance(merged_data[beam][0], xr.Dataset):
+                    merged_data = xr.concat(data, dim="obs", combine_attrs="drop_conflicts")
+                else:
+                    merged_data = np.hstack(data)
+
+        # if ptype == "szf":
+        #     if isinstance(data[0], tuple):
+        #         data, metadata = zip(*data)
+        #     merged_data = defaultdict(list)
+        #     for beam in all_beams:
+        #         for d in data:
+        #             merged_data[beam].append(d.pop(beam))
+        #         merged_data[beam] = np.hstack(merged_data[beam])
+        # else:
+        #     if isinstance(data[0], tuple):
+        #         data, metadata = zip(*data)
+        #     merged_data = np.hstack(data)
+
+        merged_data = (merged_data, metadata)
+
+        return merged_data
+
+class AscatL1bEpsFileGeneric(AscatL1bEpsFile):
+    """
+    The same as AscatL1bEpsFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 
-class AscatL2EpsFile:
+class AscatL2EpsFile(AscatFile):
     """
     ASCAT Level 2 EPS Native reader class.
     """
 
-    def __init__(self, filename):
+    def _read(self, filename, generic=False, to_xarray=False, **kwargs):
         """
-        Initialize AscatL2EpsFile.
-
-        Parameters
-        ----------
-        filename : str
-            Filename.
-        """
-        self.filename = filename
-
-    def read(self, generic=False, to_xarray=False):
-        """
-        Read ASCAT Level 2 data.
+        Read one ASCAT Level 2 EPS file.
 
         Returns
         -------
@@ -232,14 +276,40 @@ class AscatL2EpsFile:
         metadata : dict
             Metadata.
         """
-        return read_eps_l2(self.filename, generic, to_xarray)
+        return read_eps_l2(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
-    def close(self):
+    def _merge(self, data):
         """
-        Close file.
-        """
-        pass
+        Merge data.
 
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            Data.
+        """
+        if isinstance(data[0], tuple):
+            data, metadata = zip(*data)
+            if isinstance(data[0], xr.Dataset):
+                data = xr.concat(data, dim="obs", combine_attrs="drop_conflicts")
+            else:
+                data = np.hstack(data)
+            data = (data, metadata)
+        else:
+            data = np.hstack(data)
+
+        return data
+
+class AscatL2EpsFileGeneric(AscatL2EpsFile):
+    """
+    The same as AscatL1bEpsFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 class EPSProduct:
     """
@@ -915,7 +985,8 @@ def read_eps_l1b(filename,
                  full=True,
                  unsafe=False,
                  scale_mdr=True,
-                 ignore_noise_ool=False):
+                 ignore_noise_ool=False,
+                 return_ptype=False):
     """
     Level 1b reader and data preparation.
 
@@ -1053,6 +1124,8 @@ def read_eps_l1b(filename,
                         dim = ["obs"]
                     elif len(data[var_name].shape) == 2:
                         dim = ["obs", "echo"]
+                    if var_name == "time":
+                        data[var_name] = data[var_name].astype("datetime64[ns]")
 
                     sub_data[var_name] = (dim, data[var_name][subset])
 
@@ -1063,6 +1136,8 @@ def read_eps_l1b(filename,
                     coords[cf] = sub_data.pop(cf)
 
                 ds[beam] = xr.Dataset(sub_data, coords=coords, attrs=metadata)
+                if generic:
+                    data = mask_dtype_nans(data)
             else:
                 # collect dtype info
                 dtype = []
@@ -1125,6 +1200,8 @@ def read_eps_l1b(filename,
                     dim = ["obs"]
                 elif len(data[k].shape) == 2:
                     dim = ["obs", "beam"]
+                if k == "time":
+                    data[k] = data[k].astype("datetime64[ns]")
 
                 data[k] = (dim, data[k])
 
@@ -1134,6 +1211,8 @@ def read_eps_l1b(filename,
                 coords[cf] = data.pop(cf)
 
             ds = xr.Dataset(data, coords=coords, attrs=metadata)
+            if generic:
+                data = mask_dtype_nans(data)
         else:
             # collect dtype info
             dtype = []
@@ -1152,11 +1231,13 @@ def read_eps_l1b(filename,
                            " Format major version: {:2}".format(ptype, fmv))
 
     metadata["filename"] = os.path.basename(filename)
+    if return_ptype:
+        metadata["product_type"] = ptype
 
     return ds, metadata
 
 
-def read_eps_l2(filename, generic=False, to_xarray=False):
+def read_eps_l2(filename, generic=False, to_xarray=False, return_ptype=False):
     """
     Level 2 reader and data preparation.
 
@@ -1211,6 +1292,8 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
                     dim = ["obs"]
                 elif len(data[k].shape) == 2:
                     dim = ["obs", "beam"]
+                if k == "time":
+                    data[k] = data[k].astype("datetime64[ns]")
 
                 data[k] = (dim, data[k])
 
@@ -1220,6 +1303,9 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
                 coords[cf] = data.pop(cf)
 
             data = xr.Dataset(data, coords=coords, attrs=metadata)
+            if generic:
+                data = mask_dtype_nans(data)
+
         else:
             # collect dtype info
             dtype = []
@@ -1237,6 +1323,9 @@ def read_eps_l2(filename, generic=False, to_xarray=False):
     else:
         raise ValueError("Format not supported. Product type {:1}"
                          " Format major version: {:2}".format(ptype, fmv))
+
+    if return_ptype:
+        metadata["product_type"] = ptype
 
     return data, metadata
 
@@ -1618,14 +1707,14 @@ def read_smx_fmv_12(eps_file):
                                  raw_data["UTC_LINE_NODES"].flatten()["time"])
     data["jd"] = ascat_time[idx_nodes]
 
-    fields = [("sigma0_trip", long_nan), ("inc_angle_trip", uint_nan),
-              ("azi_angle_trip", int_nan), ("kp", uint_nan),
-              ("f_land", uint_nan)]
+    fields = [("sigma0_trip", long_nan, long_nan), ("inc_angle_trip", uint_nan, uint_nan),
+              ("azi_angle_trip", int_nan, int_nan), ("kp", uint_nan, uint_nan),
+              ("f_land", uint_nan, float32_nan)]
 
-    for f, nan_val in fields:
+    for f, nan_val, new_nan_val in fields:
         data[f] = raw_data[f.upper()].reshape(n_records, 3)
         valid = raw_unscaled[f.upper()].reshape(n_records, 3) != nan_val
-        data[f][~valid] = nan_val
+        data[f][~valid] = new_nan_val
 
     fields = ["sat_track_azi", "abs_line_number"]
     for f in fields:

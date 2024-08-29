@@ -28,16 +28,13 @@
 Readers for ASCAT Level 1b data for various file formats.
 """
 
-import os
-from collections import defaultdict
+from pathlib import Path
 
-import numpy as np
-
-from ascat.read_native.nc import AscatL1bNcFile
-from ascat.read_native.hdf5 import AscatL1bHdf5File
-from ascat.read_native.bufr import AscatL1bBufrFile
-from ascat.read_native.eps_native import AscatL1bEpsFile
-from ascat.utils import get_toi_subset, get_roi_subset
+from ascat.read_native.nc import AscatL1bNcFileGeneric
+from ascat.read_native.hdf5 import AscatL1bHdf5FileGeneric
+from ascat.read_native.bufr import AscatL1bBufrFileGeneric
+from ascat.read_native.eps_native import AscatL1bEpsFileGeneric
+from ascat.utils import get_file_format
 from ascat.file_handling import ChronFiles
 
 
@@ -46,9 +43,9 @@ class AscatL1bFile:
     Class reading ASCAT Level 1b files.
     """
 
-    def __init__(self, filename, file_format=None):
+    def __new__(cls, filename, file_format=None):
         """
-        Initialize.
+        Return an instance of the appropriate ASCAT Level 1b file reader.
 
         Parameters
         ----------
@@ -58,108 +55,23 @@ class AscatL1bFile:
             File format: ".nat", ".nc", ".bfr", ".h5" (default: None).
             If None file format will be guessed based on the file ending.
         """
-        self.filename = filename
-        self.fid = None
-
         if file_format is None:
-            file_format = get_file_format(self.filename)
+            if isinstance(filename, (str, Path)):
+                file_format = get_file_format(filename)
+            else:
+                file_format = get_file_format(filename[0])
 
-        self.file_format = file_format
-
-        if self.file_format in [".nat", ".nat.gz"]:
-            self.fid = AscatL1bEpsFile(self.filename)
-        elif self.file_format in [".nc", ".nc.gz"]:
-            self.fid = AscatL1bNcFile(self.filename)
-        elif self.file_format in [".bfr", ".bfr.gz", ".buf", "buf.gz"]:
-            self.fid = AscatL1bBufrFile(self.filename)
-        elif self.file_format in [".h5", ".h5.gz"]:
-            self.fid = AscatL1bHdf5File(self.filename)
+        if file_format in [".nat", ".nat.gz"]:
+            return AscatL1bEpsFileGeneric(filename)
+        elif file_format in [".nc", ".nc.gz"]:
+            return AscatL1bNcFileGeneric(filename)
+        elif file_format in [".bfr", ".bfr.gz", ".buf", "buf.gz"]:
+            return AscatL1bBufrFileGeneric(filename)
+        elif file_format in [".h5", ".h5.gz"]:
+            return AscatL1bHdf5FileGeneric(filename)
         else:
             raise RuntimeError("ASCAT Level 1b file format unknown")
 
-    def read(self, toi=None, roi=None, generic=True, to_xarray=False, **kwargs):
-        """
-        Read ASCAT Level 1b data.
-
-        Parameters
-        ----------
-        toi : tuple of datetime, optional
-            Filter data for given time of interest (default: None).
-            e.g. (datetime(2020, 1, 1, 12), datetime(2020, 1, 2))
-        roi : tuple of 4 float, optional
-            Filter data for region of interest (default: None).
-            e.g. latmin, lonmin, latmax, lonmax
-        generic : boolean, optional
-            Convert original data field names to generic field names
-            (default: True).
-        to_xarray : boolean, optional
-            Convert data to xarray.Dataset otherwise numpy.ndarray will be
-            returned (default: False).
-
-        Returns
-        -------
-        data : xarray.Dataset or numpy.ndarray
-            ASCAT data.
-        metadata : dict
-            Metadata.
-        """
-        data, metadata = self.fid.read(generic=generic, to_xarray=to_xarray, **kwargs)
-
-        if toi:
-            data = get_toi_subset(data, toi)
-
-        if roi:
-            data = get_roi_subset(data, roi)
-
-        return data, metadata
-
-    def read_period(self, dt_start, dt_end, **kwargs):
-        """
-        Read interval.
-
-        Parameters
-        ----------
-        dt_start : datetime
-            Start datetime.
-        dt_end : datetime
-            End datetime.
-
-        Returns
-        -------
-        data : xarray.Dataset or numpy.ndarray
-            ASCAT data.
-        metadata : dict
-            Metadata.
-        """
-        return self.read(toi=(dt_start, dt_end), **kwargs)
-
-    def close(self):
-        """
-        Close file.
-        """
-        self.fid.close()
-
-
-def get_file_format(filename):
-    """
-    Try to guess the file format from the extension.
-
-    Parameters
-    ----------
-    filename : str
-        File name.
-
-    Returns
-    -------
-    file_format : str
-        File format indicator.
-    """
-    if os.path.splitext(filename)[1] == ".gz":
-        file_format = os.path.splitext(os.path.splitext(filename)[0])[1]
-    else:
-        file_format = os.path.splitext(filename)[1]
-
-    return file_format
 
 
 class AscatL1bBufrFileList(ChronFiles):
@@ -224,30 +136,6 @@ class AscatL1bBufrFileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _merge_data(self, data):
-        """
-        Merge data.
-
-        Parameters
-        ----------
-        data : list
-            List of array.
-
-        Returns
-        -------
-        data : numpy.ndarray or tuple
-            Data (and Metdata).
-        """
-        if type(data) == list:
-            if type(data[0]) == tuple:
-                metadata = [element[1] for element in data]
-                data = np.hstack([element[0] for element in data])
-                data = (data, metadata)
-            else:
-                data = np.hstack(data)
-
-        return data
-
 
 class AscatL1bNcFileList(ChronFiles):
     """
@@ -309,30 +197,6 @@ class AscatL1bNcFileList(ChronFiles):
         sf_write_fmt = sf_read_fmt
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
-
-    def _merge_data(self, data):
-        """
-        Merge data.
-
-        Parameters
-        ----------
-        data : list
-            List of array.
-
-        Returns
-        -------
-        data : numpy.ndarray
-            Data.
-        """
-        if type(data) == list:
-            if type(data[0]) == tuple:
-                metadata = [element[1] for element in data]
-                data = np.hstack([element[0] for element in data])
-                data = (data, metadata)
-            else:
-                data = np.hstack(data)
-
-        return data
 
 
 class AscatL1bEpsFileList(ChronFiles):
@@ -396,57 +260,6 @@ class AscatL1bEpsFileList(ChronFiles):
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
 
-    def _merge_data(self, data):
-        """
-        Merge data.
-
-        Parameters
-        ----------
-        data : list
-            List of array.
-
-        Returns
-        -------
-        data : numpy.ndarray
-            Data.
-        """
-        metadata = {}
-
-        left_beams = ["lf-vv", "lm-vv", "la-vv"]
-        right_beams = ["rf-vv", "rm-vv", "ra-vv"]
-        all_beams = left_beams + right_beams
-
-        if self.product == "szf":
-            if type(data) == list:
-                if type(data[0]) == tuple:
-                    metadata = [element[1] for element in data]
-                    merged_data = defaultdict(list)
-                    for beam in all_beams:
-                        for d in data:
-                            merged_data[beam].append(d[0].pop(beam))
-                        merged_data[beam] = np.hstack(merged_data[beam])
-                else:
-                    merged_data = defaultdict(list)
-                    for beam in all_beams:
-                        for d in data:
-                            merged_data[beam].append(d.pop(beam))
-                        merged_data[beam] = np.hstack(merged_data[beam])
-            else:
-                merged_data = data
-        else:
-            if type(data) == list:
-                if type(data[0]) == tuple:
-                    metadata = [element[1] for element in data]
-                    merged_data = np.hstack([element[0] for element in data])
-                else:
-                    merged_data = np.hstack(data)
-            else:
-                merged_data = data
-
-        merged_data = (merged_data, metadata)
-
-        return merged_data
-
 
 class AscatL1bHdf5FileList(ChronFiles):
     """
@@ -504,44 +317,3 @@ class AscatL1bHdf5FileList(ChronFiles):
         sf_write_fmt = sf_read_fmt
 
         return fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt
-
-    def _merge_data(self, data):
-        """
-        Merge data.
-
-        Parameters
-        ----------
-        data : list
-            List of array.
-
-        Returns
-        -------
-        data : numpy.ndarray
-            Data.
-        """
-        left_beams = ["lf-vv", "lm-vv", "la-vv"]
-        right_beams = ["rf-vv", "rm-vv", "ra-vv"]
-        all_beams = left_beams + right_beams
-
-        metadata = {}
-
-        if type(data) == list:
-            if type(data[0]) == tuple:
-                metadata = [element[1] for element in data]
-                merged_data = defaultdict(list)
-                for beam in all_beams:
-                    for d in data:
-                        merged_data[beam].append(d[0].pop(beam))
-                    merged_data[beam] = np.hstack(merged_data[beam])
-            else:
-                merged_data = defaultdict(list)
-                for beam in all_beams:
-                    for d in data:
-                        merged_data[beam].append(d.pop(beam))
-                    merged_data[beam] = np.hstack(merged_data[beam])
-        else:
-            merged_data = data
-
-        merged_data = (merged_data, metadata)
-
-        return merged_data
