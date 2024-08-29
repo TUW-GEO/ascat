@@ -130,7 +130,7 @@ class ErsNCell():
 
     @staticmethod
     def sf_read_fmt(cell, sat=None):
-        return {"satellite_folder": {"sat": sat}, "res_folder": {"res": "H"}}
+        return {"satellite_folder": {"sat": sat}, "res_folder": {"res": "N"}}
 
 class AscatH129Cell():
     grid_name = "Fib6.25"
