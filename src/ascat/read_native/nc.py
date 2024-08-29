@@ -39,11 +39,10 @@ import xarray as xr
 from ascat.utils import tmp_unzip
 from ascat.utils import daterange
 from ascat.utils import mask_dtype_nans
+from ascat.utils import uint8_nan
+from ascat.utils import float32_nan
 from ascat.file_handling import ChronFiles
 from ascat.read_native import AscatFile
-
-float32_nan = -999999.
-uint8_nan = np.iinfo(np.uint8).max
 
 
 def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):

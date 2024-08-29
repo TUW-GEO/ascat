@@ -45,20 +45,20 @@ from ascat.utils import get_toi_subset, get_roi_subset
 from ascat.utils import get_bit, set_bit
 from ascat.utils import dtype_to_nan
 from ascat.utils import mask_dtype_nans
+from ascat.utils import int8_nan, uint8_nan
+from ascat.utils import int16_nan, uint16_nan
+from ascat.utils import int32_nan, uint32_nan
+from ascat.utils import float32_nan
 from ascat.read_native import AscatFile
 
 short_cds_time = np.dtype([("day", ">u2"), ("time", ">u4")])
 long_cds_time = np.dtype([("day", ">u2"), ("ms", ">u4"), ("mms", ">u2")])
 
-long_nan = np.iinfo(np.int32).min
-ulong_nan = np.iinfo(np.uint32).max
-int_nan = np.iinfo(np.int16).min
-uint_nan = np.iinfo(np.uint16).max
-int8_nan = np.iinfo(np.int8).min
-uint8_nan = np.iinfo(np.uint8).max
-int32_nan = np.iinfo(np.int32).min
-uint32_nan = np.iinfo(np.uint32).max
-float32_nan = -999999.
+
+long_nan = int32_nan
+ulong_nan = uint32_nan
+int_nan = int16_nan
+uint_nan = uint16_nan
 
 # 2000-01-01 00:00:00
 julian_epoch = 2451544.5
