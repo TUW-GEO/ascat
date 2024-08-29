@@ -41,15 +41,13 @@ except ImportError:
 
 from ascat.utils import tmp_unzip
 from ascat.utils import mask_dtype_nans
-from ascat.utils import float32_nan
 from ascat.utils import uint8_nan
 from ascat.utils import uint16_nan
+from ascat.utils import int32_nan
+from ascat.utils import float32_nan
 from ascat.read_native import AscatFile
 
 bufr_nan = 1.7e+38
-
-# TODO correct this? now that we like to use the range min for signed integer nans
-int32_nan = np.iinfo(np.int32).max
 
 nan_val_dict = {
     np.float32: float32_nan,
