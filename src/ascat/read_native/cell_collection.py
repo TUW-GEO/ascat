@@ -1000,6 +1000,7 @@ class CellGridFiles(MultiFileHandler):
 
     def _merge_cell_out(self, cell, out_dir, fmt_kwargs, **write_kwargs):
         data = self.extract(cell=cell, fmt_kwargs=fmt_kwargs)
+        data.load()
         if data is not None:
             fid = self.cls(None, data=data)
             filename = self.ft.build_basename(self.fn_read_fmt(cell))
