@@ -843,10 +843,10 @@ class SwathGridFiles(ChronFiles):
         if "backscatter" in ds.variables:
             if ds["obs"].size > 0:
                 ds = ds.sel(
-                    obs=~da.all(
+                    obs=~np.all(
                         ds["backscatter"].isnull(),
                         axis=1
-                    ).compute()
+                    )
                 )
 
         # # break the beams dimension variables into separate variables for
