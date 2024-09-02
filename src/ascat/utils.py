@@ -563,14 +563,15 @@ def create_variable_encodings(ds,
         var_encoding["zlib"] = True
         var_encoding["complevel"] = 4
 
-    default_encoding.update({
-        var: {
-            "dtype": dtype,
-            "zlib": bool(np.issubdtype(dtype, np.number)),
-            "complevel": 4,
-            "_FillValue": dtype_to_nan[dtype],
-        } for var, dtype in ds.dtypes.items() if var not in default_encoding
-    })
+    for var, dtype in ds.dtypes.items():
+        if var not in default_encoding:
+            dtype = ds[var].encoding.get("dtype", dtype)
+            default_encoding[var] = {
+                "dtype": dtype,
+                "zlib": bool(np.issubdtype(dtype, np.number)),
+                "complevel": 4,
+                "_FillValue": dtype_to_nan[dtype],
+            }
 
     if custom_dtypes is not None:
         custom_variable_encodings = {
