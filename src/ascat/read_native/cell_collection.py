@@ -123,10 +123,10 @@ class RaggedArrayCell:
             return ds
 
         # remove nans
-        row_size = da.where(ds["row_size"].values > 0, ds["row_size"].values,
+        row_size = np.where(ds["row_size"].data > 0, ds["row_size"].data,
                             0)
 
-        locationIndex = np.repeat(da.arange(row_size.size).compute(), row_size.compute())
+        locationIndex = np.repeat(np.arange(row_size.size), row_size)
         ds["locationIndex"] = ("obs", locationIndex)
         ds = ds.drop_vars(["row_size"])
 
@@ -161,10 +161,8 @@ class RaggedArrayCell:
             ds = ds.chunk({"obs": 1_000_000})
 
         ds = ds.sortby(["locationIndex", "time"])
-        # idxs, sizes = da.unique(ds.locationIndex.data, return_counts=True)
         idxs, sizes = np.unique(ds.locationIndex.values, return_counts=True)
-        row_size = da.zeros_like(ds.location_id.data)
-        # row_size[idxs.compute()] = sizes.compute()
+        row_size = np.zeros_like(ds.location_id.data)
         row_size[idxs] = sizes
         ds["row_size"] = ("locations", row_size)
         ds = ds.drop_vars(["locationIndex"])
@@ -233,12 +231,12 @@ class RaggedArrayCell:
             [self._only_locations(ds) for ds in data], concat_dim="locations"
         )
 
-        _, idxs = da.unique(
-            locs_merged["location_id"].data, return_index=True
+        _, idxs = np.unique(
+            locs_merged["location_id"], return_index=True
         )
 
         location_vars = {
-            var: locs_merged[var][idxs.compute()]
+            var: locs_merged[var][idxs]
             for var in locs_merged.variables
         }
 
@@ -341,11 +339,12 @@ class RaggedArrayCell:
             if gpis is None:
                 ds_location_ids = ds["location_id"].data[ds["locationIndex"].data]
                 obs_idx = lookup_vector[ds_location_ids]
-                locations_idx = da.unique(ds["locationIndex"].data[obs_idx]).compute()
+                locations_idx = np.unique(ds["locationIndex"][obs_idx])
 
                 # then trim out any gpis in the dataset not in gpis
                 ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
-                new_locationIndex = np.searchsorted(ds["location_id"].data, ds_location_ids[obs_idx])
+                new_locationIndex = np.searchsorted(ds["location_id"].data,
+                                                    ds_location_ids[obs_idx])
                 # and add the new locationIndex
                 ds["locationIndex"] = ("obs", new_locationIndex)
 
@@ -356,13 +355,13 @@ class RaggedArrayCell:
                 # this is a list of the locationIndex values that correspond to the gpis we're keeping
                 locations_idx = np.searchsorted(ds["location_id"].values, gpis)
                 # this is the indices of the observations that have any of those locationIndex values
-                obs_idx = da.isin(ds["locationIndex"], locations_idx).compute()
+                obs_idx = np.isin(ds["locationIndex"], locations_idx)
 
                 # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
                 old_locationIndex = ds["locationIndex"].values
                 new_locationIndex = np.searchsorted(
                     locations_idx,
-                    old_locationIndex[da.isin(old_locationIndex, locations_idx)]
+                    old_locationIndex[np.isin(old_locationIndex, locations_idx)]
                 )
 
                 # then trim out any gpis in the dataset not in gpis
