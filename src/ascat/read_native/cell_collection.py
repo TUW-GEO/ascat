@@ -331,9 +331,9 @@ class RaggedArrayCell:
         """
         if ds is None:
             return
-        if gpis is None and lookup_vector is None:
-            return ds
-        if len(gpis) == 0 and (lookup_vector is None or len(lookup_vector)==0):
+        # if gpis is None and lookup_vector is None:
+        #     return ds
+        if (gpis is None or len(gpis) == 0) and (lookup_vector is None or len(lookup_vector)==0):
             return ds
         if self._indexed_or_contiguous(ds) == "indexed":
             if gpis is None:
@@ -999,8 +999,8 @@ class CellGridFiles(MultiFileHandler):
 
     def _merge_cell_out(self, cell, out_dir, fmt_kwargs, **write_kwargs):
         data = self.extract(cell=cell, fmt_kwargs=fmt_kwargs)
-        data.load()
         if data is not None:
+            data.load()
             fid = self.cls(None, data=data)
             filename = self.ft.build_basename(self.fn_read_fmt(cell))
             fid.write(out_dir/filename, **write_kwargs)
