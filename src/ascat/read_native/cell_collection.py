@@ -1013,7 +1013,12 @@ class CellGridFiles(MultiFileHandler):
                   **write_kwargs):
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        cells = cells or self.grid.get_cells()
+
+        if cells is not None:
+            cells=cells
+        else:
+            cells = self.grid.get_cells()
+
         fmt_kwargs = fmt_kwargs or self.fmt_kwargs
         if num_processes == 1:
             for cell in tqdm(cells):
