@@ -33,6 +33,7 @@ from tqdm import tqdm
 
 import xarray as xr
 import numpy as np
+import numpy_groupies as npg
 import dask.array as da
 
 
@@ -162,6 +163,7 @@ class RaggedArrayCell:
 
         ds = ds.sortby(["locationIndex", "time"])
         idxs, sizes = np.unique(ds.locationIndex.values, return_counts=True)
+
         row_size = np.zeros_like(ds.location_id.data)
         row_size[idxs] = sizes
         ds["row_size"] = ("locations", row_size)
@@ -347,6 +349,7 @@ class RaggedArrayCell:
                                                     ds_location_ids[obs_idx])
                 # and add the new locationIndex
                 ds["locationIndex"] = ("obs", new_locationIndex)
+                return ds
 
             else:
                 # first trim out any gpis not in the dataset from the gpi list
@@ -368,29 +371,55 @@ class RaggedArrayCell:
                 ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
                 # and add the new locationIndex
                 ds["locationIndex"] = ("obs", new_locationIndex)
-        if self._indexed_or_contiguous(ds) == "contiguous":
-            if len(gpis) == 1:
-                idx = np.where(ds.location_id==gpis[0])[0][0]
-                start = int(ds.row_size.isel(locations=slice(0,idx)).sum().values)
-                end = int(start + ds.row_size.isel(locations=idx).values)
-                return ds.isel(obs=slice(start, end), locations=idx)
-            else:
-                if lookup_vector is None:
-                    idxs = np.where(np.isin(timeseries.location_id, gpis))[0]
-                else:
-                    idxs = np.where(
-                        lookup_vector[np.repeat(timeseries.location_id, timeseries.row_size)]
-                    )[0]
-                if idxs.size > 0:
-                    starts = [int(timeseries.row_size.isel(locations=slice(0,i)).sum().values)
-                                for i in idxs]
-                    ends = [int(start + timeseries.row_size.isel(locations=i).values)
-                            for start, i in zip(starts, idxs)]
-                    obs = np.concatenate([range(start, end) for start, end in zip(starts, ends)])
-                    locations = [i for i in idxs]
-                    return timeseries.isel(obs=obs, locations=locations)
+                return ds
+        # if self._indexed_or_contiguous(ds) == "contiguous":
+        #     if len(gpis) == 1:
+        #         idx = np.where(ds.location_id==gpis[0])[0][0]
+        #         start = int(ds.row_size.isel(locations=slice(0,idx)).sum().values)
+        #         end = int(start + ds.row_size.isel(locations=idx).values)
+        #         return ds.isel(obs=slice(start, end), locations=idx)
+        #     else:
+        #         if lookup_vector is None:
+        #             idxs = np.where(np.isin(ds.location_id, gpis))[0]
+        #         else:
+        #             idxs = np.where(
+        #                 lookup_vector[np.repeat(ds.location_id, ds.row_size)]
+        #             )[0]
+        #         if idxs.size > 0:
+        #             starts = [int(ds.row_size.isel(locations=slice(0,i)).sum().values)
+        #                         for i in idxs]
+        #             ends = [int(start + ds.row_size.isel(locations=i).values)
+        #                     for start, i in zip(starts, idxs)]
+        #             obs = np.concatenate([range(start, end) for start, end in zip(starts, ends)])
+        #             locations = [i for i in idxs]
+        #             return ds.isel(obs=obs, locations=locations)
 
-        return ds
+        if self._indexed_or_contiguous(ds) == "contiguous":
+            if gpis is None or len(gpis)==0:
+                obs_locations = np.repeat(ds.locations, ds.row_size)
+                obs_location_ids = np.repeat(ds.location_id, ds.row_size)
+                obs_idxs = lookup_vector[obs_location_ids]
+                locations_idxs = npg.aggregate(obs_locations, obs_idxs, func="any")
+                return ds.sel(obs=obs_idxs, locations=locations_idxs)
+
+            if len(gpis) == 1:
+                locations_idx = np.where(ds.location_id==gpis[0])[0][0]
+                obs_start = int(ds.row_size.isel(locations=slice(0,locations_idx)).sum().values)
+                obs_end = int(obs_start + ds.row_size.isel(locations=locations_idx).values)
+                return ds.isel(obs=slice(obs_start, obs_end), locations=locations_idx)
+            else:
+                locations_idxs = np.where(np.isin(ds.location_id, gpis))[0]
+
+            if locations_idxs.size > 0:
+                obs_starts = [int(ds.row_size.isel(locations=slice(0,i)).sum().values)
+                            for i in locations_idxs]
+                obs_ends = [int(start + ds.row_size.isel(locations=i).values)
+                        for start, i in zip(obs_starts, locations_idxs)]
+                obs_idxs = np.concatenate([range(start, end)
+                                           for start, end in zip(obs_starts, obs_ends)])
+                # locations_idxs = [i for i in locations_idxs]
+
+            return ds.isel(obs=obs_idxs, locations=locations_idxs)
 
     def write(self,
               filename=None,
