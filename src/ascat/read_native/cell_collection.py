@@ -62,10 +62,10 @@ class RaggedArrayCell:
 
         ds = self._ensure_obs(ds)
         ds = ds.chunk({"obs": self.chunks})
-        if lookup_vector is not None:
-            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
-        elif valid_gpis is not None:
+        if valid_gpis is not None:
             ds = self._trim_to_gpis(ds, gpis=valid_gpis)
+        elif lookup_vector is not None:
+            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
         ds = self._ensure_indexed(ds)
         if date_range is not None:
             ds = self._trim_var_range(ds, "time", *date_range)
@@ -345,8 +345,10 @@ class RaggedArrayCell:
 
                 # then trim out any gpis in the dataset not in gpis
                 ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
+                sorter = np.argsort(ds["location_id"].data)
                 new_locationIndex = np.searchsorted(ds["location_id"].data,
-                                                    ds_location_ids[obs_idx])
+                                                    ds_location_ids[obs_idx],
+                                                    sorter=sorter)
                 # and add the new locationIndex
                 ds["locationIndex"] = ("obs", new_locationIndex)
                 return ds
@@ -355,16 +357,20 @@ class RaggedArrayCell:
                 # first trim out any gpis not in the dataset from the gpi list
                 gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
 
+
+                sorter = np.argsort(ds["location_id"].values)
                 # this is a list of the locationIndex values that correspond to the gpis we're keeping
-                locations_idx = np.searchsorted(ds["location_id"].values, gpis)
+                locations_idx = np.searchsorted(ds["location_id"].values, gpis, sorter=sorter)
                 # this is the indices of the observations that have any of those locationIndex values
                 obs_idx = np.isin(ds["locationIndex"], locations_idx)
 
                 # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
+                sorter = np.argsort(locations_idx)
                 old_locationIndex = ds["locationIndex"].values
                 new_locationIndex = np.searchsorted(
                     locations_idx,
-                    old_locationIndex[np.isin(old_locationIndex, locations_idx)]
+                    old_locationIndex[np.isin(old_locationIndex, locations_idx)],
+                    sorter=sorter,
                 )
 
                 # then trim out any gpis in the dataset not in gpis
@@ -503,11 +509,11 @@ class OrthoMultiCell:
         # do these after merging?
         if date_range is not None:
             ds = ds.sel(time=slice(*date_range))
-        if valid_gpis is not None:
+        if lookup_vector is not None:
+            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
+        elif valid_gpis is not None:
             # ds = ds.sel(locations=valid_gpis)
             ds = self._trim_to_gpis(ds, gpis=valid_gpis)
-        elif lookup_vector is not None:
-            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
         # should I do it this way or just return the ds without having it be a class attribute?
         self.ds = ds
         return self.ds
