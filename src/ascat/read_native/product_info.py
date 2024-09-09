@@ -99,7 +99,7 @@ def register_swath_grid_reader(reader_class, grid, product_id):
 class ErsHCell():
     grid_name = "Fib12.5"
     grid_info = grid_cache.fetch_or_store(grid_name)
-    grid = FibGrid(12.5)
+    grid = grid_info["grid"]
     fn_format = "{:04d}.nc"
     possible_cells = None
     max_cell = None
@@ -117,7 +117,7 @@ class ErsHCell():
 class ErsNCell():
     grid_name = "Fib25"
     grid_info = grid_cache.fetch_or_store(grid_name)
-    grid = FibGrid(25)
+    grid = grid_info["grid"]
     fn_format = "{:04d}.nc"
     possible_cells = None
     max_cell = None
