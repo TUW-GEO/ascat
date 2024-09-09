@@ -38,30 +38,173 @@ import dask.array as da
 
 
 from ascat.file_handling import MultiFileHandler
+from ascat.file_handling import Filenames
 from ascat.read_native.product_info import cell_io_catalog
 from ascat.read_native.product_info import grid_cache
 from ascat.utils import get_grid_gpis
 from ascat.utils import append_to_netcdf
 from ascat.utils import create_variable_encodings
 
+class IndexedRaggedArrayFile(RaggedArrayCellFile):
+    def from_contiguous_raf(contiguous_raf):
+        pass
 
-class RaggedArrayCell:
+    @staticmethod
+    def _trim_to_gpis(self, ds, gpis=None, lookup_vector=None):
+        """Trim a dataset to only the gpis in the given list.
+        If any gpis are passed which are not in the dataset, they are ignored.
+        Prioritize lookup_vector if available (?)
+
+        Parameters
+        ----------
+        ds : xarray.Dataset
+            Dataset.
+        gpis : list or list-like
+            List of gpis to keep.
+
+        Returns
+        -------
+        xarray.Dataset
+            Dataset with only the gpis in the list.
+        """
+        if ds is None:
+            return
+        # if gpis is None and lookup_vector is None:
+        #     return ds
+        # if (gpis is None or len(gpis) == 0) and (lookup_vector is None or len(lookup_vector)==0):
+        #     return ds
+        if lookup_vector is not None:
+            ds_location_ids = ds["location_id"].data[ds["locationIndex"].data]
+            obs_idx = lookup_vector[ds_location_ids]
+            locations_idx = np.unique(ds["locationIndex"][obs_idx])
+
+            # then trim out any gpis in the dataset not in gpis
+            ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
+            sorter = np.argsort(ds["location_id"].data)
+            new_locationIndex = np.searchsorted(ds["location_id"].data,
+                                                ds_location_ids[obs_idx],
+                                                sorter=sorter)
+            # and add the new locationIndex
+            ds["locationIndex"] = ("obs", new_locationIndex)
+            return ds
+
+        elif gpis is not None and len(gpis) > 0:
+            # first trim out any gpis not in the dataset from the gpi list
+            gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
+
+
+            sorter = np.argsort(ds["location_id"].values)
+            # this is a list of the locationIndex values that correspond to the gpis we're keeping
+            locations_idx = np.searchsorted(ds["location_id"].values, gpis, sorter=sorter)
+            # this is the indices of the observations that have any of those locationIndex values
+            obs_idx = np.isin(ds["locationIndex"], locations_idx)
+
+            # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
+            sorter = np.argsort(locations_idx)
+            old_locationIndex = ds["locationIndex"].values
+            new_locationIndex = np.searchsorted(
+                locations_idx,
+                old_locationIndex[np.isin(old_locationIndex, locations_idx)],
+                sorter=sorter,
+            )
+
+            # then trim out any gpis in the dataset not in gpis
+            ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
+            # and add the new locationIndex
+            ds["locationIndex"] = ("obs", new_locationIndex)
+            return ds
+
+        else:
+            return ds
+
+
+class ContiguousRaggedArrayFile(RaggedArrayCellFile):
+    def from_indexed_raf(contiguous_raf):
+        pass
+
+    @staticmethod
+    def _trim_to_gpis(self, ds, gpis=None, lookup_vector=None):
+        """Trim a dataset to only the gpis in the given list.
+        If any gpis are passed which are not in the dataset, they are ignored.
+        Prioritize lookup_vector if available (?)
+
+        TODO I think this actually only makes sense if this thing stores data
+        Parameters
+        ----------
+        ds : xarray.Dataset
+            Dataset.
+        gpis : list or list-like
+            List of gpis to keep.
+
+        Returns
+        -------
+        xarray.Dataset
+            Dataset with only the gpis in the list.
+        """
+        pass
+
+    def _read(filename, generic=True, preprocessor=None, **xarray_kwargs):
+        """
+        Open one Ragged Array file as an xarray.Dataset and preprocess it if necessary.
+
+        Parameters
+        ----------
+        filename : str
+            File to read.
+        preprocessor : callable, optional
+            Function to preprocess the dataset.
+        xarray_kwargs : dict
+            Additional keyword arguments passed to xarray.open_dataset.
+
+        Returns
+        -------
+        ds : xarray.Dataset
+            Dataset.
+        """
+        ds = super()._read(filename, preprocessor=preprocessor, **xarray_kwargs)
+        if generic:
+            ds = self._ensure_indexed(ds)
+        return ds
+
+class RaggedArrayCellFile(Filenames):
     """
     Class to read and merge ragged array cell files.
     """
-    def __init__(self, filename, data=None, chunks=1_000_000):
-        self.filename = filename
-        self.ds = data
-        self.chunks = chunks
+    # def __init__(self, filenames):
+        # self.filename = filename
+        # self.ds = data          #
+        # self.chunks = chunks
 
-    def read(self, date_range=None, valid_gpis=None, lookup_vector=None, **kwargs):
-        preprocessor = kwargs.pop("preprocessor", False)
-        ds = xr.open_dataset(self.filename, **kwargs)
+    def _read(filename, generic=True, preprocessor=None, **xarray_kwargs):
+        """
+        Open one Ragged Array file as an xarray.Dataset and preprocess it if necessary.
+
+        Parameters
+        ----------
+        filename : str
+            File to read.
+        generic : bool, optional
+            If True, the data is returned as a generic Indexed Ragged Array file for
+            easy merging. If False, the file is returned as its native ragged array type.
+        preprocessor : callable, optional
+            Function to preprocess the dataset.
+        xarray_kwargs : dict
+            Additional keyword arguments passed to xarray.open_dataset.
+
+        Returns
+        -------
+        ds : xarray.Dataset
+            Dataset.
+        """
+        ds = xr.open_dataset(filename, **xarray_kwargs)
         if preprocessor:
             ds = preprocessor(ds)
-
         ds = self._ensure_obs(ds)
-        ds = ds.chunk({"obs": self.chunks})
+        return ds
+
+    def read(self, date_range=None, valid_gpis=None, lookup_vector=None, preprocessor=None, **kwargs):
+        ds = super().read(preprocessor=preprocessor, **kwargs)
+
         if valid_gpis is not None:
             ds = self._trim_to_gpis(ds, gpis=valid_gpis)
         elif lookup_vector is not None:
@@ -191,9 +334,9 @@ class RaggedArrayCell:
             and var not in ["row_size", "locationIndex"]
         ]]
 
-    def merge(self, data):
+    def _merge(self, data):
         """
-        Merge datasets with different locations dimensions.
+        Merge datasets with potentially different locations dimensions.
 
         Parameters
         ----------
@@ -208,17 +351,29 @@ class RaggedArrayCell:
         if data == []:
             return None
 
-        # need a way to short-circuit this if the datasets have all the same location_ids?
-        location_vars, location_sorter = self._location_vars_from_ds_list(data)
+        ds_locations = [self._only_locations(ds) for ds in data]
 
-        merged_ds = xr.combine_nested(
-            [self._preprocess(ds, location_vars, location_sorter)
-             for ds in data],
-            concat_dim="obs",
-            data_vars="minimal",
-            coords="minimal",
-            combine_attrs="drop_conflicts",
-        )
+        # check if any of the datasets in ds_locations is not equal to the first one
+        if any(not ds.equals(ds_locations[0]) for ds in ds_locations):
+            location_vars, location_sorter = self._merge_ds_locations_vars(data)
+
+            merged_ds = xr.combine_nested(
+                [self._preprocess(ds, location_vars, location_sorter)
+                for ds in data],
+                concat_dim="obs",
+                data_vars="minimal",
+                coords="minimal",
+                combine_attrs="drop_conflicts",
+            )
+        # if they're all the same, we can just combine them directly
+        else:
+            merged_ds = xr.combine_nested(
+                data,
+                concat_dim="obs",
+                data_vars="minimal",
+                coords="minimal",
+                combine_attrs="drop_conflicts",
+            )
 
         # # Move these elsewhere?
         # merged_ds = trim_dates(merged_ds, date_range)
@@ -227,10 +382,13 @@ class RaggedArrayCell:
 
         return merged_ds
 
-    def _location_vars_from_ds_list(self, data):
-        # if all datasets have same location_id, we can just return the first one
+    @staticmethod
+    def _merge_ds_locations_vars(data):
+        """
+        Merge the locations-dimensional variables from a list of datasets.
+        """
         locs_merged = xr.combine_nested(
-            [self._only_locations(ds) for ds in data], concat_dim="locations"
+            ds_locations, concat_dim="locations"
         )
 
         _, idxs = np.unique(
@@ -1090,7 +1248,7 @@ class RaggedArrayFiles(CellGridFiles):
 
         init_options = {
             "root_path": root_path,
-            "cls": RaggedArrayCell,
+            "cls": RaggedArrayCellFile,
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
             "grid_name": grid_name,
