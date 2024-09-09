@@ -25,6 +25,8 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import os
+
 from datetime import timedelta
 from gzip import GzipFile
 from tempfile import NamedTemporaryFile
@@ -41,23 +43,79 @@ uint8_nan = np.iinfo(np.uint8).max
 int16_nan = np.iinfo(np.int16).min
 uint16_nan = np.iinfo(np.uint16).max
 int32_nan = np.iinfo(np.int32).min
-int64_nan = np.iinfo(np.int64).max
-# float32_nan = -999999.
-# float64_nan = -999999.
-float32_nan = np.finfo(np.float32).min
-float64_nan = np.finfo(np.float64).min
+uint32_nan = np.iinfo(np.uint32).max
+int64_nan = np.iinfo(np.int64).min
+uint64_nan = np.iinfo(np.uint64).max
+float32_nan = -999999.
+float64_nan = -999999.
+
 dtype_to_nan = {
     np.dtype('int8'): int8_nan,
     np.dtype('uint8'): uint8_nan,
-    np.dtype('float32'): float32_nan,
-    np.dtype('float64'): float64_nan,
     np.dtype('int16'): int16_nan,
     np.dtype('uint16'): uint16_nan,
     np.dtype('int32'): int32_nan,
+    np.dtype('uint32'): uint32_nan,
     np.dtype('int64'): int64_nan,
+    np.dtype('uint64'): uint64_nan,
+    np.dtype('float32'): float32_nan,
+    np.dtype('float64'): float64_nan,
     np.dtype('<U1'): None,
     np.dtype('O'): None,
 }
+
+def mask_dtype_nans(ds):
+    """
+    Mask NaNs in a dataset based on the dtypes of its variables.
+    """
+    for var in ds.data_vars:
+        if ds[var].dtype in dtype_to_nan and ~ds[var].isnull().any():
+            ds[var] = ds[var].where(ds[var] != dtype_to_nan[ds[var].dtype])
+    return ds
+
+
+def get_bit(a, bit_pos):
+    """
+    Returns 1 or 0 if bit is set or not.
+
+    Parameters
+    ----------
+    a : int or numpy.ndarray
+      Input array.
+    bit_pos : int
+      Bit position. First bit position is right.
+
+    Returns
+    -------
+    b : numpy.ndarray
+      1 if bit is set and 0 if not.
+    """
+    return np.clip(np.bitwise_and(a, 2**(bit_pos - 1)), 0, 1)
+
+
+def set_bit(a, bit_pos, value=1):
+    """
+    Set bit at given position.
+
+    Parameters
+    ----------
+    a : int or numpy.ndarray
+      Input array.
+    bit_pos : int
+      Bit position. First bit starts right.
+    value : 1 or 0, optional
+      Set bit either to 1 or 0 (default: 1).
+
+    Returns
+    -------
+    a : numpy.ndarray
+      Modified input array with bit=value.
+    """
+    if value == 1:
+        return np.bitwise_or(np.atleast_1d(a), 2**(bit_pos - 1))
+    else:
+        return np.bitwise_and(np.atleast_1d(a), ~(2**(bit_pos - 1)))
+
 
 def daterange(start_date, end_date):
     """
@@ -274,8 +332,8 @@ def get_toi_subset(ds, toi):
                 elif isinstance(ds[key], np.ndarray):
                     ds[key] = ds[key][subset]
     else:
-        subset = np.where((ds['time'] > np.datetime64(toi[0])) &
-                          (ds['time'] < np.datetime64(toi[1])))[0]
+        subset = np.where((ds['time'] > np.datetime64(toi[0]))
+                          & (ds['time'] < np.datetime64(toi[1])))[0]
         if subset.size == 0:
             ds = None
         else:
@@ -305,8 +363,10 @@ def get_roi_subset(ds, roi):
     """
     if isinstance(ds, dict):
         for key in ds.keys():
-            subset = np.where((ds[key]['lat'] > roi[0]) & (ds[key]['lat'] < roi[2]) &
-                      (ds[key]['lon'] > roi[1]) & (ds[key]['lon'] < roi[3]))[0]
+            subset = np.where((ds[key]['lat'] > roi[0])
+                              & (ds[key]['lat'] < roi[2])
+                              & (ds[key]['lon'] > roi[1])
+                              & (ds[key]['lon'] < roi[3]))[0]
             if subset.size == 0:
                 ds[key] = None
             else:
@@ -315,8 +375,8 @@ def get_roi_subset(ds, roi):
                 elif isinstance(ds[key], np.ndarray):
                     ds[key] = ds[key][subset]
     else:
-        subset = np.where((ds['lat'] > roi[0]) & (ds['lat'] < roi[2]) &
-                  (ds['lon'] > roi[1]) & (ds['lon'] < roi[3]))[0]
+        subset = np.where((ds['lat'] > roi[0]) & (ds['lat'] < roi[2])
+                          & (ds['lon'] > roi[1]) & (ds['lon'] < roi[3]))[0]
         if subset.size == 0:
             ds = None
         else:
@@ -586,6 +646,26 @@ def create_variable_encodings(ds,
     encoding = {**default_encoding, **custom_variable_encodings}
 
     return encoding
+def get_file_format(filename):
+    """
+    Try to guess the file format from the extension.
+
+    Parameters
+    ----------
+    filename : str
+        File name.
+
+    Returns
+    -------
+    file_format : str
+        File format indicator.
+    """
+    if os.path.splitext(filename)[1] == ".gz":
+        file_format = os.path.splitext(os.path.splitext(filename)[0])[1]
+    else:
+        file_format = os.path.splitext(filename)[1]
+
+    return file_format
 
 class Spacecraft:
     """

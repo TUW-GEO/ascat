@@ -439,22 +439,10 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
         fn_read_fmt, sf_read_fmt, _, _ = self._fmt(*fmt_args, **fmt_kwargs)
         search_filename = self.ft.build_filename(fn_read_fmt, sf_read_fmt)
         filename = glob.glob(search_filename)
+        self._open(filename)
 
         data = None
-        if len(filename) == 0:
-            msg = f"File not found: {search_filename}"
-            if self.err:
-                raise IOError(msg)
-            else:
-                warnings.warn(msg)
-        elif len(filename) > 1:
-            msg = "Multiple files found"
-            if self.err:
-                raise RuntimeError(msg)
-            else:
-                warnings.warn(msg)
-        else:
-            data = self.read_file(filename[0], cls_kwargs)
+        data = self.fid.read(**cls_kwargs)
 
         return data
 
@@ -831,8 +819,174 @@ class ChronFiles(MultiFileHandler):
 
         return data
 
+class Filenames:
+    """
+    A class to handle operations on multiple filenames.
 
-class Csv:
+    This class provides methods for reading from, writing to, and merging data from multiple files.
+    """
+
+    def __init__(self, filenames):
+        """
+        Initialize Filenames.
+
+        Parameters
+        ----------
+        filenames : str, Path, or list
+            File path(s) to be handled.
+        """
+        if isinstance(filenames, (str, Path)):
+            filenames = [filenames]
+        elif not isinstance(filenames, list):
+            raise ValueError("filenames must be a string or list of strings.")
+
+        self.filenames = [Path(f) for f in filenames]
+
+    def _read(self, filename, **kwargs):
+        """
+        Read data from a single file.
+
+        This method should be implemented by subclasses.
+
+        Parameters
+        ----------
+        filename : Path
+            The file to read from.
+        **kwargs : dict
+            Additional keyword arguments for reading.
+
+        Raises
+        ------
+        NotImplementedError
+            If the method is not implemented in a subclass.
+        """
+        raise NotImplementedError
+
+    def _merge(self, data, **kwargs):
+        """
+        Merge multiple data objects.
+
+        This method should be implemented by subclasses.
+
+        Parameters
+        ----------
+        data : list
+            List of data objects to merge.
+        **kwargs : dict
+            Additional keyword arguments for merging.
+
+        Raises
+        ------
+        NotImplementedError
+            If the method is not implemented in a subclass.
+        """
+        raise NotImplementedError
+
+    def _write(self, data, filename, **kwargs):
+        """
+        Write data to a single file.
+
+        This method should be implemented by subclasses.
+
+        Parameters
+        ----------
+        data : object
+            The data to write.
+        filename : Path
+            The file to write to.
+        **kwargs : dict
+            Additional keyword arguments for writing.
+
+        Raises
+        ------
+        NotImplementedError
+            If the method is not implemented in a subclass.
+        """
+        raise NotImplementedError
+
+    def write(self, data):
+        """
+        Write data to file.
+
+        If there's only one filename, write provided data to that file.
+
+        Parameters
+        ----------
+        data : object
+            The data to write.
+
+        TODO: Add support for writing to multiple files by passing a list of data and
+        checking if the number of data objects matches the number of filenames.
+        """
+        n_filenames = len(self.filenames)
+        if n_filenames == 1:
+            filename = self.filenames[0]
+            filename.parent.mkdir(parents=True, exist_ok=True)
+            self._write(data, filename)
+        # elif n_filenames > 1:
+        #     if len(data) == n_filenames:
+        #         for f in self.filenames:
+        #             f.parent.mkdir(parents=True, exist_ok=True)
+        #             self.write(data, f)
+
+    def read(self, **kwargs):
+        """
+        Read all data from files.
+
+        Returns
+        -------
+        object
+            Merged data from all files.
+        """
+        data = [d for d in self.iter_read(**kwargs)]
+        data = self.merge(data)
+        return data
+
+    def iter_read(self, **kwargs):
+        """
+        Iterate over all files and yield data.
+
+        Yields
+        ------
+        object
+            Data read from each file.
+        """
+        for filename in self.filenames:
+            yield self._read(filename, **kwargs)
+
+    def merge(self, data):
+        """
+        Merge data from multiple data objects.
+
+        Parameters
+        ----------
+        data : list
+            List of data objects.
+
+        Returns
+        -------
+        object
+            Merged data, or None if the input list is empty.
+        """
+        if len(data) > 1:
+            data = self._merge(data)
+        elif len(data) == 1:
+            data = data[0]
+        else:
+            data = None
+
+        return data
+
+    def close(self):
+        """
+        Close file(s).
+
+        This method can be overridden in subclasses if necessary.
+        """
+        pass
+
+
+class CsvFile(Filenames):
     """
     Read and write single CSV file.
     """
@@ -848,8 +1002,8 @@ class Csv:
         mode : str, optional
             File opening mode.
         """
-        self.filename = filename
         self.mode = mode
+        super().__init__(filename)
 
     def header2dtype(self, header):
         """
@@ -882,16 +1036,16 @@ class Csv:
 
         return np.dtype(dtype_list)
 
-    def read(self):
+    def _read(self, filename):
         """
         Read data from CSV file.
 
         Parameters
         ----------
-        timestamp : datetime
-            Time stamp.
+        filename : str
+            Filename.
         """
-        with open(self.filename) as fid:
+        with open(filename) as fid:
             header = fid.readline()
             dtype = self.header2dtype(header)
             data = np.loadtxt(fid, dtype)
@@ -924,7 +1078,7 @@ class Csv:
 
         return data
 
-    def write(self, data):
+    def _write(self, data, filename):
         """
         Write data to CSV file.
 
@@ -934,10 +1088,10 @@ class Csv:
             Data.
         """
         header = data.dtype.__repr__()
-        np.savetxt(self.filename, data, fmt="%s", header=header)
+        np.savetxt(filename, data, fmt="%s", header=header)
 
     @staticmethod
-    def merge(data):
+    def _merge(data):
         """
         Merge data.
 
@@ -971,7 +1125,7 @@ class CsvFiles(ChronFiles):
         fn_templ = "prefix_{date}_{now}_postfix.csv"
         sf_templ = {"Y": "{year}", "M": "{month}"}
 
-        super().__init__(root_path, Csv, fn_templ, sf_templ=sf_templ)
+        super().__init__(root_path, CsvFile, fn_templ, sf_templ=sf_templ)
 
     def _fmt(self, timestamp):
         """

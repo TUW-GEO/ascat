@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2024, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -28,120 +28,131 @@
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 
 from pygeogrids.grids import genreg_grid
-from pygeogrids.netcdf import save_grid, load_grid
+from pygeogrids.netcdf import load_grid, save_grid
 
 
-# move this to pygeogrids
-
-def grid_to_regular_grid(old_grid, new_grid_size):
-    """ Create a regular grid of a given size and a lookup table from it to another grid.
+def retrieve_or_store_grid_lut(src_grid,
+                               src_grid_id,
+                               trg_grid_id,
+                               trg_grid_size,
+                               store_path=None):
+    """
+    Get a grid and its lookup table either from a store directory or
+    create and return them.
 
     Parameters
     ----------
-    old_grid : pygeogrids.grids.BasicGrid
-        The grid to create a lookup table to.
-    new_grid_size : int
-        Size of the new grid in degrees.
+    src_grid : pygeogrids.BasicGrid
+        Source grid.
+    src_grid_id : str
+        The source grid's id.
+    trg_grid_id : str
+        The target grid's id.
+    trg_grid_size : int
+        The size of the target grid in degrees.
+    store_path : str, optional
+        Path to the store directory (default: None).
+
+    Returns
+    -------
+    trg_grid : pygeogrids.grids.BasicGrid
+        Target grid.
+    grid_lut : numpy.ndarray
+        Look-up table.
     """
-    new_grid = genreg_grid(new_grid_size, new_grid_size)
-    old_grid_lut = new_grid.calc_lut(old_grid)
-    new_grid_lut = old_grid.calc_lut(new_grid)
-    return new_grid, old_grid_lut, new_grid_lut
-
-
-def retrieve_or_store_grid_lut(
-        store_path,
-        old_grid,
-        old_grid_id,
-        new_grid_id,
-        regrid_degrees
-):
-    """Get a grid and its lookup table from a store directory or create, store, and return them.
-
-    Parameters
-    ----------
-    store_path : str
-        Path to the store directory.
-    old_grid : pygeogrids.BasicGrid
-        The old grid.
-    old_grid_id : str
-        The old grid's id.
-    new_grid_id : str
-        The new grid's id.
-    regrid_degrees : int
-        The size of the new grid in degrees.
-    """
-    store_path = Path(store_path)
-    old_lut_path = store_path / f"lut_{old_grid_id}_{new_grid_id}.npy"
-    new_lut_path = store_path / f"lut_{new_grid_id}_{old_grid_id}.npy"
-    grid_path = store_path / f"grid_{new_grid_id}.nc"
-    if grid_path.exists() and cur_new_lut_path.exists() and new_cur_lut_path.exists():
-        new_grid = load_grid(grid_path)
-        old_grid_lut = np.load(old_lut_path, allow_pickle=True)
-        new_grid_lut = np.load(new_lut_path, allow_pickle=True)
-
+    if store_path == None:
+        trg_grid = genreg_grid(trg_grid_size, trg_grid_size)
+        grid_lut = trg_grid.calc_lut(src_grid)
     else:
-        new_grid, old_grid_lut, new_grid_lut = grid_to_regular_grid(old_grid,
-                                                                    regrid_degrees)
-        old_lut_path.parent.mkdir(parents=True, exist_ok=True)
-        new_lut_path.parent.mkdir(parents=True, exist_ok=True)
-        old_grid_lut.dump(old_lut_path)
-        new_grid_lut.dump(new_lut_path)
-        save_grid(grid_path, new_grid)
+        store_path = Path(store_path)
 
-    return new_grid, old_grid_lut, new_grid_lut
+        trg_grid_file = store_path / f"{trg_grid_id}.nc"
 
-def regrid_swath_ds(ds, new_grid, new_grid_lut):
-    """Convert a swath dataset's location_ids to their nearest neighbors in a new grid."""
-    new_gpis = new_grid_lut[ds["location_id"].values]
-    new_lons = new_grid.arrlon[new_gpis]
-    new_lats = new_grid.arrlat[new_gpis]
-    ds["location_id"] = ("obs", new_gpis)
-    ds["longitude"] = ("obs", new_lons)
-    ds["latitude"] = ("obs", new_lats)
-    return ds
+        if trg_grid_file.exists():
+            trg_grid = load_grid(trg_grid_file)
+        else:
+            store_path.mkdir(parents=True, exist_ok=True)
+            trg_grid = genreg_grid(trg_grid_size, trg_grid_size)
+            save_grid(trg_grid_file, trg_grid)
+
+        grid_lut_file = store_path / f"lut_{src_grid_id}_{trg_grid_id}.npy"
+
+        if grid_lut_file.exists():
+            grid_lut = np.load(grid_lut_file, allow_pickle=True)
+        else:
+            grid_lut = trg_grid.calc_lut(src_grid).reshape(trg_grid.shape)
+            store_path.mkdir(parents=True, exist_ok=True)
+            grid_lut.dump(grid_lut_file)
+
+    return trg_grid, grid_lut
 
 
-def regrid_global_raster_ds(ds, new_grid, old_grid_lut):
-    """Convert a global dataset from a Fibonacci grid to a standard grid.
-
-    Assumes the input dataset has a unique location_id dimension.
-
-    The output data will cover the entire globe and have lat and lon dimensions. The data
-    for each point will be taken from the nearest location on the old grid. If multiple
-    new points have the same nearest location, that data will be duplicated for each. If
-    the nearest old location is NaN or does not exist in `ds`, the new point will be NaN.
+def regrid_swath_ds(ds, src_grid, trg_grid, grid_lut):
+    """
+    Convert a swath dataset to their nearest neighbors
+    on a regular lat/lon grid.
 
     Parameters
     ----------
     ds : xarray.Dataset
-        Dataset with a location_id variable derived from a pygeogrids.grids.BasicGrid.
-    new_grid : pygeogrids.grids.BasicGrid
-        Instance of BasicGrid that the dataset should be regridded to.
-    ds_grid_lut : dict
-        Lookup table from the new grid to the dataset's grid.
+        Swath dataset.
+    src_grid : pygeogrids.grids.BasicGrid
+        Sourde grid.
+    trg_grid : pygeogrids.grids.BasicGrid
+        Target grid.
+    trg_grid_lut : numpy.ndarray
+        Grid look-up table.
 
     Returns
     -------
-    xarray.Dataset
-        Dataset with lon and lat dimensions according to the new grid system.
+    ds : xarray.Dataset
+        Swath dataset resampled on a regular lat/lon grid.
     """
-    new_gpis = new_grid.gpis
-    new_lons = new_grid.arrlon
-    new_lats = new_grid.arrlat
-    nearest_ds_gpis = old_grid_lut[new_gpis]
-    ds = ds.reindex(location_id=nearest_ds_gpis)
+    index_lut = np.zeros(src_grid.n_gpi, dtype=np.int32) - 1
+    index_lut[ds["location_id"].data] = np.arange(ds["location_id"].size)
+    idx = index_lut[grid_lut]
+    nan_pos = idx == -1
 
-    # put the new gpi/lon/lat data onto the grouped_ds as well
-    ds["location_id"] = ("location_id", new_gpis)
-    ds["lon"] = ("location_id", new_lons)
-    ds["lat"] = ("location_id", new_lats)
+    missing_value = {
+        "time": 0,
+        "backscatter_flag": 255,
+        "correction_flag": 255,
+        "processing_flag": 255,
+        "surface_flag": 255,
+        "surface_soil_moisture": -2**15,
+        "backscatter40": -2**31,
+        "location_id": -2**31,
+    }
 
-    # finally we turn lat and lon into their own dimensions by making a multiindex
-    # out of them and then unstacking it.
-    ds = ds.set_index(location_id=["lat", "lon"])
-    ds = ds.unstack()
+    coords = {
+        "latitude": np.int32(trg_grid.lat2d[:, 0] / 1e-6),
+        "longitude": np.int32(trg_grid.lon2d[0] / 1e-6)
+    }
 
-    return ds
+    regrid_ds = xr.Dataset(coords=coords)
+    regrid_ds.attrs = ds.attrs
+
+    regrid_ds["latitude"].attrs = ds["latitude"].attrs
+    regrid_ds["longitude"].attrs = ds["longitude"].attrs
+    dim = ("latitude", "longitude")
+
+    for var in ds.variables:
+        if var in ["latitude", "longitude"]:
+            continue
+
+        if ds[var].size == 1:
+            continue
+
+        regrid_ds[var] = (dim, ds[var].data[idx])
+        regrid_ds[var].attrs = ds[var].attrs
+        regrid_ds[var].encoding = {"zlib": True, "complevel": 4}
+
+        if hasattr(ds[var], "missing_value"):
+            regrid_ds[var].data[nan_pos] = ds[var].missing_value
+        else:
+            regrid_ds[var].data[nan_pos] = missing_value[var]
+
+    return regrid_ds

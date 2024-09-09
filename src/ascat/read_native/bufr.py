@@ -40,12 +40,14 @@ except ImportError:
     pass
 
 from ascat.utils import tmp_unzip
+from ascat.utils import mask_dtype_nans
+from ascat.utils import uint8_nan
+from ascat.utils import uint16_nan
+from ascat.utils import int32_nan
+from ascat.utils import float32_nan
+from ascat.read_native import AscatFile
 
 bufr_nan = 1.7e+38
-float32_nan = -999999.
-uint8_nan = np.iinfo(np.uint8).max
-uint16_nan = np.iinfo(np.uint16).max
-int32_nan = np.iinfo(np.int32).max
 
 nan_val_dict = {
     np.float32: float32_nan,
@@ -54,13 +56,12 @@ nan_val_dict = {
     np.int32: int32_nan
 }
 
-
-class AscatL1bBufrFile:
+class AscatL1bBufrFile(AscatFile):
     """
     Read ASCAT Level 1b file in BUFR format.
     """
 
-    def __init__(self, filename):
+    def __init__(self, filename, **kwargs):
         """
         Initialize AscatL1bBufrFile.
 
@@ -69,10 +70,11 @@ class AscatL1bBufrFile:
         filename : str
             Filename.
         """
-        if os.path.splitext(filename)[1] == '.gz':
-            self.filename = tmp_unzip(filename)
-        else:
-            self.filename = filename
+        super().__init__(filename, **kwargs)
+
+        for i, fname in enumerate(self.filenames):
+            if os.path.splitext(fname)[1] == '.gz':
+                self.filenames[i] = tmp_unzip(fname)
 
         self.msg_name_lookup = {
                 4: "Satellite Identifier",
@@ -105,9 +107,9 @@ class AscatL1bBufrFile:
                 62: "a_ASCAT Land Fraction"
             }
 
-    def read(self, generic=False, to_xarray=False):
+    def _read(self, filename, generic=False, to_xarray=False):
         """
-        Read ASCAT Level 1b data.
+        Read one ASCAT Level 1b BUFR file.
 
         Parameters
         ----------
@@ -123,7 +125,7 @@ class AscatL1bBufrFile:
         ds : xarray.Dataset, numpy.ndarray
             ASCAT Level 1b data.
         """
-        df = pdbufr.read_bufr(self.filename, columns="data", flat=True)
+        df = pdbufr.read_bufr(filename, columns="data", flat=True)
 
         col_rename = {}
         for i, col in enumerate(df.columns.to_list()):
@@ -153,7 +155,7 @@ class AscatL1bBufrFile:
         metadata = {}
         metadata['platform_id'] = data['Satellite Identifier'][0].astype(int)
         metadata['orbit_start'] = np.uint32(data['Orbit Number'][0])
-        metadata['filename'] = os.path.basename(self.filename)
+        metadata['filename'] = os.path.basename(filename)
 
         # add/rename/remove fields according to generic format
         if generic:
@@ -175,6 +177,8 @@ class AscatL1bBufrFile:
                 coords[cf] = data.pop(cf)
 
             data = xr.Dataset(data, coords=coords, attrs=metadata)
+            if generic:
+                data = mask_dtype_nans(data)
         else:
             # collect dtype info
             dtype = []
@@ -193,11 +197,39 @@ class AscatL1bBufrFile:
 
         return data, metadata
 
-    def close(self):
+    def _merge(self, data):
         """
-        Close file.
+        Merge data.
+
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : numpy.ndarray or xarray.Dataset
+            Data.
         """
-        pass
+        if isinstance(data[0], tuple):
+            data, metadata = zip(*data)
+            if isinstance(data[0], xr.Dataset):
+                data = xr.concat(data,
+                                 dim="obs",
+                                 combine_attrs="drop_conflicts")
+            else:
+                data = np.hstack(data)
+            data = (data, metadata)
+        else:
+            data = np.hstack(data)
+        return data
+
+class AscatL1bBufrFileGeneric(AscatL1bBufrFile):
+    """
+    The same as AscatL1bBufrFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 
 def conv_bufrl1b_generic(data, metadata):
@@ -266,7 +298,7 @@ def conv_bufrl1b_generic(data, metadata):
                                     data.pop(f[2]))).T.astype(new_dtype)
         if nan_val is not None:
             valid = data[new_name] != nan_val
-            data[new_name][~valid] = float32_nan
+            data[new_name][~valid] = nan_val_dict[new_dtype]
             data[new_name][valid] *= s
 
     if data['node_num'].max() == 82:
@@ -289,12 +321,12 @@ def conv_bufrl1b_generic(data, metadata):
     return data
 
 
-class AscatL2BufrFile():
+class AscatL2BufrFile(AscatFile):
     """
     Read ASCAT Level 2 file in BUFR format.
     """
 
-    def __init__(self, filename):
+    def __init__(self, filename, **kwargs):
         """
         Initialize AscatL2BufrFile.
 
@@ -303,10 +335,11 @@ class AscatL2BufrFile():
         filename: str
             Filename.
         """
-        if os.path.splitext(filename)[1] == '.gz':
-            self.filename = tmp_unzip(filename)
-        else:
-            self.filename = filename
+        super().__init__(filename, **kwargs)
+
+        for i, fname in enumerate(self.filenames):
+            if os.path.splitext(fname)[1] == '.gz':
+                self.filenames[i] = tmp_unzip(fname)
 
         self.msg_name_lookup = {
             4: "Satellite Identifier",
@@ -357,9 +390,9 @@ class AscatL2BufrFile():
             82: "Topographic Complexity",
         }
 
-    def read(self, generic=False, to_xarray=False):
+    def _read(self, filename, generic=False, to_xarray=False):
         """
-        Read ASCAT Level 2 data.
+        Read one ASCAT Level 2 BUFR file.
 
         Parameters
         ----------
@@ -377,7 +410,7 @@ class AscatL2BufrFile():
         metadata : dict
             Metadata.
         """
-        df = pdbufr.read_bufr(self.filename, columns="data", flat=True)
+        df = pdbufr.read_bufr(filename, columns="data", flat=True)
 
         col_rename = {}
         for i, col in enumerate(df.columns.to_list()):
@@ -409,7 +442,7 @@ class AscatL2BufrFile():
         metadata = {}
         metadata['platform_id'] = data['Satellite Identifier'][0].astype(int)
         metadata['orbit_start'] = np.uint32(data['Orbit Number'][0])
-        metadata['filename'] = os.path.basename(self.filename)
+        metadata['filename'] = os.path.basename(filename)
 
         # add/rename/remove fields according to generic format
         if generic:
@@ -431,6 +464,8 @@ class AscatL2BufrFile():
                 coords[cf] = data.pop(cf)
 
             data = xr.Dataset(data, coords=coords, attrs=metadata)
+            if generic:
+                data = mask_dtype_nans(data)
         else:
             # collect dtype info
             dtype = []
@@ -459,9 +494,39 @@ class AscatL2BufrFile():
 
         return data, metadata
 
-    def close(self):
-        pass
+    def _merge(self, data):
+        """
+        Merge data.
 
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : numpy.ndarray or xarray.Dataset
+            Data.
+        """
+        if isinstance(data[0], tuple):
+            data, metadata = zip(*data)
+            if isinstance(data[0], xr.Dataset):
+                data = xr.concat(data,
+                                 dim="obs",
+                                 combine_attrs="drop_conflicts")
+            else:
+                data = np.hstack(data)
+            data = (data, metadata)
+        else:
+            data = np.hstack(data)
+        return data
+
+class AscatL2BufrFileGeneric(AscatL2BufrFile):
+    """
+    The same as AscatL1bBufrFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 def conv_bufrl2_generic(data, metadata):
     """

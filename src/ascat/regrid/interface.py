@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2024, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -35,91 +35,104 @@ from ascat.read_native.xarray_io import get_swath_product_id
 from ascat.read_native.xarray_io import swath_io_catalog
 from ascat.regrid.regrid import regrid_swath_ds
 from ascat.regrid.regrid import retrieve_or_store_grid_lut
-from ascat.regrid.regrid import grid_to_regular_grid
 
 
 def parse_args_swath_regrid(args):
     """
-    Parse command line arguments for regridding an ASCAT swath file to a regular grid.
+    Parse command line arguments for regridding an ASCAT swath file
+    to a regular grid.
+
+    Parameters
+    ----------
+    args : list
+        Command line arguments.
+
+    Returns
+    -------
+    parser : ArgumentParser
+        Argument Parser object.
     """
     parser = argparse.ArgumentParser(
-        description='Regrid an ASCAT swath file to a regular grid'
-    )
-    parser.add_argument('filepath', metavar='FILEPATH', help='Path to the data')
-    parser.add_argument('outpath', metavar='OUTPATH', help='Path to the output data')
+        description="Regrid an ASCAT swath file to a regular grid")
     parser.add_argument(
-        'regrid_deg',
-        metavar='REGRID_DEG',
-        help='Regrid the data to a regular grid with the given spacing in degrees'
-    )
+        "filepath", metavar="FILEPATH", help="Path to file or folder")
     parser.add_argument(
-        '--grid_store',
-        metavar='GRID_STORE',
-        help='Path to a directory for storing grids and lookup tables between them'
-    )
+        "outpath", metavar="OUTPATH", help="Path to the output data")
+    parser.add_argument(
+        "regrid_deg",
+        metavar="REGRID_DEG",
+        type=float,
+        help="Target grid spacing in degrees")
+    parser.add_argument(
+        "--grid_store",
+        metavar="GRID_STORE",
+        help="Path for storing/loading lookup tables")
+    parser.add_argument(
+        "--suffix",
+        metavar="SUFFIX",
+        help="File suffix (default: _REGRID_DEGdeg)")
+
     return parser.parse_args(args)
 
 
 def swath_regrid_main(cli_args):
     """
-    Regrid an ASCAT swath file or directory of swath files to a regular grid and write
-    the results to disk.
+    Regrid an ASCAT swath file or directory of swath files
+    to a regular grid and write the results to disk.
+
+    Parameters
+    ----------
+    cli_args : list
+        Command line arguments.
     """
     args = parse_args_swath_regrid(cli_args)
     filepath = Path(args.filepath)
+    trg_grid_size = args.regrid_deg
+
     outpath = Path(args.outpath)
-    new_grid_size = float(args.regrid_deg)
-    new_grid = None
+    outpath.parent.mkdir(parents=True, exist_ok=True)
+
+    if args.suffix:
+        suffix = args.suffix
+    else:
+        suffix = f"_{args.regrid_deg}deg"
 
     if filepath.is_dir():
         files = list(filepath.glob("**/*.nc"))
     elif filepath.is_file() and filepath.suffix == ".nc":
         files = [filepath]
     else:
-        files = None
-
-    if files is None:
-        raise ValueError("No .nc files found at the provided filepath.")
+        raise RuntimeError("No files found at the provided filepath")
 
     first_file = files[0]
-    product = swath_io_catalog[get_swath_product_id(str(first_file.name))]
-    old_grid = product.grid
-    old_grid_size = product.grid_sampling_km
 
-    if args.grid_store:
-        grid_store = args.grid_store
-    else:
-        grid_store = None
+    product_id = get_swath_product_id(str(first_file.name))
 
-    for file in files:
-        if new_grid is None and grid_store is None:
-            new_grid, _, new_grid_lut = grid_to_regular_grid(
-                old_grid,
-                new_grid_size
-            )
-        elif new_grid is None:
-            old_grid_id = f"fib_grid_{old_grid_size}km"
-            new_grid_id = f"reg_grid_{args.regrid_deg}deg"
-            new_grid, _, new_grid_lut = retrieve_or_store_grid_lut(
-                grid_store,
-                old_grid,
-                old_grid_id,
-                new_grid_id,
-                new_grid_size
-            )
-        swath_ds = xr.open_dataset(file, decode_cf=False, mask_and_scale=False)
-        regridded_ds = regrid_swath_ds(swath_ds, new_grid, new_grid_lut)
+    if product_id is None:
+        raise RuntimeError("Product identifier unknown")
 
-        # figure out directories between filepath and file, if any
-        relative_path = file.relative_to(filepath)
-        if relative_path != Path("."):
-            outfile = outpath / relative_path
-            outfile.parent.mkdir(parents=True, exist_ok=True)
-        else:
-            outfile = outpath / file.name
-        regridded_ds.to_netcdf(outfile)
+    product = swath_io_catalog[product_id]
+    src_grid = product.grid
+    src_grid_size = product.grid_sampling_km
+
+    src_grid_id = f"fib_grid_{src_grid_size}km"
+    trg_grid_id = f"reg_grid_{trg_grid_size}deg"
+
+    trg_grid, grid_lut = retrieve_or_store_grid_lut(
+        src_grid,
+        src_grid_id,
+        trg_grid_id,
+        trg_grid_size,
+        args.grid_store)
+
+    for f in files:
+        outfile = outpath / Path(f.stem + suffix + f.suffix)
+
+        with xr.open_dataset(f, decode_cf=False, mask_and_scale=False) as ds:
+            regrid_ds = regrid_swath_ds(ds, src_grid, trg_grid, grid_lut)
+            regrid_ds.to_netcdf(outfile)
 
 
 def run_swath_regrid():
-    """ Run command line interface for temporal aggregation of ASCAT data. """
+    """Run command line interface for temporal aggregation of ASCAT data."""
     swath_regrid_main(sys.argv[1:])

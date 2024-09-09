@@ -2,14 +2,30 @@
 Changelog
 =========
 
-Version 2.x.x
+Version 2.4.3
+=============
+
+- Fix datatype cast issue
+
+Version 2.4.2
+=============
+
+- Fix typo in flagfield name
+
+Version 2.4.1
+=============
+
+- Add keyword to ignore ASCAT Level 1b flag noise out of limits
+
+Version 2.4.0
 =============
 
 - Update file handling read_period
 - Refactor xarray readers/writers into SwathFileCollection, CellFileCollection,
   and CellFileCollectionStack
 - Add tutorial for xarray readers/writers
-- Add "temporal_swath_agg" console script
+- Add CLI for aggregating ASCAT swath data
+- Add CLI for regridding ASCAT swath data to a regular lat/lon grid
 
 Version 2.3.1
 =============

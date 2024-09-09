@@ -38,10 +38,11 @@ import xarray as xr
 
 from ascat.utils import tmp_unzip
 from ascat.utils import daterange
+from ascat.utils import mask_dtype_nans
+from ascat.utils import uint8_nan
+from ascat.utils import float32_nan
 from ascat.file_handling import ChronFiles
-
-float32_nan = -999999.
-uint8_nan = np.iinfo(np.uint8).max
+from ascat.read_native import AscatFile
 
 
 def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
@@ -164,6 +165,8 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
             coords[cf] = data.pop(cf)
 
         data = xr.Dataset(data, coords=coords, attrs=metadata)
+        if generic:
+            data = mask_dtype_nans(data)
     else:
         ds = np.empty(num_records, dtype=np.dtype(dtype))
         for k, v in data.items():
@@ -172,13 +175,12 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
 
     return data, metadata
 
-
-class AscatL1bNcFile():
+class AscatL1bNcFile(AscatFile):
     """
     Read ASCAT Level 1b file in NetCDF format.
     """
 
-    def __init__(self, filename):
+    def __init__(self, filename, **kwargs):
         """
         Initialize AscatL1bNcFile.
 
@@ -187,14 +189,14 @@ class AscatL1bNcFile():
         filename : str
             Filename.
         """
-        if os.path.splitext(filename)[1] == '.gz':
-            self.filename = tmp_unzip(filename)
-        else:
-            self.filename = filename
+        super().__init__(filename, **kwargs)
+        for i, fname in enumerate(self.filenames):
+            if os.path.splitext(fname)[1] == '.gz':
+                self.filenames[i] = tmp_unzip(fname)
 
-    def read(self, generic=False, to_xarray=False):
+    def _read(self, filename, generic=False, to_xarray=False):
         """
-        Read ASCAT Level 1b data.
+        Read one ASCAT Level 1b NetCDF4 file.
 
         Parameters
         ----------
@@ -228,24 +230,53 @@ class AscatL1bNcFile():
             'f_f', 'f_v', 'f_oa', 'f_sa', 'f_tel', 'f_ref', 'abs_line_number'
         ]
 
-        data, metadata = read_nc(self.filename, generic, to_xarray,
+        data, metadata = read_nc(filename, generic, to_xarray,
                                  skip_fields, gen_fields_lut)
 
         return data, metadata
 
-    def close(self):
+    def _merge(self, data):
         """
-        Close file.
+        Merge data.
+
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            Data.
         """
-        pass
+        if isinstance(data[0], tuple):
+            data, metadata = zip(*data)
+            if isinstance(data[0], xr.Dataset):
+                data = xr.concat(data,
+                                 dim="obs",
+                                 combine_attrs="drop_conflicts")
+            else:
+                data = np.hstack(data)
+            data = (data, metadata)
+        else:
+            data = np.hstack(data)
+
+        return data
+
+class AscatL1bNcFileGeneric(AscatL1bNcFile):
+    """
+    The same as AscatL1bNcFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 
-class AscatL2NcFile:
+class AscatL2NcFile(AscatFile):
     """
     Read ASCAT Level 2 file in NetCDF format.
     """
 
-    def __init__(self, filename):
+    def __init__(self, filename, **kwargs):
         """
         Initialize AscatL2NcFile.
 
@@ -254,14 +285,14 @@ class AscatL2NcFile:
         filename : str
             Filename.
         """
-        if os.path.splitext(filename)[1] == '.gz':
-            self.filename = tmp_unzip(filename)
-        else:
-            self.filename = filename
+        super().__init__(filename, **kwargs)
+        for i, fname in enumerate(self.filenames):
+            if os.path.splitext(fname)[1] == '.gz':
+                self.filenames[i] = tmp_unzip(fname)
 
-    def read(self, generic=False, to_xarray=False):
+    def _read(self, filename, generic=False, to_xarray=False):
         """
-        Read ASCAT Level 2 data.
+        Read one ASCAT Level 2 NetCDF4 file.
 
         Parameters
         ----------
@@ -306,35 +337,53 @@ class AscatL2NcFile:
 
         skip_fields = ['abs_line_number']
 
-        data, metadata = read_nc(self.filename, generic, to_xarray,
+        data, metadata = read_nc(filename, generic, to_xarray,
                                  skip_fields, gen_fields_lut)
 
         return data, metadata
 
-    def close(self):
+    def _merge(self, data):
         """
-        Close file.
+        Merge data.
+
+        Parameters
+        ----------
+        data : list
+            List of array.
+
+        Returns
+        -------
+        data : numpy.ndarray
+            Data.
         """
-        pass
+        if isinstance(data[0], tuple):
+            data, metadata = zip(*data)
+            if isinstance(data[0], xr.Dataset):
+                data = xr.concat(data,
+                                 dim="obs",
+                                 combine_attrs="drop_conflicts")
+            else:
+                data = np.hstack(data)
+            data = (data, metadata)
+        else:
+            data = np.hstack(data)
+
+        return data
+
+class AscatL2NcFileGeneric(AscatL2NcFile):
+    """
+    The same as AscatL1bNcFile but with generic=True by default.
+    """
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
+        return super()._read(filename, generic=generic, to_xarray=to_xarray, **kwargs)
 
 
-class AscatSsmNcSwathFile:
+class AscatSsmNcSwathFile(AscatFile):
     """
     Class reading ASCAT Surface Soil Moisture Netcdf swath file.
     """
 
-    def __init__(self, filename):
-        """
-        Initialize object.
-
-        Parameters
-        ----------
-        filename : str
-            Filename.
-        """
-        self.filename = filename
-
-    def read(self, mask_and_scale=None, sel_dt=None):
+    def _read(self, filename, mask_and_scale=None, sel_dt=None):
         """
         Read/load data from NetCDF file.
 
@@ -573,7 +622,9 @@ class AscatSsmNcSwathFileList(ChronFiles):
                 print(f"Error reading: {self.fid.filename}")
 
         if merged_data:
-            merged_data = xr.concat(merged_data, dim="obs")
+            merged_data = xr.concat(merged_data,
+                                    dim="obs",
+                                    combine_attrs="drop_conflicts")
         else:
             merged_data = None
 

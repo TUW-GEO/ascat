@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2024, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -40,11 +40,6 @@ from dask.array import unique as da_unique
 from ascat.read_native.swath_collection import SwathGridFiles
 from ascat.read_native.xarray_io import get_swath_product_id
 from ascat.read_native.xarray_io import dtype_to_nan
-from ascat.regrid.regrid import regrid_global_raster_ds, grid_to_regular_grid
-from ascat.regrid.regrid import retrieve_or_store_grid_lut
-
-
-progress_to_stdout = False
 
 
 class TemporalSwathAggregator:
@@ -57,11 +52,11 @@ class TemporalSwathAggregator:
         end_dt,
         t_delta,
         agg,
-        snow_cover_mask=None,
-        frozen_soil_mask=None,
-        subsurface_scattering_mask=None,
-        regrid_degrees=None,
-        grid_store_path=None,
+        snow_cover_mask=80,
+        frozen_soil_mask=80,
+        subsurface_scattering_mask=5,
+        ssm_sensitivity_mask=1,
+        no_masking=False,
     ):
         """Initialize the class.
 
@@ -74,40 +69,39 @@ class TemporalSwathAggregator:
         end_dt : str
             End date and time (formatted e.g. 2020-02-01T00:00:00).
         t_delta : str
-            Time period for aggregation (e.g. 1D, 1W, 1M, 1Y, 2D, 3M, 4Y, etc.).
+            Time period for aggregation (e.g. 1D, 1W, 1M, 1Y, 3M, 4Y, etc.).
         agg : str
-            Aggregation.
+            Aggregation method (e.g. mean, median, std).
         snow_cover_mask : int, optional
             Snow cover probability value above which to mask the source data.
         frozen_soil_mask : int, optional
             Frozen soil probability value above which to mask the source data.
         subsurface_scattering_mask : int, optional
-            Subsurface scattering probability value above which to mask the source data.
-        regrid_degrees : int, optional
-            Degrees defining the size of a regular grid to regrid the data to.
-        grid_store_path : str, optional
-            Path to store the grid lookup tables and new grids for easy retrieval.
+            Subsurface scattering probability value above which to mask
+            the source data.
+        ssm_sensitivity_mask : float, optional
+            Soil moisture sensitivity value above which to mask
+            the source data.
+        no_masking : boolean, optional
+            Ignore all masks (default: False).
         """
         self.filepath = filepath
-        self.start_dt = datetime.datetime.strptime(start_dt, "%Y-%m-%dT%H:%M:%S")
-        self.end_dt = datetime.datetime.strptime(end_dt, "%Y-%m-%dT%H:%M:%S")
+
+        fmt = "%Y-%m-%dT%H:%M:%S"
+        self.start_dt = datetime.datetime.strptime(start_dt, fmt)
+        self.end_dt = datetime.datetime.strptime(end_dt, fmt)
         self.timedelta = pd.Timedelta(t_delta)
-        if agg in [
-            "mean",
-            "median",
-            "mode",
-            "std",
-            "min",
-            "max",
-            "argmin",
-            "argmax",
-            "quantile",
-            "first",
-            "last",
-        ]:
+        self.no_masking = no_masking
+
+        agg_methods = [
+            "mean", "median", "mode", "std", "min", "max", "argmin", "argmax",
+            "quantile", "first", "last"
+        ]
+
+        if agg in agg_methods:
             agg = "nan" + agg
+
         self.agg = agg
-        self.regrid_degrees = regrid_degrees
 
         # assumes ONLY swath files are in the folder
         first_fname = str(next(Path(filepath).rglob("*.nc")).name)
@@ -130,17 +124,11 @@ class TemporalSwathAggregator:
             },
         }
         self.mask_probs = {
-            "snow_cover_probability": (
-                80 if snow_cover_mask is None else snow_cover_mask
-            ),
-            "frozen_soil_probability": (
-                80 if frozen_soil_mask is None else frozen_soil_mask
-            ),
-            "subsurface_scattering_probability": (
-                90 if subsurface_scattering_mask is None else subsurface_scattering_mask
-            ),
+            "snow_cover_probability": snow_cover_mask,
+            "frozen_soil_probability": frozen_soil_mask,
+            "subsurface_scattering_probability": subsurface_scattering_mask,
+            "surface_soil_moisture_sensitivity": ssm_sensitivity_mask,
         }
-        self.grid_store_path = None or grid_store_path
 
     def _read_data(self):
         if progress_to_stdout:
@@ -157,41 +145,60 @@ class TemporalSwathAggregator:
         return ds
 
     def _create_output_encoding(self):
+        """Create NetCDF encoding."""
+
         output_encoding = {
-            "lat": {"dtype": np.dtype("int32"),
-                    "scale_factor": 1e-6,
-                    "zlib": True,
-                    "complevel": 4,
-                    "_FillValue": dtype_to_nan[np.dtype("int32")]},
-            "lon": {"dtype": np.dtype("int32"),
-                    "scale_factor": 1e-6,
-                    "zlib": True,
-                    "complevel": 4,
-                    "_FillValue": dtype_to_nan[np.dtype("int32")]},
-            "time": {"dtype": np.dtype("float64"),
-                     "zlib": True,
-                     "complevel": 4,
-                     "_FillValue": dtype_to_nan[np.dtype("float64")]},
+            "latitude": {
+                "dtype": np.dtype("int32"),
+                "scale_factor": 1e-6,
+                "zlib": True,
+                "complevel": 4,
+                "_FillValue": dtype_to_nan[np.dtype("int32")],
+                "missing_value": dtype_to_nan[np.dtype("int32")],
+            },
+            "longitude": {
+                "dtype": np.dtype("int32"),
+                "scale_factor": 1e-6,
+                "zlib": True,
+                "complevel": 4,
+                "_FillValue": dtype_to_nan[np.dtype("int32")],
+                "missing_value": dtype_to_nan[np.dtype("int32")],
+            },
+            "time": {
+                "dtype": np.dtype("float64"),
+                "zlib": True,
+                "complevel": 4,
+                "_FillValue": 0,
+                "missing_value": 0,
+            },
         }
+
         for var in self.agg_vars:
             if var in output_encoding:
                 continue
+
             output_encoding[var] = {
                 "dtype": self.agg_vars[var]["dtype"],
                 "scale_factor": self.agg_vars[var]["scale_factor"],
                 "zlib": True,
                 "complevel": 4,
                 "_FillValue": dtype_to_nan[self.agg_vars[var]["dtype"]],
+                "missing_value": dtype_to_nan[self.agg_vars[var]["dtype"]],
             }
+
         return output_encoding
 
-    def write_time_steps(self, out_dir):
-        """Loop through time steps and write them to file."""
+    def write_time_steps(self, outpath):
+        """
+        Loop through time steps and write them to file.
+
+        Parameters
+        ----------
+        outpath : str
+            Output path.
+        """
         product_id = self.product.lower().replace("_", "-")
-        if self.regrid_degrees is None:
-            grid_sampling = str(self.collection.grid_sampling_km) + "km"
-        else:
-            grid_sampling = str(self.regrid_degrees) + "deg"
+        grid_sampling = str(self.collection.ioclass.grid_sampling_km) + "km"
 
         if self.agg is not None:
             datasets = self.get_aggregated_time_steps()
@@ -200,41 +207,43 @@ class TemporalSwathAggregator:
             datasets = self.get_time_steps()
             agg_str = "_data"
 
+        fmt = "%Y%m%d%H%M%S"
+
         paths = []
         for ds in datasets:
             step_start_str = (
-                np.datetime64(ds.attrs["start_time"])
-                .astype(datetime.datetime)
-                .strftime("%Y%m%d%H%M%S")
-            )
+                np.datetime64(ds.attrs["start_time"]).astype(
+                    datetime.datetime).strftime(fmt))
             step_end_str = (
-                np.datetime64(ds.attrs["end_time"])
-                .astype(datetime.datetime)
-                .strftime("%Y%m%d%H%M%S")
-            )
-            out_name = (
-                f"ascat"
-                f"_{product_id}"
-                f"_{grid_sampling}"
-                f"{agg_str}"
-                f"_{step_start_str}"
-                f"_{step_end_str}.nc"
-            )
-            paths.append(Path(out_dir) / out_name)
+                np.datetime64(ds.attrs["end_time"]).astype(
+                    datetime.datetime).strftime(fmt))
 
-        if progress_to_stdout:
-            print("saving datasets...", end="\r")
+            out_name = (f"ascat"
+                        f"_{product_id}"
+                        f"_{grid_sampling}"
+                        f"{agg_str}"
+                        f"_{step_start_str}"
+                        f"_{step_end_str}.nc")
+
+            paths.append(Path(outpath) / out_name)
+
+        print("saving datasets...", end="\r")
 
         output_encoding = self._create_output_encoding()
         xr.save_mfdataset(datasets, paths, encoding=output_encoding)
         print("complete                     ")
 
+        return paths
+
     def get_time_steps(self):
-        """Loop through time steps of the range, return the merged data for each unmodified."""
+        """
+        Loop through time steps of the range, return the merged data
+        for each unmodified.
+        """
         time_steps = pd.date_range(
-            start=self.start_dt, end=self.end_dt, freq=self.timedelta
-        )
+            start=self.start_dt, end=self.end_dt, freq=self.timedelta)
         datasets = []
+
         if self.data is not None:
             # I don't know why this case would exist, but if it does...
             ds = self.data
@@ -242,16 +251,19 @@ class TemporalSwathAggregator:
                 step_start = timestep
                 step_end = timestep + self.timedelta - pd.Timedelta("1s")
                 ds_step = ds.sel(time=slice(step_start, step_end))
-                ds_step.attrs["start_time"] = np.datetime64(step_start).astype(str)
+                ds_step.attrs["start_time"] = np.datetime64(step_start).astype(
+                    str)
                 ds_step.attrs["end_time"] = np.datetime64(step_end).astype(str)
                 datasets.append(ds_step)
+
         if self.data is None:
             for timestep in time_steps:
                 step_start = timestep
                 step_end = timestep + self.timedelta
                 ds_step = self.collection.extract(step_start, step_end)
                 step_end = step_end - pd.Timedelta("1s")
-                ds_step.attrs["start_time"] = np.datetime64(step_start).astype(str)
+                ds_step.attrs["start_time"] = np.datetime64(step_start).astype(
+                    str)
                 ds_step.attrs["end_time"] = np.datetime64(step_end).astype(str)
                 datasets.append(ds_step)
 
@@ -261,41 +273,40 @@ class TemporalSwathAggregator:
         """Loop through data in time steps, aggregating it over time."""
         if self.data is None:
             self._read_data()
+
         ds = self.data
-        present_agg_vars = [var for var in self.agg_vars if var in ds.variables]
 
-        if progress_to_stdout:
-            print("masking data...", end="\r")
+        present_agg_vars = [
+            var for var in self.agg_vars if var in ds.variables
+        ]
 
-        # mask ds where "surface_flag" is 1, "snow_cover_probability" is > 90,
-        # or "frozen_soil_probability" is > 90
-        # (or whatever values the user has defined)
-        global_mask = (
-            (ds.surface_flag != 0)
-            | (
-                ds.subsurface_scattering_probability
-                > self.mask_probs["subsurface_scattering_probability"]
-            )
-        )
-        variable_masks = {
-            "surface_soil_moisture": (
-                (ds["frozen_soil_probability"] > self.mask_probs["frozen_soil_probability"])
-                | (ds["snow_cover_probability"] > self.mask_probs["snow_cover_probability"])
-            ),
-        }
+        print("masking data...", end="\r")
+
+        global_mask = (ds.surface_flag != 0)
 
         ds = ds.where(~global_mask, drop=False)
 
-        for var, var_mask in variable_masks.items():
-            ds[var] = ds[var].where(~var_mask, drop=False)
+        if not self.no_masking:
+            variable_masks = {
+                "surface_soil_moisture": (
+                    (ds["frozen_soil_probability"]
+                    > self.mask_probs["frozen_soil_probability"])
+                    | (ds["snow_cover_probability"]
+                    > self.mask_probs["snow_cover_probability"])
+                    | (ds["subsurface_scattering_probability"]
+                    > self.mask_probs["subsurface_scattering_probability"])
+                    | (ds["surface_soil_moisture_sensitivity"]
+                    < self.mask_probs["surface_soil_moisture_sensitivity"])),
+            }
 
-        if progress_to_stdout:
-            print("grouping data...           ")
+            for var, var_mask in variable_masks.items():
+                ds[var] = ds[var].where(~var_mask, drop=False)
+
+        print("grouping data...           ")
 
         # discretize time into integer-labeled steps according to our desired frequency
         ds["time_steps"] = (
-            ds.time - np.datetime64(self.start_dt, "ns")
-        ) // self.timedelta
+            ds.time - np.datetime64(self.start_dt, "ns")) // self.timedelta
 
         # get unique time_step and location_id values so we can tell xarray_reduce
         # what to expect.
@@ -303,45 +314,24 @@ class TemporalSwathAggregator:
         expected_location_ids = da_unique(ds["location_id"].data).compute()
 
         # remove NaN from the expected location ids (this was introduced by the masking)
-        expected_location_ids = expected_location_ids[~np.isnan(expected_location_ids)]
+        expected_location_ids = expected_location_ids[
+            ~np.isnan(expected_location_ids)]
 
         # group the data by time_steps and location_id and aggregate it
-        grouped_ds = xarray_reduce(ds[present_agg_vars],
-                                   ds["time_steps"],
-                                   ds["location_id"],
-                                   expected_groups=(expected_time_steps,
-                                                    expected_location_ids),
-                                   func=self.agg)
+        grouped_ds = xarray_reduce(
+            ds[present_agg_vars],
+            ds["time_steps"],
+            ds["location_id"],
+            expected_groups=(expected_time_steps, expected_location_ids),
+            func=self.agg)
 
         # convert the location_id back to an integer
         grouped_ds["location_id"] = grouped_ds["location_id"].astype(int)
 
-        if self.regrid_degrees is not None:
-            if progress_to_stdout:
-                print("regridding             ")
-            grid_store_path = self.grid_store_path
-            if grid_store_path is not None:
-                old_grid_id = f"fib_grid_{self.collection.grid_sampling_km}km"
-                new_grid_id = f"reg_grid_{self.regrid_degrees}deg"
-                new_grid, old_grid_lut, _ = retrieve_or_store_grid_lut(
-                    grid_store_path,
-                    self.grid,
-                    old_grid_id,
-                    new_grid_id,
-                    self.regrid_degrees
-                )
-            else:
-                new_grid, old_grid_lut, _ = grid_to_regular_grid(
-                    self.grid, self.regrid_degrees
-                )
-            grouped_ds = regrid_global_raster_ds(grouped_ds, new_grid, old_grid_lut)
-
-        else:
-            lons, lats = self.grid.gpi2lonlat(grouped_ds.location_id.values)
-            grouped_ds["lon"] = ("location_id", lons)
-            grouped_ds["lat"] = ("location_id", lats)
-            grouped_ds = grouped_ds.set_coords(["lon", "lat"])
-
+        lons, lats = self.grid.gpi2lonlat(grouped_ds.location_id.values)
+        grouped_ds["longitude"] = ("location_id", lons)
+        grouped_ds["latitude"] = ("location_id", lats)
+        grouped_ds = grouped_ds.set_coords(["longitude", "latitude"])
         grouped_ds = grouped_ds.chunk({"time_steps": 1})
 
         # Compute the results, write to a temporary directory, and then read it back in.
@@ -350,8 +340,7 @@ class TemporalSwathAggregator:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "ascat.nc"
-            if progress_to_stdout:
-                print("computing results...             ")
+            print("computing results...             ")
             grouped_ds.to_netcdf(temp_path)
             grouped_ds.close()
             grouped_ds = xr.open_dataset(temp_path)
@@ -359,19 +348,19 @@ class TemporalSwathAggregator:
         groups = []
         for timestep, group in grouped_ds.groupby("time_steps", squeeze=False):
             group = group.squeeze("time_steps")
-            if progress_to_stdout:
-                print(
-                    f"writing time step {timestep + 1}/{len(grouped_ds['time_steps'])}...      ",
-                    end="\r",
-                )
+            print(
+                f"writing time step {timestep + 1}/{len(grouped_ds['time_steps'])}...      ",
+                end="\r",
+            )
             step_start = self.start_dt + self.timedelta * timestep
             step_end = (
-                self.start_dt + self.timedelta * (timestep + 1) - pd.Timedelta("1s")
-            )
+                self.start_dt + self.timedelta * (timestep + 1) -
+                pd.Timedelta("1s"))
             group.attrs["start_time"] = np.datetime64(step_start).astype(str)
             group.attrs["end_time"] = np.datetime64(step_end).astype(str)
             group["time_steps"] = np.datetime64(step_start, "ns")
             group = group.rename({"time_steps": "time"})
             group = self._set_metadata(group)
             groups.append(group)
+
         return groups

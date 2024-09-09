@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien, Department of Geodesy and Geoinformation
+# Copyright (c) 2024, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -27,63 +27,82 @@
 
 import sys
 import argparse
+from pathlib import Path
 
 import ascat.aggregate.aggregators as aggs
-
-aggs.progress_to_stdout = True
+from ascat.regrid.interface import swath_regrid_main
 
 
 def parse_args_temporal_swath_agg(args):
     parser = argparse.ArgumentParser(
-        description='Calculate aggregates of ASCAT swath data over a given time period'
-    )
-    parser.add_argument('filepath', metavar='FILEPATH', help='Path to the data')
-    parser.add_argument('outpath', metavar='OUTPATH', help='Path to the output data')
+        description=("Generate aggregates of ASCAT swath data over "
+                     "a given time period"))
     parser.add_argument(
-        '--start_dt',
-        metavar='START_DT',
-        help='Start date and time (formatted e.g. 2020-01-01T00:00:00)'
-    )
+        "filepath", metavar="FILEPATH", help="Path to the data")
     parser.add_argument(
-        '--end_dt',
-        metavar='END_DT',
-        help='End date and time (formatted e.g. 2020-02-01T00:00:00)'
-    )
+        "outpath", metavar="OUTPATH", help="Path to the output data")
     parser.add_argument(
-        '--t_delta',
-        metavar='T_DELTA',
-        help='Time period for aggregation (e.g. 1D, 1W, 1M, 1Y, 2D, 3M, 4Y, etc.)'
-    )
+        "--start_dt",
+        metavar="START_DT",
+        help="Start datetime (formatted e.g. 2020-01-01T00:00:00)")
     parser.add_argument(
-        '--agg',
-        metavar='AGG',
-        help='Aggregation'
-    )
+        "--end_dt",
+        metavar="END_DT",
+        help="End datetime (formatted e.g. 2020-02-01T00:00:00)")
     parser.add_argument(
-        '--snow_cover_mask',
-        metavar='SNOW_MASK',
-        help='Snow cover probability value above which to mask the source data'
-    )
+        "--t_delta",
+        metavar="T_DELTA",
+        help="Time period for aggregation (e.g. 1D, 1W, 1M, 1Y, 2D, etc.)")
+    parser.add_argument("--agg", metavar="AGG", help="Aggregation")
     parser.add_argument(
-        '--frozen_soil_mask',
-        metavar='FROZEN_MASK',
-        help='Frozen soil probability value above which to mask the source data'
-    )
+        "--snow_cover_mask",
+        metavar="SNOW_COVER_MASK",
+        type=int,
+        default=90,
+        help=("Snow cover probability (0-100 %) value above which "
+              "to mask the source data (default: 90 %)"))
     parser.add_argument(
-        '--subsurface_scattering_mask',
-        metavar='SUBSCAT_MASK',
-        help='Subsurface scattering probability value above which to mask the source data'
-    )
+        "--frozen_soil_mask",
+        metavar="FROZEN_SOIL_MASK",
+        type=int,
+        default=90,
+        help=("Frozen soil probability (0-100 %) value above which "
+              "to mask the source data (default: 90 %)"))
     parser.add_argument(
-        '--regrid',
-        metavar='REGRID_DEG',
-        help='Regrid the data to a regular grid with the given spacing in degrees'
-    )
+        "--subsurface_scattering_mask",
+        metavar="SUBSURFACE_SCATTERING_MASK",
+        type=int,
+        default=10,
+        help=("Subsurface scattering probability (0-100 %) value above which "
+              "to mask the source data (default: 10 %)"))
     parser.add_argument(
-        '--grid_store',
-        metavar='GRID_STORE',
-        help='Path to a directory for storing grids and lookup tables between them'
-    )
+        "--ssm_sensitivity_mask",
+        metavar="SSM_SENSITIVITY_MASK",
+        type=float,
+        default=1.0,
+        help=("Surface soil moisture sensitivity (in dB) value below which "
+              "to mask the source data (default: 1 dB)"))
+    parser.add_argument(
+        "--no_masking",
+        action='store_const',
+        const=True,
+        default=False,
+        help="Ignore all masks")
+    parser.add_argument(
+        "--regrid",
+        metavar="REGRID_DEG",
+        type=float,
+        help=("Regrid the data to a regular grid with the given "
+              " spacing in degrees"))
+    parser.add_argument(
+        "--grid_store",
+        metavar="GRID_STORE",
+        help=("Path to a directory for storing grids and "
+              "lookup tables between them"))
+    parser.add_argument(
+        "--suffix",
+        metavar="SUFFIX",
+        help="File suffix (default: _REGRID_DEGdeg)")
 
     return parser.parse_args(args)
 
@@ -98,30 +117,26 @@ def temporal_swath_agg_main(cli_args):
         Command line arguments.
     """
     args = parse_args_temporal_swath_agg(cli_args)
-    int_args = ["snow_cover_mask", "frozen_soil_mask", "subsurface_scattering_mask"]
-    for arg in int_args:
-        if getattr(args, arg) is not None:
-            setattr(args, arg, int(getattr(args, arg)))
-
-    float_args = ["regrid"]
-    for arg in float_args:
-        if getattr(args, arg) is not None:
-            setattr(args, arg, float(getattr(args, arg)))
 
     transf = aggs.TemporalSwathAggregator(
-        args.filepath,
-        args.start_dt,
-        args.end_dt,
-        args.t_delta,
-        args.agg,
-        args.snow_cover_mask,
-        args.frozen_soil_mask,
-        args.subsurface_scattering_mask,
-        args.regrid,
-        args.grid_store
-    )
+        args.filepath, args.start_dt, args.end_dt, args.t_delta, args.agg,
+        args.snow_cover_mask, args.frozen_soil_mask,
+        args.subsurface_scattering_mask, args.ssm_sensitivity_mask,
+        args.no_masking)
 
-    transf.write_time_steps(args.outpath)
+    outpath = Path(args.outpath)
+    outpath.mkdir(parents=True, exist_ok=True)
+
+    filenames = transf.write_time_steps(outpath)
+
+    if args.regrid is not None:
+        for filename in filenames:
+            regrid_args = [str(filename), str(outpath), str(args.regrid)]
+            if args.grid_store is not None:
+                regrid_args.extend(["--grid_store", args.grid_store])
+            if args.suffix is not None:
+                regrid_args.extend(["--suffix", args.suffix])
+            swath_regrid_main(regrid_args)
 
 
 def run_temporal_swath_agg():
