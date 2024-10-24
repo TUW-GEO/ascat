@@ -158,7 +158,7 @@ class TestIndexedRaggedAccessor(unittest.TestCase):
         ra = RaggedArrayFiles(cell_path, "h129")
         bbox=(58, 70, -179, -170)
 
-        merged_ds = ra.extract(
+        merged_ds = ra.read(
             # bbox=bbox,
             cell=[30, 31],
             # date_range=(np.datetime64(datetime(2021, 1, 15)),
@@ -182,7 +182,7 @@ class TestIndexedRaggedAccessor(unittest.TestCase):
         ra = RaggedArrayFiles(cell_path, "h129")
         bbox=(58, 70, -179, -170)
 
-        merged_ds = ra.extract(
+        merged_ds = ra.read(
             # bbox=bbox,
             cell=[30, 31],
             # date_range=(np.datetime64(datetime(2021, 1, 15)),
@@ -222,5 +222,3 @@ class TestOrthoMultiAccessor(unittest.TestCase):
         ds.attrs["grid_name"] = cell_io_catalog["H129"].grid_name
         ds.orthomulti
         return
-
-

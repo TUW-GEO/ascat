@@ -18,7 +18,8 @@ import ascat.read_native.generate_test_data as gtd
 from ascat.read_native.product_info import register_cell_grid_reader
 from ascat.read_native.cell_collection import grid_cache
 
-from ascat.read_native.cell_collection import RaggedArrayCell
+from ascat.read_native.cell_collection import RaggedArrayCellFile
+from ascat.read_native.cell_collection import IndexedRaggedArrayFile
 from ascat.read_native.cell_collection import CellGridFiles
 from ascat.read_native.cell_collection import RaggedArrayFiles
 from ascat.read_native.cell_collection import OrthoMultiCell
@@ -45,7 +46,127 @@ def gen_dummy_cellfiles(dir, sat_name=None):
     add_sat_id(gtd.contiguous_ragged_ds_2587, sat_name).to_netcdf(contiguous_dir / "2587.nc")
     add_sat_id(gtd.indexed_ragged_ds_2587, sat_name).to_netcdf(indexed_dir / "2587.nc")
 
-class TestRaggedArrayCell(unittest.TestCase):
+
+
+import unittest
+import numpy as np
+import xarray as xr
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+from ascat.read_native.cell_collection import RaggedArrayCellFile
+
+# class TestRaggedArrayCellFile(unittest.TestCase):
+
+#     def setUp(self):
+#         self.test_file = 'test_file.nc'
+#         self.test_ds = xr.Dataset({
+#             'location_id': ('locations', [1, 2, 3]),
+#             'lon': ('locations', [10, 20, 30]),
+#             'lat': ('locations', [40, 50, 60]),
+#             'alt': ('locations', [np.nan, np.nan, np.nan]),
+#             'time': ('obs', [np.datetime64('2020-01-01'), np.datetime64('2020-01-02')]),
+#             'data': ('obs', [1.1, 2.2]),
+#             'locationIndex': ('obs', [0, 1])
+#         })
+
+#     def test_read(self):
+#         with patch('xarray.open_dataset', return_value=self.test_ds):
+#             raf = RaggedArrayCellFile([self.test_file])
+#             result = raf.read()
+#             self.assertIsInstance(result, xr.Dataset)
+#             self.assertEqual(len(result['obs']), 2)
+
+#     def test_read_with_date_range(self):
+#         with patch('xarray.open_dataset', return_value=self.test_ds):
+#             raf = RaggedArrayCellFile([self.test_file])
+#             result = raf.read(date_range=(np.datetime64('2020-01-01'), np.datetime64('2020-01-02')))
+#             self.assertIsInstance(result, xr.Dataset)
+#             self.assertEqual(len(result['obs']), 2)
+
+#     def test_read_with_valid_gpis(self):
+#         with patch('xarray.open_dataset', return_value=self.test_ds):
+#             raf = RaggedArrayCellFile([self.test_file])
+#             result = raf.read(valid_gpis=[1, 2])
+#             self.assertIsInstance(result, xr.Dataset)
+#             self.assertEqual(len(result['locations']), 2)
+
+#     def test_ensure_indexed(self):
+#         contiguous_ds = xr.Dataset({
+#             'location_id': ('locations', [1, 2, 3]),
+#             'lon': ('locations', [10, 20, 30]),
+#             'lat': ('locations', [40, 50, 60]),
+#             'alt': ('locations', [np.nan, np.nan, np.nan]),
+#             'row_size': ('locations', [2, 1, 0]),
+#             'data': ('obs', [1.1, 2.2, 3.3]),
+#             'time': ('obs', [np.datetime64('2020-01-01'), np.datetime64('2020-01-02'), np.datetime64('2020-01-03')]),
+#         })
+#         raf = RaggedArrayCellFile([self.test_file])
+#         result = raf._ensure_indexed(contiguous_ds)
+#         self.assertIn('locationIndex', result.data_vars)
+#         self.assertNotIn('row_size', result.data_vars)
+
+#     def test_ensure_contiguous(self):
+#         indexed_ds = xr.Dataset({
+#             'location_id': ('locations', [1, 2, 3]),
+#             'lon': ('locations', [10, 20, 30]),
+#             'lat': ('locations', [40, 50, 60]),
+#             'alt': ('locations', [np.nan, np.nan, np.nan]),
+#             'locationIndex': ('obs', [0, 1, 1]),
+#             'data': ('obs', [1.1, 2.2, 3.3]),
+#             'time': ('obs', [np.datetime64('2020-01-01'), np.datetime64('2020-01-02'), np.datetime64('2020-01-03')])
+#         })
+#         result = RaggedArrayCellFile._ensure_contiguous(indexed_ds)
+#         self.assertIn('row_size', result.data_vars)
+#         self.assertNotIn('locationIndex', result.data_vars)
+
+#     def test_merge(self):
+#         ds1 = xr.Dataset({
+#             'location_id': ('locations', [1, 2]),
+#             'lon': ('locations', [10, 20]),
+#             'lat': ('locations', [40, 50]),
+#             'alt': ('locations', [np.nan, np.nan]),
+#             'data': ('obs', [1.1, 2.2]),
+#             'locationIndex': ('obs', [0, 1]),
+#             'time': ('obs', [np.datetime64('2020-01-01'), np.datetime64('2020-01-02')]),
+#         })
+#         ds2 = xr.Dataset({
+#             'location_id': ('locations', [2, 3]),
+#             'lon': ('locations', [20, 30]),
+#             'lat': ('locations', [50, 60]),
+#             'alt': ('locations', [np.nan, np.nan]),
+#             'data': ('obs', [3.3, 4.4]),
+#             'locationIndex': ('obs', [0, 1]),
+#             'time': ('obs', [np.datetime64('2020-01-02'), np.datetime64('2020-01-03')]),
+#         })
+#         raf = RaggedArrayCellFile([self.test_file])
+#         result = raf._merge([ds1, ds2])
+#         self.assertEqual(len(result['locations']), 3)
+#         self.assertEqual(len(result['obs']), 4)
+
+#     def test_trim_to_gpis(self):
+#         raf = RaggedArrayCellFile([self.test_file])
+#         result = raf._trim_to_gpis(self.test_ds, gpis=[1, 2])
+#         self.assertEqual(len(result['locations']), 2)
+
+#     def test_write(self):
+#         raf = RaggedArrayCellFile([self.test_file])
+#         raf.ds = self.test_ds
+#         with patch('xarray.Dataset.to_netcdf') as mock_to_netcdf:
+#             raf.write('output.nc')
+#             mock_to_netcdf.assert_called_once()
+
+#     def test_write_append_mode(self):
+#         raf = RaggedArrayCellFile([self.test_file])
+#         raf.ds = self.test_ds
+#         raf.write('output.nc')
+#         with patch('ascat.utils.append_to_netcdf') as mock_append:
+#             raf.write('output.nc', mode='a', ra_type='indexed')
+#             mock_append.assert_called_once()
+
+
+
+
+class TestRaggedArrayCellFile(unittest.TestCase):
     """
     Test the merge function
     """
@@ -61,19 +182,15 @@ class TestRaggedArrayCell(unittest.TestCase):
 
     def test_init(self):
         contiguous_ragged_path = self.tempdir_path/ "contiguous" / "2588_contiguous_ragged.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
-        self.assertEqual(ra.filename, contiguous_ragged_path)
-        self.assertIsNone(ra.ds)
-
-        ra_chunked = RaggedArrayCell(contiguous_ragged_path, chunks={"locations": 2})
-        self.assertEqual(ra_chunked.filename, contiguous_ragged_path)
-        self.assertIsNone(ra_chunked.ds)
-        self.assertEqual(ra_chunked.chunks, {"locations": 2})
+        ra = RaggedArrayCellFile(contiguous_ragged_path)
+        self.assertEqual(ra.filenames[0], contiguous_ragged_path)
+        # self.assertIsNone(ra.ds)
 
     def test_read(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
-        ra.read()
+        ra = RaggedArrayCellFile(contiguous_ragged_path)
+        ra.read(chunks={"obs": 3})
+        print(ra.ds)
         self.assertIsInstance(ra.ds, xr.Dataset)
         self.assertIn("lon", ra.ds)
         self.assertIn("lat", ra.ds)
@@ -85,7 +202,7 @@ class TestRaggedArrayCell(unittest.TestCase):
 
     def test__ensure_obs(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
+        ra = RaggedArrayCellFile(contiguous_ragged_path)
         ds = xr.open_dataset(contiguous_ragged_path)
         # original_dim = ds["time"]
         self.assertNotIn("obs", ds.dims)
@@ -98,13 +215,13 @@ class TestRaggedArrayCell(unittest.TestCase):
 
     def test__indexed_or_contiguous(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
+        ra = RaggedArrayCellFile(contiguous_ragged_path)
         ds = xr.open_dataset(contiguous_ragged_path)
         self.assertEqual(ra._indexed_or_contiguous(ds), "contiguous")
 
     def test__ensure_indexed(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
+        ra = RaggedArrayCellFile(contiguous_ragged_path)
         ds = xr.open_dataset(contiguous_ragged_path)
         self.assertNotIn("locationIndex", ds)
         self.assertIn("row_size", ds)
@@ -123,7 +240,7 @@ class TestRaggedArrayCell(unittest.TestCase):
 
     def test__ensure_contiguous(self):
         indexed_ragged_path = self.tempdir_path / "indexed" / "2588.nc"
-        ra = RaggedArrayCell(indexed_ragged_path)
+        ra = RaggedArrayCellFile(indexed_ragged_path)
         ds = xr.open_dataset(indexed_ragged_path)
         ds = ds.chunk({"time": 1_000_000})
         self.assertIn("locationIndex", ds)
@@ -142,7 +259,7 @@ class TestRaggedArrayCell(unittest.TestCase):
 
     def test__trim_to_gpis(self):
         indexed_ragged_path = self.tempdir_path / "indexed" / "2588.nc"
-        ra = RaggedArrayCell(indexed_ragged_path)
+        ra = RaggedArrayCellFile(indexed_ragged_path)
         ds = xr.open_dataset(indexed_ragged_path)
         ds = ra._ensure_obs(ds)
         ds = ds.chunk({"obs": 1_000_000})
@@ -152,38 +269,9 @@ class TestRaggedArrayCell(unittest.TestCase):
         new_obs_gpis = trimmed_ds["location_id"].values[trimmed_ds["locationIndex"].values]
         np.testing.assert_array_equal(new_obs_gpis, np.repeat(np.array([1549346, 1555912]), [2, 4]))
 
-        # DELETE THIS
-        # real_file = Path("/home/charriso/p14/data-write/RADAR/charriso/sig0_12.5/stack_cell_merged_sig0/metop_a")/"2343.nc"
-        # grid = FibGrid(12.5)
-        # date_range = (np.datetime64("2016-01-01T00:00:00"), np.datetime64("2017-01-01T00:00:00"))
-        # ds2 = RaggedArray(real_file).read()
-        # valid_gpis = list(ds2["location_id"].data[:500].compute())
-        # gpi_lookup = np.zeros(grid.gpis.max()+1, dtype=bool)
-        # gpi_lookup[valid_gpis] = True
-        # print(ds2)
-        # from time import time
-        # start = time()
-        # datetrim = ra._trim_var_range(ds2, "time", *date_range)
-        # print("time to trim dates to a year")
-        # print(time() - start)
-        # start = time()
-        # # gpitrim = ra._trim_to_gpis(ds2, valid_gpis)
-        # gpitrim = ra._trim_to_gpis(ds2, lookup_vector=gpi_lookup)
-        # print(f"time to trim to {len(valid_gpis)} gpis")
-        # print(time() - start)
-        # print(f"time to trimp to {len(valid_gpis)} gpis after trimming to a year")
-        # start = time()
-        # # gpitrim2 = ra._trim_to_gpis(datetrim, valid_gpis)
-        # gpitrim2 = ra._trim_to_gpis(datetrim, lookup_vector=gpi_lookup)
-        # print(time() - start)
-        # print(f"time to trim dates to a year after trimming to {len(valid_gpis)} gpis")
-        # start = time()
-        # datetrim2 = ra._trim_var_range(gpitrim, "time", *date_range)
-        # print(time() - start)
-
     def test__trim_var_range(self):
         indexed_ragged_path = self.tempdir_path / "indexed" / "2588.nc"
-        ra = RaggedArrayCell(indexed_ragged_path)
+        ra = RaggedArrayCellFile(indexed_ragged_path)
         ds = xr.open_dataset(indexed_ragged_path)
         ds = ra._ensure_obs(ds)
         ds = ds.chunk({"obs": 1_000_000})
@@ -196,7 +284,7 @@ class TestRaggedArrayCell(unittest.TestCase):
 
     def test_back_and_forth(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2587.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
+        ra = RaggedArrayCellFile(contiguous_ragged_path)
         orig_ds = xr.open_dataset(contiguous_ragged_path)
         ds = ra._ensure_contiguous(orig_ds)
         xr.testing.assert_equal(orig_ds, ds)
@@ -204,8 +292,8 @@ class TestRaggedArrayCell(unittest.TestCase):
     def test_merge(self):
         fname1 = self.tempdir_path / "contiguous" / "2588.nc"
         fname2 = self.tempdir_path / "contiguous" / "2587.nc"
-        ra1 = RaggedArrayCell(fname1)
-        ra2 = RaggedArrayCell(fname2)
+        ra1 = RaggedArrayCellFile(fname1)
+        ra2 = RaggedArrayCellFile(fname2)
         ra1.read()
         ra2.read()
         merged = ra1.merge([ra1.ds, ra2.ds])
@@ -253,7 +341,7 @@ class TestCellGridFiles(unittest.TestCase):
             return {"cell_id": f"{cell:04d}"}
         return {
             "root_path": root_path,
-            "cls": RaggedArrayCell,
+            "cls": RaggedArrayCellFile,
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
             "grid_name": "Fib12.5",
@@ -279,7 +367,7 @@ class TestCellGridFiles(unittest.TestCase):
         self.assertEqual(contig_collection.fn_read_fmt(2588), {"cell_id": "2588"})
         # self.assertIsNone(contig_collection.sf_read_fmt)
         self.assertEqual(contig_collection.root_path, self.tempdir_path / "contiguous")
-        self.assertEqual(contig_collection.cls, RaggedArrayCell)
+        self.assertEqual(contig_collection.cls, RaggedArrayCellFile)
 
     # def test_read(self):
     #     contig_collection = CellGridFiles(
@@ -367,7 +455,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
         self.assertEqual(contig_collection.fn_read_fmt(2588), {"cell_id": "2588"})
         # self.assertIsNone(contig_collection.sf_read_fmt)
         self.assertEqual(contig_collection.root_path, self.tempdir_path / "contiguous")
-        self.assertEqual(contig_collection.cls, RaggedArrayCell)
+        self.assertEqual(contig_collection.cls, RaggedArrayCellFile)
 
     def test_search(self):
         root_path = self.tempdir_path / "contiguous"
@@ -392,7 +480,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
             root_path,
             product_id="sig0_12.5",
         )
-        real_merged = contig_collection.extract(cell=[2587, 2588])
+        real_merged = contig_collection.read(cell=[2587, 2588])
         self.assertIsInstance(real_merged, xr.Dataset)
 
         root_path = self.tempdir_path
@@ -401,7 +489,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
             product_id="sig0_12.5",
             # all_sats=True,
         )
-        real_merged = allsats_collection.extract(cell=[2587, 2588],
+        real_merged = allsats_collection.read(cell=[2587, 2588],
                                                  fmt_kwargs={"sat": ["[ABC]"]})
         self.assertIsNone(real_merged)
 
@@ -420,8 +508,8 @@ class TestRaggedArrayFiles(unittest.TestCase):
             product_id="sig0_12.5",
         )
 
-        ref_data = indexed_collection.extract().load()
-        converted_data = converted_collection.extract().load()
+        ref_data = indexed_collection.read().load()
+        converted_data = converted_collection.read().load()
 
         xr.testing.assert_equal(ref_data, converted_data)
 
