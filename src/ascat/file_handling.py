@@ -904,7 +904,7 @@ class Filenames:
         """
         raise NotImplementedError
 
-    def write(self, data):
+    def write(self, data, **kwargs):
         """
         Write data to file.
 
@@ -922,11 +922,11 @@ class Filenames:
         if n_filenames == 1:
             filename = self.filenames[0]
             filename.parent.mkdir(parents=True, exist_ok=True)
-            self._write(data, filename)
+            self._write(data, filename, **kwargs)
         # elif n_filenames > 1:
         #     if len(data) == n_filenames:
         #         for f in self.filenames:
-        #             f.parent.mkdir(parents=True, exist_ok=True)
+
         #             self.write(data, f)
 
     def read(self, **kwargs):
