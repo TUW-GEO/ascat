@@ -39,6 +39,7 @@ from pyresample import kd_tree
 from pyresample.geometry import AreaDefinition
 from pyresample.geometry import SwathDefinition
 
+from ascat.file_handling import Filenames
 from ascat.file_handling import ChronFiles
 from ascat.read_native.product_info import grid_cache
 from ascat.read_native.product_info import swath_io_catalog
@@ -46,62 +47,85 @@ from ascat.utils import get_grid_gpis
 from ascat.utils import create_variable_encodings
 
 
-class SwathFile:
-    """
-    Class to read and merge swath files.
-    """
-    def __init__(self, filename, chunks=1_000_000):
-        self.filename = filename
-        self.chunks = chunks
-        self.ds = None
 
-    def read(self, date_range=None, valid_gpis=None, lookup_vector=None, mask_and_scale=True):
+class Swath(Filenames):
+    """
+    Class to read and merge swath files given one or more file paths.
+    """
+    # def __init__(self, filename, chunks=1_000_000):
+    #     self.filename = filename
+    #     self.chunks = chunks
+    #     self.ds = None
+
+    def _read(self, filename, generic=True, preprocessor=None, **xarray_kwargs):
+        """
+        Open one swath file as an xarray.Dataset and preprocess it if necessary.
+
+        Parameters
+        ----------
+        filename : str
+            File to read.
+        generic : bool, optional
+            Not yet implemented.
+        preprocessor : callable, optional
+            Function to preprocess the dataset.
+        xarray_kwargs : dict
+            Additional keyword arguments passed to xarray.open_dataset.
+
+        Returns
+        -------
+        ds : xarray.Dataset
+            Dataset.
+        """
+        ds = xr.open_dataset(
+            filename,
+            engine="netcdf4",
+            **xarray_kwargs,
+        )
+        ds["location_id"] = ds["location_id"].astype(np.int32)
+
+        return ds
+
+    def read(self, mask_and_scale=True, max_mb=None, **kwargs):
         """
         Read the file or a subset of it.
         """
-        ds = xr.open_dataset(
-            self.filename,
-            mask_and_scale=mask_and_scale,
-            engine="netcdf4",
-        )
-        ds["location_id"] = ds["location_id"].astype(np.int32)
-        if date_range is not None:
-            ds = self._trim_var_range(ds, "time", *date_range)
-        if lookup_vector is not None:
-            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
-        elif valid_gpis is not None:
-            ds = self._trim_to_gpis(ds, gpis=valid_gpis)
+        ds = super().read(mask_and_scale=mask_and_scale, **kwargs)
+        # if date_range is not None:
+        #     ds = self._trim_var_range(ds, "time", *date_range)
+        # if lookup_vector is not None:
+        #     ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
+        # elif location_id is not None:
+        #     ds = self._trim_to_gpis(ds, gpis=location_id)
+
+        # # TODO hmmmmmm
         # ds = self._ensure_obs(ds)
 
-        ds = ds.chunk({"obs": self.chunks})
+        return ds
 
-        # should I do it this way or just return the ds without having it be a class attribute?
-        self.ds = ds
-        return self.ds
+    @staticmethod
+    def _nbytes(ds):
+        return ds.nbytes
 
-    def merge(self, data, load=False, processes=None):
-        if not data:
+    def _merge(self, data):
+        """
+        Merge datasets.
+
+        Parameters
+        ----------
+        data : list of xarray.Dataset
+            Datasets to merge.
+
+        Returns
+        -------
+        xarray.Dataset
+            Merged dataset.
+        """
+        if data == []:
             return None
 
-        if processes == 1:
-            ds_to_merge = [self._preprocess(ds, load=load) for ds in data if ds.obs.size > 0]
-        # Parallelize preprocessing
-        else:
-            ctx = mp.get_context("forkserver")
-            with ctx.Pool(processes) as pool:
-                ds_to_merge = pool.starmap(
-                    self._preprocess_wrapper,
-                    [(ds, load) for ds in data if ds.obs.size > 0]
-                )
-
-            # Filter out None results (if any)
-            ds_to_merge = [ds for ds in ds_to_merge if ds is not None]
-
-        if not ds_to_merge:
-            return data[0]
-
         merged_ds = xr.concat(
-            ds_to_merge,
+            [ds for ds in data if ds is not None],
             dim="obs",
             combine_attrs=self.combine_attributes,
             data_vars="minimal",
@@ -110,110 +134,84 @@ class SwathFile:
 
         return merged_ds
 
-    def _preprocess_wrapper(self, ds, load=False):
-        try:
-            return self._preprocess(ds, load=load)
-        except Exception:
-            return None
 
-    @staticmethod
-    def _preprocess(ds, load=False):
-        """Pre-processing to be done on a component dataset so it can be merged with others.
 
-        Assumes `ds` is an indexed ragged array. (Re)-calculates the `locationIndex`
-        values for `ds` with respect to the `location_id` variable for the merged
-        dataset, which may include locations not present in `ds`.
+    # def merge(self, data, load=False, processes=None):
+    #     if not data:
+    #         return None
 
-        Parameters
-        ----------
-        ds : xarray.Dataset
-            Dataset.
+    #     if processes == 1:
+    #         ds_to_merge = [self._preprocess(ds, load=load) for ds in data if ds.obs.size > 0]
+    #     # Parallelize preprocessing
+    #     else:
+    #         ctx = mp.get_context("forkserver")
+    #         with ctx.Pool(processes) as pool:
+    #             ds_to_merge = pool.starmap(
+    #                 self._preprocess_wrapper,
+    #                 [(ds, load) for ds in data if ds.obs.size > 0]
+    #             )
 
-        Returns
-        -------
-        xarray.Dataset
-            Dataset with pre-processing applied.
-        """
-        ds.attrs["global_attributes_flag"] = 1
-        if "spacecraft" in ds.attrs:
-            # Assumption: the spacecraft attribute is something like "metop-a"
-            sat_id = {"a": 3, "b": 4, "c": 5}
-            sat = ds.attrs["spacecraft"][-1].lower()
-            ds["sat_id"] = ("obs",
-                            np.repeat(sat_id[sat], ds["location_id"].size))
-            del ds.attrs["spacecraft"]
-        if load:
-            ds.load()
-        return ds
+    #         # Filter out None results (if any)
+    #         ds_to_merge = [ds for ds in ds_to_merge if ds is not None]
+
+    #     if not ds_to_merge:
+    #         return data[0]
+
+    #     merged_ds = xr.concat(
+    #         ds_to_merge,
+    #         dim="obs",
+    #         combine_attrs=self.combine_attributes,
+    #         data_vars="minimal",
+    #         coords="minimal",
+    #     )
+
+    #     return merged_ds
+
+    # def _preprocess_wrapper(self, ds, load=False):
+    #     try:
+    #         return self._preprocess(ds, load=load)
+    #     except Exception:
+    #         return None
+
+    # @staticmethod
+    # def _preprocess(ds, load=False):
+    #     """Pre-processing to be done on a component dataset so it can be merged with others.
+
+    #     Assumes `ds` is an indexed ragged array. (Re)-calculates the `locationIndex`
+    #     values for `ds` with respect to the `location_id` variable for the merged
+    #     dataset, which may include locations not present in `ds`.
+
+    #     Parameters
+    #     ----------
+    #     ds : xarray.Dataset
+    #         Dataset.
+
+    #     Returns
+    #     -------
+    #     xarray.Dataset
+    #         Dataset with pre-processing applied.
+    #     """
+    #     ds.attrs["global_attributes_flag"] = 1
+    #     if "spacecraft" in ds.attrs:
+    #         # Assumption: the spacecraft attribute is something like "metop-a"
+    #         sat_id = {"a": 3, "b": 4, "c": 5}
+    #         sat = ds.attrs["spacecraft"][-1].lower()
+    #         ds["sat_id"] = ("obs",
+    #                         np.repeat(sat_id[sat], ds["location_id"].size))
+    #         del ds.attrs["spacecraft"]
+    #     if load:
+    #         ds.load()
+    #     return ds
 
     @staticmethod
     def _ensure_obs(ds):
+        # TODO make reg func.
         # basic heuristic - if obs isn't present, assume it's instead "time"
         if "obs" not in ds.dims:
             ds = ds.rename_dims({"time": "obs"})
         # other possible heuristics:
         # - if neither "obs" nor "time" is present, assume the obs dim is the one that's
         #  not "locations".
-        return ds
-
-    @staticmethod
-    def _trim_var_range(ds, var_name, var_min, var_max, end_inclusive=False):
-        # if var_name in ds:
-        if end_inclusive:
-            mask = (ds[var_name] >= var_min) & (ds[var_name] <= var_max)
-        else:
-            mask = (ds[var_name] >= var_min) & (ds[var_name] < var_max)
-        return ds.sel(obs=mask.compute())
-
-    @staticmethod
-    def _trim_to_gpis(ds, gpis=None, lookup_vector=None):
-        """Trim a dataset to only the gpis in the given list.
-        If any gpis are passed which are not in the dataset, they are ignored.
-
-        Parameters
-        ----------
-        ds : xarray.Dataset
-            Dataset.
-        gpis : list or list-like
-            List of gpis to keep.
-
-        Returns
-        -------
-        xarray.Dataset
-            Dataset with only the gpis in the list.
-        """
-        if ds is None:
-            return None
-        if gpis is None and lookup_vector is None:
-            return ds
-        if gpis is None:
-            ds_location_ids = ds["location_id"].data
-            obs_idx = lookup_vector[ds_location_ids]
-            ds = ds.sel(obs=obs_idx)
-
-        # TODO Need to add this case!!!
-        # else:
-        #     ds = ds.sel(obs=(da.isin(ds["location_id"], gpis).compute())) #
-            # # first trim out any gpis not in the dataset from the gpi list
-            # gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
-
-            # # this is a list of the locationIndex values that correspond to the gpis we're keeping
-            # locations_idx = np.searchsorted(ds["location_id"].values, gpis)
-            # # this is the indices of the observations that have any of those locationIndex values
-            # obs_idx = da.isin(ds["locationIndex"], locations_idx).compute()
-
-            # # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
-            # old_locationIndex = ds["locationIndex"].values
-            # new_locationIndex = np.searchsorted(
-            #     locations_idx,
-            #     old_locationIndex[da.isin(old_locationIndex, locations_idx)]
-            # )
-
-            # # then trim out any gpis in the dataset not in gpis
-            # ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
-            # # and add the new locationIndex
-            # ds["locationIndex"] = ("obs", new_locationIndex)
-
         return ds
 
     @staticmethod
@@ -258,29 +256,272 @@ class SwathFile:
             dropped_keys |= {key for key in attrs if key not in result}
         return result
 
-    def _close(self):
-        """
-        Close the file.
-        """
-        if self.ds is not None:
-            self.ds.close()
-
-    def __enter__(self):
-        """
-        Context manager initialization.
-        """
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """
-        Exit the runtime context related to this object. The file will be
-        closed. The parameters describe the exception that caused the
-        context to be exited.
-        """
-        self._close()
-
-
 class SwathGridFiles(ChronFiles):
+    """
+    Class to manage chronological swath files with a date field in the filename.
+    """
+    def _spatial_filter(
+            self,
+            filenames,
+            cell=None,
+            location_id=None,
+            coords=None,
+            bbox=None,
+            geom=None,
+            # mask_and_scale=True,
+            # date_range=None,
+            # **kwargs,
+            # timestamp,
+            # search_date_fmt="%Y%m%d*",
+            # date_field="date",
+            # date_field_fmt="%Y%m%d",
+            # return_date=False
+    ):
+        """
+        Filter a search result for cells matching a spatial criterion.
+
+        Parameters
+        ----------
+        cell : int or list of int
+            Grid cell number to read.
+        location_id : int or list of int
+            Location id.
+        coords : tuple of numeric or tuple of iterable of numeric
+            Tuple of (lon, lat) coordinates.
+        bbox : tuple
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+
+        Returns
+        -------
+        filenames : list of str
+            Filenames.
+        """
+
+        if cell is not None:
+            gpis = get_grid_gpis(self.grid, cell=cell)
+            spatial = SwathDefinition(
+                lats=self.grid.arrlat[gpis],
+                lons=self.grid.arrlon[gpis],
+            )
+        elif location_id is not None:
+            gpis = get_grid_gpis(self.grid, location_id=location_id)
+            spatial = SwathDefinition(
+                lats=self.grid.arrlat[gpis],
+                lons=self.grid.arrlon[gpis],
+            )
+        elif coords is not None:
+            spatial = SwathDefinition(
+                lats=[coords[1]],
+                lons=[coords[0]],
+            )
+        elif (bbox or geom) is not None:
+            if bbox is not None:
+                # AreaDefinition expects (lonmin, latmin, lonmax, latmax)
+                # but bbox is (latmin, latmax, lonmin, lonmax)
+                bbox = (bbox[2], bbox[0], bbox[3], bbox[1])
+            else:
+                # If we get a geometry just take its bounding box and check
+                # that intersection.
+                #
+                # shapely.geometry.bounds is already in the correct order
+                bbox = geom.bounds
+            spatial = AreaDefinition(
+                "bbox",
+                "",
+                "EPSG:4326",
+                {"proj": "latlong", "datum": "WGS84"},
+                1000,
+                1000,
+                bbox,
+            )
+        else:
+            spatial = None
+
+        if spatial is None:
+            return filenames
+
+        filtered_filenames = []
+        for filename in filenames:
+            lazy_result = dask.delayed(self._check_intersection)(filename, spatial)
+            filtered_filenames.append(lazy_result)
+
+        def none_filter(fname_list):
+            return [l for l in fname_list if l is not None]
+
+        filtered_filenames = dask.delayed(none_filter)(filtered_filenames).compute()
+
+        return filtered_filenames
+
+    @staticmethod
+    def _trim_var_range(ds, var_name, var_min, var_max, end_inclusive=False):
+        # TODO make reg func.
+        # if var_name in ds:
+        if end_inclusive:
+            mask = (ds[var_name] >= var_min) & (ds[var_name] <= var_max)
+        else:
+            mask = (ds[var_name] >= var_min) & (ds[var_name] < var_max)
+        return ds.sel(obs=mask.compute())
+
+    @staticmethod
+    def _trim_to_gpis(ds, gpis=None, lookup_vector=None):
+        """Trim a dataset to only the gpis in the given list.
+        If any gpis are passed which are not in the dataset, they are ignored.
+
+        Parameters
+        ----------
+        ds : xarray.Dataset
+            Dataset.
+        gpis : list or list-like
+            List of gpis to keep.
+
+        Returns
+        -------
+        xarray.Dataset
+            Dataset with only the gpis in the list.
+        """
+        if ds is None:
+            return None
+        if gpis is None and lookup_vector is None:
+            return ds
+        if gpis is None:
+            ds_location_ids = ds["location_id"].data
+            obs_idx = lookup_vector[ds_location_ids]
+            ds = ds.sel(obs=obs_idx)
+        else:
+            # this is a case where I really do want the answer of `isin` to be fully
+            # loaded no matter what, so I use dask.array's version of isin to make sure
+            # I can call compute on it.
+            ds = ds.sel(obs=(da.isin(ds["location_id"], gpis).compute()))
+
+        # else:
+        #     ds = ds.sel(obs=(da.isin(ds["location_id"], gpis).compute())) #
+            # # first trim out any gpis not in the dataset from the gpi list
+            # gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
+
+            # # this is a list of the locationIndex values that correspond to the gpis we're keeping
+            # locations_idx = np.searchsorted(ds["location_id"].values, gpis)
+            # # this is the indices of the observations that have any of those locationIndex values
+            # obs_idx = da.isin(ds["locationIndex"], locations_idx).compute()
+
+            # # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
+            # old_locationIndex = ds["locationIndex"].values
+            # new_locationIndex = np.searchsorted(
+            #     locations_idx,
+            #     old_locationIndex[da.isin(old_locationIndex, locations_idx)]
+            # )
+
+            # # then trim out any gpis in the dataset not in gpis
+            # ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
+            # # and add the new locationIndex
+            # ds["locationIndex"] = ("obs", new_locationIndex)
+
+        return ds
+
+    def _check_intersection(self, filename, spatial):
+        """
+        Check if a file intersects with a pyresample SwathDefinition or AreaDefinition.
+
+        Parameters
+        ----------
+        filename : str
+            Filename.
+        gpis : list of int
+            List of gpis.
+
+        Returns
+        -------
+        bool
+            True if the file intersects with the gpis.
+        """
+        with self.cls(filename) as f:
+            f.read()
+            lons, lats = f.ds["longitude"].values, f.ds["latitude"].values
+            swath_def = SwathDefinition(lats=lats, lons=lons)
+            n_info = kd_tree.get_neighbour_info(
+                swath_def,
+                spatial,
+                radius_of_influence=15000,
+                neighbours=1,
+            )
+            valid_input_index, _, _ = n_info[:3]
+            if np.any(valid_input_index):
+                return filename
+        return None
+
+    def swath_search(
+        self,
+        dt_start,
+        dt_end,
+        dt_delta=None,
+        search_date_fmt="%Y%m%d*",
+        date_field="date",
+        end_inclusive=True,
+        cell=None,
+        location_id=None,
+        coords=None,
+        bbox=None,
+        geom=None,
+        **fmt_kwargs,
+    ):
+        """
+        Search for swath files within a time range and spatial criterion.
+
+        Parameters
+        ----------
+        dt_start : datetime
+            Start date.
+        dt_end : datetime
+            End date.
+        dt_delta : timedelta
+            Time delta.
+        search_date_fmt : str
+            Search date format.
+        date_field : str
+            Date field.
+        end_inclusive : bool
+            End date inclusive.
+        cell : int or list of int
+            Grid cell number to read.
+        location_id : int or list of int
+            Location id.
+        coords : tuple of numeric or tuple of iterable of numeric
+            Tuple of (lon, lat) coordinates.
+        bbox : tuple
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        geom : shapely.geometry
+            Geometry.
+
+        Returns
+        -------
+        list of str
+            Filenames.
+        """
+        dt_delta = dt_delta or timedelta(days=1)
+
+        filenames = self.search_period(
+            dt_start,
+            dt_end,
+            dt_delta,
+            search_date_fmt,
+            date_field,
+            date_field_fmt=self.date_field_fmt,
+            end_inclusive=end_inclusive,
+            **fmt_kwargs,
+        )
+
+        filtered_filenames = self._spatial_filter(
+            filenames,
+            cell=cell,
+            location_id=location_id,
+            coords=coords,
+            bbox=bbox,
+            geom=geom,
+        )
+
+        return filtered_filenames
+
+
+class SwathGridFilesOld(ChronFiles):
     """
     Class to read and merge multiple swath files.
     """
@@ -836,35 +1077,35 @@ class SwathGridFiles(ChronFiles):
 
     def _process_stack(self, ds):
         # if there are kwargs, use them instead of self.ioclass_kws
-        beam_idx = {"for": 0, "mid": 1, "aft": 2}
+        # beam_idx = {"for": 0, "mid": 1, "aft": 2}
 
         # if any beam has backscatter ds for a record, the record is valid. Drop
         # observations that don't have any backscatter data.
-        if "backscatter" in ds.variables:
-            if ds["obs"].size > 0:
-                ds = ds.sel(
-                    obs=~np.all(
-                        ds["backscatter"].isnull(),
-                        axis=1
-                    )
-                )
+        # if "backscatter" in ds.variables:
+        #     if ds["obs"].size > 0:
+        #         ds = ds.sel(
+        #             obs=~np.all(
+        #                 ds["backscatter"].isnull(),
+        #                 axis=1
+        #             )
+        #         )
 
         # # break the beams dimension variables into separate variables for
         # # the fore, mid, and aft beams
-        if ds["obs"].size > 0:
-            if "beams" in ds.dims:
-                # if the dataset has a beams dimension and beams_vars is set,
-                # break the beams dimension variables into separate variables
-                # for the fore, mid, and aft beams and remove the beams dimension
-                # along with any beams-dimensional variables that aren't in beams_vars
-                if self.beams_vars:
-                    for var in self.beams_vars:
-                        if var in ds.variables:
-                            for ending, idx in beam_idx.items():
-                                ds[var + "_" + ending] = ds[var].sel(beams=idx)
+        # if ds["obs"].size > 0:
+        #     if "beams" in ds.dims:
+        #         # if the dataset has a beams dimension and beams_vars is set,
+        #         # break the beams dimension variables into separate variables
+        #         # for the fore, mid, and aft beams and remove the beams dimension
+        #         # along with any beams-dimensional variables that aren't in beams_vars
+        #         if self.beams_vars:
+        #             for var in self.beams_vars:
+        #                 if var in ds.variables:
+        #                     for ending, idx in beam_idx.items():
+        #                         ds[var + "_" + ending] = ds[var].sel(beams=idx)
 
-                    # drop the variables on the beams dimension
-                    ds = ds.drop_dims("beams")
+        #             # drop the variables on the beams dimension
+        #             ds = ds.drop_dims("beams")
 
         ds = ds.assign_coords(
             {"cell": ("obs", self.grid.gpi2cell(ds["location_id"].values))}

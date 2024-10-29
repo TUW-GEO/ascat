@@ -14,7 +14,7 @@ import ascat.read_native.generate_test_data as gtd
 
 from ascat.read_native.swath_collection import SwathFile
 from ascat.read_native.swath_collection import SwathGridFiles
-from ascat.read_native.cell_collection import RaggedArrayCell
+# from ascat.read_native.cell_collection import RaggedArrayCell
 from ascat.read_native.product_info import AscatH129Swath
 
 
@@ -38,23 +38,22 @@ class TestSwathFile(unittest.TestCase):
     def test_init(self):
         swath_path = self.tempdir_path / "swath.nc"
         ra = SwathFile(swath_path)
-        self.assertEqual(ra.filename, swath_path)
-        self.assertIsNone(ra.ds)
+        self.assertEqual(ra.filenames[0], swath_path)
 
-        ra_chunked = SwathFile(swath_path, chunks={"locations": 2})
-        self.assertEqual(ra_chunked.filename, swath_path)
-        self.assertIsNone(ra_chunked.ds)
-        self.assertEqual(ra_chunked.chunks, {"locations": 2})
+        # ra_chunked = SwathFile(swath_path, chunks={"locations": 2})
+        # self.assertEqual(ra_chunked.filename, swath_path)
+        # self.assertIsNone(ra_chunked.ds)
+        # self.assertEqual(ra_chunked.chunks, {"locations": 2})
 
     def test_read(self):
         swath_path = self.tempdir_path / "swath.nc"
         ra = SwathFile(swath_path)
-        ra.read()
-        self.assertIsInstance(ra.ds, xr.Dataset)
-        self.assertIn("longitude", ra.ds)
-        self.assertIn("latitude", ra.ds)
+        ds = ra.read()
+        self.assertIsInstance(ds, xr.Dataset)
+        self.assertIn("longitude", ds)
+        self.assertIn("latitude", ds)
         # self.assertIn("time", ra.ds)
-        self.assertIn("obs", ra.ds.dims)
+        self.assertIn("obs", ds.dims)
 
     def test__ensure_obs(self):
         swath_path = self.tempdir_path / "swath.nc"
@@ -101,7 +100,7 @@ class TestSwathFile(unittest.TestCase):
         ra2 = SwathFile(fname2)
         ds1 = ra1.read()
         ds2 = ra2.read()
-        merged = ra1.merge([ra1.ds, ra2.ds])
+        merged = ra1.merge([ds1, ds2])
         self.assertTrue(np.all(merged["location_id"].values == np.concatenate([ds1["location_id"].values, ds2["location_id"].values])))
 
 

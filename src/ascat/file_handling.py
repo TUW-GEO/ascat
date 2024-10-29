@@ -954,6 +954,26 @@ class Filenames:
         for filename in self.filenames:
             yield self._read(filename, **kwargs)
 
+    def iter_read_nbytes(self, max_nbytes, **kwargs):
+        size = 0
+        data_list = []
+        for filename in self.filenames:
+            data = self._read(filename, **kwargs)
+            size += self._nbytes(data)
+            if size > max_nbytes:
+                yield self.merge(data_list)
+                size = 0
+                data_list = []
+            else:
+                data_list.append(data)
+
+    @staticmethod
+    def _nbytes(data):
+        """
+        Returns size of data object in bytes.
+        """
+        raise NotImplementedError
+
     def merge(self, data):
         """
         Merge data from multiple data objects.
