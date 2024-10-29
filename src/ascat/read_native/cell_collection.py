@@ -40,13 +40,42 @@ import dask.array as da
 from ascat.file_handling import MultiFileHandler
 from ascat.file_handling import Filenames
 from ascat.read_native.product_info import cell_io_catalog
-from ascat.read_native.product_info import grid_cache
+#from ascat.read_native.product_info import grid_cache
 from ascat.utils import get_grid_gpis
 from ascat.utils import append_to_netcdf
 from ascat.utils import create_variable_encodings
 
 class IndexedRaggedArrayHandler:
-    def trim_to_gpis(self, ds, gpis=None, lookup_vector=None):
+    @classmethod
+    def from_1d_array(cls, ds):
+        # the "unique_index" is what we'll use to get all the other location variables'
+        # values from the 1d array
+        location_id, unique_index_1d, locationIndex = np.unique(ds["location_id"],
+                                                        return_index=True,
+                                                        return_inverse=True)
+        ds["location_id"] = ("locations", location_id)
+        ds["locationIndex"] = ("obs", locationIndex)
+
+        potential_loc_vars = ["lon", "lat", "alt", "longitude", "latitude", "altitude", "location_description"]
+        for var in potential_loc_vars:
+            if var in ds:
+                ds[var] = ("locations", ds[var][unique_index_1d].data)
+
+        return ds
+
+
+    @classmethod
+    def to_1d_array(cls, ds):
+        print("indexed to 1d")
+        loc_vars = [var for var in ds.variables if "locations" in ds[var].dims]
+        for loc_var in loc_vars:
+            ds[loc_var] = ds[loc_var][ds["locationIndex"]]
+        ds = ds.drop_vars(["locationIndex"])
+        return ds
+
+
+    @classmethod
+    def trim_to_gpis(cls, ds, gpis=None, lookup_vector=None, output_1d=False):
         """Trim a dataset to only the gpis in the given list.
         If any gpis are passed which are not in the dataset, they are ignored.
         Prioritize lookup_vector if available (?)
@@ -113,13 +142,91 @@ class IndexedRaggedArrayHandler:
         else:
             return ds
 
+class OneDimArrayHandler:
+    @classmethod
+    def trim_to_gpis(cls, ds, gpis=None, lookup_vector=None):
+        if lookup_vector is not None:
+            obs_idx = lookup_vector[ds["location_id"]]
+            locations_idx = np.unique(ds["location_id"][obs_idx])
+            return ds.sel(obs=obs_idx)
+        elif gpis is not None and len(gpis) > 0:
+            locations_idx = np.where(np.isin(ds["location_id"], gpis))[0]
+            return ds.sel(obs=locations_idx)
+        else:
+            return None
+
+
+
+    @classmethod
+    def trim_var_range(cls, ds, var_name, var_min, var_max, end_inclusive=False):
+        if end_inclusive:
+            mask = (ds[var_name] >= var_min) & (ds[var_name] <= var_max)
+        else:
+            mask = (ds[var_name] >= var_min) & (ds[var_name] < var_max)
+        ds = ds.sel(obs=mask)
+
+        return ds
+
+
 class ContiguousRaggedArrayHandler:
-    def trim_to_gpis(self, ds, gpis=None, lookup_vector=None):
+    @classmethod
+    def from_1d_array(cls, ds):
+        ds = ds.sortby(["location_id", "time"])
+        location_id, unique_index_1d, row_size = np.unique(ds["location_id"],
+                                                    return_index=True,
+                                                    return_counts=True)
+
+        ds["location_id"] = ("locations", location_id)
+        ds["row_size"] = ("locations", row_size)
+
+        potential_loc_vars = ["lon", "lat", "alt", "longitude", "latitude", "altitude", "location_description"]
+        for var in potential_loc_vars:
+            if var in ds:
+                ds[var] = ("locations", ds[var][unique_index_1d].data)
+
+        return ds
+
+    @classmethod
+    def to_1d_array(cls, ds):
+        """Convert a ragged array dataset to a pure time series dataset.
+
+        Parameters
+        ----------
+        ds : xarray.Dataset
+            Dataset.
+
+        Returns
+        -------
+        xarray.Dataset
+            Dataset with only the time series variables.
+        """
+        print("contiguous to 1d")
+        row_size = ds["row_size"].data
+        ds = ds.drop_vars("row_size")
+        loc_vars = [var for var in ds.variables if "locations" in ds[var].dims]
+        for loc_var in loc_vars:
+            ds[loc_var] = ("obs", np.repeat(ds[loc_var], row_size).data)
+        return ds
+
+    @classmethod
+    def trim_var_range(cls, ds, var_name, var_min, var_max, end_inclusive=False):
+        ds = cls.to_1d_array(ds)
+        if end_inclusive:
+            mask = (ds[var_name] >= var_min) & (ds[var_name] <= var_max)
+        else:
+            mask = (ds[var_name] >= var_min) & (ds[var_name] < var_max)
+        ds = ds.sel(obs=mask)
+        ds = cls.from_1d_array(ds)
+
+        return ds
+
+    @classmethod
+    def trim_to_gpis(cls, ds, gpis=None, lookup_vector=None):
         if gpis is None or len(gpis)==0:
             obs_locations = np.repeat(ds.locations, ds.row_size)
             obs_location_ids = np.repeat(ds.location_id, ds.row_size)
             obs_idxs = lookup_vector[obs_location_ids]
-            locations_idxs = npg.aggregate(obs_locations, obs_idxs, func="any")
+            locations_idxs = np.aggregate(obs_locations, obs_idxs, func="any")
             return ds.sel(obs=obs_idxs, locations=locations_idxs)
 
         if len(gpis) == 1:
@@ -138,10 +245,13 @@ class ContiguousRaggedArrayHandler:
             obs_idxs = np.concatenate([range(start, end)
                                         for start, end in zip(obs_starts, obs_ends)])
             # locations_idxs = [i for i in locations_idxs]
+        else:
+            obs_idxs = []
+            locations_idxs = []
 
         return ds.isel(obs=obs_idxs, locations=locations_idxs)
 
-class RaggedArrayCellFile(Filenames):
+class RaggedArrayCell(Filenames):
     """
     Class to read and merge ragged array cell files.
     """
@@ -150,7 +260,16 @@ class RaggedArrayCellFile(Filenames):
         # self.ds = data          #
         # self.chunks = chunks
 
-    def _read(self, filename, generic=True, preprocessor=None, **xarray_kwargs):
+    def _read(
+        self,
+        filename,
+        location_id=None,
+        lookup_vector=None,
+        date_range=None,
+        generic=True,
+        preprocessor=None,
+        **xarray_kwargs
+    ):
         """
         Open one Ragged Array file as an xarray.Dataset and preprocess it if necessary.
 
@@ -175,9 +294,19 @@ class RaggedArrayCellFile(Filenames):
         if preprocessor:
             ds = preprocessor(ds)
         ds = self._ensure_obs(ds)
+
+        if location_id is not None:
+            ds = self._trim_to_gpis(ds, gpis=location_id)
+        elif lookup_vector is not None:
+            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
+        # ds = self._ensure_indexed(ds)
+        ds = self._ensure_1d(ds)
+        if date_range is not None:
+            ds = self._trim_var_range(ds, "time", *date_range)
+
         return ds
 
-    def read(self, date_range=None, valid_gpis=None, lookup_vector=None, preprocessor=None, **kwargs):
+    def read(self, date_range=None, location_id=None, lookup_vector=None, preprocessor=None, **kwargs):
         """
         Read data from Ragged Array Cell files.
 
@@ -193,22 +322,13 @@ class RaggedArrayCellFile(Filenames):
             Function to preprocess the dataset.
         **kwargs : dict
         """
-        ds = super().read(preprocessor=preprocessor, **kwargs)
+        ds = super().read(date_range=date_range,
+                          location_id=location_id,
+                          lookup_vector=lookup_vector,
+                          preprocessor=preprocessor, **kwargs)
 
-        if valid_gpis is not None:
-            ds = self._trim_to_gpis(ds, gpis=valid_gpis)
-        elif lookup_vector is not None:
-            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
-        ds = self._ensure_indexed(ds)
-        if date_range is not None:
-            ds = self._trim_var_range(ds, "time", *date_range)
-        # should I do it this way or just return the ds without having it be a class attribute?
-        self.ds = ds
-        return self.ds
+        return ds
 
-    # def read_period(self, dt_start, dt_end):
-    #     data = self.read()
-    #     return data
     @staticmethod
     def _indexed_or_contiguous(ds):
         if "locationIndex" in ds:
@@ -217,8 +337,8 @@ class RaggedArrayCellFile(Filenames):
 
     def _ra_handler(self, ds):
         if self._indexed_or_contiguous(ds) == "indexed":
-            return IndexedRaggedArrayHandler()
-        return ContiguousRaggedArrayHandler()
+            return IndexedRaggedArrayHandler
+        return ContiguousRaggedArrayHandler
 
     @staticmethod
     def _trim_var_range(ds, var_name, var_min, var_max, end_inclusive=False):
@@ -228,6 +348,7 @@ class RaggedArrayCellFile(Filenames):
         else:
             mask = (ds[var_name] >= var_min) & (ds[var_name] < var_max)
         return ds.sel(obs=mask.compute())
+
 
     @staticmethod
     def _ensure_obs(ds):
@@ -348,30 +469,38 @@ class RaggedArrayCellFile(Filenames):
         if data == []:
             return None
 
-        ds_locations = [self._only_locations(ds) for ds in data]
-
+        merged_ds = xr.concat(
+            [self._preprocess(ds).chunk({"obs":-1})#, location_vars, location_sorter)
+                for ds in data if ds is not None],
+            dim="obs",
+            # data_vars="minimal",
+            # coords="minimal",
+            combine_attrs="drop_conflicts",
+        )
+        # merged_ds = IndexedRaggedArrayHandler.from_1d_array(merged_ds)
         # check if any of the datasets in ds_locations is not equal to the first one
-        if any(not ds.equals(ds_locations[0]) for ds in ds_locations):
-            location_vars, location_sorter = self._merge_ds_locations_vars(ds_locations)
+        # if any(not ds.equals(ds_locations[0]) for ds in ds_locations):
+            # location_vars, location_sorter = self._merge_ds_locations_vars(ds_locations)
 
-            merged_ds = xr.combine_nested(
-                [self._preprocess(ds, location_vars, location_sorter)
-                for ds in data],
-                concat_dim="obs",
-                data_vars="minimal",
-                coords="minimal",
-                combine_attrs="drop_conflicts",
-            )
+            # merged_ds = xr.combine_nested(
+            #     [self._preprocess(ds, location_vars, location_sorter)
+            #      for ds in data if ds is not None],
+            #     concat_dim="obs",
+            #     data_vars="minimal",
+            #     coords="minimal",
+            #     combine_attrs="drop_conflicts",
+            # )
+            # then put locations dim back on
         # if they're all the same (e.g. merging the same cell from several satellites),
         # we can just combine them directly
-        else:
-            merged_ds = xr.combine_nested(
-                data,
-                concat_dim="obs",
-                data_vars="minimal",
-                coords="minimal",
-                combine_attrs="drop_conflicts",
-            )
+        # else:
+        #     merged_ds = xr.combine_nested(
+        #         [ds for ds in data if ds is not None],
+        #         concat_dim="obs",
+        #         data_vars="minimal",
+        #         coords="minimal",
+        #         combine_attrs="drop_conflicts",
+        #     )
 
         # # Move these elsewhere?
         # merged_ds = trim_dates(merged_ds, date_range)
@@ -385,35 +514,70 @@ class RaggedArrayCellFile(Filenames):
         """
         Merge the locations-dimensional variables from a list of datasets.
         """
-        print("MERGING LOCATIONS VARS")
-        print(ds_locations, "\n")
         locs_merged = xr.combine_nested(
             ds_locations, concat_dim="locations"
         )
 
-        print(locs_merged, "\n")
-
         _, idxs = np.unique(
             locs_merged["location_id"], return_index=True
         )
-        print(_, "\n")
-        print(idxs, "\n")
 
         location_vars = {
             var: locs_merged[var][idxs]
             for var in locs_merged.variables
         }
-        print(location_vars, "\n")
 
         location_sorter = np.argsort(location_vars["location_id"].values)
-        print(location_sorter, "\n")
 
         locs_merged.close()
 
         return location_vars, location_sorter
 
+    def _preprocess(self, ds):
+        """Pre-processing to be done on a component dataset so it can be merged with others.
+
+        Assumes `ds` is an indexed ragged array. (Re)-calculates the `locationIndex`
+        values for `ds` with respect to the `location_id` variable for the merged
+        dataset, which may include locations not present in `ds`.
+
+        Parameters
+        ----------
+        ds : xarray.Dataset
+            Dataset.
+        location_vars : dict
+            Dictionary of ordered location variable DataArrays for the merged data.
+        location_sorter : numpy.ndarray
+            Result of `np.argsort(location_vars["location_id"])`, used to calculate
+            the `locationIndex` variable. Calculated outside this function to avoid
+            re-calculating it for every dataset being merged.
+
+        Returns
+        -------
+        xarray.Dataset
+            Dataset with pre-processing applied.
+        """
+        # get list of all vars with "locations" dimension
+        # ds = self._ra_handler(ds).to_1d_array(ds)
+
+        # ds["locationIndex"] = ("obs", locationIndex)
+
+        # # Next, we put the locations-dimensional variables on the dataset,
+        # # and set them as coordinates.
+        # for var, var_data in location_vars.items():
+        #     ds[var] = ("locations", var_data.values)
+        # ds = ds.set_coords(["lon", "lat", "alt", "time"])
+
+        # try:
+        #     # Need to reset the time index if it's already there, but I can't
+        #     # figure out how to test if time is already an index except like this
+        #     ds = ds.reset_index("time")
+        # except ValueError:
+        #     pass
+
+        return ds
+
     @staticmethod
-    def _preprocess(ds, location_vars, location_sorter):
+    def _preprocess_old(ds, location_vars, location_sorter):
         """Pre-processing to be done on a component dataset so it can be merged with others.
 
         Assumes `ds` is an indexed ragged array. (Re)-calculates the `locationIndex`
@@ -464,8 +628,6 @@ class RaggedArrayCellFile(Filenames):
 
         ds["locationIndex"] = ("obs", locationIndex)
 
-        print(ds)
-        print(location_vars)
         # Next, we put the locations-dimensional variables on the dataset,
         # and set them as coordinates.
         for var, var_data in location_vars.items():
@@ -506,95 +668,95 @@ class RaggedArrayCellFile(Filenames):
         handler = self._ra_handler(ds)
         return handler.trim_to_gpis(ds, gpis, lookup_vector)
 
-        if self._indexed_or_contiguous(ds) == "indexed":
-            if gpis is None:
-                ds_location_ids = ds["location_id"].data[ds["locationIndex"].data]
-                obs_idx = lookup_vector[ds_location_ids]
-                locations_idx = np.unique(ds["locationIndex"][obs_idx])
+        # if self._indexed_or_contiguous(ds) == "indexed":
+        #     if gpis is None:
+        #         ds_location_ids = ds["location_id"].data[ds["locationIndex"].data]
+        #         obs_idx = lookup_vector[ds_location_ids]
+        #         locations_idx = np.unique(ds["locationIndex"][obs_idx])
 
-                # then trim out any gpis in the dataset not in gpis
-                ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
-                sorter = np.argsort(ds["location_id"].data)
-                new_locationIndex = np.searchsorted(ds["location_id"].data,
-                                                    ds_location_ids[obs_idx],
-                                                    sorter=sorter)
-                # and add the new locationIndex
-                ds["locationIndex"] = ("obs", new_locationIndex)
-                return ds
+        #         # then trim out any gpis in the dataset not in gpis
+        #         ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
+        #         sorter = np.argsort(ds["location_id"].data)
+        #         new_locationIndex = np.searchsorted(ds["location_id"].data,
+        #                                             ds_location_ids[obs_idx],
+        #                                             sorter=sorter)
+        #         # and add the new locationIndex
+        #         ds["locationIndex"] = ("obs", new_locationIndex)
+        #         return ds
 
-            else:
-                # first trim out any gpis not in the dataset from the gpi list
-                gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
-
-
-                sorter = np.argsort(ds["location_id"].values)
-                # this is a list of the locationIndex values that correspond to the gpis we're keeping
-                locations_idx = np.searchsorted(ds["location_id"].values, gpis, sorter=sorter)
-                # this is the indices of the observations that have any of those locationIndex values
-                obs_idx = np.isin(ds["locationIndex"], locations_idx)
-
-                # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
-                sorter = np.argsort(locations_idx)
-                old_locationIndex = ds["locationIndex"].values
-                new_locationIndex = np.searchsorted(
-                    locations_idx,
-                    old_locationIndex[np.isin(old_locationIndex, locations_idx)],
-                    sorter=sorter,
-                )
-
-                # then trim out any gpis in the dataset not in gpis
-                ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
-                # and add the new locationIndex
-                ds["locationIndex"] = ("obs", new_locationIndex)
-                return ds
-        # if self._indexed_or_contiguous(ds) == "contiguous":
-        #     if len(gpis) == 1:
-        #         idx = np.where(ds.location_id==gpis[0])[0][0]
-        #         start = int(ds.row_size.isel(locations=slice(0,idx)).sum().values)
-        #         end = int(start + ds.row_size.isel(locations=idx).values)
-        #         return ds.isel(obs=slice(start, end), locations=idx)
         #     else:
-        #         if lookup_vector is None:
-        #             idxs = np.where(np.isin(ds.location_id, gpis))[0]
-        #         else:
-        #             idxs = np.where(
-        #                 lookup_vector[np.repeat(ds.location_id, ds.row_size)]
-        #             )[0]
-        #         if idxs.size > 0:
-        #             starts = [int(ds.row_size.isel(locations=slice(0,i)).sum().values)
-        #                         for i in idxs]
-        #             ends = [int(start + ds.row_size.isel(locations=i).values)
-        #                     for start, i in zip(starts, idxs)]
-        #             obs = np.concatenate([range(start, end) for start, end in zip(starts, ends)])
-        #             locations = [i for i in idxs]
-        #             return ds.isel(obs=obs, locations=locations)
+        #         # first trim out any gpis not in the dataset from the gpi list
+        #         gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
 
-        if self._indexed_or_contiguous(ds) == "contiguous":
-            if gpis is None or len(gpis)==0:
-                obs_locations = np.repeat(ds.locations, ds.row_size)
-                obs_location_ids = np.repeat(ds.location_id, ds.row_size)
-                obs_idxs = lookup_vector[obs_location_ids]
-                locations_idxs = npg.aggregate(obs_locations, obs_idxs, func="any")
-                return ds.sel(obs=obs_idxs, locations=locations_idxs)
 
-            if len(gpis) == 1:
-                locations_idx = np.where(ds.location_id==gpis[0])[0][0]
-                obs_start = int(ds.row_size.isel(locations=slice(0,locations_idx)).sum().values)
-                obs_end = int(obs_start + ds.row_size.isel(locations=locations_idx).values)
-                return ds.isel(obs=slice(obs_start, obs_end), locations=locations_idx)
-            else:
-                locations_idxs = np.where(np.isin(ds.location_id, gpis))[0]
+        #         sorter = np.argsort(ds["location_id"].values)
+        #         # this is a list of the locationIndex values that correspond to the gpis we're keeping
+        #         locations_idx = np.searchsorted(ds["location_id"].values, gpis, sorter=sorter)
+        #         # this is the indices of the observations that have any of those locationIndex values
+        #         obs_idx = np.isin(ds["locationIndex"], locations_idx)
 
-            if locations_idxs.size > 0:
-                obs_starts = [int(ds.row_size.isel(locations=slice(0,i)).sum().values)
-                            for i in locations_idxs]
-                obs_ends = [int(start + ds.row_size.isel(locations=i).values)
-                        for start, i in zip(obs_starts, locations_idxs)]
-                obs_idxs = np.concatenate([range(start, end)
-                                           for start, end in zip(obs_starts, obs_ends)])
-                # locations_idxs = [i for i in locations_idxs]
+        #         # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
+        #         sorter = np.argsort(locations_idx)
+        #         old_locationIndex = ds["locationIndex"].values
+        #         new_locationIndex = np.searchsorted(
+        #             locations_idx,
+        #             old_locationIndex[np.isin(old_locationIndex, locations_idx)],
+        #             sorter=sorter,
+        #         )
 
-            return ds.isel(obs=obs_idxs, locations=locations_idxs)
+        #         # then trim out any gpis in the dataset not in gpis
+        #         ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
+        #         # and add the new locationIndex
+        #         ds["locationIndex"] = ("obs", new_locationIndex)
+        #         return ds
+        # # if self._indexed_or_contiguous(ds) == "contiguous":
+        # #     if len(gpis) == 1:
+        # #         idx = np.where(ds.location_id==gpis[0])[0][0]
+        # #         start = int(ds.row_size.isel(locations=slice(0,idx)).sum().values)
+        # #         end = int(start + ds.row_size.isel(locations=idx).values)
+        # #         return ds.isel(obs=slice(start, end), locations=idx)
+        # #     else:
+        # #         if lookup_vector is None:
+        # #             idxs = np.where(np.isin(ds.location_id, gpis))[0]
+        # #         else:
+        # #             idxs = np.where(
+        # #                 lookup_vector[np.repeat(ds.location_id, ds.row_size)]
+        # #             )[0]
+        # #         if idxs.size > 0:
+        # #             starts = [int(ds.row_size.isel(locations=slice(0,i)).sum().values)
+        # #                         for i in idxs]
+        # #             ends = [int(start + ds.row_size.isel(locations=i).values)
+        # #                     for start, i in zip(starts, idxs)]
+        # #             obs = np.concatenate([range(start, end) for start, end in zip(starts, ends)])
+        # #             locations = [i for i in idxs]
+        # #             return ds.isel(obs=obs, locations=locations)
+
+        # if self._indexed_or_contiguous(ds) == "contiguous":
+        #     if gpis is None or len(gpis)==0:
+        #         obs_locations = np.repeat(ds.locations, ds.row_size)
+        #         obs_location_ids = np.repeat(ds.location_id, ds.row_size)
+        #         obs_idxs = lookup_vector[obs_location_ids]
+        #         locations_idxs = npg.aggregate(obs_locations, obs_idxs, func="any")
+        #         return ds.sel(obs=obs_idxs, locations=locations_idxs)
+
+        #     if len(gpis) == 1:
+        #         locations_idx = np.where(ds.location_id==gpis[0])[0][0]
+        #         obs_start = int(ds.row_size.isel(locations=slice(0,locations_idx)).sum().values)
+        #         obs_end = int(obs_start + ds.row_size.isel(locations=locations_idx).values)
+        #         return ds.isel(obs=slice(obs_start, obs_end), locations=locations_idx)
+        #     else:
+        #         locations_idxs = np.where(np.isin(ds.location_id, gpis))[0]
+
+        #     if locations_idxs.size > 0:
+        #         obs_starts = [int(ds.row_size.isel(locations=slice(0,i)).sum().values)
+        #                     for i in locations_idxs]
+        #         obs_ends = [int(start + ds.row_size.isel(locations=i).values)
+        #                 for start, i in zip(obs_starts, locations_idxs)]
+        #         obs_idxs = np.concatenate([range(start, end)
+        #                                    for start, end in zip(obs_starts, obs_ends)])
+        #         # locations_idxs = [i for i in locations_idxs]
+
+        #     return ds.isel(obs=obs_idxs, locations=locations_idxs)
 
     def _write(self,
                data,
@@ -656,7 +818,7 @@ class RaggedArrayCellFile(Filenames):
                          **kwargs)
 
 
-class OrthoMultiCellFile(Filenames):
+class OrthoMultiCell(Filenames):
     """
     Class to read and merge orthomulti cell files.
     """
@@ -706,8 +868,8 @@ class OrthoMultiCellFile(Filenames):
             # ds = ds.sel(locations=valid_gpis)
             ds = self._trim_to_gpis(ds, gpis=valid_gpis)
         # should I do it this way or just return the ds without having it be a class attribute?
-        self.ds = ds
-        return self.ds
+        # self.ds = ds
+        return ds
 
     def _merge(self, data):
         """
@@ -737,7 +899,7 @@ class OrthoMultiCellFile(Filenames):
         # along a single dimension.
 
         merged_ds = xr.combine_by_coords(
-            [ds.chunk(-1) for ds in data],
+            [ds.chunk(-1) for ds in data if ds is not None],
             combine_attrs="drop_conflicts",
         )
         return merged_ds
@@ -837,6 +999,7 @@ class CellGridFiles(MultiFileHandler):
         self.fmt_kwargs = fmt_kwargs or {}
         self.read_kwargs = read_kwargs or {}
 
+        from ascat.read_native.product_info import grid_cache
         grid_info = grid_cache.fetch_or_store(grid_name)
         self.grid_name = grid_name
         self.grid = grid_info["grid"]
@@ -1051,20 +1214,22 @@ class CellGridFiles(MultiFileHandler):
                             func_kwargs=None,
                             write_kwargs=None,
                             write_func=None):
+        """
+        TODO revisit this - maybe can be simplified now
+        """
         func_kwargs = func_kwargs or {}
         write_kwargs = write_kwargs or {}
         fid = self.cls(Path(self.root_path)/filename)
         ds = fid.read(mask_and_scale=True)
         if func is not None:
-            fid.ds = func(ds, **func_kwargs)
+            ds = func(ds, **func_kwargs)
         out_filename = out_dir / Path(filename).relative_to(self.root_path)
         if write_func is not None:
-            write_func(fid.ds, out_filename, **write_kwargs)
+            write_func(ds, out_filename, **write_kwargs)
         else:
-            fid.write(out_filename, **write_kwargs)
+            fid.write(ds, out_filename, **write_kwargs)
         # out_filename = Path(out_dir)/Path(filename).name
         # ds.to_netcdf(out_filename)
-        fid.ds.close()
         ds.close()
         return
 

@@ -16,10 +16,10 @@ import ascat.read_native.generate_test_data as gtd
 
 # from ascat.read_native.product_info import cell_io_catalog
 from ascat.read_native.product_info import register_cell_grid_reader
-from ascat.read_native.cell_collection import grid_cache
+#from ascat.read_native.product_info import grid_cache
 
-from ascat.read_native.cell_collection import RaggedArrayCellFile
-from ascat.read_native.cell_collection import IndexedRaggedArrayFile
+from ascat.read_native.cell_collection import RaggedArrayCell
+#from ascat.read_native.cell_collection import IndexedRaggedArrayFile
 from ascat.read_native.cell_collection import CellGridFiles
 from ascat.read_native.cell_collection import RaggedArrayFiles
 from ascat.read_native.cell_collection import OrthoMultiCell
@@ -53,7 +53,7 @@ import numpy as np
 import xarray as xr
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from ascat.read_native.cell_collection import RaggedArrayCellFile
+from ascat.read_native.cell_collection import RaggedArrayCell
 
 # class TestRaggedArrayCellFile(unittest.TestCase):
 
@@ -163,6 +163,108 @@ from ascat.read_native.cell_collection import RaggedArrayCellFile
 #             raf.write('output.nc', mode='a', ra_type='indexed')
 #             mock_append.assert_called_once()
 
+from time import time
+from ascat.read_native.cell_collection import ContiguousRaggedArrayHandler
+from ascat.read_native.cell_collection import OneDimArrayHandler
+from ascat.read_native.cell_collection import IndexedRaggedArrayHandler
+
+
+
+class TestContiguousRaggedArrayHandler(unittest.TestCase):
+    def setUp(self):
+        #self.path1 = Path("tests/ascat_test_data/hsaf/h129/stack_cells/")
+        self.contiguous_path = Path("/data-write/RADAR/hsaf/h121_v2.0/time_series/")
+
+    # def test_one_location(self):
+    #     all_cells = list(self.contiguous_path.glob("100*.nc"))
+    #     cell = RaggedArrayCell(all_cells[0:10])
+    #     # locations = [5974490, 5974545, 5974634, 5974778,5974867, 5974922, 5975011, 5975155, 5975244,5696947, 5697934, 5698544, 5698921, 5699531, 5700518, 5701128, 5701505, 5701738, 5702115]
+    #     # ds = cell.read(location_id=locations)
+    #     #
+    #     ds = cell.read(date_range = (np.datetime64("2020-01-01"), np.datetime64("2020-01-15")))
+    #     print(ds)
+
+    def test_to_1d_array(self):
+        handler = ContiguousRaggedArrayHandler
+        contiguous_cells = list(self.contiguous_path.glob("100*.nc"))
+        ds = xr.open_dataset(contiguous_cells[0])
+        start = time()
+        ds_1d = handler.to_1d_array(ds)
+        t1 = time() - start
+        ds_reverted = handler.from_1d_array(ds_1d)
+        t2 = time() - t1
+
+        num_locations = 100
+        random_indices = np.random.randint(0, len(ds_1d), num_locations)
+        random_location_ds = ds_1d["location_id"].values[random_indices]
+
+        print("to_1d_array", t1)
+        print("from_1d_array to contiguous", t2)
+
+        start = time()
+        handler.trim_to_gpis(ds, random_location_ds).compute()
+        print(f"read {num_locations} locations from original contiguous", time() - start)
+
+        start = time()
+        handler.trim_to_gpis(ds_reverted, random_location_ds).compute()
+        print(f"read {num_locations} locations from reverted contiguous", time() - start)
+
+        start = time()
+        OneDimArrayHandler.trim_to_gpis(ds_1d, gpis=random_location_ds).compute()
+        print(f"read {num_locations} locations from 1d with gpis", time() - start)
+        lookup_vector = np.zeros(ds_1d["location_id"].max().values + 1, dtype=bool)
+        lookup_vector[random_indices] = True
+        start = time()
+        OneDimArrayHandler.trim_to_gpis(ds_1d, lookup_vector=lookup_vector).compute()
+        print(f"read {num_locations} locations from 1d with lookup vector", time() - start)
+
+
+
+        # print(ds)
+        # print(ds_1d)
+        # print(ds_reverted)
+
+        handler = IndexedRaggedArrayHandler
+        start = time()
+        ds_indexed = handler.from_1d_array(ds_1d)
+        t3 = time() - start
+        print("from_1d_array to indexed", t3)
+
+        start = time()
+        handler.trim_to_gpis(ds_indexed, random_location_ds).compute()
+        print(f"read {num_locations} locations from reverted indexed", time() - start)
+
+
+
+class TestRaggedArrayCellFile_new(unittest.TestCase):
+    def setUp(self):
+        #self.path1 = Path("tests/ascat_test_data/hsaf/h129/stack_cells/")
+        self.contiguous_path = Path("/data-write/RADAR/hsaf/h121_v2.0/time_series/")
+        self.indexed_path = Path("/data-write/RADAR/hsaf/h129_v1.0/ts/")
+
+    # def test_one_location(self):
+    #     all_cells = list(self.contiguous_path.glob("100*.nc"))
+    #     cell = RaggedArrayCell(all_cells[0:10])
+    #     # locations = [5974490, 5974545, 5974634, 5974778,5974867, 5974922, 5975011, 5975155, 5975244,5696947, 5697934, 5698544, 5698921, 5699531, 5700518, 5701128, 5701505, 5701738, 5702115]
+    #     # ds = cell.read(location_id=locations)
+    #     #
+    #     ds = cell.read(date_range = (np.datetime64("2020-01-01"), np.datetime64("2020-01-15")))
+    #     print(ds)
+
+    def test_read(self):
+        # date_range
+        # # Make sure for both RA types, with single and multiple cells, that "date_range"
+        # # is faster than reading without date_range and filtering afterward.
+        contiguous_cells = list(self.contiguous_path.glob("100*.nc"))
+        indexed_cells = list(self.indexed_path.glob("100*.nc"))
+
+        # # contiguous, single cell
+        cell = RaggedArrayCell(contiguous_cells[0:1])
+        start = time()
+        ds = cell.read(date_range=(np.datetime64("2020-01-01"), np.datetime64("2020-01-15")))
+        t1 = time() - start
+        print("contiguous, single cell, date_range", t1)
+
 
 
 
@@ -182,13 +284,13 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test_init(self):
         contiguous_ragged_path = self.tempdir_path/ "contiguous" / "2588_contiguous_ragged.nc"
-        ra = RaggedArrayCellFile(contiguous_ragged_path)
+        ra = RaggedArrayCell(contiguous_ragged_path)
         self.assertEqual(ra.filenames[0], contiguous_ragged_path)
         # self.assertIsNone(ra.ds)
 
     def test_read(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCellFile(contiguous_ragged_path)
+        ra = RaggedArrayCell(contiguous_ragged_path)
         ra.read(chunks={"obs": 3})
         print(ra.ds)
         self.assertIsInstance(ra.ds, xr.Dataset)
@@ -202,7 +304,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test__ensure_obs(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCellFile(contiguous_ragged_path)
+        ra = RaggedArrayCell(contiguous_ragged_path)
         ds = xr.open_dataset(contiguous_ragged_path)
         # original_dim = ds["time"]
         self.assertNotIn("obs", ds.dims)
@@ -215,13 +317,13 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test__indexed_or_contiguous(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCellFile(contiguous_ragged_path)
+        ra = RaggedArrayCell(contiguous_ragged_path)
         ds = xr.open_dataset(contiguous_ragged_path)
         self.assertEqual(ra._indexed_or_contiguous(ds), "contiguous")
 
     def test__ensure_indexed(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCellFile(contiguous_ragged_path)
+        ra = RaggedArrayCell(contiguous_ragged_path)
         ds = xr.open_dataset(contiguous_ragged_path)
         self.assertNotIn("locationIndex", ds)
         self.assertIn("row_size", ds)
@@ -240,7 +342,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test__ensure_contiguous(self):
         indexed_ragged_path = self.tempdir_path / "indexed" / "2588.nc"
-        ra = RaggedArrayCellFile(indexed_ragged_path)
+        ra = RaggedArrayCell(indexed_ragged_path)
         ds = xr.open_dataset(indexed_ragged_path)
         ds = ds.chunk({"time": 1_000_000})
         self.assertIn("locationIndex", ds)
@@ -259,7 +361,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test__trim_to_gpis(self):
         indexed_ragged_path = self.tempdir_path / "indexed" / "2588.nc"
-        ra = RaggedArrayCellFile(indexed_ragged_path)
+        ra = RaggedArrayCell(indexed_ragged_path)
         ds = xr.open_dataset(indexed_ragged_path)
         ds = ra._ensure_obs(ds)
         ds = ds.chunk({"obs": 1_000_000})
@@ -271,7 +373,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test__trim_var_range(self):
         indexed_ragged_path = self.tempdir_path / "indexed" / "2588.nc"
-        ra = RaggedArrayCellFile(indexed_ragged_path)
+        ra = RaggedArrayCell(indexed_ragged_path)
         ds = xr.open_dataset(indexed_ragged_path)
         ds = ra._ensure_obs(ds)
         ds = ds.chunk({"obs": 1_000_000})
@@ -284,7 +386,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test_back_and_forth(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2587.nc"
-        ra = RaggedArrayCellFile(contiguous_ragged_path)
+        ra = RaggedArrayCell(contiguous_ragged_path)
         orig_ds = xr.open_dataset(contiguous_ragged_path)
         ds = ra._ensure_contiguous(orig_ds)
         xr.testing.assert_equal(orig_ds, ds)
@@ -292,8 +394,8 @@ class TestRaggedArrayCellFile(unittest.TestCase):
     def test_merge(self):
         fname1 = self.tempdir_path / "contiguous" / "2588.nc"
         fname2 = self.tempdir_path / "contiguous" / "2587.nc"
-        ra1 = RaggedArrayCellFile(fname1)
-        ra2 = RaggedArrayCellFile(fname2)
+        ra1 = RaggedArrayCell(fname1)
+        ra2 = RaggedArrayCell(fname2)
         ra1.read()
         ra2.read()
         merged = ra1.merge([ra1.ds, ra2.ds])
@@ -341,7 +443,7 @@ class TestCellGridFiles(unittest.TestCase):
             return {"cell_id": f"{cell:04d}"}
         return {
             "root_path": root_path,
-            "cls": RaggedArrayCellFile,
+            "cls": RaggedArrayCell,
             "fn_templ": "{cell_id}.nc",
             "sf_templ": sf_templ,
             "grid_name": "Fib12.5",
@@ -367,7 +469,7 @@ class TestCellGridFiles(unittest.TestCase):
         self.assertEqual(contig_collection.fn_read_fmt(2588), {"cell_id": "2588"})
         # self.assertIsNone(contig_collection.sf_read_fmt)
         self.assertEqual(contig_collection.root_path, self.tempdir_path / "contiguous")
-        self.assertEqual(contig_collection.cls, RaggedArrayCellFile)
+        self.assertEqual(contig_collection.cls, RaggedArrayCell)
 
     # def test_read(self):
     #     contig_collection = CellGridFiles(
@@ -455,7 +557,7 @@ class TestRaggedArrayFiles(unittest.TestCase):
         self.assertEqual(contig_collection.fn_read_fmt(2588), {"cell_id": "2588"})
         # self.assertIsNone(contig_collection.sf_read_fmt)
         self.assertEqual(contig_collection.root_path, self.tempdir_path / "contiguous")
-        self.assertEqual(contig_collection.cls, RaggedArrayCellFile)
+        self.assertEqual(contig_collection.cls, RaggedArrayCell)
 
     def test_search(self):
         root_path = self.tempdir_path / "contiguous"
