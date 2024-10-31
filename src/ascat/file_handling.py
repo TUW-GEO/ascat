@@ -38,7 +38,6 @@ from datetime import datetime
 
 import numpy as np
 
-
 class FilenameTemplate:
     """
     FilenameTemplate class.
@@ -929,7 +928,7 @@ class Filenames:
 
         #             self.write(data, f)
 
-    def read(self, **kwargs):
+    def read(self, parallel=False, closer_attr=None, **kwargs):
         """
         Read all data from files.
 
@@ -938,8 +937,29 @@ class Filenames:
         object
             Merged data from all files.
         """
-        data = [d for d in self.iter_read(**kwargs)]
+        if parallel:
+            import dask
+            read_ = dask.delayed(self._read)
+            getattr_ = dask.delayed(getattr)
+        else:
+            read_ = self._read
+            getattr_ = getattr
+
+        data = [read_(f, **kwargs) for f in self.filenames]
+        # data = [d for d in self.iter_read(**kwargs)]
+        if closer_attr is not None:
+            closers = [getattr_(d, closer_attr) for d in data]
+
+        if parallel:
+            data = dask.compute(data)[0]
+            if closer_attr is not None:
+                closers = dask.compute(closers)[0]
+
         data = self.merge(data)
+
+        if closer_attr is not None:
+            return data, closers
+
         return data
 
     def iter_read(self, **kwargs):
@@ -1004,6 +1024,12 @@ class Filenames:
         This method can be overridden in subclasses if necessary.
         """
         pass
+
+    @staticmethod
+    def _multi_file_closer(closers):
+        for closer in closers:
+            closer()
+        return
 
 
 class CsvFile(Filenames):
