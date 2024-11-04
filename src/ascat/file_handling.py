@@ -975,17 +975,23 @@ class Filenames:
             yield self._read(filename, **kwargs)
 
     def iter_read_nbytes(self, max_nbytes, **kwargs):
+        """
+        Iterate over all files and yield data until the specified number of bytes is reached.
+        If `_read` returns dask objects, they are computed (in parallel) before merging the data.
+        """
+        from dask import compute
         size = 0
         data_list = []
-        for filename in self.filenames:
-            data = self._read(filename, **kwargs)
+        for data in self.iter_read(**kwargs):
             size += self._nbytes(data)
             if size > max_nbytes:
-                yield self.merge(data_list)
+                yield self.merge(compute(*[ds for ds in data_list]))
                 size = 0
                 data_list = []
             else:
                 data_list.append(data)
+        if data_list:
+            yield self.merge(compute(*[ds for ds in data_list]))
 
     @staticmethod
     def _nbytes(data):
