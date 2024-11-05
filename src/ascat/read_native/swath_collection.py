@@ -28,6 +28,7 @@
 import multiprocessing as mp
 
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 
 import dask
@@ -86,11 +87,24 @@ class Swath(Filenames):
 
         return ds
 
-    def read(self, mask_and_scale=True, max_mb=None, **kwargs):
+    def read(
+        self,
+        mask_and_scale=True,
+        max_nbytes=None,
+        parallel=False,
+        **kwargs
+    ):
         """
         Read the file or a subset of it.
         """
-        ds = super().read(mask_and_scale=mask_and_scale, **kwargs)
+
+        ds, closers = super().read(closer_attr="_close",
+                                   parallel=parallel,
+                                   mask_and_scale=mask_and_scale,
+                                   **kwargs)
+
+        ds.set_close(partial(super()._multi_file_closer, closers))
+
         # if date_range is not None:
         #     ds = self._trim_var_range(ds, "time", *date_range)
         # if lookup_vector is not None:
@@ -133,75 +147,6 @@ class Swath(Filenames):
         )
 
         return merged_ds
-
-
-
-    # def merge(self, data, load=False, processes=None):
-    #     if not data:
-    #         return None
-
-    #     if processes == 1:
-    #         ds_to_merge = [self._preprocess(ds, load=load) for ds in data if ds.obs.size > 0]
-    #     # Parallelize preprocessing
-    #     else:
-    #         ctx = mp.get_context("forkserver")
-    #         with ctx.Pool(processes) as pool:
-    #             ds_to_merge = pool.starmap(
-    #                 self._preprocess_wrapper,
-    #                 [(ds, load) for ds in data if ds.obs.size > 0]
-    #             )
-
-    #         # Filter out None results (if any)
-    #         ds_to_merge = [ds for ds in ds_to_merge if ds is not None]
-
-    #     if not ds_to_merge:
-    #         return data[0]
-
-    #     merged_ds = xr.concat(
-    #         ds_to_merge,
-    #         dim="obs",
-    #         combine_attrs=self.combine_attributes,
-    #         data_vars="minimal",
-    #         coords="minimal",
-    #     )
-
-    #     return merged_ds
-
-    # def _preprocess_wrapper(self, ds, load=False):
-    #     try:
-    #         return self._preprocess(ds, load=load)
-    #     except Exception:
-    #         return None
-
-    # @staticmethod
-    # def _preprocess(ds, load=False):
-    #     """Pre-processing to be done on a component dataset so it can be merged with others.
-
-    #     Assumes `ds` is an indexed ragged array. (Re)-calculates the `locationIndex`
-    #     values for `ds` with respect to the `location_id` variable for the merged
-    #     dataset, which may include locations not present in `ds`.
-
-    #     Parameters
-    #     ----------
-    #     ds : xarray.Dataset
-    #         Dataset.
-
-    #     Returns
-    #     -------
-    #     xarray.Dataset
-    #         Dataset with pre-processing applied.
-    #     """
-    #     ds.attrs["global_attributes_flag"] = 1
-    #     if "spacecraft" in ds.attrs:
-    #         # Assumption: the spacecraft attribute is something like "metop-a"
-    #         sat_id = {"a": 3, "b": 4, "c": 5}
-    #         sat = ds.attrs["spacecraft"][-1].lower()
-    #         ds["sat_id"] = ("obs",
-    #                         np.repeat(sat_id[sat], ds["location_id"].size))
-    #         del ds.attrs["spacecraft"]
-    #     if load:
-    #         ds.load()
-    #     return ds
 
     @staticmethod
     def _ensure_obs(ds):
