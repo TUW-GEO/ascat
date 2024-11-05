@@ -714,7 +714,13 @@ class SwathGridFiles(ChronFiles):
             return data
 
 
-    def stack_to_cell_files(self, out_dir, max_nbytes, n_processes, date_range=None, fmt_kwargs=None):
+    def stack_to_cell_files(self,
+                            out_dir,
+                            max_nbytes,
+                            n_processes,
+                            date_range=None,
+                            fmt_kwargs=None,
+                            cells=None):
         """
         Stack all swath files to cell files, writing them in parallel.
         """
@@ -723,32 +729,33 @@ class SwathGridFiles(ChronFiles):
         fmt_kwargs = fmt_kwargs or {}
         if date_range is not None:
             dt_start, dt_end = date_range
-            filenames = self.swath_search(dt_start, dt_end, **fmt_kwargs)
+            filenames = self.swath_search(dt_start, dt_end, cell=cells, **fmt_kwargs)
         else:
             filenames = list(Path(self.root_path).glob("**/*.nc"))
 
         swath = self.cls(filenames)
         for ds in swath.iter_read_nbytes(max_nbytes):
-            cell = self.grid.gpi2cell(ds["location_id"]).compressed()
-            cell = xr.DataArray(cell, dims="obs", name="cell")
+            ds_cells = self.grid.gpi2cell(ds["location_id"]).compressed()
+            ds_cells = xr.DataArray(ds_cells, dims="obs", name="cell")
 
             # sorting here enables us to manually select each cell's data much faster
             # than using a .groupby
-            ds = ds.sortby(cell)
+            ds = ds.sortby(ds_cells)
 
-            unique_cells, cell_counts = np.unique(cell, return_counts=True)
+            unique_cells, cell_counts = np.unique(ds_cells, return_counts=True)
             cell_counts = np.hstack([0, np.cumsum(cell_counts)])
 
             # for each cell in unique cells, isel the slice from the dataarray corresponding to it
             ds_list = []
             cell_fnames = []
             for i, c in enumerate(unique_cells):
-                cell_ds = ds.isel(obs=slice(cell_counts[i], cell_counts[i+1]))
-                if len(cell_ds) == 0:
-                    continue
-                ds_list.append(cell_ds)
-                cell_fname = Path(out_dir)/self.cell_fn_format.format(c)
-                cell_fnames.append(cell_fname)
+                if c in cells:
+                    cell_ds = ds.isel(obs=slice(cell_counts[i], cell_counts[i+1]))
+                    if len(cell_ds) == 0:
+                        continue
+                    ds_list.append(cell_ds)
+                    cell_fname = Path(out_dir)/self.cell_fn_format.format(c)
+                    cell_fnames.append(cell_fname)
 
             writer_class = RaggedArrayCell(cell_fnames)
             writer_class.write(ds_list, parallel=True,
