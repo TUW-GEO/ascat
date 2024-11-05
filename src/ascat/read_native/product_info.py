@@ -11,90 +11,53 @@ from pygeogrids.netcdf import load_grid
 
 from pathlib import Path
 
+from ascat.read_native.cell_collection import RaggedArrayCell
+from ascat.read_native.cell_collection import OrthoMultiCell
 
-class CellGridCache:
+from ascat.read_native.grid_registry import grid_registry
+
+
+def register_cell_grid_product(product_class, grid, product_id, grid_attrs=None):
     """
-    Cache for CellGrid objects.
-    """
-
-    def __init__(self):
-        self.grids = {}
-
-    def fetch_or_store(self, key, grid=None, attrs=None):
-        """
-        Fetch a CellGrid object from the cache given a key,
-        or store a new one.
-
-        Parameters
-        ----------
-        """
-        if key not in self.grids:
-            if grid is None:
-                raise ValueError(
-                    "Key not in cache, please specify cell_grid_type and arguments"
-                    " to create a new CellGrid object and add it to the cache under"
-                    " the given key.")
-            self.grids[key] = {}
-            self.grids[key]["grid"] = grid
-            self.grids[key]["possible_cells"] = self.grids[key][
-                "grid"].get_cells()
-            self.grids[key]["max_cell"] = self.grids[key][
-                "possible_cells"].max()
-            self.grids[key]["min_cell"] = self.grids[key][
-                "possible_cells"].min()
-            self.grids[key]["attrs"] = attrs
-
-        return self.grids[key]
-
-
-grid_cache = CellGridCache()
-grid_cache.fetch_or_store("Fib6.25", FibGrid(6.25), {"grid_sampling_km": 6.25})
-grid_cache.fetch_or_store("Fib12.5", FibGrid(12.5), {"grid_sampling_km": 12.5})
-grid_cache.fetch_or_store("Fib25", FibGrid(25), {"grid_sampling_km": 25})
-
-def register_cell_grid_reader(reader_class, grid, product_id):
-    """
-    Register a reader class for a specific grid.
+    Register a product class for a specific grid.
 
     Parameters
     ----------
-    reader_class: class
+    product_class: class
         Class to register
     grid: pygeogrids.BasicGrid
         Grid object to register the class for
     """
+    grid_attrs = grid_attrs or {}
     if isinstance(grid, (str, Path)):
         grid = load_grid(grid)
     elif not isinstance(grid, BasicGrid):
         raise ValueError("grid must be a BasicGrid object or a string or Path to a grid file.")
 
-    reader_class.grid_info = grid_cache.fetch_or_store(reader_class.grid_name, grid)
-    reader_class.grid = reader_class.grid_info["grid"]
-    reader_class.possible_cells = reader_class.grid_info["possible_cells"]
-    reader_class.max_cell = reader_class.grid_info["max_cell"]
-    reader_class.min_cell = reader_class.grid_info["min_cell"]
-    cell_io_catalog[product_id] = reader_class
+    grid_registry.register(product_class.grid_name, lambda: {"grid": grid, "attrs": {**grid_attrs}})
 
-def register_swath_grid_reader(reader_class, grid, product_id):
+    cell_io_catalog[product_id] = product_class
+
+def register_swath_grid_product(product_class, grid, product_id, grid_attrs=None):
     """
-    Register a reader class for a specific grid.
+    Register a product class for a specific grid.
 
     Parameters
     ----------
-    reader_class: class
+    product_class: class
         Class to register
     grid: pygeogrids.BasicGrid
         Grid object to register the class for
     """
+    grid_attrs = grid_attrs or {}
     if isinstance(grid, (str, Path)):
         grid = load_grid(grid)
-    elif not isinstance(grid, pygeogrids.BasicGrid):
+    elif not isinstance(grid, BasicGrid):
         raise ValueError("grid must be a BasicGrid object or a string or Path to a grid file.")
 
-    grid_cache.fetch_or_store(reader_class.grid_name, grid)
-    swath_io_catalog[product_id] = reader_class
+    grid_registry.register(product_class.grid_name, lambda: {"grid": grid, "attrs": {**grid_attrs}})
 
-# Define dataset-specific classes.
+    swath_io_catalog[product_id] = product_class
 
 class ErsHCell():
     grid_name = "Fib12.5"

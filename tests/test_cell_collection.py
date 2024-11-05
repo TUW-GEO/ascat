@@ -15,7 +15,8 @@ from pygeogrids.netcdf import load_grid
 import ascat.read_native.generate_test_data as gtd
 
 # from ascat.read_native.product_info import cell_io_catalog
-from ascat.read_native.product_info import register_cell_grid_reader
+import ascat.read_native.product_info as product_info
+from ascat.read_native.product_info import register_cell_grid_product
 #from ascat.read_native.product_info import grid_cache
 
 from ascat.read_native.cell_collection import RaggedArrayCell
@@ -683,9 +684,9 @@ era5_grid = load_grid("tests/ascat_test_data/warp/era5_land_2023/grid.nc")
 gldas_grid = load_grid("tests/ascat_test_data/warp/gldas_2023/grid.nc")
 cci_passive_grid = load_grid("tests/ascat_test_data/warp/cci_passive_v07.1/grid.nc")
 
-register_cell_grid_reader(ERA5Cell, era5_grid, "ERA5")
-register_cell_grid_reader(GLDASCell, gldas_grid, "GLDAS")
-register_cell_grid_reader(CCI_PassiveCell, cci_passive_grid, "CCI_PASSIVE")
+register_cell_grid_product(ERA5Cell, era5_grid, "ERA5")
+register_cell_grid_product(GLDASCell, gldas_grid, "GLDAS")
+register_cell_grid_product(CCI_PassiveCell, cci_passive_grid, "CCI_PASSIVE")
 
 
 class TestOrthoMultiCell(unittest.TestCase):

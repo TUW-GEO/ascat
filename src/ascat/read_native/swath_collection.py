@@ -39,10 +39,10 @@ from pyresample import kd_tree
 from pyresample.geometry import AreaDefinition
 from pyresample.geometry import SwathDefinition
 
+from ascat.read_native.grid_registry import grid_registry
+
 from ascat.file_handling import Filenames
 from ascat.file_handling import ChronFiles
-from ascat.read_native.product_info import grid_cache
-from ascat.read_native.product_info import swath_io_catalog
 from ascat.utils import get_grid_gpis
 from ascat.utils import create_variable_encodings
 
@@ -594,7 +594,7 @@ class SwathGridFilesOld(ChronFiles):
                          cache_size)
 
         self.date_field_fmt = date_field_fmt
-        grid_info = grid_cache.fetch_or_store(grid_name)
+        grid_info = grid_registry.get(grid_name)
         self.grid_name = grid_name
         self.grid = grid_info["grid"]
         if "grid_sampling_km" in grid_info["attrs"]:
@@ -637,6 +637,7 @@ class SwathGridFilesOld(ChronFiles):
         ... )
 
         """
+        from ascat.read_native.product_info import swath_io_catalog
         product_id = product_id.upper()
         if product_id in swath_io_catalog:
             io_class = swath_io_catalog[product_id]

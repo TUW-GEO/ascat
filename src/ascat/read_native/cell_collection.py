@@ -37,10 +37,10 @@ import numpy_groupies as npg
 import dask.array as da
 
 
+from ascat.read_native.grid_registry import grid_registry
+
 from ascat.file_handling import MultiFileHandler
 from ascat.file_handling import Filenames
-from ascat.read_native.product_info import cell_io_catalog
-#from ascat.read_native.product_info import grid_cache
 from ascat.utils import get_grid_gpis
 from ascat.utils import append_to_netcdf
 from ascat.utils import create_variable_encodings
@@ -971,7 +971,7 @@ class CellGridFiles(MultiFileHandler):
         sf_templ : dict, optional
             Subfolder template defined as dictionary (default: None).
         grid_name : str
-            Name of the grid used by the files as stored in the grid_cache.
+            Name of the grid used by the files as stored in the grid_registry.
         cls_kwargs : dict, optional
             Class keyword arguments (default: None).
         err : bool, optional
@@ -999,8 +999,7 @@ class CellGridFiles(MultiFileHandler):
         self.fmt_kwargs = fmt_kwargs or {}
         self.read_kwargs = read_kwargs or {}
 
-        from ascat.read_native.product_info import grid_cache
-        grid_info = grid_cache.fetch_or_store(grid_name)
+        grid_info = grid_registry.get(grid_name)
         self.grid_name = grid_name
         self.grid = grid_info["grid"]
         if (grid_info["attrs"] is not None) and ("grid_sampling_km" in grid_info["attrs"]):
