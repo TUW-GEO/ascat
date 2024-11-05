@@ -99,8 +99,23 @@ class AscatSIG0Cell12500m(RaggedArrayCellProduct):
     grid_name = "Fib12.5"
 
 
+class SwathProduct:
+    from ascat.read_native.swath_collection import Swath
+    file_class = Swath
 
-class AscatH129Swath():
+class AscatSwathProduct(SwathProduct):
+    @staticmethod
+    def preprocess_(ds):
+        ds.attrs["global_attributes_flag"] = 1
+        if "spacecraft" in ds.attrs:
+            # Assumption: the spacecraft attribute is something like "metop-a"
+            sat_id = {"a": 3, "b": 4, "c": 5}
+            sat = ds.attrs["spacecraft"][-1].lower()
+            ds["sat_id"] = ("obs",
+                            np.repeat(sat_id[sat], ds["location_id"].size))
+            del ds.attrs["spacecraft"]
+
+class AscatH129Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc"
     sf_pattern = {
         "satellite_folder": "metop_[abc]",
@@ -164,7 +179,7 @@ class AscatH129Swath():
         }
 
 
-class AscatH129v1Swath():
+class AscatH129v1Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
@@ -215,7 +230,7 @@ class AscatH129v1Swath():
         }
 
 
-class AscatH121v1Swath():
+class AscatH121v1Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
@@ -266,7 +281,7 @@ class AscatH121v1Swath():
         }
 
 
-class AscatH122Swath():
+class AscatH122Swath(AscatSwathProduct):
     fn_pattern = "ascat_ssm_nrt_6.25km_{placeholder}Z_{date}Z_metop-{sat}_h122.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
@@ -321,7 +336,7 @@ class AscatH122Swath():
         }
 
 
-class AscatSIG0Swath6250m():
+class AscatSIG0Swath6250m(AscatSwathProduct):
     """
     Class for reading ASCAT sigma0 swath data and writing it to cells.
     """
@@ -423,7 +438,7 @@ class AscatSIG0Swath6250m():
         }
 
 
-class AscatSIG0Swath12500m():
+class AscatSIG0Swath12500m(AscatSwathProduct):
     """
     Class for reading and writing ASCAT sigma0 swath data.
     """
