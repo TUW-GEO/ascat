@@ -684,27 +684,27 @@ class SwathGridFiles(ChronFiles):
             dt_start, dt_end, dt_delta, search_date_fmt, date_field,
             end_inclusive, cell, location_id, coords, bbox, geom, **fmt_kwargs,
         )
-        valid_gpis = get_grid_gpis(
-            self.grid,
-            cell=cell,
-            location_id=location_id,
-            coords=coords,
-            bbox=bbox,
-            geom=geom,
-        )
-        lookup_vector = np.zeros(self.grid.gpis.max()+1, dtype=bool)
-        lookup_vector[valid_gpis] = 1
 
         date_range = (np.datetime64(dt_start), np.datetime64(dt_end))
-
         data = self.cls(filenames).read()
 
         if data:
-            data_location_ids = data["location_id"].values
-            obs_idx = lookup_vector[data_location_ids]
-            data = data.sel(obs=obs_idx)
+            if any(v is not None for v in (cell, location_id, coords, bbox, geom)):
+                valid_gpis = get_grid_gpis(
+                    self.grid,
+                    cell=cell,
+                    location_id=location_id,
+                    coords=coords,
+                    bbox=bbox,
+                    geom=geom,
+                )
+                lookup_vector = np.zeros(self.grid.gpis.max()+1, dtype=bool)
+                lookup_vector[valid_gpis] = 1
 
-            # still not clear if it's better to filter date here or during fid.read
+                data_location_ids = data["location_id"].values
+                obs_idx = lookup_vector[data_location_ids]
+                data = data.sel(obs=obs_idx)
+
             if date_range is not None:
                 mask = (data["time"] >= date_range[0]) & (data["time"] <= date_range[1])
                 data = data.sel(obs=mask.compute())
@@ -712,7 +712,6 @@ class SwathGridFiles(ChronFiles):
             data.attrs["grid_name"] = self.grid_name
 
             return data
-        return None
 
 
     def stack_to_cell_files(self, out_dir, max_nbytes, n_processes, date_range=None, fmt_kwargs=None):
