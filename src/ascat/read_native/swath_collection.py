@@ -102,20 +102,9 @@ class Swath(Filenames):
                                    parallel=parallel,
                                    mask_and_scale=mask_and_scale,
                                    **kwargs)
-
-        ds.set_close(partial(super()._multi_file_closer, closers))
-
-        # if date_range is not None:
-        #     ds = self._trim_var_range(ds, "time", *date_range)
-        # if lookup_vector is not None:
-        #     ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
-        # elif location_id is not None:
-        #     ds = self._trim_to_gpis(ds, gpis=location_id)
-
-        # # TODO hmmmmmm
-        # ds = self._ensure_obs(ds)
-
-        return ds
+        if ds is not None:
+            ds.set_close(partial(super()._multi_file_closer, closers))
+            return ds
 
     @staticmethod
     def _nbytes(ds):
