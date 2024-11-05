@@ -762,7 +762,256 @@ class OrthoMultiCell(Filenames):
         return ds
 
 
-class CellGridFiles(MultiFileHandler):
+class CellGridFiles():
+
+    def __init__(
+        self,
+        root_path,
+        file_class,
+        grid,
+        fn_format="{cell:04d}.nc",
+        sf_format=None,
+    ):
+        self.root_path = Path(root_path)
+        self.file_class = file_class
+        self.grid = grid
+        self.fn_format = fn_format
+        self.sf_format = sf_format
+
+
+    def from_product_id(cls, root_path, product_id, **kwargs):
+        from ascat.read_native.product_info import cell_io_catalog
+        product_id = product_id.upper()
+        if product_id in cell_io_catalog:
+            product_class = cell_io_catalog[product_id]
+            return cls.from_product_class(root_path, product_class, **kwargs)
+        error_str = f"Product {product_id} not recognized. Valid products are"
+        error_str += f" {', '.join(cell_io_catalog.keys())}."
+        raise ValueError(error_str)
+
+    @classmethod
+    def from_product_class(cls, root_path, product_class, **kwargs):
+        grid_name = product_class.grid_name
+        init_options = {
+            "root_path": root_path,
+            "file_class": product_class.reader_class,
+            "grid": grid_registry.get(grid_name)["grid"],
+            "fn_format": product_class.fn_format,
+            **kwargs
+        }
+        init_options = {**init_options}
+        return cls(**init_options)
+
+    def fn_search(self, cell, sf_args=None):
+        # get the paths to files matching a cell if the files exist
+
+        filename = self.fn_format.format(cell=cell)
+        if sf_args is not None:
+            subfolder = self.sf_format.format(**sf_args)
+            return list(self.root_path.glob(subfolder / filename))
+        else:
+            # Should it return all below root path if no subfolder is specified?
+            #return list(self.root_path.glob("**/" + filename))
+            return list(self.root_path.glob(filename))
+
+
+    def spatial_search(
+            self,
+            cell=None,
+            location_id=None,
+            coords=None,
+            bbox=None,
+            geom=None,
+    ):
+        """
+        Search files for cells matching a spatial criterion.
+
+        Parameters
+        ----------
+        cell : int or list of int
+            Grid cell number to read.
+        location_id : int or list of int
+            Location id.
+        coords : tuple of numeric or tuple of iterable of numeric
+            Tuple of (lon, lat) coordinates.
+        bbox : tuple
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+
+        Returns
+        -------
+        filenames : list of str
+            Filenames.
+
+        Notes
+        -----
+        TODO maybe can get rid of all the _cells_for_* methods and just do them here
+        """
+        if cell is not None:
+            # guarantee cell is a list
+            matched_cells = cell
+            if not isinstance(matched_cells, list):
+                matched_cells = [matched_cells]
+        elif location_id is not None:
+            # guarantee location_id is a list
+            if not isinstance(location_id, list):
+                location_id = [location_id]
+            matched_cells = self._cells_for_location_id(location_id)
+        elif coords is not None:
+            matched_cells = self._cells_for_coords(coords)
+        elif bbox is not None:
+            matched_cells = self._cells_for_bbox(bbox)
+        elif geom is not None:
+            matched_cells = self._cells_for_geom(geom)
+        else:
+            matched_cells = self.grid.arrcell
+
+        matched_cells = np.unique(matched_cells)
+        # self.grid.allpoints
+
+        filenames = []
+        for cell in matched_cells:
+            filenames += self.fn_search(cell)
+
+        return filenames
+
+    def _cells_for_location_id(self, location_id):
+        """
+        Get cells for location_id.
+
+        Parameters
+        ----------
+        location_id : int
+            Location id.
+
+        Returns
+        -------
+        cells : list of int
+            Cells.
+        """
+        cells = self.grid.gpi2cell(location_id)
+        return cells
+
+    def _cells_for_coords(self, coords):
+        """
+        Get cells for coordinates.
+
+        Parameters
+        ----------
+        coords : tuple
+            Coordinates (lon, lat)
+
+        Returns
+        -------
+        cells : list of int
+            Cells.
+        """
+        # gpis, _ = self.grid.find_nearest_gpi(*coords)
+        gpis = get_grid_gpis(self.grid, coords=coords)
+        cells = self._cells_for_location_id(gpis)
+        return cells
+
+    def _cells_for_bbox(self, bbox):
+        """
+        Get cells for bounding box.
+
+        Parameters
+        ----------
+        bbox : tuple
+            Bounding box.
+
+        Returns
+        -------
+        cells : list of int
+            Cells.
+        """
+        # gpis = self.grid.get_bbox_grid_points(*bbox)
+        gpis = get_grid_gpis(self.grid, bbox=bbox)
+        cells = self._cells_for_location_id(gpis)
+        return cells
+
+    def _cells_for_geom(self, geom):
+        """
+        Get cells for bounding box.
+
+        Parameters
+        ----------
+        bbox : tuple
+            Bounding box.
+
+        Returns
+        -------
+        cells : list of int
+            Cells.
+        """
+        gpis = get_grid_gpis(self.grid, geom=geom)
+        cells = self._cells_for_location_id(gpis)
+        return cells
+
+    def _fn(self, cell):
+        return self.root_path / self.fn_format.format(cell=cell)
+
+    def read(
+            self,
+            cell=None,
+            location_id=None,
+            coords=None,
+            bbox=None,
+            geom=None,
+            max_coord_dist=np.inf,
+            date_range=None,
+            **kwargs,
+    ):
+        """
+        Read data matching a spatial and temporal criterion.
+
+        Parameters
+        ----------
+        cell : int or list of int
+            Grid cell number to read.
+        location_id : int or list of int
+            Location id.
+        coords : tuple of numeric or tuple of iterable of numeric
+            Tuple of (lon, lat) coordinates.
+        bbox : tuple
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        max_coord_dist : float
+            The maximum distance a coordinate's nearest grid point can be from it to be
+            selected.
+        date_range : tuple of np.datetime64
+            Tuple of (start, end) dates.
+
+        Returns
+        -------
+        filenames : list of str
+            Filenames.
+        """
+        filenames = self.spatial_search(
+            cell=cell,
+            location_id=location_id,
+            coords=coords,
+            bbox=bbox,
+            geom=geom,
+        )
+        if cell is not None:
+            valid_gpis = None
+            lookup_vector = None
+        else:
+            valid_gpis, lookup_vector = get_grid_gpis(
+                self.grid,
+                cell,
+                location_id,
+                coords,
+                bbox,
+                geom,
+                max_coord_dist,
+                return_lookup=True
+            )
+
+        return self.file_class(filenames).read(date_range=date_range,
+                                                 lookup_vector=lookup_vector,
+                                                 **kwargs)
+
+class CellGridFilesOld(MultiFileHandler):
     """
     Managing pygeogrid-ed files with a cell number in the filename.
     """
@@ -1265,7 +1514,7 @@ class CellGridFiles(MultiFileHandler):
 
 
 
-class RaggedArrayFiles(CellGridFiles):
+class RaggedArrayFilesOld(CellGridFiles):
 
     @classmethod
     def from_product_class(cls, root_path, product_class, **kwargs):

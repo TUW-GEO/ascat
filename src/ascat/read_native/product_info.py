@@ -59,155 +59,45 @@ def register_swath_grid_product(product_class, grid, product_id, grid_attrs=None
 
     swath_io_catalog[product_id] = product_class
 
-class ErsHCell():
-    grid_name = "Fib12.5"
-    grid_info = grid_cache.fetch_or_store(grid_name)
-    grid = grid_info["grid"]
+
+class RaggedArrayCellProduct:
+    file_class = RaggedArrayCell
     fn_format = "{:04d}.nc"
-    possible_cells = None
-    max_cell = None
-    min_cell = None
-    sf_pattern = {"satellite_folder": "ERS-{sat}_WindScatt", "res_folder": "{res}"}
 
-    @staticmethod
-    def fn_read_fmt(cell, sat=None):
-        return {"cell_id": f"{cell:04d}"}
+    
+class ErsHCell(RaggedArrayCellProduct):
+    grid_name = "Fib12.5"
+    #sf_pattern = {"satellite_folder": "ERS-{sat}_WindScatt", "res_folder": "{res}"}
 
-    @staticmethod
-    def sf_read_fmt(cell, sat=None):
-        return {"satellite_folder": {"sat": sat}, "res_folder": {"res": "H"}}
 
-class ErsNCell():
+class ErsNCell(RaggedArrayCellProduct):
     grid_name = "Fib25"
-    grid_info = grid_cache.fetch_or_store(grid_name)
-    grid = grid_info["grid"]
-    fn_format = "{:04d}.nc"
-    possible_cells = None
-    max_cell = None
-    min_cell = None
-    sf_pattern = {"satellite_folder": "ERS-{sat}_WindScatt", "res_folder": "{res}"}
 
-    @staticmethod
-    def fn_read_fmt(cell, sat=None):
-        return {"cell_id": f"{cell:04d}"}
 
-    @staticmethod
-    def sf_read_fmt(cell, sat=None):
-        return {"satellite_folder": {"sat": sat}, "res_folder": {"res": "N"}}
-
-class AscatH129Cell():
+class AscatH129Cell(RaggedArrayCellProduct):
     grid_name = "Fib6.25"
-    grid_info = grid_cache.fetch_or_store(grid_name)
-    grid = grid_info["grid"]
-    fn_format = "{:04d}.nc"
-    possible_cells = grid_info["possible_cells"]
-    max_cell = grid_info["max_cell"]
-    min_cell = grid_info["min_cell"]
-    sf_pattern = {"sat_str": "{sat}"}
+    # sf_pattern = {"sat_str": "{sat}"}
 
-    @staticmethod
-    def fn_read_fmt(cell, sat=None):
-        return {"cell_id": f"{cell:04d}"}
 
-    @staticmethod
-    def sf_read_fmt(cell, sat=None):
-        if sat is not None:
-            return {"sat_str": {"sat": sat}}
-
-class AscatH129v1Cell():
+class AscatH129v1Cell(RaggedArrayCellProduct):
     grid_name = "Fib6.25"
-    grid_info = grid_cache.fetch_or_store(grid_name, FibGrid, 6.25)
-    grid = grid_info["grid"]
-    fn_format = "{:04d}.nc"
-    possible_cells = grid_info["possible_cells"]
-    max_cell = grid_info["max_cell"]
-    min_cell = grid_info["min_cell"]
-    sf_pattern = {"sat_str": "{sat}"}
 
-    @staticmethod
-    def fn_read_fmt(cell, sat=None):
-        return {"cell_id": f"{cell:04d}"}
 
-    @staticmethod
-    def sf_read_fmt(cell, sat=None):
-        if sat is not None:
-            return {"sat_str": {"sat": sat}}
-
-class AscatH121v1Cell():
+class AscatH121v1Cell(RaggedArrayCellProduct):
     grid_name = "Fib12.5"
-    grid_info = grid_cache.fetch_or_store(grid_name, FibGrid, 12.5)
-    grid = grid_info["grid"]
-    fn_format = "{:04d}.nc"
-    possible_cells = grid_info["possible_cells"]
-    max_cell = grid_info["max_cell"]
-    min_cell = grid_info["min_cell"]
-    sf_pattern = {"sat_str": "{sat}"}
 
-    @staticmethod
-    def fn_read_fmt(cell, sat=None):
-        return {"cell_id": f"{cell:04d}"}
 
-    @staticmethod
-    def sf_read_fmt(cell, sat=None):
-        if sat is not None:
-            return {"sat_str": {"sat": sat}}
-
-class AscatH122Cell():
+class AscatH122Cell(RaggedArrayCellProduct):
     grid_name = "Fib6.25"
-    grid_info = grid_cache.fetch_or_store(grid_name, FibGrid, 6.25)
-    grid = grid_info["grid"]
-    fn_format = "{:04d}.nc"
-    possible_cells = grid_info["possible_cells"]
-    max_cell = grid_info["max_cell"]
-    min_cell = grid_info["min_cell"]
-    sf_pattern = {"sat_str": "{sat}"}
 
-    @staticmethod
-    def fn_read_fmt(cell, sat=None):
-        return {"cell_id": f"{cell:04d}"}
 
-    @staticmethod
-    def sf_read_fmt(cell, sat=None):
-        if sat is not None:
-            return {"sat_str": {"sat": sat}}
-
-class AscatSIG0Cell6250m():
+class AscatSIG0Cell6250m(RaggedArrayCellProduct):
     grid_name = "Fib6.25"
-    grid_info = grid_cache.fetch_or_store(grid_name, FibGrid, 6.25)
-    grid = grid_info["grid"]
-    fn_format = "{:04d}.nc"
-    possible_cells = grid_info["possible_cells"]
-    max_cell = grid_info["max_cell"]
-    min_cell = grid_info["min_cell"]
-    sf_pattern = {"sat_str": "{sat}"}
 
-    @staticmethod
-    def fn_read_fmt(cell, sat=None):
-        return {"cell_id": f"{cell:04d}"}
 
-    @staticmethod
-    def sf_read_fmt(cell, sat=None):
-        if sat is not None:
-            return {"sat_str": {"sat": sat}}
-
-class AscatSIG0Cell12500m():
+class AscatSIG0Cell12500m(RaggedArrayCellProduct):
     grid_name = "Fib12.5"
-    grid_info = grid_cache.fetch_or_store(grid_name, FibGrid, 12.5)
-    grid = grid_info["grid"]
-    fn_format = "{:04d}.nc"
-    possible_cells = grid_info["possible_cells"]
-    max_cell = grid_info["max_cell"]
-    min_cell = grid_info["min_cell"]
-    sf_pattern = {"sat_str": "{sat}"}
 
-    @staticmethod
-    def fn_read_fmt(cell, sat=None):
-        return {"cell_id": f"{cell:04d}"}
-
-    @staticmethod
-    def sf_read_fmt(cell, sat=None):
-        if sat is not None:
-            return {"sat_str": {"sat": sat}}
 
 
 class AscatH129Swath():
