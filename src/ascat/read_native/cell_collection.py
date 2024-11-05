@@ -779,6 +779,7 @@ class CellGridFiles():
         self.sf_format = sf_format
 
 
+    @classmethod
     def from_product_id(cls, root_path, product_id, **kwargs):
         from ascat.read_native.product_info import cell_io_catalog
         product_id = product_id.upper()
@@ -794,7 +795,7 @@ class CellGridFiles():
         grid_name = product_class.grid_name
         init_options = {
             "root_path": root_path,
-            "file_class": product_class.reader_class,
+            "file_class": product_class.file_class,
             "grid": grid_registry.get(grid_name)["grid"],
             "fn_format": product_class.fn_format,
             **kwargs
@@ -805,7 +806,7 @@ class CellGridFiles():
     def fn_search(self, cell, sf_args=None):
         # get the paths to files matching a cell if the files exist
 
-        filename = self.fn_format.format(cell=cell)
+        filename = self.fn_format.format(cell)
         if sf_args is not None:
             subfolder = self.sf_format.format(**sf_args)
             return list(self.root_path.glob(subfolder / filename))
