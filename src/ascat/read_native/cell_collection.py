@@ -51,15 +51,23 @@ class IndexedRaggedArrayHandler:
         # the "unique_index" is what we'll use to get all the other location variables'
         # values from the 1d array
         location_id, unique_index_1d, locationIndex = np.unique(ds["location_id"],
-                                                        return_index=True,
-                                                        return_inverse=True)
-        ds["location_id"] = ("locations", location_id)
+                                                                return_index=True,
+                                                                return_inverse=True)
         ds["locationIndex"] = ("obs", locationIndex)
 
-        potential_loc_vars = ["lon", "lat", "alt", "longitude", "latitude", "altitude", "location_description"]
+        potential_loc_vars = ["location_id",
+                              "lon",
+                              "lat",
+                              "alt",
+                              "longitude",
+                              "latitude",
+                              "altitude",
+                              "location_description"]
         for var in potential_loc_vars:
             if var in ds:
-                ds[var] = ("locations", ds[var][unique_index_1d].data)
+                ds[var] = ("locations", ds[var][unique_index_1d].data, ds[var].attrs)
+                if var in ["lon", "lat", "longitude", "latitude"]:
+                    ds = ds.set_coords(var)
 
         return ds
 
@@ -132,7 +140,6 @@ class IndexedRaggedArrayHandler:
             # first trim out any gpis not in the dataset from the gpi list
             gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
 
-
             sorter = np.argsort(ds["location_id"].values)
             # this is a list of the locationIndex values that correspond to the gpis we're keeping
             locations_idx = np.searchsorted(ds["location_id"].values, gpis, sorter=sorter)
@@ -156,6 +163,7 @@ class IndexedRaggedArrayHandler:
 
         else:
             return ds
+
 
 class OneDimArrayHandler:
     @classmethod
@@ -189,14 +197,22 @@ class ContiguousRaggedArrayHandler:
                                                     return_index=True,
                                                     return_counts=True)
 
-        ds["location_id"] = ("locations", location_id)
+        # ds["location_id"] = ("locations", location_id)
         ds["row_size"] = ("locations", row_size)
 
-        potential_loc_vars = ["lon", "lat", "alt", "longitude", "latitude", "altitude", "location_description"]
+        potential_loc_vars = ["location_id",
+                              "lon",
+                              "lat",
+                              "alt",
+                              "longitude",
+                              "latitude",
+                              "altitude",
+                              "location_description"]
         for var in potential_loc_vars:
             if var in ds:
-                ds[var] = ("locations", ds[var][unique_index_1d].data)
-
+                ds[var] = ("locations", ds[var][unique_index_1d].data, ds[var].attrs)
+                if var in ["lon", "lat", "longitude", "latitude"]:
+                    ds = ds.set_coords(var)
         return ds
 
     @classmethod
@@ -1010,8 +1026,8 @@ class CellGridFiles():
             )
 
         return self.file_class(filenames).read(date_range=date_range,
-                                                 lookup_vector=lookup_vector,
-                                                 **kwargs)
+                                               lookup_vector=lookup_vector,
+                                               **kwargs)
 
 class CellGridFilesOld(MultiFileHandler):
     """
