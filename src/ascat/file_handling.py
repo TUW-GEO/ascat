@@ -903,7 +903,7 @@ class Filenames:
         """
         raise NotImplementedError
 
-    def write(self, data, **kwargs):
+    def write(self, data, parallel=False, **kwargs):
         """
         Write data to file.
 
@@ -911,8 +911,9 @@ class Filenames:
 
         Parameters
         ----------
-        data : object
-            The data to write.
+        data :  list of objects
+            The data to write. Should be a list with the same length as self.filenames,
+            where each element is the data to be written to the corresponding filename.
 
         TODO: Add support for writing to multiple files by passing a list of data and
         checking if the number of data objects matches the number of filenames.
@@ -921,12 +922,19 @@ class Filenames:
         if n_filenames == 1:
             filename = self.filenames[0]
             filename.parent.mkdir(parents=True, exist_ok=True)
-            self._write(data, filename, **kwargs)
-        # elif n_filenames > 1:
-        #     if len(data) == n_filenames:
-        #         for f in self.filenames:
+            self._write(data[0], filename, **kwargs)
+        elif n_filenames > 1:
+            if len(data) == n_filenames:
+                if parallel:
+                    from dask import delayed, compute
+                    write_ = delayed(self._write)
+                    writers = [write_(d, f, **kwargs) for d, f in zip(data, self.filenames)]
+                    compute(writers)
+                else:
+                    for d, f in zip(data, self.filenames):
+                        self._write(d, f, **kwargs)
 
-        #             self.write(data, f)
+
 
     def read(self, parallel=False, closer_attr=None, **kwargs):
         """
@@ -983,11 +991,12 @@ class Filenames:
         size = 0
         data_list = []
         for data in self.iter_read(**kwargs):
-            size += self._nbytes(data)
-            if size > max_nbytes:
+            data_size = self._nbytes(data)
+            size += data_size
+            if size > max_nbytes and size > data_size:
                 yield self.merge(compute(*[ds for ds in data_list]))
-                size = 0
-                data_list = []
+                size = data_size
+                data_list = [data]
             else:
                 data_list.append(data)
         if data_list:
