@@ -63,10 +63,23 @@ class IndexedRaggedArrayHandler:
 
         return ds
 
+    @classmethod
+    def from_contiguous_ra(cls, ds):
+        row_size = np.where(ds["row_size"].data > 0, ds["row_size"].data,
+                            0)
+
+        locationIndex = np.repeat(np.arange(row_size.size), row_size)
+        ds = ds.drop_vars(["row_size"])
+
+        ds["locationIndex"] = ("obs", locationIndex)
+
+        # put locationIndex as first var
+        ds = ds[["locationIndex"] + [var for var in ds.variables if var != "locationIndex"]]
+
+        return ds
 
     @classmethod
     def to_1d_array(cls, ds):
-        print("indexed to 1d")
         loc_vars = [var for var in ds.variables if "locations" in ds[var].dims]
         for loc_var in loc_vars:
             ds[loc_var] = ds[loc_var][ds["locationIndex"]]
@@ -75,7 +88,7 @@ class IndexedRaggedArrayHandler:
 
 
     @classmethod
-    def trim_to_gpis(cls, ds, gpis=None, lookup_vector=None, output_1d=False):
+    def trim_to_gpis(cls, ds, gpis=None, lookup_vector=None, output_1d=True):
         """Trim a dataset to only the gpis in the given list.
         If any gpis are passed which are not in the dataset, they are ignored.
         Prioritize lookup_vector if available (?)
@@ -94,10 +107,12 @@ class IndexedRaggedArrayHandler:
         """
         if ds is None:
             return
-        # if gpis is None and lookup_vector is None:
-        #     return ds
-        # if (gpis is None or len(gpis) == 0) and (lookup_vector is None or len(lookup_vector)==0):
-        #     return ds
+        if output_1d:
+            ds = cls.to_1d_array(ds)
+            return OneDimArrayHandler.trim_to_gpis(ds, gpis, lookup_vector)
+
+        # this implementation keeps things in IndexedRaggedArray format. Might be able
+        # to ditch it
         if lookup_vector is not None:
             ds_location_ids = ds["location_id"].data[ds["locationIndex"].data]
             obs_idx = lookup_vector[ds_location_ids]
@@ -155,8 +170,6 @@ class OneDimArrayHandler:
         else:
             return None
 
-
-
     @classmethod
     def trim_var_range(cls, ds, var_name, var_min, var_max, end_inclusive=False):
         if end_inclusive:
@@ -200,13 +213,28 @@ class ContiguousRaggedArrayHandler:
         xarray.Dataset
             Dataset with only the time series variables.
         """
-        print("contiguous to 1d")
         row_size = ds["row_size"].data
         ds = ds.drop_vars("row_size")
         loc_vars = [var for var in ds.variables if "locations" in ds[var].dims]
         for loc_var in loc_vars:
             ds[loc_var] = ("obs", np.repeat(ds[loc_var], row_size).data)
         return ds
+
+    @classmethod
+    def from_indexed_ra(cls, ds):
+        if not ds.chunks:
+            ds = ds.chunk({"obs": 1_000_000})
+
+        ds = ds.sortby(["locationIndex", "time"])
+        idxs, sizes = np.unique(ds.locationIndex.values, return_counts=True)
+
+        row_size = np.zeros_like(ds.location_id.data)
+        row_size[idxs] = sizes
+        ds["row_size"] = ("locations", row_size)
+        ds = ds.drop_vars(["locationIndex"])
+
+        return ds
+
 
     @classmethod
     def trim_var_range(cls, ds, var_name, var_min, var_max, end_inclusive=False):
@@ -221,7 +249,7 @@ class ContiguousRaggedArrayHandler:
         return ds
 
     @classmethod
-    def trim_to_gpis(cls, ds, gpis=None, lookup_vector=None):
+    def trim_to_gpis(cls, ds, gpis=None, lookup_vector=None, output_1d=True):
         if gpis is None or len(gpis)==0:
             obs_locations = np.repeat(ds.locations, ds.row_size)
             obs_location_ids = np.repeat(ds.location_id, ds.row_size)
@@ -249,7 +277,10 @@ class ContiguousRaggedArrayHandler:
             obs_idxs = []
             locations_idxs = []
 
-        return ds.isel(obs=obs_idxs, locations=locations_idxs)
+        ds = ds.isel(obs=obs_idxs, locations=locations_idxs)
+        if output_1d:
+            return cls.to_1d_array(ds)
+        return ds
 
 class RaggedArrayCell(Filenames):
     """
