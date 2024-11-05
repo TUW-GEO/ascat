@@ -370,16 +370,17 @@ class RaggedArrayCell(Filenames):
                                    parallel=parallel,
                                    **kwargs)
 
-        ds.set_close(partial(super()._multi_file_closer, closers))
+        if ds is not None:
+            ds.set_close(partial(super()._multi_file_closer, closers))
 
-        if return_format == "1d":
-            return ds
+            if return_format == "1d":
+                return ds
 
-        if return_format == "indexed":
-            return IndexedRaggedArrayHandler.from_1d_array(ds)
+            if return_format == "indexed":
+                return IndexedRaggedArrayHandler.from_1d_array(ds)
 
-        if return_format == "contiguous":
-            return ContiguousRaggedArrayHandler.from_1d_array(ds)
+            if return_format == "contiguous":
+                return ContiguousRaggedArrayHandler.from_1d_array(ds)
 
     @staticmethod
     def _indexed_or_contiguous(ds):
