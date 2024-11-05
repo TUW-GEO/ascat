@@ -593,7 +593,7 @@ class SwathGridFilesOld(ChronFiles):
 
         return cls(
             path,
-            SwathFile,
+            Swath,
             io_class.fn_pattern,
             io_class.sf_pattern,
             grid_name=io_class.grid_name,
