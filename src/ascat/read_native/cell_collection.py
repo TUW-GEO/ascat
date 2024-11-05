@@ -337,7 +337,15 @@ class RaggedArrayCell(Filenames):
 
         return ds
 
-    def read(self, date_range=None, location_id=None, lookup_vector=None, preprocessor=None, **kwargs):
+
+    def read(self,
+             date_range=None,
+             location_id=None,
+             lookup_vector=None,
+             preprocessor=None,
+             return_format="indexed",
+             parallel=False,
+             **kwargs):
         """
         Read data from Ragged Array Cell files.
 
@@ -353,18 +361,41 @@ class RaggedArrayCell(Filenames):
             Function to preprocess the dataset.
         **kwargs : dict
         """
-        ds = super().read(date_range=date_range,
-                          location_id=location_id,
-                          lookup_vector=lookup_vector,
-                          preprocessor=preprocessor, **kwargs)
 
-        return ds
+        ds, closers = super().read(date_range=date_range,
+                                   location_id=location_id,
+                                   lookup_vector=lookup_vector,
+                                   preprocessor=preprocessor,
+                                   closer_attr="_close",
+                                   parallel=parallel,
+                                   **kwargs)
+
+        ds.set_close(partial(super()._multi_file_closer, closers))
+
+        if return_format == "1d":
+            return ds
+
+        if return_format == "indexed":
+            return IndexedRaggedArrayHandler.from_1d_array(ds)
+
+        if return_format == "contiguous":
+            return ContiguousRaggedArrayHandler.from_1d_array(ds)
 
     @staticmethod
     def _indexed_or_contiguous(ds):
         if "locationIndex" in ds:
             return "indexed"
         return "contiguous"
+
+    @staticmethod
+    def _array_type(ds):
+        """
+        Determine the type of ragged array.
+        """
+        if "locationIndex" in ds:
+            return "indexed"
+        if "row_size" in ds:
+            return "contiguous"
 
     def _ra_handler(self, ds):
         if self._indexed_or_contiguous(ds) == "indexed":
@@ -391,8 +422,13 @@ class RaggedArrayCell(Filenames):
         #  not "locations".
         return ds
 
-    @staticmethod
-    def _ensure_indexed(ds):
+    def _ensure_1d(self, ds):
+        if self._indexed_or_contiguous(ds) == "indexed":
+            return IndexedRaggedArrayHandler.to_1d_array(ds)
+        return ContiguousRaggedArrayHandler.to_1d_array(ds)
+
+
+    def _ensure_indexed(self, ds):
         """
         Convert a contiguous dataset to indexed dataset,
         if necessary. Indexed datasets pass through.
@@ -411,24 +447,20 @@ class RaggedArrayCell(Filenames):
         xarray.Dataset
             Dataset in indexed ragged array format.
         """
-        if ds is None or "locationIndex" in ds.data_vars:
+        ds_type = self._array_type(ds)
+
+        if ds is None or ds_type == "indexed":
             return ds
 
-        # remove nans
-        row_size = np.where(ds["row_size"].data > 0, ds["row_size"].data,
-                            0)
+        if ds_type == "contiguous":
+            return IndexedRaggedArrayHandler.from_contiguous_ra(ds)
 
-        locationIndex = np.repeat(np.arange(row_size.size), row_size)
-        ds["locationIndex"] = ("obs", locationIndex)
-        ds = ds.drop_vars(["row_size"])
+        if ds_type is None:
+            # assume one-dimensional array
+            return IndexedRaggedArrayHandler.from_1d_array(ds)
 
-        # put locationIndex as first var
-        ds = ds[["locationIndex"] + [var for var in ds.variables if var != "locationIndex"]]
 
-        return ds
-
-    @staticmethod
-    def _ensure_contiguous(ds):
+    def _ensure_contiguous(self, ds):
         """
         Convert an indexed dataset to contiguous dataset,
         if necessary. Contiguous datasets pass through.
@@ -447,19 +479,16 @@ class RaggedArrayCell(Filenames):
         xarray.Dataset
             Dataset in contiguous ragged array format.
         """
-        if ds is None or "row_size" in ds.data_vars:
+        ds_type = self._array_type(ds)
+        if ds is None or ds_type == "contiguous":
             return ds
 
-        if not ds.chunks:
-            ds = ds.chunk({"obs": 1_000_000})
+        if ds_type == "indexed":
+            return ContiguousRaggedArrayHandler.from_indexed_ra(ds)
 
-        ds = ds.sortby(["locationIndex", "time"])
-        idxs, sizes = np.unique(ds.locationIndex.values, return_counts=True)
+        if ds_type == "1d":
+            return ContiguousRaggedArrayHandler.from_1d_array(ds)
 
-        row_size = np.zeros_like(ds.location_id.data)
-        row_size[idxs] = sizes
-        ds["row_size"] = ("locations", row_size)
-        ds = ds.drop_vars(["locationIndex"])
         return ds
 
     @staticmethod
@@ -501,177 +530,31 @@ class RaggedArrayCell(Filenames):
             return None
 
         merged_ds = xr.concat(
-            [self._preprocess(ds).chunk({"obs":-1})#, location_vars, location_sorter)
+            [self._preprocess(ds).chunk({"obs":-1})
                 for ds in data if ds is not None],
             dim="obs",
             # data_vars="minimal",
             # coords="minimal",
             combine_attrs="drop_conflicts",
         )
-        # merged_ds = IndexedRaggedArrayHandler.from_1d_array(merged_ds)
-        # check if any of the datasets in ds_locations is not equal to the first one
-        # if any(not ds.equals(ds_locations[0]) for ds in ds_locations):
-            # location_vars, location_sorter = self._merge_ds_locations_vars(ds_locations)
-
-            # merged_ds = xr.combine_nested(
-            #     [self._preprocess(ds, location_vars, location_sorter)
-            #      for ds in data if ds is not None],
-            #     concat_dim="obs",
-            #     data_vars="minimal",
-            #     coords="minimal",
-            #     combine_attrs="drop_conflicts",
-            # )
-            # then put locations dim back on
-        # if they're all the same (e.g. merging the same cell from several satellites),
-        # we can just combine them directly
-        # else:
-        #     merged_ds = xr.combine_nested(
-        #         [ds for ds in data if ds is not None],
-        #         concat_dim="obs",
-        #         data_vars="minimal",
-        #         coords="minimal",
-        #         combine_attrs="drop_conflicts",
-        #     )
-
-        # # Move these elsewhere?
-        # merged_ds = trim_dates(merged_ds, date_range)
-        # merged_ds = self._trim_var_range(merged_ds, "time", *date_range)
-        # merged_ds = self._trim_to_gpis(merged_ds, valid_gpis)
 
         return merged_ds
-
-    @staticmethod
-    def _merge_ds_locations_vars(ds_locations):
-        """
-        Merge the locations-dimensional variables from a list of datasets.
-        """
-        locs_merged = xr.combine_nested(
-            ds_locations, concat_dim="locations"
-        )
-
-        _, idxs = np.unique(
-            locs_merged["location_id"], return_index=True
-        )
-
-        location_vars = {
-            var: locs_merged[var][idxs]
-            for var in locs_merged.variables
-        }
-
-        location_sorter = np.argsort(location_vars["location_id"].values)
-
-        locs_merged.close()
-
-        return location_vars, location_sorter
 
     def _preprocess(self, ds):
         """Pre-processing to be done on a component dataset so it can be merged with others.
 
-        Assumes `ds` is an indexed ragged array. (Re)-calculates the `locationIndex`
-        values for `ds` with respect to the `location_id` variable for the merged
-        dataset, which may include locations not present in `ds`.
+        Nothing here at the moment.
 
         Parameters
         ----------
         ds : xarray.Dataset
             Dataset.
-        location_vars : dict
-            Dictionary of ordered location variable DataArrays for the merged data.
-        location_sorter : numpy.ndarray
-            Result of `np.argsort(location_vars["location_id"])`, used to calculate
-            the `locationIndex` variable. Calculated outside this function to avoid
-            re-calculating it for every dataset being merged.
 
         Returns
         -------
         xarray.Dataset
             Dataset with pre-processing applied.
         """
-        # get list of all vars with "locations" dimension
-        # ds = self._ra_handler(ds).to_1d_array(ds)
-
-        # ds["locationIndex"] = ("obs", locationIndex)
-
-        # # Next, we put the locations-dimensional variables on the dataset,
-        # # and set them as coordinates.
-        # for var, var_data in location_vars.items():
-        #     ds[var] = ("locations", var_data.values)
-        # ds = ds.set_coords(["lon", "lat", "alt", "time"])
-
-        # try:
-        #     # Need to reset the time index if it's already there, but I can't
-        #     # figure out how to test if time is already an index except like this
-        #     ds = ds.reset_index("time")
-        # except ValueError:
-        #     pass
-
-        return ds
-
-    @staticmethod
-    def _preprocess_old(ds, location_vars, location_sorter):
-        """Pre-processing to be done on a component dataset so it can be merged with others.
-
-        Assumes `ds` is an indexed ragged array. (Re)-calculates the `locationIndex`
-        values for `ds` with respect to the `location_id` variable for the merged
-        dataset, which may include locations not present in `ds`.
-
-        Parameters
-        ----------
-        ds : xarray.Dataset
-            Dataset.
-        location_vars : dict
-            Dictionary of ordered location variable DataArrays for the merged data.
-        location_sorter : numpy.ndarray
-            Result of `np.argsort(location_vars["location_id"])`, used to calculate
-            the `locationIndex` variable. Calculated outside this function to avoid
-            re-calculating it for every dataset being merged.
-
-        Returns
-        -------
-        xarray.Dataset
-            Dataset with pre-processing applied.
-        """
-        # First, we need to calculate the locationIndex variable, based
-        # on the location_id variable that will go on the final merged dataset.
-        # This should have been stored in self.location_vars["location_id"] at some
-        # point before reaching this function, along with all the other
-        # locations-dimensional variables in the combined dataset.
-
-        # if "locations" is in the dataset dimensions, then we have
-        # a multi-location dataset.
-        if "locations" in ds.dims:
-            # TODO maybe we can speed this up with a sel?
-            ds = ds.dropna(dim="locations", subset=["location_id"])
-            locationIndex = location_sorter[np.searchsorted(
-                location_vars["location_id"].values,
-                ds["location_id"].values[ds["locationIndex"]],
-                sorter=location_sorter,
-            )]
-            ds = ds.drop_dims("locations")
-
-        # if not, we just have a single location, and logic is different
-        else:
-            locationIndex = location_sorter[np.searchsorted(
-                location_vars["location_id"].values,
-                np.repeat(ds["location_id"].values, ds["locationIndex"].size),
-                sorter=location_sorter,
-            )]
-
-        ds["locationIndex"] = ("obs", locationIndex)
-
-        # Next, we put the locations-dimensional variables on the dataset,
-        # and set them as coordinates.
-        for var, var_data in location_vars.items():
-            ds[var] = ("locations", var_data.values)
-        ds = ds.set_coords(["lon", "lat", "alt", "time"])
-
-        try:
-            # Need to reset the time index if it's already there, but I can't
-            # figure out how to test if time is already an index except like this
-            ds = ds.reset_index("time")
-        except ValueError:
-            pass
-
         return ds
 
     def _trim_to_gpis(self, ds, gpis=None, lookup_vector=None):
@@ -692,102 +575,11 @@ class RaggedArrayCell(Filenames):
         """
         if ds is None:
             return
-        # if gpis is None and lookup_vector is None:
-        #     return ds
+
         if (gpis is None or len(gpis) == 0) and (lookup_vector is None or len(lookup_vector)==0):
             return ds
-        handler = self._ra_handler(ds)
-        return handler.trim_to_gpis(ds, gpis, lookup_vector)
 
-        # if self._indexed_or_contiguous(ds) == "indexed":
-        #     if gpis is None:
-        #         ds_location_ids = ds["location_id"].data[ds["locationIndex"].data]
-        #         obs_idx = lookup_vector[ds_location_ids]
-        #         locations_idx = np.unique(ds["locationIndex"][obs_idx])
-
-        #         # then trim out any gpis in the dataset not in gpis
-        #         ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
-        #         sorter = np.argsort(ds["location_id"].data)
-        #         new_locationIndex = np.searchsorted(ds["location_id"].data,
-        #                                             ds_location_ids[obs_idx],
-        #                                             sorter=sorter)
-        #         # and add the new locationIndex
-        #         ds["locationIndex"] = ("obs", new_locationIndex)
-        #         return ds
-
-        #     else:
-        #         # first trim out any gpis not in the dataset from the gpi list
-        #         gpis = np.intersect1d(gpis, ds["location_id"].values, assume_unique=True)
-
-
-        #         sorter = np.argsort(ds["location_id"].values)
-        #         # this is a list of the locationIndex values that correspond to the gpis we're keeping
-        #         locations_idx = np.searchsorted(ds["location_id"].values, gpis, sorter=sorter)
-        #         # this is the indices of the observations that have any of those locationIndex values
-        #         obs_idx = np.isin(ds["locationIndex"], locations_idx)
-
-        #         # now we need to figure out what the new locationIndex vector will be once we drop all the other location_ids
-        #         sorter = np.argsort(locations_idx)
-        #         old_locationIndex = ds["locationIndex"].values
-        #         new_locationIndex = np.searchsorted(
-        #             locations_idx,
-        #             old_locationIndex[np.isin(old_locationIndex, locations_idx)],
-        #             sorter=sorter,
-        #         )
-
-        #         # then trim out any gpis in the dataset not in gpis
-        #         ds = ds.isel({"obs": obs_idx, "locations": locations_idx})
-        #         # and add the new locationIndex
-        #         ds["locationIndex"] = ("obs", new_locationIndex)
-        #         return ds
-        # # if self._indexed_or_contiguous(ds) == "contiguous":
-        # #     if len(gpis) == 1:
-        # #         idx = np.where(ds.location_id==gpis[0])[0][0]
-        # #         start = int(ds.row_size.isel(locations=slice(0,idx)).sum().values)
-        # #         end = int(start + ds.row_size.isel(locations=idx).values)
-        # #         return ds.isel(obs=slice(start, end), locations=idx)
-        # #     else:
-        # #         if lookup_vector is None:
-        # #             idxs = np.where(np.isin(ds.location_id, gpis))[0]
-        # #         else:
-        # #             idxs = np.where(
-        # #                 lookup_vector[np.repeat(ds.location_id, ds.row_size)]
-        # #             )[0]
-        # #         if idxs.size > 0:
-        # #             starts = [int(ds.row_size.isel(locations=slice(0,i)).sum().values)
-        # #                         for i in idxs]
-        # #             ends = [int(start + ds.row_size.isel(locations=i).values)
-        # #                     for start, i in zip(starts, idxs)]
-        # #             obs = np.concatenate([range(start, end) for start, end in zip(starts, ends)])
-        # #             locations = [i for i in idxs]
-        # #             return ds.isel(obs=obs, locations=locations)
-
-        # if self._indexed_or_contiguous(ds) == "contiguous":
-        #     if gpis is None or len(gpis)==0:
-        #         obs_locations = np.repeat(ds.locations, ds.row_size)
-        #         obs_location_ids = np.repeat(ds.location_id, ds.row_size)
-        #         obs_idxs = lookup_vector[obs_location_ids]
-        #         locations_idxs = npg.aggregate(obs_locations, obs_idxs, func="any")
-        #         return ds.sel(obs=obs_idxs, locations=locations_idxs)
-
-        #     if len(gpis) == 1:
-        #         locations_idx = np.where(ds.location_id==gpis[0])[0][0]
-        #         obs_start = int(ds.row_size.isel(locations=slice(0,locations_idx)).sum().values)
-        #         obs_end = int(obs_start + ds.row_size.isel(locations=locations_idx).values)
-        #         return ds.isel(obs=slice(obs_start, obs_end), locations=locations_idx)
-        #     else:
-        #         locations_idxs = np.where(np.isin(ds.location_id, gpis))[0]
-
-        #     if locations_idxs.size > 0:
-        #         obs_starts = [int(ds.row_size.isel(locations=slice(0,i)).sum().values)
-        #                     for i in locations_idxs]
-        #         obs_ends = [int(start + ds.row_size.isel(locations=i).values)
-        #                 for start, i in zip(obs_starts, locations_idxs)]
-        #         obs_idxs = np.concatenate([range(start, end)
-        #                                    for start, end in zip(obs_starts, obs_ends)])
-        #         # locations_idxs = [i for i in locations_idxs]
-
-        #     return ds.isel(obs=obs_idxs, locations=locations_idxs)
+        return self._ra_handler(ds).trim_to_gpis(ds, gpis, lookup_vector)
 
     def _write(self,
                data,
@@ -812,6 +604,9 @@ class RaggedArrayCell(Filenames):
             raise ValueError("ra_type must be 'contiguous' or 'indexed'")
         if ra_type == "contiguous":
             data = self._ensure_contiguous(data)
+        else:
+            data = self._ensure_indexed(data)
+
 
         if postprocessor is not None:
             data = postprocessor(data)
@@ -845,8 +640,8 @@ class RaggedArrayCell(Filenames):
             return
 
         data.to_netcdf(filename,
-                         encoding=out_encoding,
-                         **kwargs)
+                       encoding=out_encoding,
+                       **kwargs)
 
 
 class OrthoMultiCell(Filenames):
