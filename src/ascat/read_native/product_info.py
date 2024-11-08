@@ -115,6 +115,17 @@ class AscatSwathProduct(SwathProduct):
                             np.repeat(sat_id[sat], ds["location_id"].size))
             del ds.attrs["spacecraft"]
 
+    @staticmethod
+    def postprocess_(ds):
+        for key, item in {"latitude": "lat", "longitude": "lon", "altitude": "alt"}.items():
+            if key in ds:
+                ds = ds.rename({key: item})
+        if "altitude" not in ds:
+            ds["alt"] = ("locations", np.full_like(ds["lat"], fill_value=np.nan))
+        return ds
+
+
+
 class AscatH129Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc"
     sf_pattern = {
