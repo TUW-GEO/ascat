@@ -204,7 +204,6 @@ class PointArrayAccessor:
 
     @property
     def array_type(self) -> str:
-        print("hello typeraer")
         if self._ra_type is None:
             if self._obj.attrs["featureType"] == "point":
                 self._ra_type = "point"
@@ -223,8 +222,6 @@ class PointArrayAccessor:
         instance_uid: str = "location_id",
     ):
         ds = self._obj
-        print("hiiii")
-        print(ds)
         return self._select_instances(
             ds,
             self._sample_dimension,
@@ -481,7 +478,6 @@ class RaggedArrayAccessor:
         if self.array_type == "indexed":
             # convert to point array, select there, convert back\
             ds = self.to_point_array()
-            print(ds)
             instances = ds.parr.sel_instances(
                 instance_vals=instance_vals,
                 instance_lookup_vector=instance_lookup_vector,
