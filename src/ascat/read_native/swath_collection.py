@@ -211,6 +211,8 @@ class SwathGridFiles(ChronFiles):
         sf_read_fmt=None,
         fn_write_fmt=None,
         sf_write_fmt=None,
+        preprocessor=None,
+        postprocessor=None,
         cache_size=0,
     ):
         """
@@ -273,7 +275,8 @@ class SwathGridFiles(ChronFiles):
         self.cell_fn_format = cell_fn_format
         self.beams_vars = beams_vars
         self.ts_dtype = ts_dtype
-
+        self.preprocessor = preprocessor
+        self.postprocessor = postprocessor
 
     @classmethod
     def from_product_id(
@@ -354,6 +357,7 @@ class SwathGridFiles(ChronFiles):
             ts_dtype=product_class.ts_dtype,
             fn_read_fmt=product_class.fn_read_fmt,
             sf_read_fmt=product_class.sf_read_fmt,
+
             # fn_write_fmt=io_class.fn_write_fmt,
             # sf_write_fmt=io_class.sf_write_fmt,
         )
@@ -699,7 +703,6 @@ class SwathGridFiles(ChronFiles):
 
             return data
 
-
     def stack_to_cell_files(self,
                             out_dir,
                             max_nbytes,
@@ -720,6 +723,7 @@ class SwathGridFiles(ChronFiles):
             filenames = list(Path(self.root_path).glob("**/*.nc"))
 
         swath = self.cls(filenames)
+
         for ds in swath.iter_read_nbytes(max_nbytes):
             ds_cells = self.grid.gpi2cell(ds["location_id"]).compressed()
             ds_cells = xr.DataArray(ds_cells, dims="obs", name="cell")
@@ -745,16 +749,7 @@ class SwathGridFiles(ChronFiles):
 
             writer_class = RaggedArrayCell(cell_fnames)
             writer_class.write(ds_list, parallel=True,
-                               postprocessor=self._postprocess_stacked_cell, mode="a")
-
-    @staticmethod
-    def _postprocess_stacked_cell(ds):
-        for key, item in {"latitude": "lat", "longitude": "lon", "altitude": "alt"}.items():
-            if key in ds:
-                ds = ds.rename({key: item})
-        if "altitude" not in ds:
-            ds["alt"] = ("locations", np.full_like(ds["lat"], fill_value=np.nan))
-        return ds
+                                postprocessor=self.postprocessor, mode="a")
 
 
 class SwathGridFilesOld(ChronFiles):
