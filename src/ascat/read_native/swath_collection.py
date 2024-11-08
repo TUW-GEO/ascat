@@ -315,21 +315,7 @@ class SwathGridFiles(ChronFiles):
             error_str += f" {', '.join(swath_io_catalog.keys())}."
             raise ValueError(error_str)
 
-        return cls(
-            path,
-            Swath,
-            product_class.fn_pattern,
-            product_class.sf_pattern,
-            grid_name=product_class.grid_name,
-            cell_fn_format=product_class.cell_fn_format,
-            date_field_fmt=product_class.date_field_fmt,
-            fn_read_fmt=product_class.fn_read_fmt,
-            sf_read_fmt=product_class.sf_read_fmt,
-            beams_vars=product_class.beams_vars,
-            ts_dtype=product_class.ts_dtype,
-            # fn_write_fmt=io_class.fn_write_fmt,
-            # sf_write_fmt=io_class.sf_write_fmt,
-        )
+        return cls.from_product_class(path, product_class)
 
     @classmethod
     def from_product_class(
