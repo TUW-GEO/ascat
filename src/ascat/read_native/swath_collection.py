@@ -197,7 +197,6 @@ class SwathGridFiles(ChronFiles):
     def __init__(
         self,
         root_path,
-        file_class,
         fn_templ,
         sf_templ,
         grid_name,
@@ -222,8 +221,6 @@ class SwathGridFiles(ChronFiles):
         ----------
         root_path : str
             Root path.
-        file_class : class
-            Class reading/writing files.
         fn_templ : str
             Filename template (e.g. "{date}_ascat.nc").
         sf_templ : dict, optional
@@ -259,7 +256,7 @@ class SwathGridFiles(ChronFiles):
                 sf_read_fmt = None
                 break
 
-        super().__init__(root_path, file_class, fn_templ, sf_templ, cls_kwargs, err,
+        super().__init__(root_path, Swath, fn_templ, sf_templ, cls_kwargs, err,
                          fn_read_fmt, sf_read_fmt, fn_write_fmt, sf_write_fmt,
                          cache_size)
 
