@@ -636,6 +636,7 @@ class SwathGridFiles(ChronFiles):
         bbox=None,
         geom=None,
         processes=None,
+        read_kwargs=None,
         **fmt_kwargs,
     ):
         """
@@ -676,7 +677,9 @@ class SwathGridFiles(ChronFiles):
         )
 
         date_range = (np.datetime64(dt_start), np.datetime64(dt_end))
-        data = self.cls(filenames).read()
+
+        read_kwargs = read_kwargs or {}
+        data = self.cls(filenames).read(**read_kwargs)
 
         if data:
             if any(v is not None for v in (cell, location_id, coords, bbox, geom)):
