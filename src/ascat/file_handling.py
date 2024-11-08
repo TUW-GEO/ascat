@@ -944,9 +944,8 @@ class Filenames:
             Merged data from all files.
         """
         if parallel:
-            import dask
-            read_ = dask.delayed(self._read)
-            getattr_ = dask.delayed(getattr)
+            read_ = delayed(self._read)
+            getattr_ = delayed(getattr)
         else:
             read_ = self._read
             getattr_ = getattr
@@ -957,9 +956,9 @@ class Filenames:
             closers = [getattr_(d, closer_attr) for d in data]
 
         if parallel:
-            data = dask.compute(data)[0]
+            data = compute(data)[0]
             if closer_attr is not None:
-                closers = dask.compute(closers)[0]
+                closers = compute(closers)[0]
 
         data = self.merge(data)
 
