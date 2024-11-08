@@ -36,12 +36,10 @@ from pygeogrids import BasicGrid, CellGrid
 
 registry = PyGeoGridRegistry()
 
+
 @xr.register_dataset_accessor("pgg")
 class PyGeoGriddedArrayAccessor:
-    def __init__(
-        self,
-        xarray_obj: xr.Dataset
-    ):
+    def __init__(self, xarray_obj: xr.Dataset):
         self._obj = xarray_obj
         self._grid = None
 
@@ -63,53 +61,45 @@ class PyGeoGriddedArrayAccessor:
             if grid is not None:
                 registry.register(grid_name, lambda: grid)
             else:
-                raise ValueError(f"Grid {grid_name} is not registered."
-                                 " Please pass a grid object to the `grid` argument.")
+                raise ValueError(
+                    f"Grid {grid_name} is not registered."
+                    " Please pass a grid object to the `grid` argument."
+                )
         self._obj.attrs["grid_name"] = grid_name
 
-    def sel_bbox(
-        self,
-        bbox: Iterable[float]
-    ):
-        gpis, lookup_vector = get_grid_gpis(grid=self.grid,
-                                            bbox=bbox)
+    def sel_bbox(self, bbox: Iterable[float]):
+        gpis, lookup_vector = get_grid_gpis(grid=self.grid, bbox=bbox)
         return self._obj.pgg.sel_gpi(gpis)
 
     def sel_coords(
-        self,
-        coords: Iterable[Iterable[float]],
-        max_coord_dist: float = np.inf
+        self, coords: Iterable[Iterable[float]], max_coord_dist: float = np.inf
     ):
-        gpis, lookup_vector = get_grid_gpis(grid=self.grid,
-                                            coords=coords,
-                                            max_coord_dist=max_coord_dist)
+        gpis, lookup_vector = get_grid_gpis(
+            grid=self.grid, coords=coords, max_coord_dist=max_coord_dist
+        )
         return self._obj.pgg.sel_gpi(gpis)
 
-    def sel_cells(
-        self,
-        cells: Iterable[float]
-    ):
+    def sel_cells(self, cells: Iterable[float]):
         assert isinstance(self._grid, CellGrid)
-        gpis, lookup_vector = get_grid_gpis(grid=self._grid,
-                                            cell=cells)
+        gpis, lookup_vector = get_grid_gpis(grid=self._grid, cell=cells)
         return self._obj.pgg.sel_gpi(gpis)
 
     def sel_gpis(
         self,
         gpis: Iterable[int] = None,
         lookup_vector: np.ndarray = None,
-        gpi_var: str = "location_id"
+        gpi_var: str = "location_id",
     ) -> xr.Dataset:
-        return self._obj.cf_geom.sel_instances(instance_vals=gpis,
-                                               instance_lookup_vector=lookup_vector,
-                                               instance_uid=gpi_var)
+        return self._obj.cf_geom.sel_instances(
+            instance_vals=gpis,
+            instance_lookup_vector=lookup_vector,
+            instance_uid=gpi_var,
+        )
+
 
 @xr.register_dataset_accessor("cf_geom")
 class CFDiscreteGeometryAccessor:
-    def __init__(
-        self,
-        xarray_obj: xr.Dataset
-    ):
+    def __init__(self, xarray_obj: xr.Dataset):
         self._obj = xarray_obj
         self._arr_type = None
         self._sample_dimension = None
@@ -143,19 +133,25 @@ class CFDiscreteGeometryAccessor:
         instance_uid: str = "location_id",
     ):
         if self.array_type == "indexed":
-            return self._obj.raga.sel_instances(instance_vals=instance_vals,
-                                                instance_lookup_vector=instance_lookup_vector,)
+            return self._obj.raga.sel_instances(
+                instance_vals=instance_vals,
+                instance_lookup_vector=instance_lookup_vector,
+            )
         if self.array_type == "contiguous":
-            return self._obj.raga.sel_instances(instance_vals=instance_vals,
-                                                instance_lookup_vector=instance_lookup_vector,)
+            return self._obj.raga.sel_instances(
+                instance_vals=instance_vals,
+                instance_lookup_vector=instance_lookup_vector,
+            )
         # if self.array_type == "orthomulti":
         #     return self._obj.ormu.sel_instances(instance_vals=instance_vals,
         #                                         instance_lookup_vector=instance_lookup_vector,
         #                                         instance_uid=instance_uid)
         if self.array_type == "point":
-            return self._obj.parr.sel_instances(instance_vals=instance_vals,
-                                                instance_lookup_vector=instance_lookup_vector,
-                                                instance_uid=instance_uid)
+            return self._obj.parr.sel_instances(
+                instance_vals=instance_vals,
+                instance_lookup_vector=instance_lookup_vector,
+                instance_uid=instance_uid,
+            )
 
     def to_point_array(self):
         if self.array_type == "indexed":
@@ -198,13 +194,9 @@ class CFDiscreteGeometryAccessor:
             return self._obj.parr.to_orthomulti()
 
 
-
 @xr.register_dataset_accessor("parr")
 class PointArrayAccessor:
-    def __init__(
-        self,
-        xarray_obj: xr.Dataset
-    ):
+    def __init__(self, xarray_obj: xr.Dataset):
         self._obj = xarray_obj
         self._ra_type = None
         self._sample_dimension = None
@@ -214,12 +206,14 @@ class PointArrayAccessor:
     def array_type(self) -> str:
         print("hello typeraer")
         if self._ra_type is None:
-            if (self._obj.attrs["featureType"] == "point"):
+            if self._obj.attrs["featureType"] == "point":
                 self._ra_type = "point"
                 self._sample_dimension = list(self._obj.dims)[0]
             else:
-                raise ValueError("Dataset is not a point array"
-                                 "(should have featureType='point' in attributes).")
+                raise ValueError(
+                    "Dataset is not a point array"
+                    "(should have featureType='point' in attributes)."
+                )
         return self._ra_type
 
     def sel_instances(
@@ -231,11 +225,13 @@ class PointArrayAccessor:
         ds = self._obj
         print("hiiii")
         print(ds)
-        return self._select_instances(ds,
-                                      self._sample_dimension,
-                                      instance_vals,
-                                      instance_lookup_vector,
-                                      instance_uid)
+        return self._select_instances(
+            ds,
+            self._sample_dimension,
+            instance_vals,
+            instance_lookup_vector,
+            instance_uid,
+        )
 
     def to_indexed_ragged(
         self,
@@ -243,7 +239,7 @@ class PointArrayAccessor:
         instance_uid: str = "location_id",
         index_var: str = "locationIndex",
         instance_vars: Iterable[str] = None,
-        set_coords: Iterable[str] = None
+        set_coords: Iterable[str] = None,
     ) -> xr.Dataset:
         return self._point_to_indexed(
             self._obj,
@@ -252,7 +248,7 @@ class PointArrayAccessor:
             instance_uid,
             index_var,
             instance_vars,
-            set_coords
+            set_coords,
         )
 
     def to_contiguous_ragged(
@@ -261,15 +257,10 @@ class PointArrayAccessor:
         instance_uid: str = "location_id",
         count_var: str = "row_size",
         instance_vars: Iterable[str] = None,
-        set_coords: Iterable[str] = None
+        set_coords: Iterable[str] = None,
     ) -> xr.Dataset:
         return self._point_to_contiguous(
-            self._obj,
-            instance_dim,
-            instance_uid,
-            count_var,
-            instance_vars,
-            set_coords
+            self._obj, instance_dim, instance_uid, count_var, instance_vars, set_coords
         )
 
     def to_orthomulti(self):
@@ -301,9 +292,9 @@ class PointArrayAccessor:
         instance_vars: Iterable[str] = None,
         set_coords: Iterable[str] = None,
     ) -> xr.Dataset:
-        instance_id, unique_index_1d, instanceIndex = np.unique(ds[instance_uid],
-                                                                return_index=True,
-                                                                return_inverse=True)
+        instance_id, unique_index_1d, instanceIndex = np.unique(
+            ds[instance_uid], return_index=True, return_inverse=True
+        )
         ds[index_var] = (sample_dim, instanceIndex)
 
         potential_instance_vars = [
@@ -313,28 +304,27 @@ class PointArrayAccessor:
             "longitude",
             "latitude",
             "altitude",
-            "location_description"
+            "location_description",
         ]
         instance_vars = instance_vars or potential_instance_vars
         instance_vars = [instance_uid] + instance_vars
 
         potential_set_coords = [
-                instance_uid,
-                "lon",
-                "lat",
-                "alt",
-                "longitude",
-                "latitude",
-                "altitude"
+            instance_uid,
+            "lon",
+            "lat",
+            "alt",
+            "longitude",
+            "latitude",
+            "altitude",
         ]
         set_coords = set_coords or potential_set_coords
 
         for var in instance_vars:
             if var in ds:
-                ds = ds.assign({var:
-                                (instance_dim,
-                                 ds[var][unique_index_1d].data,
-                                 ds[var].attrs)})
+                ds = ds.assign(
+                    {var: (instance_dim, ds[var][unique_index_1d].data, ds[var].attrs)}
+                )
                 if var in set_coords:
                     ds = ds.set_coords(var)
         ds = ds.assign_attrs({"featureType": "timeSeries"})
@@ -350,30 +340,32 @@ class PointArrayAccessor:
         set_coords: Iterable[str] = None,
     ) -> xr.Dataset:
         ds = ds.sortby(["location_id", "time"])
-        instance_id, unique_index_1d, row_size = np.unique(ds[instance_uid],
-                                                           return_index=True,
-                                                           return_counts=True)
+        instance_id, unique_index_1d, row_size = np.unique(
+            ds[instance_uid], return_index=True, return_counts=True
+        )
 
         ds[count_var] = ("locations", row_size)
 
-        potential_instance_vars = ["lon",
-                                   "lat",
-                                   "alt",
-                                   "longitude",
-                                   "latitude",
-                                   "altitude",
-                                   "location_description"]
+        potential_instance_vars = [
+            "lon",
+            "lat",
+            "alt",
+            "longitude",
+            "latitude",
+            "altitude",
+            "location_description",
+        ]
         instance_vars = instance_vars or potential_instance_vars
         instance_vars = [instance_uid] + instance_vars
 
         potential_set_coords = [
-                instance_uid,
-                "lon",
-                "lat",
-                "alt",
-                "longitude",
-                "latitude",
-                "altitude"
+            instance_uid,
+            "lon",
+            "lat",
+            "alt",
+            "longitude",
+            "latitude",
+            "altitude",
         ]
         set_coords = set_coords or potential_set_coords
 
@@ -388,10 +380,7 @@ class PointArrayAccessor:
 
 @xr.register_dataset_accessor("raga")
 class RaggedArrayAccessor:
-    def __init__(
-        self,
-        xarray_obj: xr.Dataset
-    ):
+    def __init__(self, xarray_obj: xr.Dataset):
         self._obj = xarray_obj
         self._ra_type = None
         self._sample_dimension = None
@@ -433,53 +422,56 @@ class RaggedArrayAccessor:
                 if cf_role == "timeseries_id":
                     self._timeseries_id = v
                     return self.timeseries_id
-        raise ValueError("Timeseries ID could not be determined from dataset attributes.")
+        raise ValueError(
+            "Timeseries ID could not be determined from dataset attributes."
+        )
 
-    def to_indexed_ragged(
-        self,
-        index_var: str = "locationIndex"
-    ):
+    def to_indexed_ragged(self, index_var: str = "locationIndex"):
         if self.array_type == "indexed":
             return self._obj
         if self.array_type == "contiguous":
             if self._index_var is None:
                 self._index_var = index_var
-            return self._contiguous_to_indexed(self._obj,
-                                               self._sample_dimension,
-                                               self._instance_dimension,
-                                               self._count_var,
-                                               self._index_var)
+            return self._contiguous_to_indexed(
+                self._obj,
+                self._sample_dimension,
+                self._instance_dimension,
+                self._count_var,
+                self._index_var,
+            )
 
     def to_contiguous_ragged(
-        self,
-        count_var: str = "row_size",
-        sort_vars: Iterable[str] = None
+        self, count_var: str = "row_size", sort_vars: Iterable[str] = None
     ):
         if self.array_type == "contiguous":
             return self._obj
         if self.array_type == "indexed":
             if self._count_var is None:
                 self._count_var = count_var
-            return self._indexed_to_contiguous(self._obj,
-                                               self._sample_dimension,
-                                               self._instance_dimension,
-                                               self._count_var,
-                                               self._index_var,
-                                               sort_vars=sort_vars)
+            return self._indexed_to_contiguous(
+                self._obj,
+                self._sample_dimension,
+                self._instance_dimension,
+                self._count_var,
+                self._index_var,
+                sort_vars=sort_vars,
+            )
 
-    def to_point_array(
-        self
-    ):
+    def to_point_array(self):
         if self.array_type == "indexed":
-            return self._indexed_to_point(self._obj,
-                                          self._sample_dimension,
-                                          self._instance_dimension,
-                                          self._index_var)
+            return self._indexed_to_point(
+                self._obj,
+                self._sample_dimension,
+                self._instance_dimension,
+                self._index_var,
+            )
         if self.array_type == "contiguous":
-            return self._contiguous_to_point(self._obj,
-                                             self._sample_dimension,
-                                             self._instance_dimension,
-                                             self._count_var)
+            return self._contiguous_to_point(
+                self._obj,
+                self._sample_dimension,
+                self._instance_dimension,
+                self._count_var,
+            )
 
     def sel_instances(
         self,
@@ -490,20 +482,24 @@ class RaggedArrayAccessor:
             # convert to point array, select there, convert back\
             ds = self.to_point_array()
             print(ds)
-            instances = ds.parr.sel_instances(instance_vals=instance_vals,
-                                              instance_lookup_vector=instance_lookup_vector,
-                                              instance_uid=self.timeseries_id)
+            instances = ds.parr.sel_instances(
+                instance_vals=instance_vals,
+                instance_lookup_vector=instance_lookup_vector,
+                instance_uid=self.timeseries_id,
+            )
             return instances.parr.to_indexed_ragged()
 
         if self.array_type == "contiguous":
-            return self._select_instances_contiguous(self._obj,
-                                                     self._sample_dimension,
-                                                     self._instance_dimension,
-                                                     self.timeseries_id,
-                                                     self._count_var,
-                                                     self._index_var,
-                                                     instance_vals=instance_vals,
-                                                     instance_lookup_vector=instance_lookup_vector)
+            return self._select_instances_contiguous(
+                self._obj,
+                self._sample_dimension,
+                self._instance_dimension,
+                self.timeseries_id,
+                self._count_var,
+                self._index_var,
+                instance_vals=instance_vals,
+                instance_lookup_vector=instance_lookup_vector,
+            )
 
     @staticmethod
     def _select_instances_contiguous(
@@ -523,33 +519,41 @@ class RaggedArrayAccessor:
                 sample_instance_ids = np.repeat(ds[instance_uid], ds[count_var])
                 sample_idxs = instance_lookup_vector[sample_instance_ids]
                 instances_idxs = np.aggregate(sample_instances, sample_idxs, func="any")
-                return ds.sel({
-                    sample_dim: sample_idxs,
-                    instance_dim: instances_idxs
-                })
+                return ds.sel({sample_dim: sample_idxs, instance_dim: instances_idxs})
             else:
                 sample_idxs = []
                 instances_idxs = []
 
         if len(instance_vals) == 1:
             instances_idx = np.where(ds[instance_uid] == instance_vals[0])[0][0]
-            sample_start = int(ds[count_var].isel({instance_dim: slice(0, instances_idx)}).sum().values)
-            sample_end = int(sample_start + ds[count_var].isel({instance_dim: instances_idx}).values)
+            sample_start = int(
+                ds[count_var].isel({instance_dim: slice(0, instances_idx)}).sum().values
+            )
+            sample_end = int(
+                sample_start + ds[count_var].isel({instance_dim: instances_idx}).values
+            )
 
             return ds.isel(
-                {sample_dim: slice(sample_start, sample_end),
-                 instance_dim: instances_idx}
+                {
+                    sample_dim: slice(sample_start, sample_end),
+                    instance_dim: instances_idx,
+                }
             )
         else:
             instances_idxs = np.where(np.isin(ds[instance_uid], instance_vals))[0]
 
         if instances_idxs.size > 0:
-            sample_starts = [int(ds[count_var].isel({instance_dim: slice(0,i)}).sum().values)
-                          for i in instances_idxs]
-            sample_ends = [int(start + ds[count_var].isel({instance_dim: i}).values)
-                        for start, i in zip(sample_starts, instances_idxs)]
-            sample_idxs = np.concatenate([range(start, end)
-                                       for start, end in zip(sample_starts, sample_ends)])
+            sample_starts = [
+                int(ds[count_var].isel({instance_dim: slice(0, i)}).sum().values)
+                for i in instances_idxs
+            ]
+            sample_ends = [
+                int(start + ds[count_var].isel({instance_dim: i}).values)
+                for start, i in zip(sample_starts, instances_idxs)
+            ]
+            sample_idxs = np.concatenate(
+                [range(start, end) for start, end in zip(sample_starts, sample_ends)]
+            )
             # locations_idxs = [i for i in locations_idxs]
         else:
             sample_idxs = []
@@ -558,15 +562,13 @@ class RaggedArrayAccessor:
         ds = ds.isel({sample_dim: sample_idxs, instance_dim: instances_idxs})
         return ds
 
-
-
     @staticmethod
     def _contiguous_to_indexed(
         ds: xr.Dataset,
-        sample_dim:  str,
+        sample_dim: str,
         instance_dim: str,
         count_var: str,
-        index_var: str
+        index_var: str,
     ) -> xr.Dataset:
         """
         Convert a contiguous ragged array dataset to an indexed ragged array dataset.
@@ -575,11 +577,15 @@ class RaggedArrayAccessor:
 
         locationIndex = np.repeat(np.arange(row_size.size), row_size)
 
-        ds = ds.assign({index_var:
-                        (sample_dim,
-                         locationIndex,
-                         {"instance_dimension": instance_dim})})\
-               .drop_vars([count_var])
+        ds = ds.assign(
+            {
+                index_var: (
+                    sample_dim,
+                    locationIndex,
+                    {"instance_dimension": instance_dim},
+                )
+            }
+        ).drop_vars([count_var])
 
         # put locationIndex as first var
         ds = ds[[index_var] + [var for var in ds.variables if var != index_var]]
@@ -593,7 +599,7 @@ class RaggedArrayAccessor:
         instance_dim: str,
         count_var: str,
         index_var: str,
-        sort_vars: Iterable[str] = None
+        sort_vars: Iterable[str] = None,
     ) -> xr.Dataset:
         """
         Convert an indexed ragged array dataset to a contiguous ragged array dataset
@@ -607,26 +613,27 @@ class RaggedArrayAccessor:
 
         row_size = np.zeros_like(ds[instance_dim].data)
         row_size[idxs] = sizes
-        ds = ds.assign({count_var: (instance_dim,
-                                    row_size,
-                                    {"sample_dimension": sample_dim})})\
-               .drop_vars([index_var])
+        ds = ds.assign(
+            {count_var: (instance_dim, row_size, {"sample_dimension": sample_dim})}
+        ).drop_vars([index_var])
 
         return ds
 
     @staticmethod
     def _indexed_to_point(
-        ds: xr.Dataset,
-        sample_dim: str,
-        instance_dim: str,
-        index_var: str
+        ds: xr.Dataset, sample_dim: str, instance_dim: str, index_var: str
     ):
         instance_vars = [var for var in ds.variables if instance_dim in ds[var].dims]
         for instance_var in instance_vars:
-            ds = ds.assign({instance_var:
-                            (sample_dim,
-                             ds[instance_var][ds[index_var]].data,
-                             ds[instance_var].attrs)})
+            ds = ds.assign(
+                {
+                    instance_var: (
+                        sample_dim,
+                        ds[instance_var][ds[index_var]].data,
+                        ds[instance_var].attrs,
+                    )
+                }
+            )
         ds = ds.drop_vars([index_var]).assign_attrs({"featureType": "point"})
         return ds
 
@@ -653,19 +660,22 @@ class RaggedArrayAccessor:
         ds = ds.drop_vars(count_var)
         instance_vars = [var for var in ds.variables if instance_dim in ds[var].dims]
         for instance_var in instance_vars:
-            ds = ds.assign({instance_var:
-                            (sample_dim,
-                             np.repeat(ds[instance_var].data, row_size),
-                             ds[instance_var].attrs)})
+            ds = ds.assign(
+                {
+                    instance_var: (
+                        sample_dim,
+                        np.repeat(ds[instance_var].data, row_size),
+                        ds[instance_var].attrs,
+                    )
+                }
+            )
         ds = ds.assign_attrs({"featureType": "point"})
         return ds
 
+
 @xr.register_dataset_accessor("ormu")
 class OrthoMultiArrayAccessor:
-    def __init__(
-        self,
-        xarray_obj: xr.Dataset
-    ):
+    def __init__(self, xarray_obj: xr.Dataset):
         ...
         # self._obj = xarray_obj
         # self._ra_type = None
