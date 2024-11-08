@@ -38,6 +38,8 @@ from datetime import datetime
 
 import numpy as np
 
+from dask import delayed, compute
+
 class FilenameTemplate:
     """
     FilenameTemplate class.
@@ -907,34 +909,30 @@ class Filenames:
         """
         Write data to file.
 
-        If there's only one filename, write provided data to that file.
+        If there's only one filename in `self.filenames`, write provided data to that file.
+        If there is more than one filename, write each element of the provided data list
+        to the corresponding filename.
 
         Parameters
         ----------
         data :  list of objects
             The data to write. Should be a list with the same length as self.filenames,
             where each element is the data to be written to the corresponding filename.
-
-        TODO: Add support for writing to multiple files by passing a list of data and
-        checking if the number of data objects matches the number of filenames.
         """
-        n_filenames = len(self.filenames)
-        if n_filenames == 1:
-            filename = self.filenames[0]
-            filename.parent.mkdir(parents=True, exist_ok=True)
-            self._write(data[0], filename, **kwargs)
-        elif n_filenames > 1:
-            if len(data) == n_filenames:
-                if parallel:
-                    from dask import delayed, compute
-                    write_ = delayed(self._write)
-                    writers = [write_(d, f, **kwargs) for d, f in zip(data, self.filenames)]
-                    compute(writers)
-                else:
-                    for d, f in zip(data, self.filenames):
-                        self._write(d, f, **kwargs)
+        if len(self.filenames) == 1 and not isinstance(data, list):
+            data = [data]
 
-
+        if len(data) == len(self.filenames):
+            if parallel:
+                write_ = delayed(self._write)
+                writers = [write_(d, f, **kwargs) for d, f in zip(data, self.filenames)]
+                compute(writers)
+            else:
+                for d, f in zip(data, self.filenames):
+                    self._write(d, f, **kwargs)
+        else:
+            # Special case when the data object meant to be written to a single filename is a list
+            raise ValueError("Number of data objects must match number of filenames.")
 
     def read(self, parallel=False, closer_attr=None, **kwargs):
         """
