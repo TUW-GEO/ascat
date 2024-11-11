@@ -17,7 +17,7 @@ jobs:
         ymlfile: ["environment.yml"]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: false # does not work with self-hosted testdata
       - name: Checkout test data
