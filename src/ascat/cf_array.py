@@ -25,7 +25,7 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Iterable
+from typing import Sequence
 
 import numpy as np
 import xarray as xr
@@ -70,8 +70,8 @@ def point_to_indexed(
     instance_dim: str,
     instance_uid: str,
     index_var: str = "locationIndex",
-    instance_vars: list[str] | None = None,
-    coord_vars: list[str] | None = None,
+    instance_vars: Sequence[str] | None = None,
+    coord_vars: Sequence[str] | None = None,
 ) -> xr.Dataset:
     coord_vars = coord_vars or []
     instance_vars = instance_vars or []
@@ -120,8 +120,8 @@ def point_to_contiguous(
     instance_dim: str,
     instance_uid: str,
     count_var: str = "row_size",
-    instance_vars: list[str] | None = None,
-    coord_vars: list[str] | None = None,
+    instance_vars: Sequence[str] | None = None,
+    coord_vars: Sequence[str] | None = None,
 ) -> xr.Dataset:
     coord_vars = coord_vars or []
     instance_vars = instance_vars or []
@@ -179,7 +179,7 @@ def indexed_to_contiguous(
     instance_dim: str,
     count_var: str,
     index_var: str,
-    sort_vars: Iterable[str] | None = None,
+    sort_vars: Sequence[str] | None = None,
 ) -> xr.Dataset:
     """
     Convert an indexed ragged array dataset to a contiguous ragged array dataset
@@ -257,8 +257,8 @@ class CFDiscreteGeom:
     def __init__(
         self,
         xarray_obj: xr.Dataset,
-        coord_vars: Iterable[str] | None = None,
-        instance_vars: Iterable[str] | None = None,
+        coord_vars: Sequence[str] | None = None,
+        instance_vars: Sequence[str] | None = None,
     ):
         self._data = xarray_obj
         self._coord_vars = coord_vars or [
@@ -311,7 +311,7 @@ class PointArray(CFDiscreteGeom):
 
     def sel_instances(
         self,
-        instance_vals: list[int|str] | np.ndarray | None = None,
+        instance_vals: Sequence[int|str] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
         instance_uid: str = "location_id",
     ):
@@ -329,8 +329,8 @@ class PointArray(CFDiscreteGeom):
         instance_dim: str = "locations",
         instance_uid: str = "location_id",
         index_var: str = "locationIndex",
-        instance_vars: list[str] | None = None,
-        coord_vars: list[str] | None = None,
+        instance_vars: Sequence[str] | None = None,
+        coord_vars: Sequence[str] | None = None,
     ) -> xr.Dataset:
         return self._point_to_indexed(
             self._data,
@@ -347,8 +347,8 @@ class PointArray(CFDiscreteGeom):
         instance_dim: str = "locations",
         instance_uid: str = "location_id",
         count_var: str = "row_size",
-        instance_vars: list[str] | None = None,
-        coord_vars: list[str] | None = None,
+        instance_vars: Sequence[str] | None = None,
+        coord_vars: Sequence[str] | None = None,
     ) -> xr.Dataset:
         return self._point_to_contiguous(
             self._data,
@@ -366,7 +366,7 @@ class PointArray(CFDiscreteGeom):
     def _select_instances(
         ds: xr.Dataset,
         sample_dim: str,
-        instance_vals: list[int|str] | np.ndarray | None = None,
+        instance_vals: Sequence[int|str] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
         instance_uid: str = "location_id",
     ) -> xr.Dataset:
@@ -384,8 +384,8 @@ class PointArray(CFDiscreteGeom):
         instance_dim: str,
         instance_uid: str,
         index_var: str = "locationIndex",
-        instance_vars: list[str] | None = None,
-        coord_vars: list[str] | None = None,
+        instance_vars: Sequence[str] | None = None,
+        coord_vars: Sequence[str] | None = None,
     ) -> xr.Dataset:
         return point_to_indexed(
             ds,
@@ -403,8 +403,8 @@ class PointArray(CFDiscreteGeom):
         instance_dim: str,
         instance_uid: str,
         count_var: str = "row_size",
-        instance_vars: Iterable[str] = None,
-        coord_vars: Iterable[str] = None,
+        instance_vars: Sequence[str] | None = None,
+        coord_vars: Sequence[str] | None = None,
     ) -> xr.Dataset:
         return point_to_contiguous(
             ds,
@@ -471,7 +471,9 @@ class RaggedArray(CFDiscreteGeom):
             )
 
     def to_contiguous_ragged(
-        self, count_var: str = "row_size", sort_vars: Iterable[str] = None
+        self,
+        count_var: str = "row_size",
+        sort_vars: Sequence[str] | None = None
     ) -> xr.Dataset:
         if self.array_type == "contiguous":
             return self._data
@@ -505,7 +507,7 @@ class RaggedArray(CFDiscreteGeom):
 
     def sel_instances(
         self,
-        instance_vals: list[int|str] | np.ndarray | None = None,
+        instance_vals: Sequence[int|str] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
         instance_uid: str | None = None,
     ) -> xr.Dataset:
@@ -540,7 +542,7 @@ class RaggedArray(CFDiscreteGeom):
         instance_uid: str,
         count_var: str,
         index_var: str,
-        instance_vals: list[int] | np.ndarray | None = None,
+        instance_vals: Sequence[int] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
     ) -> xr.Dataset:
         instance_vals = instance_vals or []
@@ -618,7 +620,7 @@ class RaggedArray(CFDiscreteGeom):
         instance_dim: str,
         count_var: str,
         index_var: str,
-        sort_vars: Iterable[str] | None = None,
+        sort_vars: Sequence[str] | None = None,
     ) -> xr.Dataset:
         """
         Convert an indexed ragged array dataset to a contiguous ragged array dataset

@@ -25,10 +25,12 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Iterable
+from typing import Any, Sequence
 
 import numpy as np
 import xarray as xr
+from shapely.geometry.base import BaseGeometry
+
 from pygeogrids import BasicGrid, CellGrid
 
 from ascat.cf_array import cf_array_class, cf_array_type
@@ -72,16 +74,16 @@ class PyGeoGriddedArrayAccessor:
 
     def sel_bbox(
             self,
-            bbox: Iterable[float]
-    ):
+            bbox: Sequence[float]
         gpis, lookup_vector = get_grid_gpis(
             grid=self.grid, bbox=bbox, return_lookup=True
         )
         return self._obj.pgg.sel_gpi(gpis, lookup_vector)
 
     def sel_coords(
-        self, coords: Iterable[Iterable[float]], max_coord_dist: float = np.inf
     ):
+        self,
+        coords: Sequence[Sequence[float]],
         gpis, lookup_vector = get_grid_gpis(
             grid=self.grid,
             coords=coords,
@@ -90,8 +92,8 @@ class PyGeoGriddedArrayAccessor:
         )
         return self._obj.pgg.sel_gpi(gpis, lookup_vector)
 
-    def sel_cells(self, cells: Iterable[float]):
         assert isinstance(self._grid, CellGrid)
+    def sel_cells(self, cells: Sequence[float]) -> xr.Dataset:
         gpis, lookup_vector = get_grid_gpis(
             grid=self._grid, cell=cells, return_lookup=True
         )
@@ -99,7 +101,7 @@ class PyGeoGriddedArrayAccessor:
 
     def sel_gpis(
         self,
-        gpis: Iterable[int] | None = None,
+        gpis: Sequence[int] | None = None,
         lookup_vector: np.ndarray | None = None,
         gpi_var: str = "location_id",
     ) -> xr.Dataset:
@@ -130,10 +132,10 @@ class CFDiscreteGeometryAccessor:
         # self._index_var = None
 
     @property
-    def array_type(self):
+    def array_type(self) -> str:
         return cf_array_type(self._ds)
 
-    def set_coord_vars(self, coord_vars: Iterable[str]):
+    def set_coord_vars(self, coord_vars: Sequence[str]):
         self._coord_vars = coord_vars
         if self._instance_vars is None:
             self._instance_vars = []
@@ -146,7 +148,7 @@ class CFDiscreteGeometryAccessor:
             instance_vars=self._instance_vars,
         )
 
-    def set_instance_vars(self, instance_vars: Iterable[str]):
+    def set_instance_vars(self, instance_vars: Sequence[str]):
         self._instance_vars = instance_vars
         self._obj = cf_array_class(
             self._ds,
@@ -157,9 +159,8 @@ class CFDiscreteGeometryAccessor:
 
     def sel_instances(
         self,
-        instance_vals: Iterable[int] = None,
-        instance_lookup_vector: np.ndarray = None,
-        instance_uid: str = "location_id",
+        instance_vals: Sequence[int | str] | np.ndarray | None = None,
+        instance_lookup_vector: np.ndarray[Any, np.dtype[np.bool]] | None = None,
         **kwargs,
     ):
         return self._obj.sel_instances(
