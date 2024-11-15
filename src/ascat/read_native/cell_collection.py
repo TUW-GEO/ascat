@@ -33,11 +33,9 @@ from tqdm import tqdm
 
 import xarray as xr
 import numpy as np
-import numpy_groupies as npg
-import dask.array as da
 
-
-from ascat.read_native.grid_registry import grid_registry
+from ascat.read_native.xarray_accessors import *
+from ascat.read_native.grid_registry import GridRegistry
 
 from ascat.file_handling import MultiFileHandler
 from ascat.file_handling import Filenames
