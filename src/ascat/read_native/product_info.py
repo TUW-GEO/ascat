@@ -18,6 +18,20 @@ from ascat.read_native.cell_collection import OrthoMultiCell
 class RaggedArrayCellProduct:
     file_class = RaggedArrayCell
     fn_format = "{:04d}.nc"
+    sample_dim = "obs"
+    instance_dim = "locations"
+
+    @classmethod
+    def preprocessor(cls, ds):
+        if "row_size" in ds.variables:
+            ds["row_size"].attrs["sample_dimension"] = cls.sample_dim
+        if "locationIndex" in ds.variables:
+            ds["locationIndex"].attrs["instance_dimension"] = cls.instance_dim
+        if "location_id" in ds.variables:
+            ds["location_id"].attrs["cf_role"] = "timeseries_id"
+        ds = ds.assign_attrs({"featureType": "timeSeries"})
+        return ds
+
 
     
 class ErsHCell(RaggedArrayCellProduct):
@@ -59,9 +73,16 @@ class SwathProduct:
     file_class = Swath
 
 class AscatSwathProduct(SwathProduct):
-    @staticmethod
-    def preprocess_(ds):
+    grid_name = None
+
+    @classmethod
+    def preprocess_(cls, ds):
+        ds["location_id"] = ds["location_id"].astype(np.int32)
+        ds["location_id"].attrs["cf_role"] = "timeseries_id"
         ds.attrs["global_attributes_flag"] = 1
+        ds.attrs["featureType"] = "point"
+        # if "grid_mapping_name" not in ds.attrs:
+        ds.attrs["grid_mapping_name"] = cls.grid_name
         if "spacecraft" in ds.attrs:
             # Assumption: the spacecraft attribute is something like "metop-a"
             sat_id = {"a": 3, "b": 4, "c": 5}
@@ -69,6 +90,7 @@ class AscatSwathProduct(SwathProduct):
             ds["sat_id"] = ("obs",
                             np.repeat(sat_id[sat], ds["location_id"].size))
             del ds.attrs["spacecraft"]
+        return ds
 
     @staticmethod
     def postprocess_(ds):
