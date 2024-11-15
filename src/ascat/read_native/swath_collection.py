@@ -549,7 +549,7 @@ class SwathGridFiles(ChronFiles):
 
         return filtered_filenames
 
-    def extract(
+    def read(
         self,
         date_range,
         dt_delta=None,
@@ -559,9 +559,9 @@ class SwathGridFiles(ChronFiles):
         cell=None,
         location_id=None,
         coords=None,
+        max_coord_dist=None,
         bbox=None,
         geom=None,
-        processes=None,
         read_kwargs=None,
         **fmt_kwargs,
     ):

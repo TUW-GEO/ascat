@@ -133,7 +133,7 @@ class TemporalSwathAggregator:
     def _read_data(self):
         if progress_to_stdout:
             print("constructing dataset, this may take some time...")
-        self.data = self.collection.extract(
+        self.data = self.collection.read(
             self.start_dt,
             self.end_dt,
         )
@@ -260,7 +260,7 @@ class TemporalSwathAggregator:
             for timestep in time_steps:
                 step_start = timestep
                 step_end = timestep + self.timedelta
-                ds_step = self.collection.extract(step_start, step_end)
+                ds_step = self.collection.read(step_start, step_end)
                 step_end = step_end - pd.Timedelta("1s")
                 ds_step.attrs["start_time"] = np.datetime64(step_start).astype(
                     str)
