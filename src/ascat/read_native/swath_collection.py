@@ -162,9 +162,17 @@ class Swath(Filenames):
         Returns
         -------
         """
-        # we don't need to pass on anything from global attributes
+        # we don't need to pass on anything from global attributes, except for these
+        global_attributes_to_pass_on_merge = [
+            "grid_mapping_name",
+            "featureType"
+        ]
         if "global_attributes_flag" in attrs_list[0].keys():
-            return None
+            result = {}
+            for attr in global_attributes_to_pass_on_merge:
+                if val := attrs_list[0].get(attr, False):
+                    result[attr] = val
+            return result
 
         variable_attrs = attrs_list
         # this code taken straight from xarray/core/merge.py
