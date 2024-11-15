@@ -35,7 +35,6 @@ class RaggedArrayCellProduct:
 
     
 class ErsHCell(RaggedArrayCellProduct):
-    #sf_pattern = {"satellite_folder": "ERS-{sat}_WindScatt", "res_folder": "{res}"}
     grid_name = "fibgrid_12.5"
 
 
