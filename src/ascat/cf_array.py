@@ -491,7 +491,7 @@ class RaggedArray(CFDiscreteGeom):
     ) -> xr.Dataset:
         if self.array_type == "indexed":
             return self._data
-        if self.array_type == "contiguous":
+        elif self.array_type == "contiguous":
             if self._index_var is None:
                 self._index_var = index_var
             return self._contiguous_to_indexed(
@@ -509,7 +509,7 @@ class RaggedArray(CFDiscreteGeom):
     ) -> xr.Dataset:
         if self.array_type == "contiguous":
             return self._data
-        if self.array_type == "indexed":
+        elif self.array_type == "indexed":
             if self._count_var is None:
                 self._count_var = count_var
             return self._indexed_to_contiguous(
