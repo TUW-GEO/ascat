@@ -292,8 +292,10 @@ class CFDiscreteGeom:
         self.array_type
 
     @property
-    def array_type(self):
+    def array_type():
         raise NotImplementedError
+
+
 
 
 class PointArray(CFDiscreteGeom):
