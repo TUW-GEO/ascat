@@ -70,7 +70,7 @@ class PyGeoGriddedArrayAccessor:
                     f"Grid {grid_name} is not registered."
                     " Please pass a class for creating a grid to the `grid` argument."
                 )
-        self._obj.attrs["grid_name"] = grid_name
+        self._obj.attrs["grid_mapping_name"] = grid_name
 
     def sel_bbox(
             self,
@@ -78,7 +78,7 @@ class PyGeoGriddedArrayAccessor:
         gpis, lookup_vector = get_grid_gpis(
             grid=self.grid, bbox=bbox, return_lookup=True
         )
-        return self._obj.pgg.sel_gpi(gpis, lookup_vector)
+        return self._obj.pgg.sel_gpis(gpis, lookup_vector)
 
     def sel_coords(
     ):
@@ -90,14 +90,16 @@ class PyGeoGriddedArrayAccessor:
             max_coord_dist=max_coord_dist,
             return_lookup=True,
         )
-        return self._obj.pgg.sel_gpi(gpis, lookup_vector)
+        return self._obj.pgg.sel_gpis(gpis, lookup_vector)
 
-        assert isinstance(self._grid, CellGrid)
     def sel_cells(self, cells: Sequence[float]) -> xr.Dataset:
+        assert isinstance(self.grid, CellGrid)
         gpis, lookup_vector = get_grid_gpis(
-            grid=self._grid, cell=cells, return_lookup=True
+            grid=self.grid,
+            cell=cells,
+            return_lookup=True
         )
-        return self._obj.pgg.sel_gpi(gpis, lookup_vector)
+        return self._obj.pgg.sel_gpis(gpis, lookup_vector)
 
     def sel_gpis(
         self,
