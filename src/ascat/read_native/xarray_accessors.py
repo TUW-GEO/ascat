@@ -83,12 +83,13 @@ class PyGeoGriddedArrayAccessor:
             Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
         """
         gpis, lookup_vector = get_grid_gpis(
-            grid=self.grid, bbox=bbox, return_lookup=True
+            grid=self.grid,
+            bbox=bbox,
+            return_lookup=True
         )
         return self._obj.pgg.sel_gpis(gpis, lookup_vector)
 
     def sel_coords(
-    ):
         self,
         coords: Sequence[Sequence[float]],
         max_coord_dist: float = np.inf
@@ -117,12 +118,15 @@ class PyGeoGriddedArrayAccessor:
     ) -> xr.Dataset:
         if lookup_vector is None:
             _, lookup_vector = get_grid_gpis(
-                grid=self.grid, location_id=gpis, return_lookup=True
+                grid=self.grid,
+                location_id=gpis,
+                return_lookup=True
             )
         return self._obj.cf_geom.sel_instances(
             instance_vals=gpis,
             instance_lookup_vector=lookup_vector,
         )
+
 
 
 @xr.register_dataset_accessor("cf_geom")
