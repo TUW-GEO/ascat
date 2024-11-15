@@ -603,37 +603,56 @@ class SwathGridFiles(ChronFiles):
         """
         dt_start, dt_end = date_range
         filenames = self.swath_search(
-            dt_start, dt_end, dt_delta, search_date_fmt, date_field,
-            end_inclusive, cell, location_id, coords, bbox, geom, **fmt_kwargs,
+            dt_start, dt_end, dt_delta, search_date_fmt, date_field, end_inclusive,
+            # cell, location_id, coords, bbox, geom,
+            **fmt_kwargs,
         )
 
         date_range = (np.datetime64(dt_start), np.datetime64(dt_end))
 
         read_kwargs = read_kwargs or {}
+
+        def filter_ds_spatial(ds):
+            if cell is not None:
+                ds = ds.pgg.sel_cells(cell)
+            elif location_id is not None:
+                ds = ds.pgg.sel_gpis(location_id, gpi_var="location_id")
+            elif coords is not None:
+                ds = ds.pgg.sel_coords(coords, max_coord_dist=max_coord_dist)
+            elif bbox is not None:
+                ds = ds.pgg.sel_bbox(bbox)
+            elif geom is not None:
+                ds = ds.pgg.sel_geom(geom)
+            return ds
+
+        def preprocessor(ds):
+            if self.preprocessor is not None:
+                ds = self.preprocessor(ds)
+            ds = filter_ds_spatial(ds)
+            return ds
+
+        read_kwargs["preprocessor"] = preprocessor
+
         data = self.cls(filenames).read(**read_kwargs)
 
         if data:
-            if any(v is not None for v in (cell, location_id, coords, bbox, geom)):
-                valid_gpis = get_grid_gpis(
-                    self.grid,
-                    cell=cell,
-                    location_id=location_id,
-                    coords=coords,
-                    bbox=bbox,
-                    geom=geom,
-                )
-                lookup_vector = np.zeros(self.grid.gpis.max()+1, dtype=bool)
-                lookup_vector[valid_gpis] = 1
+            # data.attrs["grid_mapping_name"] = self.grid_name
 
-                data_location_ids = data["location_id"].values
-                obs_idx = lookup_vector[data_location_ids]
-                data = data.sel(obs=obs_idx)
+            # if cell is not None:
+            #     data = data.pgg.sel_cells(cell)
+            # elif location_id is not None:
+            #     data = data.pgg.sel_gpis(location_id, gpi_var="location_id")
+            # elif coords is not None:
+            #     data = data.pgg.sel_coords(coords, max_coord_dist=max_coord_dist)
+            # elif bbox is not None:
+            #     data = data.pgg.sel_bbox(bbox)
+            # elif geom is not None:
+            #     data = data.pgg.sel_geom(geom)
 
             if date_range is not None:
                 mask = (data["time"] >= date_range[0]) & (data["time"] <= date_range[1])
                 data = data.sel(obs=mask.compute())
 
-            data.attrs["grid_name"] = self.grid_name
 
             return data
 
