@@ -355,15 +355,15 @@ class RaggedArrayCell(Filenames):
 
         # custom_variable_encodings = kwargs.pop(
         #     "encoding", None) or self.custom_variable_encodings
-        out_encoding = kwargs.pop("encoding", {})
-        out_encoding = create_variable_encodings(data, out_encoding)
+        # out_encoding = kwargs.pop("encoding", {})
+        # out_encoding = create_variable_encodings(data, out_encoding)
         #
         data.encoding["unlimited_dims"] = ["obs"]
 
-        for var, var_encoding in out_encoding.items():
-            if "_FillValue" in var_encoding and "_FillValue" in data[
-                    var].attrs:
-                del data[var].attrs["_FillValue"]
+        # for var, var_encoding in out_encoding.items():
+        #     if "_FillValue" in var_encoding and "_FillValue" in data[
+        #             var].attrs:
+        #         del data[var].attrs["_FillValue"]
 
         if mode == "a" and ra_type == "indexed":
             if not Path(filename).exists():
@@ -373,7 +373,7 @@ class RaggedArrayCell(Filenames):
             return
 
         data.to_netcdf(filename,
-                       encoding=out_encoding,
+                       # encoding=out_encoding,
                        **kwargs)
 
 
