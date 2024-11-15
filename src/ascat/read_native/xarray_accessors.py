@@ -75,6 +75,13 @@ class PyGeoGriddedArrayAccessor:
     def sel_bbox(
             self,
             bbox: Sequence[float]
+    ) -> xr.Dataset:
+        """
+        Select data for a bounding box.
+
+        bbox : tuple, optional
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        """
         gpis, lookup_vector = get_grid_gpis(
             grid=self.grid, bbox=bbox, return_lookup=True
         )
@@ -84,6 +91,8 @@ class PyGeoGriddedArrayAccessor:
     ):
         self,
         coords: Sequence[Sequence[float]],
+        max_coord_dist: float = np.inf
+    ) -> xr.Dataset:
         gpis, lookup_vector = get_grid_gpis(
             grid=self.grid,
             coords=coords,
