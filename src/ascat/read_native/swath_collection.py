@@ -336,7 +336,6 @@ class SwathGridFiles(ChronFiles):
         """
         return cls(
             path,
-            Swath,
             product_class.fn_pattern,
             product_class.sf_pattern,
             grid_name=product_class.grid_name,
