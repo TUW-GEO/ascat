@@ -653,7 +653,7 @@ class SwathGridFiles(ChronFiles):
 
         swath = self.cls(filenames)
 
-        for ds in swath.iter_read_nbytes(max_nbytes):
+        for ds in swath.iter_read_nbytes(max_nbytes, preprocessor=self.preprocessor):
             ds_cells = self.grid.gpi2cell(ds["location_id"]).compressed()
             ds_cells = xr.DataArray(ds_cells, dims="obs", name="cell")
 
