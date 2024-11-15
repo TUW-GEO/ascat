@@ -395,7 +395,7 @@ def get_grid_gpis(
         bbox=None,
         geom=None,
         max_coord_dist=np.inf,
-        return_lookup=False,
+        return_lookup: bool = False,
 ):
     """
     Get grid point indices.
@@ -412,6 +412,8 @@ def get_grid_gpis(
         Tuple of (lon, lat) coordinates.
     bbox : tuple, optional
         Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+    geom : shapely.geometry.BaseGeometry, optional
+        Geometry object.
     max_coord_dist : float, optional
         Maximum distance from coordinates to return a gpi.
 
@@ -419,9 +421,11 @@ def get_grid_gpis(
     -------
     gpi : int
         Grid point index.
+    lookup_vector : numpy.ndarray
+        Lookup vector. (only if return_lookup is True)
     """
     if cell is not None:
-        gpis, lons, lats = grid.grid_points_for_cell(cell)
+        gpis, _, _ = grid.grid_points_for_cell(cell)
     elif location_id is not None:
         gpis = location_id
         if not isinstance(gpis, list) and not isinstance(gpis, np.ndarray):
