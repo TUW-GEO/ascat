@@ -80,7 +80,7 @@ class Swath(Filenames):
             filename,
             engine="netcdf4",
             **xarray_kwargs,
-        )
+        ).load()
         if ds["location_id"].dtype != np.int32:
             ds["location_id"] = ds["location_id"].astype(np.int32)
         if preprocessor is not None:
