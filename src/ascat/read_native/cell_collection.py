@@ -685,7 +685,7 @@ class CellGridFiles():
         return cells
 
     def _fn(self, cell):
-        return self.root_path / self.fn_format.format(cell=cell)
+        return self.root_path / self.fn_format.format(cell)
 
     def read(
             self,
