@@ -85,6 +85,8 @@ class Swath(Filenames):
             **xarray_kwargs,
         )
         ds["location_id"] = ds["location_id"].astype(np.int32)
+        if preprocessor is not None:
+            ds = preprocessor(ds)
 
         return ds
 
@@ -344,6 +346,7 @@ class SwathGridFiles(ChronFiles):
             ts_dtype=product_class.ts_dtype,
             fn_read_fmt=product_class.fn_read_fmt,
             sf_read_fmt=product_class.sf_read_fmt,
+            preprocessor=product_class.preprocess_,
 
             # fn_write_fmt=io_class.fn_write_fmt,
             # sf_write_fmt=io_class.sf_write_fmt,
