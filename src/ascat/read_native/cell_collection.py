@@ -504,12 +504,14 @@ class CellGridFiles():
         grid,
         fn_format="{cell:04d}.nc",
         sf_format=None,
+        preprocessor=None,
     ):
         self.root_path = Path(root_path)
         self.file_class = file_class
         self.grid = grid
         self.fn_format = fn_format
         self.sf_format = sf_format
+        self._preprocessor = preprocessor
 
 
     @classmethod
@@ -531,6 +533,7 @@ class CellGridFiles():
             "file_class": product_class.file_class,
             "grid": grid_registry.get(grid_name)["grid"],
             "fn_format": product_class.fn_format,
+            "preprocessor": product_class.preprocessor,
             **kwargs
         }
         init_options = {**init_options}
@@ -743,4 +746,5 @@ class CellGridFiles():
 
         return self.file_class(filenames).read(date_range=date_range,
                                                lookup_vector=lookup_vector,
+                                               preprocessor=self._preprocessor,
                                                **kwargs)
