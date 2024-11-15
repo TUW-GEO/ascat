@@ -460,15 +460,16 @@ class SwathGridFiles(ChronFiles):
         """
         f = self.cls(filename)
         ds = f.read()
-        lons, lats = ds["longitude"].values, ds["latitude"].values
-        swath_def = SwathDefinition(lats=lats, lons=lons)
-        n_info = kd_tree.get_neighbour_info(
-            swath_def,
-            spatial,
-            radius_of_influence=15000,
-            neighbours=1,
-        )
-        valid_input_index, _, _ = n_info[:3]
+        with f.read() as ds:
+            lons, lats = ds["longitude"].values, ds["latitude"].values
+            swath_def = SwathDefinition(lats=lats, lons=lons)
+            n_info = kd_tree.get_neighbour_info(
+                swath_def,
+                spatial,
+                radius_of_influence=15000,
+                neighbours=1,
+            )
+            valid_input_index, _, _ = n_info[:3]
         if np.any(valid_input_index):
             return filename
         return None
