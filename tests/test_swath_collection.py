@@ -4,17 +4,15 @@ import unittest
 from pathlib import Path
 from datetime import datetime
 from tempfile import TemporaryDirectory
+from time import time
 
 import xarray as xr
 import numpy as np
 
-from fibgrid.realization import FibGrid
-
 import ascat.read_native.generate_test_data as gtd
 
-from ascat.read_native.swath_collection import SwathFile
+from ascat.read_native.swath_collection import Swath
 from ascat.read_native.swath_collection import SwathGridFiles
-# from ascat.read_native.cell_collection import RaggedArrayCell
 from ascat.read_native.product_info import AscatH129Swath
 
 
@@ -26,10 +24,13 @@ def gen_dummy_swathfiles(directory, sat_name=None):
     gtd.swath_ds_2.to_netcdf(directory / "swath_2.nc")
 
 
-class TestSwathFile(unittest.TestCase):
+class TestSwath(unittest.TestCase):
     def setUp(self):
         self.tempdir = TemporaryDirectory()
         self.tempdir_path = Path(self.tempdir.name)
+        self.real_swaths_path = Path(
+            "tests/ascat_test_data/hsaf/h129/swaths/metop_a/2021"
+        )
         gen_dummy_swathfiles(self.tempdir_path)
 
     def tearDown(self):
@@ -37,7 +38,7 @@ class TestSwathFile(unittest.TestCase):
 
     def test_init(self):
         swath_path = self.tempdir_path / "swath.nc"
-        ra = SwathFile(swath_path)
+        ra = Swath(swath_path)
         self.assertEqual(ra.filenames[0], swath_path)
 
         # ra_chunked = SwathFile(swath_path, chunks={"locations": 2})
@@ -46,8 +47,9 @@ class TestSwathFile(unittest.TestCase):
         # self.assertEqual(ra_chunked.chunks, {"locations": 2})
 
     def test_read(self):
+        # Basic open of dummy file
         swath_path = self.tempdir_path / "swath.nc"
-        ra = SwathFile(swath_path)
+        ra = Swath(swath_path)
         ds = ra.read()
         self.assertIsInstance(ds, xr.Dataset)
         self.assertIn("longitude", ds)
@@ -55,9 +57,34 @@ class TestSwathFile(unittest.TestCase):
         # self.assertIn("time", ra.ds)
         self.assertIn("obs", ds.dims)
 
+        # Open of multiple real files
+        swath_paths = list(self.real_swaths_path.glob("*.nc"))
+        ra = Swath(swath_paths)
+        t1 = time()
+        ds1 = ra.read().load()
+        t2 = time()
+        ds2 = ra.read(parallel=True).load()
+        t3 = time()
+
+        reconstructed = xr.open_mfdataset(
+            swath_paths,
+            concat_dim="obs",
+            combine="nested",
+            combine_attrs="drop_conflicts",
+        ).load()
+        t4 = time()
+        ds3 = [data for data in ra.iter_read_nbytes(1_000_000_000_000)][0].load()
+        t5 = time()
+
+        xr.testing.assert_identical(ds1, reconstructed)
+        xr.testing.assert_identical(ds2, reconstructed)
+        xr.testing.assert_identical(ds3, reconstructed)
+
+        assert (t3 - t2) < (t2 - t1)
+
     def test__ensure_obs(self):
         swath_path = self.tempdir_path / "swath.nc"
-        ra = SwathFile(swath_path)
+        ra = Swath(swath_path)
         ds = xr.open_dataset(swath_path)
         ds = ra._ensure_obs(ds)
         self.assertIn("obs", ds.dims)
@@ -65,43 +92,48 @@ class TestSwathFile(unittest.TestCase):
         # print(original_dim.values)
         # np.testing.assert_equal(ds["obs"].values, original_dim.values)
 
-    def test__trim_to_gpis(self):
-        swath_path = self.tempdir_path / "swath.nc"
-        ra = SwathFile(swath_path)
-        ds = xr.open_dataset(swath_path)
-        ds = ds.chunk({"obs": 1_000_000})
-        valid_gpis = [1100178, 1102762]
-        grid = FibGrid(12.5)
-
-        gpi_lookup = np.zeros(grid.gpis.max()+1, dtype=bool)
-        gpi_lookup[valid_gpis] = 1
-        # trimmed_ds = ra._trim_to_gpis(ds, valid_gpis)
-        trimmed_ds = ra._trim_to_gpis(ds, lookup_vector=gpi_lookup)
-        self.assertTrue(np.all(np.isin(trimmed_ds["location_id"].values, valid_gpis)))
-        new_obs_gpis = trimmed_ds["location_id"].values
-        np.testing.assert_array_equal(new_obs_gpis, np.repeat(np.array(valid_gpis), [1, 1]))
-
-    def test__trim_var_range(self):
-        swath_path = self.tempdir_path / "swath.nc"
-        ra = SwathFile(swath_path)
-        ds = xr.open_dataset(swath_path)
-        ds = ra._ensure_obs(ds)
-        ds = ds.chunk({"obs": 1_000_000})
-        start_dt = np.datetime64("2020-11-15T09:04:50")
-        end_dt = np.datetime64("2020-11-15T09:04:52")
-        trimmed_ds = ra._trim_var_range(ds, "time", start_dt, end_dt)
-        self.assertTrue(np.all(trimmed_ds["time"].values < end_dt))
-        self.assertTrue(np.all(trimmed_ds["time"].values >= start_dt))
-
     def test_merge(self):
         fname1 = self.tempdir_path / "swath.nc"
         fname2 = self.tempdir_path / "swath_2.nc"
-        ra1 = SwathFile(fname1)
-        ra2 = SwathFile(fname2)
+        ra1 = Swath(fname1)
+        ra2 = Swath(fname2)
         ds1 = ra1.read()
         ds2 = ra2.read()
         merged = ra1.merge([ds1, ds2])
-        self.assertTrue(np.all(merged["location_id"].values == np.concatenate([ds1["location_id"].values, ds2["location_id"].values])))
+        self.assertTrue(
+            np.all(
+                merged["location_id"].values
+                == np.concatenate(
+                    [ds1["location_id"].values, ds2["location_id"].values]
+                )
+            )
+        )
+
+    def test__nbytes(self):
+        swath_path = self.tempdir_path / "swath.nc"
+        ra = Swath(swath_path)
+        ds = ra.read()
+        nbytes = ra._nbytes(ds)
+        self.assertGreater(nbytes, 0)
+
+    def test_iter_read_nbytes(self):
+        # TODO adapt and move to test_file_handling.TestFilenames
+
+        fname1 = self.tempdir_path / "swath.nc"
+        fname2 = self.tempdir_path / "swath_2.nc"
+        ra = Swath([fname1, fname2])
+
+        iterations = list(ra.iter_read_nbytes(max_nbytes=0))
+        assert len(iterations) == 2
+
+        ds1, ds2 = iterations
+        total_size = ra._nbytes(ds1) + ra._nbytes(ds2)
+
+        iterations = list(ra.iter_read_nbytes(max_nbytes=total_size))
+        assert len(iterations) == 1
+
+        iterations = list(ra.iter_read_nbytes(max_nbytes=total_size - 1))
+        assert len(iterations) == 2
 
 
 class TestSwathGridFiles(unittest.TestCase):
@@ -121,18 +153,14 @@ class TestSwathGridFiles(unittest.TestCase):
                 "date": timestamp.strftime("%Y%m%d*"),
                 "sat": sat,
                 "placeholder": "*",
-                "placeholder1": "*"
+                "placeholder1": "*",
             }
 
         def _sf_read_fmt(timestamp, sat="[abc]"):
             sat = sat.lower()
             output_fmt = {
-                "satellite_folder": {
-                    "satellite": f"metop_{sat}"
-                },
-                "year_folder": {
-                    "year": f"{timestamp.year}"
-                },
+                "satellite_folder": {"satellite": f"metop_{sat}"},
+                "year_folder": {"year": f"{timestamp.year}"},
             }
             # if sat is not None:
             #     output_fmt["sat_folder"] = {
@@ -148,11 +176,10 @@ class TestSwathGridFiles(unittest.TestCase):
 
         sf = SwathGridFiles(
             swath_path,
-            file_class=SwathFile,
             fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc",
             sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}"},
             date_field_fmt="%Y%m%d%H%M%S",
-            grid_name="Fib6.25",
+            grid_name="fibgrid_6.25",
             fn_read_fmt=_fn_read_fmt,
             sf_read_fmt=_sf_read_fmt,
         )
@@ -175,13 +202,12 @@ class TestSwathGridFiles(unittest.TestCase):
         swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
         sf = SwathGridFiles(
             swath_path,
-            file_class=SwathFile,
             fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc",
             sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}"},
             date_field_fmt="%Y%m%d%H%M%S",
-            grid_name="Fib6.25",
-            fn_read_fmt = _fn_read_fmt,
-            sf_read_fmt = _sf_read_fmt
+            grid_name="fibgrid_6.25",
+            fn_read_fmt=_fn_read_fmt,
+            sf_read_fmt=_sf_read_fmt,
         )
 
         files = sf.search_period(
@@ -196,39 +222,49 @@ class TestSwathGridFiles(unittest.TestCase):
         swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
         sf = SwathGridFiles.from_product_id(swath_path, "h129")
         files = sf.search_period(
-            datetime(2021, 1, 15),
-            datetime(2021, 1, 30),
-            date_field_fmt="%Y%m%d%H%M%S"
+            datetime(2021, 1, 15), datetime(2021, 1, 30), date_field_fmt="%Y%m%d%H%M%S"
         )
+        print(files)
         self.assertGreater(len(files), 0)
 
     def test_from_io_class(self):
         swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
-        sf = SwathGridFiles.from_io_class(swath_path, AscatH129Swath)
+        sf = SwathGridFiles.from_product_class(swath_path, AscatH129Swath)
         files = sf.search_period(
-            datetime(2021, 1, 15),
-            datetime(2021, 1, 30),
-            date_field_fmt="%Y%m%d%H%M%S"
+            datetime(2021, 1, 15), datetime(2021, 1, 30), date_field_fmt="%Y%m%d%H%M%S"
         )
         self.assertGreater(len(files), 0)
 
-    def test_extract(self):
-        # test extract
+    def test_real(self):
+        swath_source = "/data-write/RADAR/hsaf/h121_v1.0/swaths"
+        swath_collection = SwathGridFiles.from_product_id(swath_source, "H121_V1.0")
+
+        bounds = (45, 50, 10, 20) #latmin, latmax, lonmin, lonmax
+        dates = (datetime(2020, 12, 1), datetime(2020, 12, 2))
+
+        # read from one sat
+        # this works because it has been set up in the product class
+        output = swath_collection.read(date_range=dates, bbox=bounds, sat="c")
+        print(output)
+
+        # read from all sats
+        output = swath_collection.read(date_range=dates, bbox=bounds)
+        print(output)
+
+    def test_read(self):
+        # test read
         swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
         sf = SwathGridFiles.from_product_id(swath_path, "h129")
         files = sf.search_period(
-            datetime(2021, 1, 15),
-            datetime(2021, 1, 30),
-            date_field_fmt="%Y%m%d%H%M%S"
+            datetime(2021, 1, 15), datetime(2021, 1, 30), date_field_fmt="%Y%m%d%H%M%S"
         )
         self.assertGreater(len(files), 0)
         bbox = (-180, -4, -70, 20)
 
-        merged_ds = sf.extract(
+        merged_ds = sf.read(
             (datetime(2021, 1, 15), datetime(2021, 1, 30)),
             bbox=bbox,
         )
-
         merged_ds.load()
         self.assertLess(merged_ds.time.max(), np.datetime64(datetime(2021, 1, 30)))
         self.assertGreater(merged_ds.time.min(), np.datetime64(datetime(2021, 1, 15)))
@@ -241,19 +277,16 @@ class TestSwathGridFiles(unittest.TestCase):
         swath_path = "tests/ascat_test_data/hsaf/h129/swaths/metop_a/2021"
         sf = SwathGridFiles.from_product_id(swath_path, "h129")
         files = sf.search_period(
-            datetime(2021, 1, 15),
-            datetime(2021, 1, 30),
-            date_field_fmt="%Y%m%d%H%M%S"
+            datetime(2021, 1, 15), datetime(2021, 1, 30), date_field_fmt="%Y%m%d%H%M%S"
         )
         self.assertGreater(len(files), 0)
         bbox = (-180, -4, -70, 20)
 
-        merged_ds = sf.extract(
+        merged_ds = sf.read(
             (datetime(2021, 1, 15), datetime(2021, 1, 30)),
             bbox=bbox,
         )
 
-        merged_ds.load()
         self.assertLess(merged_ds.time.max(), np.datetime64(datetime(2021, 1, 30)))
         self.assertGreater(merged_ds.time.min(), np.datetime64(datetime(2021, 1, 15)))
         self.assertLess(merged_ds.latitude.max(), bbox[1])
@@ -261,97 +294,76 @@ class TestSwathGridFiles(unittest.TestCase):
         self.assertLess(merged_ds.longitude.max(), bbox[3])
         self.assertGreater(merged_ds.longitude.min(), bbox[2])
 
+
+    # def test__trim_to_gpis(self):
+    #     swath_path = self.tempdir_path / "swath.nc"
+    #     ra = Swath(swath_path)
+    #     ds = xr.open_dataset(swath_path)
+    #     ds = ds.chunk({"obs": 1_000_000})
+    #     valid_gpis = [1100178, 1102762]
+    #     grid = FibGrid(12.5)
+
+    #     gpi_lookup = np.zeros(grid.gpis.max()+1, dtype=bool)
+    #     gpi_lookup[valid_gpis] = 1
+    #     # trimmed_ds = ra._trim_to_gpis(ds, valid_gpis)
+    #     trimmed_ds = ra._trim_to_gpis(ds, lookup_vector=gpi_lookup)
+    #     self.assertTrue(np.all(np.isin(trimmed_ds["location_id"].values, valid_gpis)))
+    #     new_obs_gpis = trimmed_ds["location_id"].values
+    #     np.testing.assert_array_equal(new_obs_gpis, np.repeat(np.array(valid_gpis), [1, 1]))
+
+    # def test__trim_var_range(self):
+    #     swath_path = self.tempdir_path / "swath.nc"
+    #     ra = Swath(swath_path)
+    #     ds = xr.open_dataset(swath_path)
+    #     ds = ra._ensure_obs(ds)
+    #     ds = ds.chunk({"obs": 1_000_000})
+    #     start_dt = np.datetime64("2020-11-15T09:04:50")
+    #     end_dt = np.datetime64("2020-11-15T09:04:52")
+    #     trimmed_ds = ra._trim_var_range(ds, "time", start_dt, end_dt)
+    #     self.assertTrue(np.all(trimmed_ds["time"].values < end_dt))
+    #     self.assertTrue(np.all(trimmed_ds["time"].values >= start_dt))
+
     def test_stack_to_cell_files(self):
-        return
-        # cell_path = self.tempdir_path / "cell"
-        # cell_path.mkdir(parents=True, exist_ok=True)
-        # swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
-        # swath_path = "ascat_test_data/hsaf/h129/swaths"
-
-        swath_path = "/home/charriso/Projects/ascat/tests/ascat_test_data/hsaf/h129/swaths"
+        swath_path = "tests/ascat_test_data/hsaf/h129/swaths/"
         sf = SwathGridFiles.from_product_id(swath_path, "h129")
-
-        # sf.stack_to_cell_files("/home/charriso/test_cells/", RaggedArrayCell, datetime(2021, 1, 1), datetime(2021, 2, 1), processes=12, mode="a", chunk=True, load=True)
-
+        out_dir = self.tempdir_path / "cells_out"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        cells_to_test = [2587, 2588]
         sf.stack_to_cell_files(
-            "/home/charriso/test_cells/",
-            RaggedArrayCell,
-            (datetime(2021, 1, 1), datetime(2021, 2, 1)),
-            fnames=list(Path(swath_path).rglob("*.nc"))[:2],
-            processes=12,
-            # sat="b",
-            mode="w"
+            out_dir,
+            4 * (1024**3),
+            4,
+            date_range=(datetime(2021, 1, 1), datetime(2021, 1, 15)),
+            cells=cells_to_test,
         )
-        return
 
-        # sf.stack_to_cell_files_dask(
-        #     "/home/charriso/test_cells/",
-        #     RaggedArrayCell,
-        #     datetime(2021, 1, 1),
-        #     datetime(2021, 2, 1),
-        #     processes=12,
-        #     # sat="b",
-        #     # mode="a"
-        # )
-        #
-        # ds = sf.extract(
-        #     datetime(2021, 1, 1),
-        #     datetime(2021, 1, 2),
-        #     # sat="[bc]"
-        # )
-        # print("hi")
-        # #############################
-        swath_path = "/home/charriso/p14/data-write/RADAR/hsaf/h129_v1.0/swaths/"
-        sf = SwathGridFiles.from_product_id(swath_path, "h129_v1.0")
+        # assert that the cell files were created ( and no others )
+        assert len(list(out_dir.rglob("*.nc"))) == len(cells_to_test)
+        assert all(
+            [
+                f"{c}.nc" in [f.name for f in out_dir.rglob("*.nc")]
+                for c in cells_to_test
+            ]
+        )
 
-        # for f in sf.swath_search(datetime(2021, 1, 1), datetime(2021, 1, 7)):
-        #     with xr.open_dataset(f) as ds:
-        #         if "backscatter_flag" not in ds.variables:
-        #             print(f)
-
-        sf.stack_to_cell_files_2("/home/charriso/test_cells/magic/",
-                                 RaggedArrayCell,
-                                 (datetime(2021, 1, 7), datetime(2021, 1, 14)),
-                                 processes=12,
-                                 sat="c",
-                                 mode="a"
-                                 )
-
-        # check that the time var in all files in /test_cells/ are monotonic ascending
-        # output_cells = list(Path("/home/charriso/test_cells/").rglob("*.nc"))
-
-        # for cell in output_cells:
-        #     ds = xr.open_dataset(cell)
-        #     if ds.time.size > 1:
-        #         print(cell)
-        # ds = sf.extract(datetime(2021, 1, 1), datetime(2021, 2, 1))
-        # ds = ds.assign_coords(
-        #     {"cell": ("obs", sf.grid.gpi2cell(ds["location_id"].values))}
-        # )
-        # ds = ds.set_xindex("cell")
-        # print(ds)
-        #
-
-# import dask.array as da
-
-# all_cells = np.unique(ds.cell.values)
-
-# def m1(ds, cells):
-#     for c in cells:
-#         ds.sel(cell=c)
-
-# def m2(ds, cells):
-#     for c in cells:
-#         ds.isel(obs=np.where(ds.cell.values==c)[0])
-
-# def m3(ds, cells):
-#     for c in cells:
-#         ds.isel(obs=da.where(ds.cell.values==c)[0].compute())
-
-# def m4(ds, cells):
-#     for c in cells:
-#         ds.where(ds.cell==c, drop=True)
-
-# def m5(ds, cells):
-#     for c in ds.groupby("cell"):
-#         pass
+        # assert that they are not empty
+        for cell, cell_file in zip(cells_to_test, out_dir.rglob("*.nc")):
+            ds = xr.open_dataset(cell_file, decode_cf=True, mask_and_scale=False)
+            assert len(ds.obs) > 0
+            # assert that they contain all the data that the swaths did (for these cells)
+            cell_ds_from_swath = sf.read(
+                date_range=(datetime(2021, 1, 1), datetime(2021, 1, 15)),
+                cell=[cell],
+                read_kwargs={"mask_and_scale": False, "decode_cf": True},
+            )
+            assert len(cell_ds_from_swath.obs) == len(ds.obs)
+            for variable in cell_ds_from_swath.data_vars:
+                if variable in ["location_id", "lat", "lon", "latitude", "longitude"]:
+                    continue
+                np.testing.assert_array_equal(
+                    cell_ds_from_swath[variable].values, ds[variable].values
+                )
+                xr.testing.assert_identical(
+                    cell_ds_from_swath[variable].reset_coords(drop=True),
+                    ds[variable].reset_coords(drop=True),
+                )
