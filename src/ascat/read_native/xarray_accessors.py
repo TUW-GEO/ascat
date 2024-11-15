@@ -103,7 +103,6 @@ class PyGeoGriddedArrayAccessor:
         self,
         gpis: Sequence[int] | None = None,
         lookup_vector: np.ndarray | None = None,
-        gpi_var: str = "location_id",
     ) -> xr.Dataset:
         if lookup_vector is None:
             _, lookup_vector = get_grid_gpis(
@@ -112,7 +111,6 @@ class PyGeoGriddedArrayAccessor:
         return self._obj.cf_geom.sel_instances(
             instance_vals=gpis,
             instance_lookup_vector=lookup_vector,
-            instance_uid=gpi_var,
         )
 
 
@@ -134,6 +132,10 @@ class CFDiscreteGeometryAccessor:
     @property
     def array_type(self) -> str:
         return cf_array_type(self._ds)
+
+    @property
+    def timeseries_id(self) -> str:
+        return self._obj.timeseries_id
 
     def set_coord_vars(self, coord_vars: Sequence[str]):
         self._coord_vars = coord_vars
@@ -166,7 +168,6 @@ class CFDiscreteGeometryAccessor:
         return self._obj.sel_instances(
             instance_vals=instance_vals,
             instance_lookup_vector=instance_lookup_vector,
-            instance_uid=instance_uid,
             **kwargs,
         )
 

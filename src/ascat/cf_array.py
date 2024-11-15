@@ -68,17 +68,17 @@ def point_to_indexed(
     ds: xr.Dataset,
     sample_dim: str,
     instance_dim: str,
-    instance_uid: str,
+    timeseries_id: str,
     index_var: str = "locationIndex",
     instance_vars: Sequence[str] | None = None,
     coord_vars: Sequence[str] | None = None,
 ) -> xr.Dataset:
     coord_vars = coord_vars or []
     instance_vars = instance_vars or []
-    instance_vars = [instance_uid] + instance_vars
+    instance_vars = [timeseries_id] + instance_vars
 
     _, unique_index_1d, instanceIndex = np.unique(
-        ds[instance_uid], return_index=True, return_inverse=True
+        ds[timeseries_id], return_index=True, return_inverse=True
     )
     ds[index_var] = (sample_dim, instanceIndex, {"instance_dimension": instance_dim})
 
@@ -94,7 +94,7 @@ def point_to_indexed(
     # instance_vars = instance_vars or potential_instance_vars
 
     # potential_coord_vars = [
-    #     instance_uid,
+    #     timeseries_id,
     #     "lon",
     #     "lat",
     #     "alt",
@@ -118,18 +118,18 @@ def point_to_indexed(
 def point_to_contiguous(
     ds: xr.Dataset,
     instance_dim: str,
-    instance_uid: str,
+    timeseries_id: str,
     count_var: str = "row_size",
     instance_vars: Sequence[str] | None = None,
     coord_vars: Sequence[str] | None = None,
 ) -> xr.Dataset:
     coord_vars = coord_vars or []
     instance_vars = instance_vars or []
-    instance_vars = [instance_uid] + instance_vars
+    instance_vars = [timeseries_id] + instance_vars
 
-    ds = ds.sortby([instance_uid])  # ,time])
+    ds = ds.sortby([timeseries_id])  # ,time])
     _, unique_index_1d, row_size = np.unique(
-        ds[instance_uid], return_index=True, return_counts=True
+        ds[timeseries_id], return_index=True, return_counts=True
     )
 
     ds[count_var] = ("locations", row_size)
@@ -294,7 +294,11 @@ class CFDiscreteGeom:
 
 class PointArray(CFDiscreteGeom):
     """
-    TODO assume attr field defining sample dimension name
+    Assumptions made beyond basic CF conventions:
+
+    - cf_role="timeseries_id" is used to identify the timeseries ID variable for purposes
+        of selecting instances and converting to ragged arrays. If you only have a single
+        timeseries there's not much point in using this class.
     """
     @property
     def array_type(self) -> str:
@@ -309,11 +313,24 @@ class PointArray(CFDiscreteGeom):
                 )
         return self._ra_type
 
+    @property
+    def timeseries_id(self):
+        if self._timeseries_id is not None:
+            return self._timeseries_id
+        for v in self._data.variables:
+            if cf_role := self._data[v].attrs.get("cf_role"):
+                if cf_role == "timeseries_id":
+                    self._timeseries_id = v
+                    return self.timeseries_id
+        raise ValueError(
+            "Timeseries ID could not be determined from dataset attributes."
+        )
+
     def sel_instances(
         self,
         instance_vals: Sequence[int|str] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
-        instance_uid: str = "location_id",
+        timeseries_id: str = "location_id",
     ):
         ds = self._data
         return self._select_instances(
@@ -321,13 +338,13 @@ class PointArray(CFDiscreteGeom):
             self._sample_dimension,
             instance_vals,
             instance_lookup_vector,
-            instance_uid,
+            timeseries_id,
         )
 
     def to_indexed_ragged(
         self,
         instance_dim: str = "locations",
-        instance_uid: str = "location_id",
+        timeseries_id: str = "location_id",
         index_var: str = "locationIndex",
         instance_vars: Sequence[str] | None = None,
         coord_vars: Sequence[str] | None = None,
@@ -336,7 +353,7 @@ class PointArray(CFDiscreteGeom):
             self._data,
             self._sample_dimension,
             instance_dim,
-            instance_uid,
+            timeseries_id,
             index_var,
             instance_vars or self._instance_vars,
             coord_vars or self._coord_vars,
@@ -345,7 +362,7 @@ class PointArray(CFDiscreteGeom):
     def to_contiguous_ragged(
         self,
         instance_dim: str = "locations",
-        instance_uid: str = "location_id",
+        timeseries_id: str = "location_id",
         count_var: str = "row_size",
         instance_vars: Sequence[str] | None = None,
         coord_vars: Sequence[str] | None = None,
@@ -353,7 +370,7 @@ class PointArray(CFDiscreteGeom):
         return self._point_to_contiguous(
             self._data,
             instance_dim,
-            instance_uid,
+            timeseries_id,
             count_var,
             instance_vars or self._instance_vars,
             coord_vars or self._coord_vars,
@@ -368,13 +385,13 @@ class PointArray(CFDiscreteGeom):
         sample_dim: str,
         instance_vals: Sequence[int|str] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
-        instance_uid: str = "location_id",
+        timeseries_id: str = "location_id",
     ) -> xr.Dataset:
         instance_vals = instance_vals or []
         if instance_lookup_vector is not None:
-            sample_idx = instance_lookup_vector[ds[instance_uid]]
+            sample_idx = instance_lookup_vector[ds[timeseries_id]]
             return ds.sel({sample_dim: sample_idx})
-        sample_idx = np.isin(ds[instance_uid], instance_vals)
+        sample_idx = np.isin(ds[timeseries_id], instance_vals)
         return ds.sel({sample_dim: sample_idx})
 
     @staticmethod
@@ -382,7 +399,7 @@ class PointArray(CFDiscreteGeom):
         ds: xr.Dataset,
         sample_dim: str,
         instance_dim: str,
-        instance_uid: str,
+        timeseries_id: str,
         index_var: str = "locationIndex",
         instance_vars: Sequence[str] | None = None,
         coord_vars: Sequence[str] | None = None,
@@ -391,7 +408,7 @@ class PointArray(CFDiscreteGeom):
             ds,
             sample_dim,
             instance_dim,
-            instance_uid,
+            timeseries_id,
             index_var,
             instance_vars,
             coord_vars,
@@ -401,7 +418,7 @@ class PointArray(CFDiscreteGeom):
     def _point_to_contiguous(
         ds: xr.Dataset,
         instance_dim: str,
-        instance_uid: str,
+        timeseries_id: str,
         count_var: str = "row_size",
         instance_vars: Sequence[str] | None = None,
         coord_vars: Sequence[str] | None = None,
@@ -409,7 +426,7 @@ class PointArray(CFDiscreteGeom):
         return point_to_contiguous(
             ds,
             instance_dim,
-            instance_uid,
+            timeseries_id,
             count_var,
             instance_vars,
             coord_vars,
@@ -509,16 +526,13 @@ class RaggedArray(CFDiscreteGeom):
         self,
         instance_vals: Sequence[int|str] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
-        instance_uid: str | None = None,
     ) -> xr.Dataset:
-        instance_uid = instance_uid or "location_id"
         if self.array_type == "indexed":
             # convert to point array, select there, convert back\
             ds = self.to_point_array()
             instances = ds.cf_geom.sel_instances(
                 instance_vals=instance_vals,
                 instance_lookup_vector=instance_lookup_vector,
-                instance_uid=instance_uid,
             )
             return instances.cf_geom.to_indexed_ragged(index_var=self._index_var)
 
@@ -539,7 +553,7 @@ class RaggedArray(CFDiscreteGeom):
         ds: xr.Dataset,
         sample_dim: str,
         instance_dim: str,
-        instance_uid: str,
+        timeseries_id: str,
         count_var: str,
         index_var: str,
         instance_vals: Sequence[int] | np.ndarray | None = None,
@@ -552,7 +566,7 @@ class RaggedArray(CFDiscreteGeom):
         if len(instance_vals) == 0:
             if instance_lookup_vector is not None:
                 sample_instances = np.repeat(ds[instance_dim].data, ds[count_var])
-                sample_instance_ids = np.repeat(ds[instance_uid].data, ds[count_var])
+                sample_instance_ids = np.repeat(ds[timeseries_id].data, ds[count_var])
                 sample_bools = instance_lookup_vector[sample_instance_ids]
                 instances_sample_idxs = np.unique(sample_instances, return_index=True)[1]
                 instances_bools = sample_bools[instances_sample_idxs]
@@ -562,7 +576,7 @@ class RaggedArray(CFDiscreteGeom):
                 instances_idxs = []
 
         if len(instance_vals) == 1:
-            instances_idx = np.where(ds[instance_uid] == instance_vals[0])[0][0]
+            instances_idx = np.where(ds[timeseries_id] == instance_vals[0])[0][0]
             sample_start = int(
                 ds[count_var].isel({instance_dim: slice(0, instances_idx)}).sum().values
             )
@@ -578,7 +592,7 @@ class RaggedArray(CFDiscreteGeom):
             )
 
         else:
-            instances_idxs = np.where(np.isin(ds[instance_uid], instance_vals))[0]
+            instances_idxs = np.where(np.isin(ds[timeseries_id], instance_vals))[0]
 
         if instances_idxs.size > 0:
             sample_starts = [
