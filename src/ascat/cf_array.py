@@ -388,6 +388,12 @@ class PointArray(CFDiscreteGeom):
     def to_point_array(self):
         return self._data
 
+    def set_sample_dimension(self, sample_dim: str):
+        if self._sample_dimension != sample_dim:
+            self._data = self._data.rename_dims({self._sample_dimension: sample_dim})
+            self._sample_dimension = sample_dim
+        return self._data
+
     @staticmethod
     def _select_instances(
         ds: xr.Dataset,
@@ -556,6 +562,15 @@ class RaggedArray(CFDiscreteGeom):
                 instance_vals=instance_vals,
                 instance_lookup_vector=instance_lookup_vector,
             )
+
+
+    def set_sample_dimension(self, sample_dim: str):
+        if self._sample_dimension != sample_dim:
+            self._data = self._data.rename_dims({self._sample_dimension: sample_dim})
+            if self.array_type == "contiguous":
+                self._data[self._count_var].attrs["sample_dimension"] = sample_dim
+            self._sample_dimension = sample_dim
+        return self._data
 
     @staticmethod
     def _select_instances_contiguous(

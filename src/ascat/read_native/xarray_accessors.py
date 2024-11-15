@@ -161,6 +161,11 @@ class CFDiscreteGeometryAccessor:
             instance_vars=instance_vars,
         )
 
+    def set_sample_dimension(self, sample_dim: str):
+        self._ds = self._obj.set_sample_dimension(sample_dim)
+        self._obj = cf_array_class(self._ds, self.array_type)
+        return self._ds
+
     def sel_instances(
         self,
         instance_vals: Sequence[int | str] | np.ndarray | None = None,

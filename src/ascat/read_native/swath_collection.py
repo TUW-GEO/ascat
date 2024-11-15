@@ -139,13 +139,7 @@ class Swath(Filenames):
 
     @staticmethod
     def _ensure_obs(ds):
-        # TODO make reg func.
-        # basic heuristic - if obs isn't present, assume it's instead "time"
-        if "obs" not in ds.dims:
-            ds = ds.rename_dims({"time": "obs"})
-        # other possible heuristics:
-        # - if neither "obs" nor "time" is present, assume the obs dim is the one that's
-        #  not "locations".
+        ds = ds.cf_geom.set_sample_dimension("obs")
         return ds
 
     @staticmethod
