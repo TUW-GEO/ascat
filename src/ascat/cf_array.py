@@ -402,7 +402,8 @@ class PointArray(CFDiscreteGeom):
         instance_lookup_vector: np.ndarray | None = None,
         timeseries_id: str = "location_id",
     ) -> xr.Dataset:
-        instance_vals = instance_vals or []
+        if instance_vals is None:
+            instance_vals = []
         if instance_lookup_vector is not None:
             sample_idx = instance_lookup_vector[ds[timeseries_id]]
             return ds.sel({sample_dim: sample_idx})
