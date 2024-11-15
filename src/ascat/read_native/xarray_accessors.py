@@ -111,6 +111,14 @@ class PyGeoGriddedArrayAccessor:
         )
         return self._obj.pgg.sel_gpis(gpis, lookup_vector)
 
+    def sel_geom(self, geom: BaseGeometry) -> xr.Dataset:
+        gpis, lookup_vector = get_grid_gpis(
+            grid=self.grid,
+            geom=geom,
+            return_lookup=True
+        )
+        return self._obj.pgg.sel_gpis(gpis, lookup_vector)
+
     def sel_gpis(
         self,
         gpis: Sequence[int] | None = None,
