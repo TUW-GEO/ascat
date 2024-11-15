@@ -494,7 +494,7 @@ class OrthoMultiCell(Filenames):
 
         return ds
 
-
+grid_registry = GridRegistry()
 class CellGridFiles():
 
     def __init__(
@@ -531,7 +531,7 @@ class CellGridFiles():
         init_options = {
             "root_path": root_path,
             "file_class": product_class.file_class,
-            "grid": grid_registry.get(grid_name)["grid"],
+            "grid": grid_registry.get(grid_name),
             "fn_format": product_class.fn_format,
             "preprocessor": product_class.preprocessor,
             **kwargs

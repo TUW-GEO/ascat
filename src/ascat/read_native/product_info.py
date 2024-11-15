@@ -14,51 +14,6 @@ from pathlib import Path
 from ascat.read_native.cell_collection import RaggedArrayCell
 from ascat.read_native.cell_collection import OrthoMultiCell
 
-from ascat.read_native.grid_registry import grid_registry
-
-
-def register_cell_grid_product(product_class, grid, product_id, grid_attrs=None):
-    """
-    Register a product class for a specific grid.
-
-    Parameters
-    ----------
-    product_class: class
-        Class to register
-    grid: pygeogrids.BasicGrid
-        Grid object to register the class for
-    """
-    grid_attrs = grid_attrs or {}
-    if isinstance(grid, (str, Path)):
-        grid = load_grid(grid)
-    elif not isinstance(grid, BasicGrid):
-        raise ValueError("grid must be a BasicGrid object or a string or Path to a grid file.")
-
-    grid_registry.register(product_class.grid_name, lambda: {"grid": grid, "attrs": {**grid_attrs}})
-
-    cell_io_catalog[product_id] = product_class
-
-def register_swath_grid_product(product_class, grid, product_id, grid_attrs=None):
-    """
-    Register a product class for a specific grid.
-
-    Parameters
-    ----------
-    product_class: class
-        Class to register
-    grid: pygeogrids.BasicGrid
-        Grid object to register the class for
-    """
-    grid_attrs = grid_attrs or {}
-    if isinstance(grid, (str, Path)):
-        grid = load_grid(grid)
-    elif not isinstance(grid, BasicGrid):
-        raise ValueError("grid must be a BasicGrid object or a string or Path to a grid file.")
-
-    grid_registry.register(product_class.grid_name, lambda: {"grid": grid, "attrs": {**grid_attrs}})
-
-    swath_io_catalog[product_id] = product_class
-
 
 class RaggedArrayCellProduct:
     file_class = RaggedArrayCell
@@ -133,7 +88,7 @@ class AscatH129Swath(AscatSwathProduct):
         "year_folder": "{year}"
     }
     date_field_fmt = "%Y%m%d%H%M%S"
-    grid_name = "Fib6.25"
+    grid_name = "fibgrid_6.25"
     cell_fn_format = "{:04d}.nc"
     beams_vars = ["backscatter", "incidence_angle", "azimuth_angle", "kp"]
     ts_dtype = np.dtype([
@@ -194,7 +149,7 @@ class AscatH129v1Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
-    grid_name = "Fib6.25"
+    grid_name = "fibgrid_6.25"
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
     ts_dtype = np.dtype([
@@ -245,7 +200,7 @@ class AscatH121v1Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
-    grid_name = "Fib12.5"
+    grid_name = "fibgrid_12.5"
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
     ts_dtype = np.dtype([
@@ -296,7 +251,7 @@ class AscatH122Swath(AscatSwathProduct):
     fn_pattern = "ascat_ssm_nrt_6.25km_{placeholder}Z_{date}Z_metop-{sat}_h122.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
-    grid_name = "Fib6.25"
+    grid_name = "fibgrid_6.25"
     cell_fn_format = "{:04d}.nc"
     beams_vars = []
     ts_dtype = np.dtype([
@@ -354,7 +309,7 @@ class AscatSIG0Swath6250m(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP{sat}-6.25_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
-    grid_name = "Fib6.25"
+    grid_name = "fibgrid_6.25"
     cell_fn_format = "{:04d}.nc"
     beams_vars = [
         "backscatter",
@@ -456,7 +411,7 @@ class AscatSIG0Swath12500m(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP{sat}-12.5_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
-    grid_name = "Fib12.5"
+    grid_name = "fibgrid_12.5"
     cell_fn_format = "{:04d}.nc"
     beams_vars = [
         "backscatter",
