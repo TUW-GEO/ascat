@@ -714,4 +714,70 @@ class OrthoMultiArray(CFDiscreteGeom):
 
     @property
     def array_type(self):
-        return None
+        if check_orthomulti(self._data):
+            return "orthomulti"
+        else:
+            raise ValueError("Dataset is not an orthomulti array.")
+
+
+    def to_indexed_ragged(self):
+        ...
+
+    def to_contiguous_ragged(self):
+        ...
+
+    def to_point_array(self):
+        ...
+
+    def sel_instances(
+        self,
+        instance_vals: Sequence[int|str] | np.ndarray | None = None,
+        instance_lookup_vector: np.ndarray | None = None,
+        timeseries_id: str | None = None,
+    ):
+        return self._select_instances(
+            self._data,
+            self._instance_dimension,
+            instance_vals,
+            instance_lookup_vector,
+            timeseries_id,
+        )
+
+    def set_sample_dimension(self, sample_dim: str):
+        if self._sample_dimension != sample_dim:
+            self._data = self._data.rename_dims({self._sample_dimension: sample_dim})
+            self._sample_dimension = sample_dim
+        return self._data
+
+    @staticmethod
+    def _orthomulti_to_contiguous():
+        ...
+
+    @staticmethod
+    def _orthomulti_to_indexed():
+        ...
+
+    @staticmethod
+    def _orthomulti_to_point():
+        ...
+
+    @staticmethod
+    def _select_instances(
+        ds: xr.Dataset,
+        instance_dim: str,
+        instance_vals: Sequence[int|str] | np.ndarray | None = None,
+        instance_lookup_vector: np.ndarray | None = None,
+        timeseries_id: str = "location_id",
+    ) -> xr.Dataset:
+        """
+        Selects requested instances from an orthomulti array dataset.
+
+        Returns a dataset containing the requested instances. If instances are requested
+        that are not in the dataset, no error will be thrown.
+        """
+        instance_vals = instance_vals or []
+        if instance_lookup_vector is not None:
+            instance_bool = instance_lookup_vector[ds[timeseries_id]]
+        else:
+            instance_bool = np.isin(ds[timeseries_id], instance_vals)
+        return ds.sel({instance_dim: instance_bool})
