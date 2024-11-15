@@ -21,37 +21,37 @@ class RaggedArrayCellProduct:
 
     
 class ErsHCell(RaggedArrayCellProduct):
-    grid_name = "Fib12.5"
     #sf_pattern = {"satellite_folder": "ERS-{sat}_WindScatt", "res_folder": "{res}"}
+    grid_name = "fibgrid_12.5"
 
 
 class ErsNCell(RaggedArrayCellProduct):
-    grid_name = "Fib25"
+    grid_name = "fibgrid_25"
 
 
 class AscatH129Cell(RaggedArrayCellProduct):
-    grid_name = "Fib6.25"
+    grid_name = "fibgrid_6.25"
     # sf_pattern = {"sat_str": "{sat}"}
 
 
 class AscatH129v1Cell(RaggedArrayCellProduct):
-    grid_name = "Fib6.25"
+    grid_name = "fibgrid_6.25"
 
 
 class AscatH121v1Cell(RaggedArrayCellProduct):
-    grid_name = "Fib12.5"
+    grid_name = "fibgrid_12.5"
 
 
 class AscatH122Cell(RaggedArrayCellProduct):
-    grid_name = "Fib6.25"
+    grid_name = "fibgrid_6.25"
 
 
 class AscatSIG0Cell6250m(RaggedArrayCellProduct):
-    grid_name = "Fib6.25"
+    grid_name = "fibgrid_6.25"
 
 
 class AscatSIG0Cell12500m(RaggedArrayCellProduct):
-    grid_name = "Fib12.5"
+    grid_name = "fibgrid_12.5"
 
 
 class SwathProduct:

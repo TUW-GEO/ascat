@@ -24,8 +24,13 @@ contiguous_ragged_ds_2588 = xr.Dataset(
         "location_id": (
             "locations",
             np.array([1549346, 1549723, 1555679, 1555912, 1556056], dtype=np.int64),
+          {"cf_role": "timeseries_id"}
         ),
-        "row_size": ("locations", np.array([2, 1, 2, 4, 1], dtype=np.int32)),
+        "row_size": (
+            "locations",
+            np.array([2, 1, 2, 4, 1], dtype=np.int32),
+            {"sample_dimension": "time"},
+        ),
         "time": (
             "time",
             np.array(
@@ -44,8 +49,9 @@ contiguous_ragged_ds_2588 = xr.Dataset(
                 dtype="datetime64[ns]",
             ),
         ),
-    }
-)
+    },
+    attrs={"featureType": "timeseries"},
+).set_coords(["lon", "lat", "alt"])
 
 indexed_ragged_ds_2588 = xr.Dataset(
     {
@@ -68,10 +74,12 @@ indexed_ragged_ds_2588 = xr.Dataset(
         "location_id": (
             "locations",
             np.array([1549346, 1549723, 1555679, 1555912, 1556056], dtype=np.int64),
+          {"cf_role": "timeseries_id"}
         ),
         "locationIndex": (
             "time",
             np.array([0, 0, 1, 2, 2, 3, 3, 3, 3, 4], dtype=np.int32),
+            {"instance_dimension": "locations"},
         ),
         "time": (
             "time",
@@ -91,8 +99,9 @@ indexed_ragged_ds_2588 = xr.Dataset(
                 dtype="datetime64[ns]",
             ),
         ),
-    }
-)
+    },
+    attrs={"featureType": "timeseries"},
+).set_coords(["lon", "lat", "alt"])
 
 contiguous_ragged_ds_2587 = xr.Dataset(
     {
@@ -115,8 +124,9 @@ contiguous_ragged_ds_2587 = xr.Dataset(
         "location_id": (
             "locations",
             np.array([1493629, 1493718, 1493807, 1493862, 1493951], dtype=np.int64),
+          {"cf_role": "timeseries_id"}
         ),
-        "row_size": ("locations", np.array([3, 1, 1, 3, 2], dtype=np.int32)),
+        "row_size": ("locations", np.array([3, 1, 1, 3, 2], dtype=np.int32), {"sample_dimension": "time"}),
         "time": (
             "time",
             np.array(
@@ -135,8 +145,9 @@ contiguous_ragged_ds_2587 = xr.Dataset(
                 dtype="datetime64[ns]",
             ),
         ),
-    }
-)
+    },
+    attrs={"featureType": "timeseries"},
+).set_coords(["lon", "lat", "alt"])
 
 indexed_ragged_ds_2587 = xr.Dataset(
     {
@@ -159,10 +170,12 @@ indexed_ragged_ds_2587 = xr.Dataset(
         "location_id": (
             "locations",
             np.array([1493629, 1493718, 1493807, 1493862, 1493951], dtype=np.int64),
+          {"cf_role": "timeseries_id"}
         ),
         "locationIndex": (
             "time",
             np.array([0, 0, 0, 1, 2, 3, 3, 3, 4, 4], dtype=np.int32),
+            {"instance_dimension": "locations"},
         ),
         "time": (
             "time",
@@ -182,8 +195,9 @@ indexed_ragged_ds_2587 = xr.Dataset(
                 dtype="datetime64[ns]",
             ),
         ),
-    }
-)
+    },
+    attrs={"featureType": "timeseries"},
+).set_coords(["lon", "lat", "alt"])
 
 swath_ds = xr.Dataset(
     {
@@ -192,6 +206,7 @@ swath_ds = xr.Dataset(
         "location_id": (
             "obs",
             np.array([1100178, 1101775, 1102762, 1104359], dtype=np.int64),
+          {"cf_role": "timeseries_id"}
         ),
         "time": (
             "obs",
@@ -209,16 +224,26 @@ swath_ds = xr.Dataset(
             "obs",
             np.array([58.18, 57.43, 55.469997, 47.489998], dtype=np.float32),
         ),
-    }
+    },
+    attrs={"featureType": "point"},
 )
 
 swath_ds_2 = xr.Dataset(
     {
-        "longitude": ("obs", np.array([142.937536, 143.302272, 143.038352, 142.774416], dtype=np.float64)),
-        "latitude": ("obs", np.array([42.176548, 42.279804, 42.251248, 42.222704], dtype=np.float64)),
+        "longitude": (
+            "obs",
+            np.array(
+                [142.937536, 143.302272, 143.038352, 142.774416], dtype=np.float64
+            ),
+        ),
+        "latitude": (
+            "obs",
+            np.array([42.176548, 42.279804, 42.251248, 42.222704], dtype=np.float64),
+        ),
         "location_id": (
             "obs",
-            np.array([1103749., 1105956., 1105346., 1104736.], dtype=np.int64),
+            np.array([1103749.0, 1105956.0, 1105346.0, 1104736.0], dtype=np.int64),
+          {"cf_role": "timeseries_id"}
         ),
         "time": (
             "obs",
@@ -228,7 +253,6 @@ swath_ds_2 = xr.Dataset(
                     np.datetime64("2021-11-15T09:04:53.338000128"),
                     np.datetime64("2021-11-15T09:04:54.188000000"),
                     np.datetime64("2021-11-15T09:04:55.036000000"),
-
                 ],
                 dtype="datetime64[ns]",
             ),
@@ -237,5 +261,6 @@ swath_ds_2 = xr.Dataset(
             "obs",
             np.array([46.289997, 39.629997, 40.36, 44.19], dtype=np.float32),
         ),
-    }
+    },
+    attrs={"featureType": "point"},
 )
