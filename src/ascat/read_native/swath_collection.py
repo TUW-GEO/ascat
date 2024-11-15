@@ -25,8 +25,6 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import multiprocessing as mp
-
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
@@ -42,10 +40,9 @@ from pyresample.geometry import SwathDefinition
 
 from ascat.read_native.grid_registry import GridRegistry #grid_registry
 
+from ascat.utils import get_grid_gpis
 from ascat.file_handling import Filenames
 from ascat.file_handling import ChronFiles
-from ascat.utils import get_grid_gpis
-from ascat.utils import create_variable_encodings
 
 
 registry = GridRegistry()
@@ -92,9 +89,8 @@ class Swath(Filenames):
 
     def read(
         self,
-        mask_and_scale=True,
-        max_nbytes=None,
         parallel=False,
+        mask_and_scale=True,
         **kwargs
     ):
         """
@@ -199,6 +195,7 @@ class SwathGridFiles(ChronFiles):
     """
     Class to manage chronological swath files with a date field in the filename.
     """
+
     def __init__(
         self,
         root_path,
