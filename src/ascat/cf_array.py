@@ -385,6 +385,9 @@ class PointArray(CFDiscreteGeom):
     def to_orthomulti(self):
         pass
 
+    def to_point_array(self):
+        return self._data
+
     @staticmethod
     def _select_instances(
         ds: xr.Dataset,
