@@ -240,7 +240,7 @@ def contiguous_to_point(
     xarray.Dataset
         Dataset with only the time series variables.
     """
-    row_size = ds[count_var].data
+    row_size = ds[count_var].values
     ds = ds.drop_vars(count_var)
     instance_vars = [var for var in ds.variables if instance_dim in ds[var].dims]
     for instance_var in instance_vars:
@@ -248,7 +248,7 @@ def contiguous_to_point(
             {
                 instance_var: (
                     sample_dim,
-                    np.repeat(ds[instance_var].data, row_size),
+                    np.repeat(ds[instance_var].values, row_size),
                     ds[instance_var].attrs,
                 )
             }
@@ -569,8 +569,9 @@ class RaggedArray(CFDiscreteGeom):
         # In this case we /can/ use the lookup vector but it will be slower
         if len(instance_vals) == 0:
             if instance_lookup_vector is not None:
-                sample_instances = np.repeat(ds[instance_dim].data, ds[count_var])
-                sample_instance_ids = np.repeat(ds[timeseries_id].data, ds[count_var])
+                instance_counts = ds[count_var].values
+                sample_instances = np.repeat(ds[instance_dim].values, instance_counts)
+                sample_instance_ids = np.repeat(ds[timeseries_id].values, instance_counts)
                 sample_bools = instance_lookup_vector[sample_instance_ids]
                 instances_sample_idxs = np.unique(sample_instances, return_index=True)[1]
                 instances_bools = sample_bools[instances_sample_idxs]
