@@ -45,12 +45,14 @@ def check_orthomulti(ds):
 def cf_array_type(ds):
     if ds.attrs.get("featureType") == "point":
         return "point"
-    if any("instance_dimension" in ds[v].attrs for v in ds.variables):
-        return "indexed"
-    if any("sample_dimension" in ds[v].attrs for v in ds.variables):
-        return "contiguous"
+    for v in ds.variables:
+        if "instance_dimension" in ds[v].attrs:
+            return "indexed"
+        if "sample_dimension" in ds[v].attrs:
+            return "contiguous"
     if check_orthomulti(ds):
         return "orthomulti"
+    raise ValueError("Array type could not be determined.")
 
 
 def cf_array_class(ds, array_type, **kwargs):
@@ -62,6 +64,8 @@ def cf_array_class(ds, array_type, **kwargs):
         return RaggedArray(ds, **kwargs)
     if array_type == "orthomulti":
         return OrthoMultiArray(ds, **kwargs)
+    raise ValueError(f"Array type '{array_type}' not recognized."
+                     "Should be one of 'point', 'indexed', 'contiguous', 'orthomulti'.")
 
 
 def point_to_indexed(
