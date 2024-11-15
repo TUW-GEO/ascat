@@ -91,7 +91,7 @@ class RaggedArrayCell(Filenames):
         elif lookup_vector is not None:
             ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
         # ds = self._ensure_indexed(ds)
-        ds = self._ensure_1d(ds)
+        ds = self._ensure_point(ds)
         if date_range is not None:
             ds = self._trim_var_range(ds, "time", *date_range)
 
@@ -121,7 +121,6 @@ class RaggedArrayCell(Filenames):
             Function to preprocess the dataset.
         **kwargs : dict
         """
-
         ds, closers = super().read(date_range=date_range,
                                    location_id=location_id,
                                    lookup_vector=lookup_vector,
@@ -133,14 +132,14 @@ class RaggedArrayCell(Filenames):
         if ds is not None:
             ds.set_close(partial(super()._multi_file_closer, closers))
 
-            if return_format == "1d":
+            if return_format == "point":
                 return ds
 
             if return_format == "indexed":
-                return IndexedRaggedArrayHandler.from_1d_array(ds)
+                return ds.cf_geom.to_indexed_ragged()
 
             if return_format == "contiguous":
-                return ContiguousRaggedArrayHandler.from_1d_array(ds)
+                return ds.cf_geom.to_contiguous_ragged()
 
     @staticmethod
     def _indexed_or_contiguous(ds):
@@ -158,11 +157,6 @@ class RaggedArrayCell(Filenames):
         if "row_size" in ds:
             return "contiguous"
 
-    def _ra_handler(self, ds):
-        if self._indexed_or_contiguous(ds) == "indexed":
-            return IndexedRaggedArrayHandler
-        return ContiguousRaggedArrayHandler
-
     @staticmethod
     def _trim_var_range(ds, var_name, var_min, var_max, end_inclusive=False):
         # if var_name in ds:
@@ -176,20 +170,15 @@ class RaggedArrayCell(Filenames):
     @staticmethod
     def _ensure_obs(ds):
         # basic heuristic - if obs isn't present, assume it's instead "time"
-        if "obs" not in ds.dims:
-            ds = ds.rename_dims({"time": "obs"})
-        # other possible heuristics:
-        # - if neither "obs" nor "time" is present, assume the obs dim is the one that's
-        #  not "locations".
+        ds = ds.cf_geom.set_sample_dimension("obs")
         return ds
 
-    def _ensure_1d(self, ds):
-        if self._indexed_or_contiguous(ds) == "indexed":
-            return IndexedRaggedArrayHandler.to_1d_array(ds)
-        return ContiguousRaggedArrayHandler.to_1d_array(ds)
+    @staticmethod
+    def _ensure_point(ds):
+        return ds.cf_geom.to_point_array()
 
-
-    def _ensure_indexed(self, ds):
+    @staticmethod
+    def _ensure_indexed(ds):
         """
         Convert a contiguous dataset to indexed dataset,
         if necessary. Indexed datasets pass through.
@@ -208,20 +197,12 @@ class RaggedArrayCell(Filenames):
         xarray.Dataset
             Dataset in indexed ragged array format.
         """
-        ds_type = self._array_type(ds)
-
-        if ds is None or ds_type == "indexed":
-            return ds
-
-        if ds_type == "contiguous":
-            return IndexedRaggedArrayHandler.from_contiguous_ra(ds)
-
-        if ds_type is None:
-            # assume one-dimensional array
-            return IndexedRaggedArrayHandler.from_1d_array(ds)
+        if ds is not None:
+            return ds.cf_geom.to_indexed_ragged()
 
 
-    def _ensure_contiguous(self, ds):
+    @staticmethod
+    def _ensure_contiguous(ds):
         """
         Convert an indexed dataset to contiguous dataset,
         if necessary. Contiguous datasets pass through.
@@ -240,17 +221,8 @@ class RaggedArrayCell(Filenames):
         xarray.Dataset
             Dataset in contiguous ragged array format.
         """
-        ds_type = self._array_type(ds)
-        if ds is None or ds_type == "contiguous":
-            return ds
-
-        if ds_type == "indexed":
-            return ContiguousRaggedArrayHandler.from_indexed_ra(ds)
-
-        if ds_type == "1d":
-            return ContiguousRaggedArrayHandler.from_1d_array(ds)
-
-        return ds
+        if ds is not None:
+            return ds.cf_geom.to_contiguous_ragged()
 
     @staticmethod
     def _only_locations(ds):
@@ -340,7 +312,7 @@ class RaggedArrayCell(Filenames):
         if (gpis is None or len(gpis) == 0) and (lookup_vector is None or len(lookup_vector)==0):
             return ds
 
-        return self._ra_handler(ds).trim_to_gpis(ds, gpis, lookup_vector)
+        return ds.cf_geom.sel_instances(gpis, lookup_vector)
 
     def _write(self,
                data,
@@ -367,7 +339,6 @@ class RaggedArrayCell(Filenames):
             data = self._ensure_contiguous(data)
         else:
             data = self._ensure_indexed(data)
-
 
         if postprocessor is not None:
             data = postprocessor(data)
