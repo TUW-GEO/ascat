@@ -121,6 +121,7 @@ def point_to_indexed(
 
 def point_to_contiguous(
     ds: xr.Dataset,
+    sample_dim: str,
     instance_dim: str,
     timeseries_id: str,
     count_var: str = "row_size",
@@ -131,12 +132,13 @@ def point_to_contiguous(
     instance_vars = instance_vars or []
     instance_vars = [timeseries_id] + instance_vars
 
+
     ds = ds.sortby([timeseries_id])  # ,time])
     _, unique_index_1d, row_size = np.unique(
         ds[timeseries_id], return_index=True, return_counts=True
     )
 
-    ds[count_var] = ("locations", row_size)
+    ds[count_var] = ("locations", row_size, {"sample_dimension": sample_dim})
 
     for var in instance_vars:
         if var in ds:
@@ -375,6 +377,7 @@ class PointArray(CFDiscreteGeom):
     ) -> xr.Dataset:
         return self._point_to_contiguous(
             self._data,
+            self._sample_dimension,
             instance_dim,
             timeseries_id,
             count_var,
@@ -433,6 +436,7 @@ class PointArray(CFDiscreteGeom):
     @staticmethod
     def _point_to_contiguous(
         ds: xr.Dataset,
+        sample_dim: str,
         instance_dim: str,
         timeseries_id: str,
         count_var: str = "row_size",
@@ -441,6 +445,7 @@ class PointArray(CFDiscreteGeom):
     ) -> xr.Dataset:
         return point_to_contiguous(
             ds,
+            sample_dim,
             instance_dim,
             timeseries_id,
             count_var,
