@@ -905,6 +905,40 @@ class Filenames:
         """
         raise NotImplementedError
 
+    def reprocess(self,
+                  out_dir,
+                  func,
+                  parallel=False,
+                  **kwargs):
+        """
+        Reprocess data from all files through `func`, writing the results to `out_dir`.
+
+        Parameters
+        ----------
+        out_dir : Path
+            Directory to write the output files. This will be prepended to the filenames.
+        func : function
+            The function to apply to the data before writing out.
+        parallel : bool, optional
+            Whether to process the data in parallel (default: False).
+        **kwargs : dict
+            Additional keyword arguments for writing.
+        """
+        if parallel:
+            read_ = delayed(self._read)
+            getattr_ = delayed(getattr)
+            func_ = delayed(func)
+            # data = compute(data)[0]
+        else:
+            read_ = self._read
+            getattr_ = getattr
+            func_ = func
+
+        data = [func_(read_(f)) for f in self.filenames]
+        self.filenames = [out_dir / f.name for f in self.filenames]
+
+        self.write(data, parallel=parallel, **kwargs)
+
     def write(self, data, parallel=False, **kwargs):
         """
         Write data to file.
