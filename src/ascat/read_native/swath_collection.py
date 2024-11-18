@@ -659,7 +659,6 @@ class SwathGridFiles(ChronFiles):
     def stack_to_cell_files(self,
                             out_dir,
                             max_nbytes,
-                            n_processes,
                             date_range=None,
                             fmt_kwargs=None,
                             cells=None):
@@ -701,5 +700,7 @@ class SwathGridFiles(ChronFiles):
                     cell_fnames.append(cell_fname)
 
             writer_class = RaggedArrayCell(cell_fnames)
-            writer_class.write(ds_list, parallel=True,
-                                postprocessor=self.postprocessor, mode="a")
+            writer_class.write(ds_list,
+                               parallel=True,
+                               postprocessor=self.postprocessor,
+                               mode="a")

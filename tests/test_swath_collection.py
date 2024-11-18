@@ -332,7 +332,6 @@ class TestSwathGridFiles(unittest.TestCase):
         sf.stack_to_cell_files(
             out_dir,
             4 * (1024**3),
-            4,
             date_range=(datetime(2021, 1, 1), datetime(2021, 1, 15)),
             cells=cells_to_test,
         )
