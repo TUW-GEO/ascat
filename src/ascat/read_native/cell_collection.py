@@ -551,6 +551,36 @@ class CellGridFiles():
             #return list(self.root_path.glob("**/" + filename))
             return list(self.root_path.glob(filename))
 
+    def convert_to_contiguous(self, out_dir, **kwargs):
+        """
+        Convert all files in the collection to contiguous format.
+
+        Parameters
+        ----------
+        out_dir : str
+            Output directory.
+        kwargs : dict
+            Keyword arguments passed to the reprocess method.
+        """
+        self.reprocess(out_dir, lambda ds: ds, ra_type="contiguous", **kwargs)
+
+    def reprocess(self, out_dir, func, parallel=True, **kwargs):
+        """
+        Use Filenames.reprocess to apply a function to all files in the collection and
+        save the results to `out_dir`.
+
+        Parameters
+        ----------
+        func : callable
+            Function to apply to each file.
+        kwargs : dict
+            Keyword arguments passed to func.
+        """
+
+        # get list of every filename in the collection
+        filenames = self.spatial_search()
+        files = self.file_class(filenames)
+        files.reprocess(out_dir, func, parallel=parallel, **kwargs)
 
     def spatial_search(
             self,
