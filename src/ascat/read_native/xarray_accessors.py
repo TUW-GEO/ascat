@@ -29,6 +29,8 @@ from typing import Any, Sequence
 
 import numpy as np
 import xarray as xr
+import cf_xarray
+from cartopy import crs as ccrs
 from shapely.geometry.base import BaseGeometry
 
 from pygeogrids import BasicGrid, CellGrid
@@ -36,6 +38,8 @@ from pygeogrids import BasicGrid, CellGrid
 from ascat.cf_array import cf_array_class, cf_array_type
 from ascat.read_native.grid_registry import GridRegistry
 from ascat.utils import get_grid_gpis
+
+from matplotlib import pyplot as plt
 
 
 registry = GridRegistry()
@@ -198,6 +202,24 @@ class CFDiscreteGeometryAccessor:
             instance_lookup_vector=instance_lookup_vector,
             **kwargs,
         )
+
+    def plot_var_map(self,
+                     c_var: str,
+                     # x_var: str | None = None,
+                     # y_var: str | None = None,
+                     **kwargs):
+        """
+        Plot a map of a variable. Assumes cf conventions for lon and lat.
+        """
+        point_ds = self._obj.to_point_array()
+        lon = point_ds.cf["X"]
+        lat = point_ds.cf["Y"]
+        c = point_ds[c_var]
+        fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()})
+        ax.coastlines()
+        ax.scatter(lon, lat, c=c, **kwargs)
+        return fig, ax
+
 
     def to_point_array(self):
         return self._obj.to_point_array()
