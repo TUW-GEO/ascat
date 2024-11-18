@@ -367,3 +367,34 @@ class TestSwathGridFiles(unittest.TestCase):
                     cell_ds_from_swath[variable].reset_coords(drop=True),
                     ds[variable].reset_coords(drop=True),
                 )
+
+        # reprocess to contiguous
+        from ascat.read_native.cell_collection import CellGridFiles
+        cf = CellGridFiles.from_product_id(out_dir, "h129")
+
+        contig_out_dir = self.tempdir_path / "contig_cells_out"
+        contig_out_dir.mkdir(parents=True, exist_ok=True)
+
+        cf.convert_to_contiguous(contig_out_dir, parallel=True)
+
+        # assert that the cell files were created ( and no others )
+        assert len(list(contig_out_dir.rglob("*.nc"))) == len(cells_to_test)
+        assert all(
+            [
+                f"{c}.nc" in [f.name for f in contig_out_dir.rglob("*.nc")]
+                for c in cells_to_test
+            ]
+        )
+
+        # assert that the data is the same as the original
+        for cell, cell_file in zip(cells_to_test, out_dir.rglob("*.nc")):
+            idx_ds = xr.open_dataset(cell_file, decode_cf=True, mask_and_scale=False)
+            ctg_ds = xr.open_dataset(contig_out_dir / f"{cell}.nc", decode_cf=True, mask_and_scale=False,)
+            round_trip_ds = ctg_ds.cf_geom.to_indexed_ragged()
+
+            # time will not be sorted after a round trip
+            idx_ds = idx_ds.sortby("time")
+            round_trip_ds = round_trip_ds.sortby("time")
+
+            for var in idx_ds.variables:
+                xr.testing.assert_identical(idx_ds[var], round_trip_ds[var])
