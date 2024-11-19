@@ -554,7 +554,7 @@ class CellGridFiles():
             #return list(self.root_path.glob("**/" + filename))
             return list(self.root_path.glob(filename))
 
-    def convert_to_contiguous(self, out_dir, **kwargs):
+    def convert_to_contiguous(self, out_dir, print_progress=True, **kwargs):
         """
         Convert all files in the collection to contiguous format.
 
@@ -565,7 +565,7 @@ class CellGridFiles():
         kwargs : dict
             Keyword arguments passed to the reprocess method.
         """
-        self.reprocess(out_dir, lambda ds: ds, ra_type="contiguous", **kwargs)
+        self.reprocess(out_dir, lambda ds: ds, ra_type="contiguous", print_progress=True, **kwargs)
 
     def reprocess(self, out_dir, func, parallel=True, **kwargs):
         """
