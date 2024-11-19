@@ -679,7 +679,9 @@ class SwathGridFiles(ChronFiles):
         for ds in swath.iter_read_nbytes(max_nbytes,
                                          preprocessor=self.preprocessor,
                                          print_progress=print_progress):
-            ds_cells = self.grid.gpi2cell(ds["location_id"]).compressed()
+            ds_cells = self.grid.gpi2cell(ds["location_id"])
+            if isinstance(ds_cells, np.ma.MaskedArray):
+                ds_cells = ds_cells.compressed()
             ds_cells = xr.DataArray(ds_cells, dims="obs", name="cell")
 
             # sorting here enables us to manually select each cell's data much faster
