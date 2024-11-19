@@ -32,6 +32,7 @@ from datetime import datetime
 
 import re
 
+from ascat.read_native.cell_collection import CellGridFiles
 from ascat.read_native.swath_collection import SwathGridFiles
 
 
@@ -166,8 +167,71 @@ def swath_stacker_main(cli_args):
                                     print_progress=(not quiet),)
 
 
+def parse_args_cell_format_converter(args):
+    """
+    Parse command line arguments for
+
+    Parameters
+    ----------
+    args : list
+        Command line arguments.
+
+    Returns
+    -------
+    parser : ArgumentParser
+        Argument Parser object.
+    """
+    parser = argparse.ArgumentParser(
+        description="Reformat ASCAT cell files to various CF Array formats")
+    parser.add_argument(
+        "filepath",
+        metavar="FILEPATH",
+        type=str,
+        help="Path to folder containing swath files")
+    parser.add_argument(
+        "outpath",
+        metavar="OUTPATH",
+        type=str,
+        help="Path to the output data")
+    parser.add_argument(
+        "product_id",
+        metavar="PRODUCT_ID",
+        type=str,
+        help="Product identifier")
+    parser.add_argument(
+        "arr_format",
+        metavar="FORMAT",
+        type=str,
+        help="Output format (indexed, contiguous, or point.)")
+
+    return parser.parse_args(args)
+
+
+def cell_format_converter_main(cli_args):
+    args = parse_args_cell_format_converter(cli_args)
+    filepath = Path(args.filepath)
+    product_id = args.product_id
+    outpath = Path(args.outpath)
+    outpath.parent.mkdir(parents=True, exist_ok=True)
+    array_format = args.arr_format
+
+    cell_files = CellGridFiles.from_product_id(filepath, product_id)
+
+    if array_format == "contiguous":
+        cell_files.convert_to_contiguous(outpath)
+    elif array_format == "indexed":
+        cell_files.reprocess(outpath, lambda ds: ds, ra_type="indexed")
+    elif array_format == "point":
+        cell_files.reprocess(outpath, lambda ds: ds, ra_type="point")
+    else:
+        raise ValueError(f"Invalid array format: {array_format}")
+
 
 
 def run_swath_stacker():
     """Run command line interface for temporal aggregation of ASCAT data."""
     swath_stacker_main(sys.argv[1:])
+
+def run_cell_format_converter():
+    """Run command line interface for temporal aggregation of ASCAT data."""
+    cell_format_converter_main(sys.argv[1:])
