@@ -39,6 +39,7 @@ from datetime import datetime
 import numpy as np
 
 from tqdm import tqdm
+from tqdm.dask import TqdmCallback
 
 from dask.delayed import delayed
 from dask.base import compute
@@ -966,16 +967,17 @@ class Filenames:
         if len(self.filenames) == 1 and not isinstance(data, list):
             data = [data]
 
-        if print_progress:
-            data = tqdm(data)
-            data.set_description("Writing cells to disk...")
 
         if len(data) == len(self.filenames):
             if parallel:
                 write_ = delayed(self._write)
                 writers = [write_(d, f, **kwargs) for d, f in zip(data, self.filenames)]
-                compute(writers)
+                with TqdmCallback(desc="Writing cells to disk...", total=len(writers)):
+                    compute(writers)
             else:
+                if print_progress:
+                    data = tqdm(data)
+                    data.set_description("Writing cells to disk...")
                 for d, f in zip(data, self.filenames):
                     self._write(d, f, **kwargs)
         else:
