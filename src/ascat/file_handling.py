@@ -38,7 +38,10 @@ from datetime import datetime
 
 import numpy as np
 
-from dask import delayed, compute
+from tqdm import tqdm
+
+from dask.delayed import delayed
+from dask.base import compute
 
 class FilenameTemplate:
     """
@@ -939,7 +942,7 @@ class Filenames:
 
         self.write(data, parallel=parallel, **kwargs)
 
-    def write(self, data, parallel=False, **kwargs):
+    def write(self, data, parallel=False, print_progress=False, **kwargs):
         """
         Write data to file.
 
@@ -955,6 +958,10 @@ class Filenames:
         """
         if len(self.filenames) == 1 and not isinstance(data, list):
             data = [data]
+
+        if print_progress:
+            data = tqdm(data)
+            data.set_description("Writing cells to disk...")
 
         if len(data) == len(self.filenames):
             if parallel:
@@ -1001,7 +1008,7 @@ class Filenames:
 
         return data
 
-    def iter_read(self, **kwargs):
+    def iter_read(self, print_progress=False, **kwargs):
         """
         Iterate over all files and yield data.
 
@@ -1010,27 +1017,37 @@ class Filenames:
         object
             Data read from each file.
         """
-        for filename in self.filenames:
+        if print_progress:
+            filenames = tqdm(self.filenames)
+        else:
+            filenames = self.filenames
+
+        for filename in filenames:
+            if print_progress:
+                filenames.set_description(f"Opening {filename}...")
             yield self._read(filename, **kwargs)
 
-    def iter_read_nbytes(self, max_nbytes, **kwargs):
+    def iter_read_nbytes(self, max_nbytes, print_progress=False, **kwargs):
         """
         Iterate over all files and yield data until the specified number of bytes is reached.
         If `_read` returns dask objects, they are computed (in parallel) before merging the data.
         """
-        from dask import compute
         size = 0
         data_list = []
-        for data in self.iter_read(**kwargs):
+        for data in self.iter_read(print_progress, **kwargs):
             data_size = self._nbytes(data)
             size += data_size
             if size > max_nbytes and size > data_size:
+                if print_progress:
+                    print(f"Opened {size} bytes, reading and merging data...")
                 yield self.merge(compute(*[ds for ds in data_list]))
                 size = data_size
                 data_list = [data]
             else:
                 data_list.append(data)
         if data_list:
+            if print_progress:
+                print("All source files opened, reading and merging remaining data...")
             yield self.merge(compute(*[ds for ds in data_list]))
 
     @staticmethod
