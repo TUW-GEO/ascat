@@ -46,6 +46,16 @@ def parse_size(size):
     number, unit = [string.strip() for string in size.split()]
     return int(float(number)*units[unit])
 
+class KeywordsAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        keyword_dict = {}
+
+        for arg in values:  #values => The args found for keyword_args
+            pieces = arg.split('=')
+            keyword_dict[pieces[0]] = pieces[1]
+
+        setattr(namespace, self.dest, keyword_dict)
+
 def parse_args_swath_stacker(args):
     """
     Parse command line arguments for stacking ASCAT swath files into a cell grid.
@@ -105,15 +115,13 @@ def parse_args_swath_stacker(args):
         help="Do not print progress information"
     )
 
+    parser.add_argument(
+        "fmt_kwargs",
+        help="Format keyword arguments, depends on the product format used. Example: 'sat=A year=2008'",
+        nargs='*',
+        action=KeywordsAction
+    )
 
-    # parser.add_argument(
-    #     "--grid_store",
-    #     metavar="GRID_STORE",
-    #     help="Path for storing/loading lookup tables")
-    # parser.add_argument(
-    #     "--suffix",
-    #     metavar="SUFFIX",
-    #     help="File suffix (default: _REGRID_DEGdeg)")
 
     return parser.parse_args(args)
 
@@ -143,12 +151,11 @@ def swath_stacker_main(cli_args):
     date_range = None if not any(date_range) else date_range
 
     cells = args.cells
-    print(cells)
 
     quiet = args.quiet
 
-    # parse the remaining args as fmt_kwargs
-    fmt_kwargs = {k: v for k, v in args._get_kwargs() if k not in ["filepath", "outpath", "product_id", "start_date", "end_date", "dump_size", "cells", "quiet"]}
+
+    fmt_kwargs = args.fmt_kwargs
 
     swath_files = SwathGridFiles.from_product_id(filepath, product_id)
     swath_files.stack_to_cell_files(outpath,
