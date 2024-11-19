@@ -653,7 +653,6 @@ class SwathGridFiles(ChronFiles):
                 mask = (data["time"] >= date_range[0]) & (data["time"] <= date_range[1])
                 data = data.sel(obs=mask.compute())
 
-
             return data
 
     def stack_to_cell_files(self,
@@ -661,7 +660,8 @@ class SwathGridFiles(ChronFiles):
                             max_nbytes,
                             date_range=None,
                             fmt_kwargs=None,
-                            cells=None):
+                            cells=None,
+                            print_progress=True,):
         """
         Stack all swath files to cell files, writing them in parallel.
         """
@@ -676,7 +676,9 @@ class SwathGridFiles(ChronFiles):
 
         swath = self.cls(filenames)
 
-        for ds in swath.iter_read_nbytes(max_nbytes, preprocessor=self.preprocessor):
+        for ds in swath.iter_read_nbytes(max_nbytes,
+                                         preprocessor=self.preprocessor,
+                                         print_progress=print_progress):
             ds_cells = self.grid.gpi2cell(ds["location_id"]).compressed()
             ds_cells = xr.DataArray(ds_cells, dims="obs", name="cell")
 
@@ -703,4 +705,5 @@ class SwathGridFiles(ChronFiles):
             writer_class.write(ds_list,
                                parallel=True,
                                postprocessor=self.postprocessor,
-                               mode="a")
+                               mode="a",
+                               print_progress=print_progress)
