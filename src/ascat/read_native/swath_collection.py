@@ -695,7 +695,7 @@ class SwathGridFiles(ChronFiles):
             ds_list = []
             cell_fnames = []
             for i, c in enumerate(unique_cells):
-                if c in cells:
+                if (cells is None) or (c in cells):
                     cell_ds = ds.isel(obs=slice(cell_counts[i], cell_counts[i+1]))
                     if len(cell_ds) == 0:
                         continue
