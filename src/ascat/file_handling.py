@@ -1029,10 +1029,13 @@ class Filenames:
         else:
             filenames = self.filenames
 
+        size = 0
         for filename in filenames:
             if print_progress:
-                filenames.set_description(f"Opening {filename}...")
-            yield self._read(filename, **kwargs)
+                filenames.set_description(f"Opening {Path(filename).name}, total {size} bytes...")
+            data = self._read(filename, **kwargs)
+            size += self._nbytes(data)
+            yield data
 
     def iter_read_nbytes(self, max_nbytes, print_progress=False, **kwargs):
         """

@@ -159,6 +159,8 @@ def swath_stacker_main(cli_args):
     fmt_kwargs = args.fmt_kwargs
 
     swath_files = SwathGridFiles.from_product_id(filepath, product_id)
+    if not quiet:
+        print("Initializing...")
     swath_files.stack_to_cell_files(outpath,
                                     dump_size,
                                     date_range=date_range,
