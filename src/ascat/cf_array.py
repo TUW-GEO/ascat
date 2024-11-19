@@ -127,13 +127,15 @@ def point_to_contiguous(
     count_var: str = "row_size",
     instance_vars: Sequence[str] | None = None,
     coord_vars: Sequence[str] | None = None,
+    sort_vars: Sequence[str] | None = None,
 ) -> xr.Dataset:
     coord_vars = coord_vars or []
+    sort_vars = sort_vars or []
     instance_vars = instance_vars or []
     instance_vars = [timeseries_id] + instance_vars
 
 
-    ds = ds.sortby([timeseries_id])  # ,time])
+    ds = ds.sortby([timeseries_id, *sort_vars])
     _, unique_index_1d, row_size = np.unique(
         ds[timeseries_id], return_index=True, return_counts=True
     )
@@ -192,7 +194,7 @@ def indexed_to_contiguous(
     """
     # if not ds.chunks:
     #     ds = ds.chunk({"obs": 1_000_000})
-    sort_vars = sort_vars or [sample_dim]
+    sort_vars = sort_vars or []
 
     ds = ds.sortby([index_var, *sort_vars])
     idxs, sizes = np.unique(ds[index_var], return_counts=True)
@@ -265,6 +267,7 @@ class CFDiscreteGeom:
         xarray_obj: xr.Dataset,
         coord_vars: Sequence[str] | None = None,
         instance_vars: Sequence[str] | None = None,
+        contiguous_sort_vars: Sequence[str] | None = None,
     ):
         self._data = xarray_obj
         self._coord_vars = coord_vars or [
@@ -283,6 +286,10 @@ class CFDiscreteGeom:
             "latitude",
             "altitude",
             "location_description",
+        ]
+
+        self._contiguous_sort_vars = contiguous_sort_vars or [
+            "time",
         ]
 
         self._ra_type = None
@@ -374,6 +381,7 @@ class PointArray(CFDiscreteGeom):
         count_var: str = "row_size",
         instance_vars: Sequence[str] | None = None,
         coord_vars: Sequence[str] | None = None,
+        sort_vars: Sequence[str] | None = None,
     ) -> xr.Dataset:
         return self._point_to_contiguous(
             self._data,
@@ -383,6 +391,7 @@ class PointArray(CFDiscreteGeom):
             count_var,
             instance_vars or self._instance_vars,
             coord_vars or self._coord_vars,
+            sort_vars or self._contiguous_sort_vars,
         )
 
     def to_orthomulti(self):
@@ -442,6 +451,7 @@ class PointArray(CFDiscreteGeom):
         count_var: str = "row_size",
         instance_vars: Sequence[str] | None = None,
         coord_vars: Sequence[str] | None = None,
+        sort_vars: Sequence[str] | None = None,
     ) -> xr.Dataset:
         return point_to_contiguous(
             ds,
@@ -451,6 +461,7 @@ class PointArray(CFDiscreteGeom):
             count_var,
             instance_vars,
             coord_vars,
+            sort_vars,
         )
 
 
@@ -524,7 +535,7 @@ class RaggedArray(CFDiscreteGeom):
                 self._instance_dimension,
                 self._count_var,
                 self._index_var,
-                sort_vars=sort_vars,
+                sort_vars=sort_vars or self._contiguous_sort_vars,
             )
 
     def to_point_array(self):

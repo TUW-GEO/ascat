@@ -223,7 +223,7 @@ class RaggedArrayCell(Filenames):
             Dataset in contiguous ragged array format.
         """
         if ds is not None:
-            return ds.cf_geom.to_contiguous_ragged()
+            return ds.cf_geom.to_contiguous_ragged(sort_vars=["time"])
 
     @staticmethod
     def _only_locations(ds):

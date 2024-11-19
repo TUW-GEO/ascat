@@ -227,8 +227,8 @@ class CFDiscreteGeometryAccessor:
     def to_indexed_ragged(self, **kwargs):
         return self._obj.to_indexed_ragged(**kwargs)
 
-    def to_contiguous_ragged(self):
-        return self._obj.to_contiguous_ragged()
+    def to_contiguous_ragged(self, **kwargs):
+        return self._obj.to_contiguous_ragged(**kwargs)
 
     def to_orthomulti(self):
         return self._obj.to_orthomulti()
