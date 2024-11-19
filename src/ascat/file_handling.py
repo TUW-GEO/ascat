@@ -972,8 +972,12 @@ class Filenames:
             if parallel:
                 write_ = delayed(self._write)
                 writers = [write_(d, f, **kwargs) for d, f in zip(data, self.filenames)]
-                with TqdmCallback(desc="Writing cells to disk...", total=len(writers)):
+                if print_progress:
+                    with TqdmCallback(desc="Writing cells to disk...", total=len(writers)):
+                        compute(writers, scheduler="processes")
+                else:
                     compute(writers, scheduler="processes")
+
             else:
                 if print_progress:
                     data = tqdm(data)
@@ -1052,7 +1056,16 @@ class Filenames:
             if size > max_nbytes and size > data_size:
                 if print_progress:
                     print(f"Opened {size} bytes, reading and merging data...")
-                yield self.merge(compute(*[ds for ds in data_list], scheduler="processes"))
+
+                    with TqdmCallback(desc="Reading data..."):
+                        out_data = compute(*[d for d in data_list],
+                                           scheduler="processes")
+                    print("Merging data...")
+                    out_data = self.merge(out_data)
+                else:
+                    out_data = self.merge(compute(*[d for d in data_list],
+                                                scheduler="processes"))
+                yield out_data
                 size = data_size
                 data_list = [data]
             else:
@@ -1060,7 +1073,7 @@ class Filenames:
         if data_list:
             if print_progress:
                 print("All source files opened, reading and merging remaining data...")
-            yield self.merge(compute(*[ds for ds in data_list], scheduler="processes"))
+            yield self.merge(compute(*[d for d in data_list], scheduler="processes"))
 
     @staticmethod
     def _nbytes(data):

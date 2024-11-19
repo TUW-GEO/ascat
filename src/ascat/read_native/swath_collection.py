@@ -80,7 +80,7 @@ class Swath(Filenames):
             filename,
             engine="netcdf4",
             **xarray_kwargs,
-        ).load()
+        )
         if ds["location_id"].dtype != np.int32:
             ds["location_id"] = ds["location_id"].astype(np.int32)
         if preprocessor is not None:
@@ -678,7 +678,8 @@ class SwathGridFiles(ChronFiles):
 
         for ds in swath.iter_read_nbytes(max_nbytes,
                                          preprocessor=self.preprocessor,
-                                         print_progress=print_progress):
+                                         print_progress=print_progress,
+                                         chunks="auto"):
             ds_cells = self.grid.gpi2cell(ds["location_id"])
             if isinstance(ds_cells, np.ma.MaskedArray):
                 ds_cells = ds_cells.compressed()
