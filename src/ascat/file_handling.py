@@ -912,6 +912,7 @@ class Filenames:
                   out_dir,
                   func,
                   parallel=False,
+                  print_progress=False,
                   **kwargs):
         """
         Reprocess data from all files through `func`, writing the results to `out_dir`.
@@ -937,10 +938,16 @@ class Filenames:
             getattr_ = getattr
             func_ = func
 
-        data = [func_(read_(f)) for f in self.filenames]
+        filenames = self.filenames
+        if print_progress:
+            filenames = tqdm(filenames)
+            filenames.set_description("Opening files...")
+
+        data = [func_(read_(f)) for f in filenames]
+
         self.filenames = [out_dir / f.name for f in self.filenames]
 
-        self.write(data, parallel=parallel, **kwargs)
+        self.write(data, parallel=parallel, print_progress=print_progress, **kwargs)
 
     def write(self, data, parallel=False, print_progress=False, **kwargs):
         """
