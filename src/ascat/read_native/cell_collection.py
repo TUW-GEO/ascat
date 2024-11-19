@@ -86,15 +86,12 @@ class RaggedArrayCell(Filenames):
             ds = preprocessor(ds)
         ds = self._ensure_obs(ds)
 
-        if location_id is not None:
-            ds = self._trim_to_gpis(ds, gpis=location_id)
-        elif lookup_vector is not None:
-            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
         # we need to make sure the time variable is in memory before converting to
         # a point array, since reordering this as a dask array will explode the process
         # graph later on
         ds.time.load()
-        # ds = self._ensure_indexed(ds)
+
+        ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
         ds = self._ensure_point(ds)
         if date_range is not None:
             ds = self._trim_var_range(ds, "time", *date_range)
