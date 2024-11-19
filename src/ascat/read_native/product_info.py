@@ -29,7 +29,8 @@ class RaggedArrayCellProduct:
             ds["locationIndex"].attrs["instance_dimension"] = cls.instance_dim
         if "location_id" in ds.variables:
             ds["location_id"].attrs["cf_role"] = "timeseries_id"
-        ds = ds.assign_attrs({"featureType": "timeSeries"})
+        if ds.attrs.get("featureType") is None:
+            ds = ds.assign_attrs({"featureType": "timeSeries"})
         return ds
 
 

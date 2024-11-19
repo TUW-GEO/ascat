@@ -705,5 +705,6 @@ class SwathGridFiles(ChronFiles):
             writer_class.write(ds_list,
                                parallel=True,
                                postprocessor=self.postprocessor,
+                               ra_type="point",
                                mode="a",
                                print_progress=print_progress)

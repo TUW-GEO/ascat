@@ -335,12 +335,14 @@ class RaggedArrayCell(Filenames):
         **kwargs : dict
             Additional keyword arguments passed to xarray.to_netcdf().
         """
-        if ra_type not in ["contiguous", "indexed"]:
-            raise ValueError("ra_type must be 'contiguous' or 'indexed'")
         if ra_type == "contiguous":
             data = self._ensure_contiguous(data)
-        else:
+        elif ra_type == "indexed":
             data = self._ensure_indexed(data)
+        elif ra_type == "point":
+            data = self._ensure_point(data)
+        else:
+            raise ValueError("ra_type must be 'contiguous', 'indexed', or 'point'")
 
         if postprocessor is not None:
             data = postprocessor(data)
@@ -366,7 +368,7 @@ class RaggedArrayCell(Filenames):
         #             var].attrs:
         #         del data[var].attrs["_FillValue"]
 
-        if mode == "a" and ra_type == "indexed":
+        if mode == "a" and ra_type in ["indexed", "point"]:
             if not Path(filename).exists():
                 data.to_netcdf(filename, **kwargs)
             else:
