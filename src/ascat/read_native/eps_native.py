@@ -1267,6 +1267,8 @@ def read_eps_l2(filename, generic=False, to_xarray=False, return_ptype=False):
 
         if fmv == 12:
             data, metadata = read_smx_fmv_12(eps_file)
+        elif fmv == 11:
+            data, metadata = read_smx_fmv_11(eps_file)
         else:
             raise RuntimeError("L2 SM format version not supported.")
 
@@ -1671,6 +1673,103 @@ def read_szf_fmv_12(eps_file, ignore_noise_ool=False):
 
     # create flagflield
     data["flagfield"] = gen_flagfield(data)
+
+    return data, metadata
+
+
+def read_smx_fmv_11(eps_file):
+    """
+    Read SMO/SMR format version 11.
+
+    Parameters
+    ----------
+    eps_file : EPSProduct object
+        EPS Product object.
+
+    Returns
+    -------
+    data : numpy.ndarray
+        SMO/SMR data.
+    """
+    raw_data = eps_file.scaled_mdr
+    raw_unscaled = eps_file.mdr
+
+    n_node_per_line = raw_data["LONGITUDE"].shape[1]
+    n_lines = raw_data["LONGITUDE"].shape[0]
+    n_records = eps_file.mdr_counter * n_node_per_line
+    idx_nodes = np.arange(eps_file.mdr_counter).repeat(n_node_per_line)
+
+    data = {}
+    metadata = {}
+
+    metadata["spacecraft_id"] = np.int8(eps_file.mphr["SPACECRAFT_ID"][-1])
+    metadata["orbit_start"] = np.uint32(eps_file.mphr["ORBIT_START"])
+
+    ascat_time = shortcdstime2jd(raw_data["UTC_LINE_NODES"].flatten()["day"],
+                                 raw_data["UTC_LINE_NODES"].flatten()["time"])
+    data["jd"] = ascat_time[idx_nodes]
+
+    fields = [("sigma0_trip", long_nan, long_nan), ("inc_angle_trip", uint_nan, uint_nan),
+              ("azi_angle_trip", int_nan, int_nan), ("kp", uint_nan, uint_nan),
+              ("f_land", uint_nan, float32_nan)]
+
+    for f, nan_val, new_nan_val in fields:
+        data[f] = raw_data[f.upper()].reshape(n_records, 3)
+        valid = raw_unscaled[f.upper()].reshape(n_records, 3) != nan_val
+        data[f][~valid] = new_nan_val
+
+    fields = ["sat_track_azi"]
+    for f in fields:
+        data[f] = raw_data[f.upper()].flatten()[idx_nodes]
+
+    fields = [("longitude", long_nan, long_nan),
+              ("latitude", long_nan, long_nan),
+              ("swath_indicator", uint8_nan, uint8_nan),
+              ("soil_moisture", uint_nan, uint_nan),
+              ("soil_moisture_error", uint_nan, uint_nan),
+              ("sigma40", long_nan, long_nan),
+              ("sigma40_error", long_nan, long_nan),
+              ("slope40", long_nan, long_nan),
+              ("slope40_error", long_nan, long_nan),
+              ("dry_backscatter", long_nan, long_nan),
+              ("wet_backscatter", long_nan, long_nan),
+              ("mean_surf_soil_moisture", uint_nan, uint_nan),
+              ("soil_moisture_sensetivity", ulong_nan, float32_nan),
+              ("correction_flags", uint8_nan, uint8_nan),
+              ("processing_flags", uint8_nan, uint8_nan),
+              ("aggregated_quality_flag", uint8_nan, uint8_nan),
+              ("snow_cover_probability", uint8_nan, uint8_nan),
+              ("frozen_soil_probability", uint8_nan, uint8_nan),
+              ("innudation_or_wetland", uint8_nan, uint8_nan),
+              ("topographical_complexity", uint8_nan, uint8_nan)]
+
+    for f, nan_val, new_nan_val in fields:
+        data[f] = raw_data[f.upper()].flatten()
+        valid = raw_unscaled[f.upper()].flatten() != nan_val
+        data[f][~valid] = new_nan_val
+
+    # sat_track_azi (uint)
+    data["as_des_pass"] = \
+        np.array(raw_data["SAT_TRACK_AZI"].flatten()[idx_nodes] < 270)
+
+    # modify longitudes from [0,360] to [-180,180]
+    mask = np.logical_and(data["longitude"] != long_nan, data["longitude"]
+                          > 180)
+    data["longitude"][mask] += -360.
+
+    # modify azimuth from (-180, 180) to (0, 360)
+    mask = (data["azi_angle_trip"] != int_nan) & (data["azi_angle_trip"] < 0)
+    data["azi_angle_trip"][mask] += 360
+
+    fields = ["param_db_version", "warp_nrt_version"]
+    for f in fields:
+        data[f] = raw_data["PARAM_DB_VERSION"].flatten()[idx_nodes]
+
+    metadata["spacecraft_id"] = int(eps_file.mphr["SPACECRAFT_ID"][2])
+
+    data["node_num"] = np.tile((np.arange(n_node_per_line) + 1), n_lines)
+
+    data["line_num"] = idx_nodes
 
     return data, metadata
 
