@@ -81,7 +81,12 @@ class RaggedArrayCell(Filenames):
         ds : xarray.Dataset
             Dataset.
         """
-        ds = xr.open_dataset(filename, **xarray_kwargs)
+        if ds := self.cache.get(filename):
+            pass
+        else:
+            ds = xr.open_dataset(filename, **xarray_kwargs)
+            self.cache[filename] = ds
+
         if preprocessor:
             ds = preprocessor(ds)
         ds = self._ensure_obs(ds)
@@ -515,6 +520,7 @@ class CellGridFiles():
         self.fn_format = fn_format
         self.sf_format = sf_format
         self._preprocessor = preprocessor
+        self._active_reader = None
 
 
     @classmethod
@@ -762,6 +768,11 @@ class CellGridFiles():
             bbox=bbox,
             geom=geom,
         )
+        if ((self._active_reader is None)
+            or not
+            all(filename in self._active_reader.cache for filename in filenames)):
+            self._active_reader = self.file_class(filenames)
+
         if cell is not None:
             valid_gpis = None
             lookup_vector = None
@@ -777,7 +788,10 @@ class CellGridFiles():
                 return_lookup=True
             )
 
-        return self.file_class(filenames).read(date_range=date_range,
-                                               lookup_vector=lookup_vector,
-                                               preprocessor=self._preprocessor,
-                                               **kwargs)
+        out_ds = self._active_reader.read(date_range=date_range,
+                                          location_id=valid_gpis,
+                                          lookup_vector=lookup_vector,
+                                          preprocessor=self._preprocessor,
+                                          **kwargs)
+
+        return out_ds
