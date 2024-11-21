@@ -67,6 +67,20 @@ class AscatSIG0Cell6250m(RaggedArrayCellProduct):
 class AscatSIG0Cell12500m(RaggedArrayCellProduct):
     grid_name = "fibgrid_12.5"
 
+class OrthoMultiArrayCellProduct:
+    file_class = OrthoMultiCell
+    fn_format = "{:04d}.nc"
+    sample_dim = "obs"
+    instance_dim = "locations"
+
+    @classmethod
+    def preprocessor(cls, ds):
+        if "location_id" in ds.variables:
+            ds["location_id"].attrs["cf_role"] = "timeseries_id"
+        if ds.attrs.get("featureType") is None:
+            ds = ds.assign_attrs({"featureType": "timeSeries"})
+        return ds
+
 
 class SwathProduct:
     from ascat.read_native.swath_collection import Swath
