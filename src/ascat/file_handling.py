@@ -846,6 +846,7 @@ class Filenames:
             raise ValueError("filenames must be a string or list of strings.")
 
         self.filenames = [Path(f) for f in filenames]
+        self.cache = {}
 
     def _read(self, filename, **kwargs):
         """
