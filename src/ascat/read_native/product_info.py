@@ -33,13 +33,29 @@ class RaggedArrayCellProduct:
             ds = ds.assign_attrs({"featureType": "timeSeries"})
         return ds
 
+class ErsCell(RaggedArrayCellProduct):
+    @classmethod
+    def preprocessor(cls, ds):
+        ds = super().preprocessor(ds)
+        for var in ds.variables:
+            if ds[var].dtype == np.float32:
+                ds[var] = ds[var].where(ds[var] > -2147483600)
+            if var == "alt":
+                ds[var] = ds[var].where(ds[var] < 999999)
 
-    
-class ErsHCell(RaggedArrayCellProduct):
+            parts = var.split("_")
+            if parts[0] in ["fore", "mid", "aft"]:
+                if parts[0] == "fore":
+                    parts[0] = "for"
+                ds = ds.rename({var:
+                                "_".join(parts[1:] + [parts[0]])})
+        return ds
+
+class ErsHCell(ErsCell):
     grid_name = "fibgrid_12.5"
 
 
-class ErsNCell(RaggedArrayCellProduct):
+class ErsNCell(ErsCell):
     grid_name = "fibgrid_25"
 
 

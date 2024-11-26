@@ -914,7 +914,8 @@ class Filenames:
                   func,
                   parallel=False,
                   print_progress=False,
-                  **kwargs):
+                  read_kwargs=None,
+                  **write_kwargs):
         """
         Reprocess data from all files through `func`, writing the results to `out_dir`.
 
@@ -929,6 +930,7 @@ class Filenames:
         **kwargs : dict
             Additional keyword arguments for writing.
         """
+        read_kwargs = read_kwargs or {}
         if parallel:
             read_ = delayed(self._read)
             getattr_ = delayed(getattr)
@@ -944,11 +946,11 @@ class Filenames:
             filenames = tqdm(filenames)
             filenames.set_description("Opening files...")
 
-        data = [func_(read_(f)) for f in filenames]
+        data = [func_(read_(f, **read_kwargs)) for f in filenames]
 
         self.filenames = [out_dir / f.name for f in self.filenames]
 
-        self.write(data, parallel=parallel, print_progress=print_progress, **kwargs)
+        self.write(data, parallel=parallel, print_progress=print_progress, **write_kwargs)
 
     def write(self, data, parallel=False, print_progress=False, **kwargs):
         """
