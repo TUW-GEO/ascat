@@ -91,15 +91,19 @@ class RaggedArrayCell(Filenames):
             ds = preprocessor(ds)
         ds = self._ensure_obs(ds)
 
-        # we need to make sure the time variable is in memory before converting to
-        # a point array, since reordering this as a dask array will explode the process
-        # graph later on
-        ds.time.load()
 
         ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
-        ds = self._ensure_point(ds)
-        if date_range is not None:
-            ds = self._trim_var_range(ds, "time", *date_range)
+
+        if ds.cf_geom.array_type == "indexed":
+            # we need to make sure the time variable is in memory before converting to
+            # a point array, since reordering this as a dask array will explode the process
+            # graph later on
+            ds.time.load()
+            ds = self._ensure_point(ds)
+            # we ONLY trim the date range if we have an indexed array - making it much
+            # faster to recombine. Otherwise we do it after merging.
+            if date_range is not None:
+                ds = self._trim_var_range(ds, "time", *date_range)
 
         return ds
 
@@ -109,7 +113,7 @@ class RaggedArrayCell(Filenames):
              location_id=None,
              lookup_vector=None,
              preprocessor=None,
-             return_format="indexed",
+             return_format=None,
              parallel=False,
              **kwargs):
         """
@@ -137,15 +141,20 @@ class RaggedArrayCell(Filenames):
 
         if ds is not None:
             ds.set_close(partial(super()._multi_file_closer, closers))
+            if return_format is not None:
+                if return_format == "point":
+                    return ds.cf_geom.to_point_array()
 
-            if return_format == "point":
-                return ds
+                elif return_format == "indexed":
+                    return ds.cf_geom.to_indexed_ragged()
 
-            if return_format == "indexed":
-                return ds.cf_geom.to_indexed_ragged()
+                elif return_format == "contiguous":
+                    return ds.cf_geom.to_contiguous_ragged()
+                else:
+                    raise ValueError("return_format must be 'point', 'indexed', "
+                                     "'contiguous', or None (default, returns as read)")
+            return ds
 
-            if return_format == "contiguous":
-                return ds.cf_geom.to_contiguous_ragged()
 
     @staticmethod
     def _indexed_or_contiguous(ds):
@@ -268,6 +277,28 @@ class RaggedArrayCell(Filenames):
         if data == []:
             return None
 
+        if data[0].cf_geom.array_type == "indexed":
+            return self._merge_indexed(data)
+        elif data[0].cf_geom.array_type == "point":
+            return self._merge_point(data)
+        elif data[0].cf_geom.array_type == "contiguous":
+            return self._merge_contiguous(data)
+        else:
+            raise ValueError("Array type must be 'contiguous', 'indexed', or 'point'")
+
+
+    def _merge_indexed(self, data):
+        merged_ds = xr.concat(
+            [self._preprocess(ds).chunk({"obs":-1}).cf_geom.to_point_array()
+                for ds in data if ds is not None],
+            dim="obs",
+            # data_vars="minimal",
+            # coords="minimal",
+            combine_attrs="drop_conflicts",
+        ).cf_geom.to_indexed_ragged()
+        return merged_ds
+
+    def _merge_point(self, data):
         merged_ds = xr.concat(
             [self._preprocess(ds).chunk({"obs":-1})
                 for ds in data if ds is not None],
@@ -277,7 +308,14 @@ class RaggedArrayCell(Filenames):
             combine_attrs="drop_conflicts",
             **kwargs,
         )
+        return merged_ds
 
+    def _merge_contiguous(self, data):
+        preprocessed = [self._preprocess(ds).chunk({"obs":-1}) for ds in data if ds is not None]
+        merged_ds = xr.merge(
+            [xr.concat([ds.drop_dims("locations") for ds in preprocessed], dim="obs"),
+             xr.concat([ds.drop_dims("obs") for ds in preprocessed], dim="locations")],
+        )
         return merged_ds
 
     def _preprocess(self, ds):
@@ -342,12 +380,10 @@ class RaggedArrayCell(Filenames):
         """
         if ra_type == "contiguous":
             data = self._ensure_contiguous(data)
-        elif ra_type == "indexed":
+        if ra_type == "indexed":
             data = self._ensure_indexed(data)
-        elif ra_type == "point":
+        if ra_type == "point":
             data = self._ensure_point(data)
-        else:
-            raise ValueError("ra_type must be 'contiguous', 'indexed', or 'point'")
 
         if postprocessor is not None:
             data = postprocessor(data)
