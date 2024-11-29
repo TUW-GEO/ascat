@@ -148,7 +148,7 @@ class RaggedArrayCell(Filenames):
                 ds = self._trim_var_range(ds.chunk({"obs": 1000000, "locations": -1}),
                                           "time", *date_range).chunk({"obs": 1000000, "locations": -1})
             if ds.cf_geom.array_type != "contiguous":
-                ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
+                ds = self._trim_to_gpis(ds.chunk({"obs": 1000000}), gpis=location_id, lookup_vector=lookup_vector)
 
             if return_format is not None:
                 if return_format == "point":
