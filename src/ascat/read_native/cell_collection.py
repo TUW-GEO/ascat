@@ -568,7 +568,11 @@ class CellGridFiles():
         # get list of every filename in the collection
         filenames = self.spatial_search()
         files = self.file_class(filenames)
-        files.reprocess(out_dir, func, parallel=parallel, **kwargs)
+        files.reprocess(out_dir,
+                        func,
+                        parallel=parallel,
+                        read_kwargs={"preprocessor": self._preprocessor},
+                        **kwargs)
 
     def spatial_search(
             self,
