@@ -212,13 +212,13 @@ class CFDiscreteGeometryAccessor:
         Plot a map of a variable. Assumes cf conventions for lon and lat.
         """
         point_ds = self._obj.to_point_array()
-        lon = point_ds.cf["X"]
-        lat = point_ds.cf["Y"]
+        lon = point_ds.cf["longitude"]
+        lat = point_ds.cf["latitude"]
         c = point_ds[c_var]
         fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()})
         ax.coastlines()
-        ax.scatter(lon, lat, c=c, **kwargs)
-        return fig, ax
+        scat = ax.scatter(lon, lat, c=c, **kwargs)
+        return fig, ax, scat
 
 
     def to_point_array(self):
