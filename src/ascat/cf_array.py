@@ -57,7 +57,7 @@ def cf_array_type(ds):
 
 def cf_array_class(ds, array_type, **kwargs):
     if array_type == "point":
-        return PointArray(ds, **kwargs)
+        return TimeseriesPointArray(ds, **kwargs)
     if array_type == "indexed":
         return RaggedArray(ds, **kwargs)
     if array_type == "contiguous":
@@ -305,9 +305,11 @@ class CFDiscreteGeom:
         raise NotImplementedError
 
 
-
-
 class PointArray(CFDiscreteGeom):
+    pass
+
+
+class TimeseriesPointArray(PointArray):
     """
     Assumptions made beyond basic CF conventions:
 
