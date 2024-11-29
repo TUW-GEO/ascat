@@ -31,6 +31,8 @@ class RaggedArrayCellProduct:
             ds["location_id"].attrs["cf_role"] = "timeseries_id"
         if ds.attrs.get("featureType") is None:
             ds = ds.assign_attrs({"featureType": "timeSeries"})
+        if ds.attrs.get("grid_mapping_name") is None:
+            ds.attrs["grid_mapping_name"] = cls.grid_name
         return ds
 
 class ErsCell(RaggedArrayCellProduct):
