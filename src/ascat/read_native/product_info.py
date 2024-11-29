@@ -73,6 +73,8 @@ class AscatH129v1Cell(RaggedArrayCellProduct):
 class AscatH121v1Cell(RaggedArrayCellProduct):
     grid_name = "fibgrid_12.5"
 
+class AscatH121v2Cell(RaggedArrayCellProduct):
+    grid_name = "fibgrid_12.5"
 
 class AscatH122Cell(RaggedArrayCellProduct):
     grid_name = "fibgrid_6.25"
@@ -564,6 +566,7 @@ cell_io_catalog = {
     "H129": AscatH129Cell,
     "H129_V1.0": AscatH129v1Cell,
     "H121_V1.0": AscatH121v1Cell,
+    "H121_V2.0": AscatH121v2Cell,
     "H122": AscatH122Cell,
     "SIG0_6.25": AscatSIG0Cell6250m,
     "SIG0_12.5": AscatSIG0Cell12500m,
