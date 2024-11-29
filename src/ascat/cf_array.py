@@ -591,6 +591,59 @@ class RaggedArray(CFDiscreteGeom):
             self._sample_dimension = sample_dim
         return self._data
 
+    # @staticmethod
+    # def _select_instances_contiguous(
+    #     ds: xr.Dataset,
+    #     sample_dim: str,
+    #     instance_dim: str,
+    #     timeseries_id: str,
+    #     count_var: str,
+    #     index_var: str,
+    #     instance_vals: Sequence[int] | np.ndarray | None = None,
+    #     instance_lookup_vector: np.ndarray | None = None,
+    # ) -> xr.Dataset:
+    #     if instance_vals is None:
+    #         instance_vals = []
+
+
+    #     # For contiguous using the lookup vector would be slower, so if we get only that,
+    #     # we'll just turn it into an instance_vals array.
+    #     if len(instance_vals) == 0:
+    #         if instance_lookup_vector is not None and sum(instance_lookup_vector) > 0:
+    #             instance_vals = np.where(instance_lookup_vector)[0]
+
+    #     def select_single_instance(ds, instance_val):
+    #         instances_idx = np.where(ds[timeseries_id] == instance_val)[0][0]
+    #         sample_start = int(
+    #             ds[count_var].isel({instance_dim: slice(0, instances_idx)}).sum().values
+    #         )
+    #         sample_end = int(
+    #             sample_start + ds[count_var].isel({instance_dim: instances_idx}).values
+    #         )
+    #         return ds.isel(
+    #             {
+    #                 sample_dim: slice(sample_start, sample_end),
+    #                 instance_dim: instances_idx,
+    #             }
+    #         )
+
+    #     if len(instance_vals) == 1:
+    #         return select_single_instance(ds, instance_vals[0])
+    #     else:
+    #         selected_instances = [select_single_instance(ds, instance_val) for instance_val in instance_vals]
+    #         return xr.merge(
+    #             [
+    #                 xr.concat([
+    #                     d.drop_vars(
+    #                         lambda x: [v for v, da in x.variables.items() if not da.ndim]
+    #                     ) for d in selected_instances
+    #                 ], dim=sample_dim),
+    #                 xr.concat([
+    #                     d.drop_dims([sample_dim]) for d in selected_instances
+    #                 ], dim=instance_dim),
+    #             ]
+    #         )
+
     @staticmethod
     def _select_instances_contiguous(
         ds: xr.Dataset,
