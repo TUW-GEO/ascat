@@ -389,13 +389,6 @@ class OrthoMultiCell(Filenames):
     """
     Class to read and merge orthomulti cell files.
     """
-    # def __init__(self, filename, chunks=None):
-    #     self.filename = filename
-    #     if chunks is None:
-    #         chunks = {"time": 1000, "locations": 1000}
-    #     self.chunks = chunks
-    #     self.ds = None
-
     def _read(self, filename, generic=True, preprocessor=None, **xarray_kwargs):
         """
         Open one OrthoMulti file as an xarray.Dataset and preprocess it if necessary.
@@ -422,20 +415,14 @@ class OrthoMultiCell(Filenames):
             ds = preprocessor(ds)
         return ds
 
-
     def read(self, date_range=None, valid_gpis=None, lookup_vector=None, preprocessor=None, **kwargs):
         ds = super().read(preprocessor=preprocessor, **kwargs)
         # ds = ds.set_index(locations="location_id")
         # ds = ds.chunk(self.chunks)
         if date_range is not None:
             ds = ds.sel(time=slice(*date_range))
-        if lookup_vector is not None:
-            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
-        elif valid_gpis is not None:
-            # ds = ds.sel(locations=valid_gpis)
-            ds = self._trim_to_gpis(ds, gpis=valid_gpis)
-        # should I do it this way or just return the ds without having it be a class attribute?
-        # self.ds = ds
+        ds = self._trim_to_gpis(ds, gpis=valid_gpis, lookup_vector=lookup_vector)
+
         return ds
 
     def _merge(self, data):
@@ -466,9 +453,10 @@ class OrthoMultiCell(Filenames):
         # along a single dimension.
 
         merged_ds = xr.combine_by_coords(
-            [ds.chunk(-1) for ds in data if ds is not None],
+            [ds.chunk(-1).set_index(locations="location_id")
+             for ds in data if ds is not None],
             combine_attrs="drop_conflicts",
-        )
+        ).rename_vars({"locations": "location_id"})
         return merged_ds
 
     @staticmethod
@@ -488,21 +476,12 @@ class OrthoMultiCell(Filenames):
         xarray.Dataset
             Dataset with only the gpis in the list.
         """
-        if ds is None:
-            return None
-        if gpis is None and lookup_vector is None:
-            pass
+        return ds.cf_geom.sel_instances(gpis, lookup_vector)
 
-        elif gpis is None:
-            ds_location_ids = ds["location_id"].data
-            locs_idx = lookup_vector[ds_location_ids]
-            ds = ds.sel(locations=locs_idx)
-        else:
-            ds = ds.where(ds["location_id"].isin(gpis).compute(), drop=True)
-
-        return ds
 
 grid_registry = GridRegistry()
+
+
 class CellGridFiles():
 
     def __init__(
