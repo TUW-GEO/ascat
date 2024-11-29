@@ -92,7 +92,8 @@ class RaggedArrayCell(Filenames):
         ds = self._ensure_obs(ds)
 
 
-        ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
+        if ds.cf_geom.array_type == "contiguous":
+            ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
 
         if ds.cf_geom.array_type == "indexed":
             # we need to make sure the time variable is in memory before converting to
@@ -146,6 +147,8 @@ class RaggedArrayCell(Filenames):
             if ds.cf_geom.array_type == "contiguous" and date_range is not None:
                 ds = self._trim_var_range(ds.chunk({"obs": 1000000, "locations": -1}),
                                           "time", *date_range).chunk({"obs": 1000000, "locations": -1})
+            if ds.cf_geom.array_type != "contiguous":
+                ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
 
             if return_format is not None:
                 if return_format == "point":
