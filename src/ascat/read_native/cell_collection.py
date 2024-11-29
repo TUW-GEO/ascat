@@ -141,6 +141,12 @@ class RaggedArrayCell(Filenames):
 
         if ds is not None:
             ds.set_close(partial(super()._multi_file_closer, closers))
+            # ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
+
+            if ds.cf_geom.array_type == "contiguous" and date_range is not None:
+                ds = self._trim_var_range(ds.chunk({"obs": 1000000, "locations": -1}),
+                                          "time", *date_range).chunk({"obs": 1000000, "locations": -1})
+
             if return_format is not None:
                 if return_format == "point":
                     return ds.cf_geom.to_point_array()
@@ -179,12 +185,29 @@ class RaggedArrayCell(Filenames):
             mask = (ds[var_name] >= var_min) & (ds[var_name] <= var_max)
         else:
             mask = (ds[var_name] >= var_min) & (ds[var_name] < var_max)
-        return ds.sel(obs=mask.compute())
+
+        if ds.cf_geom.array_type == "contiguous":
+            mask = mask.compute()
+            # location_ids = np.repeat(ds.location_id, ds.row_size)
+            # filtered_ids = location_ids.data[mask.data]
+            # new_row_sizes = np.array([np.sum(filtered_ids == loc)
+            #                           for loc in ds.location_id.data])
+            # ds = ds.sel(obs=mask)
+            # ds["row_size"].values = new_row_sizes
+            # return ds
+            group_indices = np.repeat(np.arange(ds.row_size.size), ds.row_size)
+            kept_counts = np.bincount(group_indices,
+                                      weights=mask.astype(int),
+                                      minlength=ds.row_size.size).astype(np.int32)
+            ds = ds.sel(obs=mask)
+            ds["row_size"].values = kept_counts
+            return ds
+        else:
+            return ds.sel(obs=mask)
 
 
     @staticmethod
     def _ensure_obs(ds):
-        # basic heuristic - if obs isn't present, assume it's instead "time"
         ds = ds.cf_geom.set_sample_dimension("obs")
         return ds
 
