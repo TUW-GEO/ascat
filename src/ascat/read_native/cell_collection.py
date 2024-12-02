@@ -286,7 +286,7 @@ class RaggedArrayCell(Filenames):
             and var not in ["row_size", "locationIndex"]
         ]]
 
-    def _merge(self, data, **kwargs):
+    def _merge(self, data):
         """
         Merge datasets with potentially different locations dimensions.
 
@@ -332,7 +332,6 @@ class RaggedArrayCell(Filenames):
             # data_vars="minimal",
             # coords="minimal",
             combine_attrs="drop_conflicts",
-            **kwargs,
         )
         return merged_ds
 
