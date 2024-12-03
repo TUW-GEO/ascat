@@ -1,5 +1,6 @@
 import inspect
 from fibgrid.realization import FibGrid
+from pygeogrids.netcdf import load_grid
 
 
 class Singleton(type):
@@ -47,10 +48,34 @@ class GridSingleton(object):
     def __init__(self, grid_class, arg1=None):
         self.grid = grid_class(arg1)
 
+
+static_grids = dict()
+
+
+class NamedGridRegistry:
+    """
+    Just stores a lookup table basically between instantiated grid objects and their names. Stupid.
+    """
+    @classmethod
+    def register(cls, grid_name, grid_path):
+        static_grids[grid_name] = grid_path
+
+    @classmethod
+    def get(cls, grid_name):
+        return static_grids[grid_name]
+
+
+class NamedFileGrid:
+    def __new__(cls, grid_name):
+        grid_path = NamedGridRegistry.get(grid_name)
+        return load_grid(grid_path)
+
+
 class GridRegistry:
     def __init__(self):
         self._registry = {
-            "fibgrid": FibGrid
+            "fibgrid": FibGrid,
+            "named": NamedFileGrid,
         }
 
     def register(
@@ -68,6 +93,10 @@ class GridRegistry:
                 grid_type = "fibgrid"
                 grid_spacing = float(grid_spacing)
                 args = (grid_spacing,)
+
+            case [grid_name]:
+                grid_type = "named"
+                args = (grid_name,)
 
             case [name, *args]:
                 grid_type = name
