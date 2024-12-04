@@ -12,7 +12,7 @@ from pygeogrids.netcdf import load_grid
 from pathlib import Path
 
 from ascat.read_native.cell_collection import RaggedArrayCell
-from ascat.read_native.cell_collection import OrthoMultiCell
+from ascat.read_native.cell_collection import OrthoMultiTimeseriesCell
 
 
 class RaggedArrayCellProduct:
@@ -88,8 +88,8 @@ class AscatSIG0Cell12500m(RaggedArrayCellProduct):
     grid_name = "fibgrid_12.5"
 
 class OrthoMultiArrayCellProduct:
-    file_class = OrthoMultiCell
     fn_format = "{:04d}.nc"
+    file_class = OrthoMultiTimeseriesCell
     sample_dim = "obs"
     instance_dim = "locations"
 

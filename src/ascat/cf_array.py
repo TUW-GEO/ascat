@@ -31,15 +31,17 @@ import numpy as np
 import xarray as xr
 
 
-def check_orthomulti(ds):
+def check_orthomulti_ts(ds):
     # Assumptions:
     # - two dimensions [DONE]
     # - single variable with only the sample dimension (e.g. time) [TODO]
     # - data variables have sample and instance dimension [TODO]
     # - data variables have ALL instance dimension coordinates listed as coordinates [TODO]
-    if len(ds.dims) != 2:
-        return False
-    return True
+    if len(ds.dims) == 2:
+        for v in ds.variables:
+            if "cf_role" in ds[v].attrs and ds[v].attrs["cf_role"] == "timeseries_id":
+                return True
+    return False
 
 
 def cf_array_type(ds):
@@ -50,8 +52,8 @@ def cf_array_type(ds):
             return "indexed"
         if "sample_dimension" in ds[v].attrs:
             return "contiguous"
-    if check_orthomulti(ds):
-        return "orthomulti"
+    if check_orthomulti_ts(ds):
+        return "orthomulti_ts"
     raise ValueError("Array type could not be determined.")
 
 
@@ -62,10 +64,10 @@ def cf_array_class(ds, array_type, **kwargs):
         return RaggedArray(ds, **kwargs)
     if array_type == "contiguous":
         return RaggedArray(ds, **kwargs)
-    if array_type == "orthomulti":
-        return OrthoMultiArray(ds, **kwargs)
+    if array_type == "orthomulti_ts":
+        return OrthoMultiTimeseriesArray(ds, **kwargs)
     raise ValueError(f"Array type '{array_type}' not recognized."
-                     "Should be one of 'point', 'indexed', 'contiguous', 'orthomulti'.")
+                     "Should be one of 'point', 'indexed', 'contiguous', 'orthomulti_ts'.")
 
 
 def point_to_indexed(
@@ -770,9 +772,9 @@ class RaggedArray(CFDiscreteGeom):
         return contiguous_to_point(ds, sample_dim, instance_dim, count_var)
 
 
-class OrthoMultiArray(CFDiscreteGeom):
-    def __init__(self, xarray_obj: xr.Dataset):
-        ...
+class OrthoMultiTimeseriesArray(CFDiscreteGeom):
+    # def __init__(self, xarray_obj: xr.Dataset):
+    #     ...
         # self._obj = xarray_obj
         # self._ra_type = None
         # self._sample_dimension = None
@@ -785,33 +787,27 @@ class OrthoMultiArray(CFDiscreteGeom):
 
     @property
     def array_type(self):
-        if check_orthomulti(self._data):
-            return "orthomulti"
+        if check_orthomulti_ts(self._data):
+            for v in self._data.variables:
+                if "cf_role" in self._data[v].attrs and self._data[v].attrs["cf_role"] == "timeseries_id":
+                    self._timeseries_id = v
+                    self._instance_dimension = self._data[v].dims[0]
+                    break
+            return "orthomulti_ts"
         else:
-            raise ValueError("Dataset is not an orthomulti array.")
-
-
-    def to_indexed_ragged(self):
-        ...
-
-    def to_contiguous_ragged(self):
-        ...
-
-    def to_point_array(self):
-        ...
+            raise ValueError("Dataset is not an orthomulti timeseries array.")
 
     def sel_instances(
         self,
         instance_vals: Sequence[int|str] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
-        timeseries_id: str | None = None,
     ):
         return self._select_instances(
             self._data,
             self._instance_dimension,
+            self._timeseries_id,
             instance_vals,
             instance_lookup_vector,
-            timeseries_id,
         )
 
     def set_sample_dimension(self, sample_dim: str):
@@ -820,33 +816,23 @@ class OrthoMultiArray(CFDiscreteGeom):
             self._sample_dimension = sample_dim
         return self._data
 
-    @staticmethod
-    def _orthomulti_to_contiguous():
-        ...
 
-    @staticmethod
-    def _orthomulti_to_indexed():
-        ...
 
-    @staticmethod
-    def _orthomulti_to_point():
-        ...
 
     @staticmethod
     def _select_instances(
         ds: xr.Dataset,
         instance_dim: str,
+        timeseries_id: str,
         instance_vals: Sequence[int|str] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
-        timeseries_id: str = "location_id",
     ) -> xr.Dataset:
         """
-        Selects requested instances from an orthomulti array dataset.
+        Selects requested instances from an orthomulti timeseries array dataset.
 
         Returns a dataset containing the requested instances. If instances are requested
         that are not in the dataset, no error will be thrown.
         """
-        instance_vals = instance_vals or []
         if instance_lookup_vector is not None:
             instance_bool = instance_lookup_vector[ds[timeseries_id]]
         else:

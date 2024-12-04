@@ -446,7 +446,7 @@ class RaggedArrayCell(Filenames):
                        **kwargs)
 
 
-class OrthoMultiCell(Filenames):
+class OrthoMultiTimeseriesCell(Filenames):
     """
     Class to read and merge orthomulti cell files.
     """
@@ -476,13 +476,18 @@ class OrthoMultiCell(Filenames):
             ds = preprocessor(ds)
         return ds
 
-    def read(self, date_range=None, valid_gpis=None, lookup_vector=None, preprocessor=None, **kwargs):
+    def read(self,
+             date_range=None,
+             location_id=None,
+             lookup_vector=None,
+             preprocessor=None,
+             return_format=None,
+             parallel=False,
+             **kwargs):
         ds = super().read(preprocessor=preprocessor, **kwargs)
-        # ds = ds.set_index(locations="location_id")
-        # ds = ds.chunk(self.chunks)
         if date_range is not None:
             ds = ds.sel(time=slice(*date_range))
-        ds = self._trim_to_gpis(ds, gpis=valid_gpis, lookup_vector=lookup_vector)
+        ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
 
         return ds
 
@@ -503,21 +508,18 @@ class OrthoMultiCell(Filenames):
         if data == []:
             return None
 
-        # This handles the case where the datasets have different time dimensions but
-        # I'm not sure if I actually need to handle that case since the datasets I've
-        # seen have all the years in each cell and just need to be combined by location.
-        # This is robust, so I'll leave it for now, but consider some logic
-        # to do just a standard concat by "locations" dim if the time dims are the same.
-        #
-        # Another note - need to chunk here before combining or else it tries to load
-        # everything into memory at once. This isn't necessary if doing a regular concat
-        # along a single dimension.
+        # ensures that time dimensions are aligned in case they are not
+        data = xr.align(*data, join="outer")
 
-        merged_ds = xr.combine_by_coords(
-            [ds.chunk(-1).set_index(locations="location_id")
-             for ds in data if ds is not None],
+        data = [ds.chunk(-1).set_index(locations="location_id")
+                for ds in data if ds is not None]
+        merged_ds = xr.concat(
+            data,
+            dim="locations",
             combine_attrs="drop_conflicts",
         ).rename_vars({"locations": "location_id"})
+        merged_ds["location_id"].attrs["cf_role"] = "timeseries_id"
+
         return merged_ds
 
     @staticmethod
@@ -537,6 +539,12 @@ class OrthoMultiCell(Filenames):
         xarray.Dataset
             Dataset with only the gpis in the list.
         """
+        if ds is None:
+            return
+
+        if (gpis is None or len(gpis) == 0) and (lookup_vector is None or len(lookup_vector)==0):
+            return ds
+
         return ds.cf_geom.sel_instances(gpis, lookup_vector)
 
 
