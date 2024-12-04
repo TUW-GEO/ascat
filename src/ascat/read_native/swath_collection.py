@@ -604,7 +604,6 @@ class SwathGridFiles(ChronFiles):
         dt_start, dt_end = date_range
         filenames = self.swath_search(
             dt_start, dt_end, dt_delta, search_date_fmt, date_field, end_inclusive,
-            # cell, location_id, coords, bbox, geom,
             **fmt_kwargs,
         )
 
@@ -636,19 +635,6 @@ class SwathGridFiles(ChronFiles):
         data = self.cls(filenames).read(**read_kwargs)
 
         if data:
-            # data.attrs["grid_mapping_name"] = self.grid_name
-
-            # if cell is not None:
-            #     data = data.pgg.sel_cells(cell)
-            # elif location_id is not None:
-            #     data = data.pgg.sel_gpis(location_id, gpi_var="location_id")
-            # elif coords is not None:
-            #     data = data.pgg.sel_coords(coords, max_coord_dist=max_coord_dist)
-            # elif bbox is not None:
-            #     data = data.pgg.sel_bbox(bbox)
-            # elif geom is not None:
-            #     data = data.pgg.sel_geom(geom)
-
             if date_range is not None:
                 mask = (data["time"] >= date_range[0]) & (data["time"] <= date_range[1])
                 data = data.sel(obs=mask.compute())

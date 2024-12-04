@@ -210,6 +210,7 @@ def parse_args_cell_format_converter(args):
 
 
 def cell_format_converter_main(cli_args):
+
     args = parse_args_cell_format_converter(cli_args)
     filepath = Path(args.filepath)
     product_id = args.product_id

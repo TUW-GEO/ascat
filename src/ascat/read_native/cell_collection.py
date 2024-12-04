@@ -46,11 +46,6 @@ class RaggedArrayCell(Filenames):
     """
     Class to read and merge ragged array cell files.
     """
-    # def __init__(self, filenames):
-        # self.filename = filename
-        # self.ds = data          #
-        # self.chunks = chunks
-
     def _read(
         self,
         filename,
