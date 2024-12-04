@@ -816,8 +816,12 @@ class OrthoMultiTimeseriesArray(CFDiscreteGeom):
             self._sample_dimension = sample_dim
         return self._data
 
-
-
+    def to_raster(self,
+                  x_var,
+                  y_var):
+        return self._data.reset_index(self._timeseries_id)\
+                         .set_index({self._instance_dimension: [x_var, y_var]})\
+                         .unstack(self._instance_dimension)
 
     @staticmethod
     def _select_instances(

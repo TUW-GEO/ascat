@@ -232,3 +232,6 @@ class CFDiscreteGeometryAccessor:
 
     def to_orthomulti(self):
         return self._obj.to_orthomulti()
+
+    def to_raster(self, *args, **kwargs):
+        return self._obj.to_raster(*args, **kwargs)
