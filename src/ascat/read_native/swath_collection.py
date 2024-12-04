@@ -697,3 +697,5 @@ class SwathGridFiles(ChronFiles):
                                ra_type="point",
                                mode="a",
                                print_progress=print_progress)
+        if print_progress:
+            print("\n")
