@@ -14,10 +14,15 @@ from pathlib import Path
 from ascat.read_native.cell_collection import RaggedArrayCell
 from ascat.read_native.cell_collection import OrthoMultiTimeseriesCell
 
-
-class RaggedArrayCellProduct:
-    file_class = RaggedArrayCell
+class BaseCellProduct:
     fn_format = "{:04d}.nc"
+
+    @classmethod
+    def preprocessor(cls, ds):
+        return ds
+
+class RaggedArrayCellProduct(BaseCellProduct):
+    file_class = RaggedArrayCell
     sample_dim = "obs"
     instance_dim = "locations"
 
@@ -87,8 +92,7 @@ class AscatSIG0Cell6250m(RaggedArrayCellProduct):
 class AscatSIG0Cell12500m(RaggedArrayCellProduct):
     grid_name = "fibgrid_12.5"
 
-class OrthoMultiArrayCellProduct:
-    fn_format = "{:04d}.nc"
+class OrthoMultiArrayCellProduct(BaseCellProduct):
     file_class = OrthoMultiTimeseriesCell
     sample_dim = "obs"
     instance_dim = "locations"
