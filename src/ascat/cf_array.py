@@ -488,7 +488,8 @@ class RaggedArray(CFDiscreteGeom):
                 self._ra_type = "contiguous"
                 self._count_var = v
                 self._sample_dimension = ds[v].attrs["sample_dimension"]
-                self._instance_dimension = ds[v].dims[0]
+                if len(ds[v].dims) > 0:
+                    self._instance_dimension = ds[v].dims[0]
                 return self._ra_type
 
         raise ValueError("Ragged array type could not be determined.")
@@ -657,7 +658,8 @@ class RaggedArray(CFDiscreteGeom):
         instance_vals: Sequence[int] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
     ) -> xr.Dataset:
-        instance_vals = instance_vals or []
+        if instance_vals is None:
+            instance_vals = []
 
 
         # In this case we /can/ use the lookup vector but it will be slower
