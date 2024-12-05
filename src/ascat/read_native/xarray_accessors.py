@@ -36,7 +36,7 @@ from shapely.geometry.base import BaseGeometry
 from pygeogrids import BasicGrid, CellGrid
 
 from ascat.cf_array import cf_array_class, cf_array_type
-from ascat.read_native.grid_registry import GridRegistry
+from ascat.grids import GridRegistry
 from ascat.utils import get_grid_gpis
 
 from matplotlib import pyplot as plt

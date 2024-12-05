@@ -9,9 +9,7 @@ import numpy as np
 
 import ascat.read_native.generate_test_data as gtd
 
-import ascat.read_native.product_info as product_info
-
-from ascat.read_native.grid_registry import GridRegistry, NamedFileGridRegistry
+from ascat.grids import GridRegistry, NamedFileGridRegistry
 from ascat.read_native.product_info import RaggedArrayCellProduct, OrthoMultiArrayCellProduct
 from ascat.read_native.cell_collection import RaggedArrayCell
 from ascat.read_native.cell_collection import OrthoMultiTimeseriesCell

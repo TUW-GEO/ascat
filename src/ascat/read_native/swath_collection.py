@@ -38,7 +38,7 @@ from pyresample import kd_tree
 from pyresample.geometry import AreaDefinition
 from pyresample.geometry import SwathDefinition
 
-from ascat.read_native.grid_registry import GridRegistry #grid_registry
+from ascat.grids import GridRegistry
 
 from ascat.utils import get_grid_gpis
 from ascat.file_handling import Filenames

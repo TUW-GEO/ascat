@@ -35,7 +35,7 @@ import xarray as xr
 import numpy as np
 
 from ascat.read_native.xarray_accessors import *
-from ascat.read_native.grid_registry import GridRegistry
+from ascat.grids import GridRegistry
 
 from ascat.file_handling import MultiFileHandler
 from ascat.file_handling import Filenames
@@ -543,9 +543,6 @@ class OrthoMultiTimeseriesCell(Filenames):
         return ds.cf_geom.sel_instances(gpis, lookup_vector)
 
 
-grid_registry = GridRegistry()
-
-
 class CellGridFiles():
 
     def __init__(
@@ -583,7 +580,7 @@ class CellGridFiles():
         init_options = {
             "root_path": root_path,
             "file_class": product_class.file_class,
-            "grid": grid_registry.get(grid_name),
+            "grid": GridRegistry().get(grid_name),
             "fn_format": product_class.fn_format,
             "preprocessor": product_class.preprocessor,
             **kwargs
