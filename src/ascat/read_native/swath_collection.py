@@ -128,7 +128,7 @@ class Swath(Filenames):
             return None
 
         merged_ds = xr.concat(
-            [ds for ds in data if ds is not None],
+            [ds for ds in data if ds is not None and len(ds["obs"]) > 0],
             dim="obs",
             combine_attrs=self.combine_attributes,
             data_vars="minimal",
