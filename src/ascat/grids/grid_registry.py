@@ -66,7 +66,6 @@ class GridRegistry:
         self._registry[grid_type_name] = grid_class
 
     def get(self, grid_name):
-        print(self._registry)
         match grid_name.split("_"):
             case ["fibgrid", grid_spacing]:
                 grid_type = "fibgrid"
