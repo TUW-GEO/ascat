@@ -205,6 +205,10 @@ def parse_args_cell_format_converter(args):
         metavar="FORMAT",
         type=str,
         help="Output format (indexed, contiguous, or point.)")
+    parser.add_argument(
+        "--sf_format",
+        metavar="SF_FORMAT",
+        type=str,)
 
     return parser.parse_args(args)
 
@@ -217,8 +221,9 @@ def cell_format_converter_main(cli_args):
     outpath = Path(args.outpath)
     outpath.parent.mkdir(parents=True, exist_ok=True)
     array_format = args.arr_format
+    sf_format = args.sf_format
 
-    cell_files = CellGridFiles.from_product_id(filepath, product_id)
+    cell_files = CellGridFiles.from_product_id(filepath, product_id, sf_format=sf_format)
 
     if array_format == "contiguous":
         cell_files.convert_to_contiguous(outpath)
