@@ -665,7 +665,7 @@ class SwathGridFiles(ChronFiles):
         for ds in swath.iter_read_nbytes(max_nbytes,
                                          preprocessor=self.preprocessor,
                                          print_progress=print_progress,
-                                         chunks="auto"):
+                                         chunks=-1):
             ds_cells = self.grid.gpi2cell(ds["location_id"])
             if isinstance(ds_cells, np.ma.MaskedArray):
                 ds_cells = ds_cells.compressed()
