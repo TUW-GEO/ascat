@@ -25,22 +25,19 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import multiprocessing as mp
 from functools import partial
 from pathlib import Path
-
-from tqdm import tqdm
 
 import xarray as xr
 import numpy as np
 
-from ascat.read_native.xarray_accessors import *
+import ascat.read_native.xarray_accessors
 from ascat.grids import GridRegistry
 
-from ascat.file_handling import MultiFileHandler
 from ascat.file_handling import Filenames
 from ascat.utils import get_grid_gpis
 from ascat.utils import append_to_netcdf
+
 
 class RaggedArrayCell(Filenames):
     """
