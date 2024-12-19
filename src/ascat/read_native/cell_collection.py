@@ -588,7 +588,7 @@ class CellGridFiles():
         init_options = {**init_options}
         return cls(**init_options)
 
-    def fn_search(self, cell, sf_args=None):
+    def fn_search(self, cell):
         # get the paths to files matching a cell if the files exist
 
         filename = self.fn_format.format(cell)
