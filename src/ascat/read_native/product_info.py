@@ -43,7 +43,7 @@ class RaggedArrayCellProduct(BaseCellProduct):
 class ErsCell(RaggedArrayCellProduct):
     @classmethod
     def preprocessor(cls, ds):
-        ds = super().preprocessor(ds)
+        ds = super().preprocessor(ds).chunk({"obs": -1})
         for var in ds.variables:
             if ds[var].dtype == np.float32:
                 ds[var] = ds[var].where(ds[var] > -2147483600)
