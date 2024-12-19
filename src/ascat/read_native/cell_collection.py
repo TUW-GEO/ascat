@@ -592,13 +592,12 @@ class CellGridFiles():
         # get the paths to files matching a cell if the files exist
 
         filename = self.fn_format.format(cell)
-        if sf_args is not None:
-            subfolder = self.sf_format.format(**sf_args)
-            return list(self.root_path.glob(subfolder / filename))
+        if self.sf_format is not None:
+            subfolder = self.sf_format
+            files = list(self.root_path.glob(subfolder + "/" + filename))
+            return files
         else:
-            # Should it return all below root path if no subfolder is specified?
-            #return list(self.root_path.glob("**/" + filename))
-            return list(self.root_path.glob(filename))
+            return list(self.root_path.glob("**/" + filename))
 
     def convert_to_contiguous(self, out_dir, print_progress=True, **kwargs):
         """

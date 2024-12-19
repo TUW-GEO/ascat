@@ -1010,7 +1010,7 @@ class Filenames:
         data = [read_(f, **kwargs) for f in self.filenames]
         # data = [d for d in self.iter_read(**kwargs)]
         if closer_attr is not None:
-            closers = [getattr_(d, closer_attr) for d in data]
+            closers = [getattr_(d, closer_attr) for d in data if d is not None]
 
         if parallel:
             data = compute(data, scheduler="processes")[0]
