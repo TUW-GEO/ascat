@@ -393,6 +393,44 @@ class TestCellGridFiles(unittest.TestCase):
         ds_cell_merged = contig_collection.read(cell=[2587, 2588])
         self.assertIsInstance(ds_cell_merged, xr.Dataset)
 
+
+    def test_read_with_one_coord(self):
+        root_path = self.tempdir_path / "contiguous"
+        contig_collection = CellGridFiles(
+            **self._init_options(root_path, {"sat_str": "{sat}"}, {"sat_str": {"sat": "metop_[abc]"}})
+        )
+        coord = (175.8, 70.01)
+        ds = contig_collection.read(coords=coord)
+        ds.load()
+
+    def test_read_with_two_valid_coords(self):
+        root_path = self.tempdir_path / "contiguous"
+        contig_collection = CellGridFiles(
+            **self._init_options(root_path, {"sat_str": "{sat}"}, {"sat_str": {"sat": "metop_[abc]"}})
+        )
+        coords = (np.array([175.8, 175.4]),
+                  np.array([70.01, 70.05]))
+        ds = contig_collection.read(coords=coords)
+
+    def test_read_with_invalid_coords(self):
+        root_path = self.tempdir_path / "contiguous"
+        contig_collection = CellGridFiles(
+            **self._init_options(root_path, {"sat_str": "{sat}"}, {"sat_str": {"sat": "metop_[abc]"}})
+        )
+        coords = (np.array([1, 2, 0]),
+                  np.array([10, 20, 0]))
+        ds = contig_collection.read(coords=coords)
+
+    def test_read_with_two_valid_coords_and_invalid_coord(self):
+        root_path = self.tempdir_path / "contiguous"
+        contig_collection = CellGridFiles(
+            **self._init_options(root_path, {"sat_str": "{sat}"}, {"sat_str": {"sat": "metop_[abc]"}})
+        )
+        coords = (np.array([175.8, 175.4, 0]),
+                  np.array([70.01, 70.05, 0]))
+        ds = contig_collection.read(coords=coords)
+        ds.load()
+
     def test_read_indexed(self):
         root_path = self.tempdir_path / "indexed"
         indexed_collection = CellGridFiles(
