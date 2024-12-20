@@ -76,7 +76,7 @@ class RaggedArrayCell(Filenames):
         if ds := self.cache.get(filename):
             pass
         else:
-            ds = xr.open_dataset(filename, **xarray_kwargs)
+            ds = xr.open_dataset(filename, engine = "h5netcdf", **xarray_kwargs)
             self.cache[filename] = ds
 
         if preprocessor:
