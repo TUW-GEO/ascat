@@ -327,10 +327,16 @@ class RaggedArrayCell(Filenames):
         )
         return merged_ds
 
+    @staticmethod
+    def _only_obs_vars(ds):
+        return ds[[var for var in ds.variables if "obs" in ds[var].dims]]
+
     def _merge_contiguous(self, data):
         preprocessed = [self._preprocess(ds).chunk({"obs":-1}) for ds in data if ds is not None]
         merged_ds = xr.merge(
-            [xr.concat([ds.drop_dims("locations") for ds in preprocessed], dim="obs"),
+           [xr.concat([ds.drop_dims("locations") if "locations" in ds.dims
+                       else self._only_obs_vars(ds)
+                       for ds in preprocessed], dim="obs"),
              xr.concat([ds.drop_dims("obs") for ds in preprocessed], dim="locations")],
         )
         return merged_ds
