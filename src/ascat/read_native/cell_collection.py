@@ -83,15 +83,14 @@ class RaggedArrayCell(Filenames):
             ds = preprocessor(ds)
         ds = self._ensure_obs(ds)
 
-
         if ds.cf_geom.array_type == "contiguous":
             ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
 
-        if ds.cf_geom.array_type == "indexed":
+        elif ds.cf_geom.array_type == "indexed":
+            ds.time.load()
             # we need to make sure the time variable is in memory before converting to
             # a point array, since reordering this as a dask array will explode the process
             # graph later on
-            ds.time.load()
             ds = self._ensure_point(ds)
             # we ONLY trim the date range if we have an indexed array - making it much
             # faster to recombine. Otherwise we do it after merging.
