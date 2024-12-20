@@ -594,58 +594,6 @@ class RaggedArray(CFDiscreteGeom):
             self._sample_dimension = sample_dim
         return self._data
 
-    # @staticmethod
-    # def _select_instances_contiguous(
-    #     ds: xr.Dataset,
-    #     sample_dim: str,
-    #     instance_dim: str,
-    #     timeseries_id: str,
-    #     count_var: str,
-    #     index_var: str,
-    #     instance_vals: Sequence[int] | np.ndarray | None = None,
-    #     instance_lookup_vector: np.ndarray | None = None,
-    # ) -> xr.Dataset:
-    #     if instance_vals is None:
-    #         instance_vals = []
-
-
-    #     # For contiguous using the lookup vector would be slower, so if we get only that,
-    #     # we'll just turn it into an instance_vals array.
-    #     if len(instance_vals) == 0:
-    #         if instance_lookup_vector is not None and sum(instance_lookup_vector) > 0:
-    #             instance_vals = np.where(instance_lookup_vector)[0]
-
-    #     def select_single_instance(ds, instance_val):
-    #         instances_idx = np.where(ds[timeseries_id] == instance_val)[0][0]
-    #         sample_start = int(
-    #             ds[count_var].isel({instance_dim: slice(0, instances_idx)}).sum().values
-    #         )
-    #         sample_end = int(
-    #             sample_start + ds[count_var].isel({instance_dim: instances_idx}).values
-    #         )
-    #         return ds.isel(
-    #             {
-    #                 sample_dim: slice(sample_start, sample_end),
-    #                 instance_dim: instances_idx,
-    #             }
-    #         )
-
-    #     if len(instance_vals) == 1:
-    #         return select_single_instance(ds, instance_vals[0])
-    #     else:
-    #         selected_instances = [select_single_instance(ds, instance_val) for instance_val in instance_vals]
-    #         return xr.merge(
-    #             [
-    #                 xr.concat([
-    #                     d.drop_vars(
-    #                         lambda x: [v for v, da in x.variables.items() if not da.ndim]
-    #                     ) for d in selected_instances
-    #                 ], dim=sample_dim),
-    #                 xr.concat([
-    #                     d.drop_dims([sample_dim]) for d in selected_instances
-    #                 ], dim=instance_dim),
-    #             ]
-    #         )
 
     @staticmethod
     def _select_instances_contiguous(
@@ -661,30 +609,26 @@ class RaggedArray(CFDiscreteGeom):
         if instance_vals is None:
             instance_vals = []
 
-
-        # In this case we /can/ use the lookup vector but it will be slower
+        # For contiguous using the lookup vector would be slower, so if we get only that,
+        # we'll just turn it into an instance_vals array.
         if len(instance_vals) == 0:
-            if instance_lookup_vector is not None:
-                instance_counts = ds[count_var].values
-                sample_instances = np.repeat(ds[instance_dim].values, instance_counts)
-                sample_instance_ids = np.repeat(ds[timeseries_id].values, instance_counts)
-                sample_bools = instance_lookup_vector[sample_instance_ids]
-                instances_sample_idxs = np.unique(sample_instances, return_index=True)[1]
-                instances_bools = sample_bools[instances_sample_idxs]
-                return ds.sel({sample_dim: sample_bools, instance_dim: instances_bools})
-            else:
-                sample_bools = []
-                instances_idxs = []
+            if instance_lookup_vector is not None and sum(instance_lookup_vector) > 0:
+                instance_vals = np.where(instance_lookup_vector)[0]
 
-        if len(instance_vals) == 1:
-            instances_idx = np.where(ds[timeseries_id] == instance_vals[0])[0][0]
+        def get_single_instance_idxs(ds, instance_val):
+            instances_idx = np.where(ds[timeseries_id] == instance_val)[0]
+            if len(instances_idx) == 0:
+                return None
+            instances_idx = instances_idx[0]
             sample_start = int(
                 ds[count_var].isel({instance_dim: slice(0, instances_idx)}).sum().values
             )
             sample_end = int(
                 sample_start + ds[count_var].isel({instance_dim: instances_idx}).values
             )
+            return sample_start, sample_end, instances_idx
 
+        def select_single_instance(sample_start, sample_end, instances_idx):
             return ds.isel(
                 {
                     sample_dim: slice(sample_start, sample_end),
@@ -692,28 +636,26 @@ class RaggedArray(CFDiscreteGeom):
                 }
             )
 
-        else:
-            instances_idxs = np.where(np.isin(ds[timeseries_id], instance_vals))[0]
-
-        if instances_idxs.size > 0:
-            sample_starts = [
-                int(ds[count_var].isel({instance_dim: slice(0, i)}).sum().values)
-                for i in instances_idxs
-            ]
-            sample_ends = [
-                int(start + ds[count_var].isel({instance_dim: i}).values)
-                for start, i in zip(sample_starts, instances_idxs)
-            ]
+        def select_several_instances(sample_starts, sample_ends, instances_idxs):
             sample_idxs = np.concatenate(
                 [range(start, end) for start, end in zip(sample_starts, sample_ends)]
             )
-            # locations_idxs = [i for i in locations_idxs]
-        else:
-            sample_idxs = []
-            instances_idxs = []
+            return ds.isel({sample_dim: sample_idxs,
+                            instance_dim: np.array(instances_idxs)})
 
-        ds = ds.isel({sample_dim: sample_idxs, instance_dim: instances_idxs})
-        return ds
+        if len(instance_vals) == 1:
+            if get_single_instance_idxs(ds, instance_vals[0]) is None:
+                return None
+            return select_single_instance(*get_single_instance_idxs(ds, instance_vals[0]))
+        else:
+            results = [get_single_instance_idxs(ds, instance_val) for instance_val in instance_vals]
+            results = [r for r in results if r is not None]
+            if len(results) == 0:
+                return None
+            return select_several_instances(
+                *zip(*results)
+            )
+
 
     @staticmethod
     def _contiguous_to_indexed(
