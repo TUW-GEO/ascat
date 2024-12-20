@@ -49,7 +49,6 @@ class RaggedArrayCell(Filenames):
         location_id=None,
         lookup_vector=None,
         date_range=None,
-        generic=True,
         preprocessor=None,
         **xarray_kwargs
     ):
@@ -60,9 +59,6 @@ class RaggedArrayCell(Filenames):
         ----------
         filename : str
             File to read.
-        generic : bool, optional
-            If True, the data is returned as a generic Indexed Ragged Array file for
-            easy merging. If False, the file is returned as its native ragged array type.
         preprocessor : callable, optional
             Function to preprocess the dataset.
         xarray_kwargs : dict
@@ -427,7 +423,7 @@ class OrthoMultiTimeseriesCell(Filenames):
     """
     Class to read and merge orthomulti cell files.
     """
-    def _read(self, filename, generic=True, preprocessor=None, **xarray_kwargs):
+    def _read(self, filename, preprocessor=None, **xarray_kwargs):
         """
         Open one OrthoMulti file as an xarray.Dataset and preprocess it if necessary.
 
@@ -435,9 +431,6 @@ class OrthoMultiTimeseriesCell(Filenames):
         ----------
         filename : str
             File to read.
-        generic : bool, optional
-            If True, the data is returned as a generic Indexed Ragged Array file for
-            easy merging. If False, the file is returned as its native ragged array type.
         preprocessor : callable, optional
             Function to preprocess the dataset.
         xarray_kwargs : dict
