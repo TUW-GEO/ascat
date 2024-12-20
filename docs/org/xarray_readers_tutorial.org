@@ -3,23 +3,29 @@
 #+OX-IPYNB-LANGUAGE: ipython
 
 #+begin_src elisp :exports none
-(micromamba-activate "egu2024")
+(micromamba-activate "ascat_env")
 #+end_src
 
-* Working with swath files
-** Creating a SwathFileCollection
-If we have a collection of time-series swath files, we can create a SwathFileCollection object that will handle them as a group.
+#+RESULTS:
+: Switched to micromamba environment: /home/charriso/micromamba/envs/ascat_env
+
+* Introduction
+This package provides several tools designed to streamline the process of working with data from the Metop missions' Advanced Scatterometer (ASCAT) system.
+
+- Classes for defining and working with large file datasets of swath data and cell-gridded timeseries data.
+- Classes for detecting, selecting data from, and converting data between xarray datasets conforming to different Discrete Geometry types defined in the CF Conventions.
+- xarray accessors which leverage these classes, allowing the user to easily subset, convert, and plot Ragged Array, Point Array, and Orthogonal-Multidimensional datasets with a single, simple interface.
+- an xarray accessor for CF Discrete Geometry datasets that are gridded according to the `pygeogrids` package.
+
+
+* Working with gridded swath files
+** Creating a SwathGridFiles object
+If we have a collection of time-series swath files, we can create a SwathGridFiles object that will handle them as a group.
 
 #+begin_src ipython
 from datetime import datetime
-from importlib import reload
-
-import ascat.read_native.ragged_array_ts as rat
-from ascat.read_native import xarray_io
-reload(rat)
-reload(xarray_io)
-
 from time import time
+from ascat.read_native.swath_collection import SwathGridFiles
 #+end_src
 
 #+RESULTS:
@@ -27,17 +33,17 @@ from time import time
 :end:
 
 #+begin_src ipython
-swath_source = "/home/charriso/p14/data-write/RADAR/hsaf/h121_v1.0/swaths"
+swath_source = "/data-write/RADAR/hsaf/h121_v1.0/swaths"
 #+end_src
 
 #+RESULTS:
 :results:
 :end:
 
-It's important to understand the structure of the data, so that the SwathFileCollection can find and parse all of the data that is requested from it. Handily, this package comes with existing parsers for several ASCAT products. These can be used with ~SwathFileCollection.from_product_id()~:
+It's important to understand the structure of the data, so that SwathGridFiles can find and parse all of the data that is requested from it. Handily, this package comes with existing parsers for several ASCAT products. These can be used with ~SwathGridFiles.from_product_id()~:
 
 #+begin_src ipython
-swath_collection = rat.SwathFileCollection.from_product_id(swath_source, "H121_V1.0")
+swath_collection = SwathGridFiles.from_product_id(swath_source, "H121_V1.0")
 #+end_src
 
 #+RESULTS:
@@ -47,7 +53,7 @@ swath_collection = rat.SwathFileCollection.from_product_id(swath_source, "H121_V
 The currently included project ids are the keys of ~ascat.read_native.xarray_io.swath_io_catalog~
 
 #+begin_src ipython
-from ascat.read_native.xarray_io import swath_io_catalog
+from ascat.read_native.product_info import swath_io_catalog
 swath_io_catalog.keys()
 #+end_src
 
@@ -56,43 +62,17 @@ swath_io_catalog.keys()
 : dict_keys(['H129', 'H129_V1.0', 'H121_V1.0', 'H122', 'SIG0_6.25', 'SIG0_12.5'])
 :end:
 
-If your data structure does not match anything included in the package, you can write a class inheriting from ~ascat.read_native.xarray_io.SwathIOBase~:
+If your data structure does not match anything included in the package, you can write a class inheriting from ~ascat.read_native.product_info.AscatSwathProduct~:
 
 #+attr_ipynb: :executable False
 #+begin_src ipython :eval no
-class AscatH121v1Swath(SwathIOBase):
-    # outlines the basic structure of the swath filenames, with {bracketed} variable names
-    # in the place of anything that changes according to the data inside
+class AscatH121v1Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-
-    # defines the names of the subfolder/directory names that contain the data. In this case,
-    # files are sorted into folders by satellite and year, so that a typical filepath looks like
-    # ".../metop_b/2021/W_IT-HSAF-ROME..."
-    sf_pattern = {
-        "satellite_folder": "metop_[abc]",
-        "year_folder": "{year}"
-    }
-
-    # specifies the string format of the date that occupies the "date" field in fn_pattern
-    date_format = "%Y%m%d%H%M%S"
-
-    # provides the grid that the data is based on. In this case, using the grid_cache allows
-    # us to reuse the same grid for multiple classes in the source code without
-    # actually generating several different FibGrids.
-    # however, it would also work to just write, for example:
-    #     grid = FibGrid(12.5)
-    grid = grid_cache.fetch_or_store("Fib12.5", FibGrid, 12.5)["grid"]
-
-    # specifies the size (in degrees) of the grid cell to be written out by SwathFileCollection.stack()
-    grid_cell_size = 5
-
-    # specifies the filename format for the cells written out by SwathFileCollection.stack()
+    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
+    date_field_fmt = "%Y%m%d%H%M%S"
+    grid_name = "fibgrid_12.5"
     cell_fn_format = "{:04d}.nc"
-
-    # names any dataset variables with a "beams" dimension - not relevant with this particular product
     beams_vars = []
-
-    # defines all the dataset's data variable names and the dtype that they should be written as when packed.
     ts_dtype = np.dtype([
         ("sat_id", np.int8),
         ("as_des_pass", np.int8),
@@ -114,53 +94,51 @@ class AscatH121v1Swath(SwathIOBase):
         ("subsurface_scattering_probability", np.int8),
     ])
 
-    # a function for generating a filename regex for a particular timestamp
-    # (used for filtering swath files by date)
     @staticmethod
-    def fn_read_fmt(timestamp):
-        return {"date": timestamp.strftime("%Y%m%d*"),
-                "sat": "[ABC]",
-                "placeholder": "*",
-                "placeholder1": "*"}
-
-    # a function that returns subfolder regexes based on a timestamp
-    # Here, in the case of satellite_folder, we don't actually need to be able to search
-    # by satellite, so we just have a regex that is inclusive of all three possible satellites.
-    # However, in the case of year_folder, we want the search year to actually match with the
-    # timestamp we pass to the function.
-    @staticmethod
-    def sf_read_fmt(timestamp):
+    def fn_read_fmt(timestamp, sat="[ABC]"):
+        sat = sat.upper()
         return {
-            "satellite_folder": {"satellite": "metop_[abc]"},
-            "year_folder": {"year": f"{timestamp.year}"},
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": sat,
+            "placeholder": "*",
+            "placeholder1": "*"
         }
 
-    def __init__(self, filename, **kwargs):
-        super().__init__(filename, "netcdf4", **kwargs)
+    @staticmethod
+    def sf_read_fmt(timestamp, sat="[abc]"):
+        sat = sat.lower()
+        return {
+            "satellite_folder": {
+                "satellite": f"metop_{sat}"
+            },
+            "year_folder": {
+                "year": f"{timestamp.year}"
+            },
+        }
 #+end_src
 
-After creating your IO class, you can use it to make a collection by passing it to the SwathFileCollection class:
+After creating your IO class, you can use it to make a collection by passing it to the SwathGridFiles class:
 
 #+begin_src ipython :eval no
-swath_collection = rat.SwathFileCollection(swath_source, ioclass=ASCATH121v1Swath)
+swath_collection = SwathGridFiles.from_product_class(swath_source, product_class=ASCATH121v1Swath)
 #+end_src
 
 Regardless of how you define you define your collection, once created it can be used to read data from your swath collection for any given date range and geographic extent. It can also be used to stack data in the collection into cellwise timeseries in indexed ragged array format, according to the CellGrid defined in the ioclass.
 
-** COMMENT Reading data from a SwathFileCollection
+** Getting data from SwathGridFiles
 
 Let's start with a rectangular, roughly country-sized area in Central Europe, and a time period of four days.
 
 #+begin_src ipython
 bounds = (45, 50, 10, 20) #latmin, latmax, lonmin, lonmax
-dates = (datetime(2020, 12, 1), datetime(2020, 12, 5))
+dates = (datetime(2020, 12, 1), datetime(2020, 12, 3))
 #+end_src
 
 #+RESULTS:
 :results:
 :end:
 
-By calling the ~read~ method of our SwathFileCollection, we open every dataset within the ~date_range~ we've passed, concatenate them together into an xarray dataset, and filter out any observations that don't intersect with the bounding box we've passed to ~bbox~. Other spatial selections we could pass to ~read~ are ~cell~ (cell number or list of cell numbers in the swath data's grid system), ~location_id~ (grid point ID or list of IDs in the swath data's grid system), ~coords~ (lat/lon coordinate or list of coorinates that will be converted to the nearest grid point ID or list of grid point IDs), or ~geom~ (a Shapely geometry).
+By calling the ~read~ method of SwathGridFiles, we open up every swath file within the ~date_range~ we've passed, check whether it intersects with the requested bounding box, concatenate the ones we need together into an xarray dataset, then filter out any observations that don't intersect with the bounding box we've passed to ~bbox~. Other spatial selections we could pass to ~read~ are ~cell~ (cell number or list of cell numbers in the swath data's grid system), ~location_id~ (grid point ID or list of IDs in the swath data's grid system), ~coords~ (lat/lon coordinate or list of coordinates that will be converted to the nearest grid point ID or list of grid point IDs), or ~geom~ (a Shapely geometry).
 
 #+begin_src ipython
 output = swath_collection.read(bbox=bounds, date_range=dates)
@@ -170,31 +148,34 @@ output
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.Dataset>
-  Dimensions:                            (obs: 45007)
+  <xarray.Dataset> Size: 3MB
+  Dimensions:                            (obs: 22276)
   Coordinates:
-      latitude                           (obs) float64 dask.array<chunksize=(1056,), meta=np.ndarray>
-      longitude                          (obs) float64 dask.array<chunksize=(1056,), meta=np.ndarray>
-      time                               (obs) datetime64[ns] 2020-12-01T08:09:...
+      latitude                           (obs) float64 178kB 49.91 49.96 ... 49.3
+      longitude                          (obs) float64 178kB 19.94 19.78 ... 17.43
+      time                               (obs) datetime64[ns] 178kB 2020-12-01T...
   Dimensions without coordinates: obs
   Data variables: (12/19)
-      location_id                        (obs) float64 dask.array<chunksize=(1056,), meta=np.ndarray>
-      as_des_pass                        (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
-      swath_indicator                    (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
-      surface_soil_moisture              (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
-      surface_soil_moisture_noise        (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
-      backscatter40                      (obs) float64 dask.array<chunksize=(1056,), meta=np.ndarray>
+      location_id                        (obs) int32 89kB 1258693 ... 1247425
+      as_des_pass                        (obs) float32 89kB 1.0 1.0 ... 0.0 0.0
+      swath_indicator                    (obs) float32 89kB 0.0 0.0 ... 1.0 1.0
+      surface_soil_moisture              (obs) float64 178kB 22.42 25.39 ... nan
+      surface_soil_moisture_noise        (obs) float64 178kB 6.4 6.17 ... nan nan
+      backscatter40                      (obs) float64 178kB -9.284 -9.371 ... nan
       ...                                 ...
-      snow_cover_probability             (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
-      frozen_soil_probability            (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
-      wetland_fraction                   (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
-      topographic_complexity             (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
-      subsurface_scattering_probability  (obs) float32 dask.array<chunksize=(1056,), meta=np.ndarray>
-      sat_id                             (obs) int64 ...
+      snow_cover_probability             (obs) float32 89kB 70.0 68.0 ... 51.0
+      frozen_soil_probability            (obs) float32 89kB 31.0 29.0 ... 39.0
+      wetland_fraction                   (obs) float32 89kB nan nan ... nan nan
+      topographic_complexity             (obs) float32 89kB 6.0 3.0 ... 7.0 3.0
+      subsurface_scattering_probability  (obs) float32 89kB nan nan ... nan nan
+      sat_id                             (obs) int64 178kB 3 3 3 3 3 ... 4 4 4 4 4
+  Attributes:
+      grid_mapping_name:  fibgrid_12.5
+      featureType:        point
 #+END_EXAMPLE
 :end:
 
-Now we have a nice Xarray dataset that we can work with however we wish. In this case, it's one-dimensional, so we are basically working with a tabular data structure. In order to work with it as 3-dimensional (latitude, longitude, time) raster data, we can aggregate it into timesteps.
+Now we have a nice xarray dataset that we can work with however we wish. In this case, it's one-dimensional, so we are basically working with a tabular data structure. In order to work with it as 3-dimensional (latitude, longitude, time) raster data, we can aggregate it into timesteps.
 
 First, to make sure we got the desired data, let's make some plots.
 
@@ -220,33 +201,21 @@ plt.tight_layout()
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/ga7Qd6.png]]
+[[file:./obipy-resources/k32Pzp.png]]
 :end:
 
+** Mapping data from SwathGridFiles
 
 We can check the spatial coverage of the data by plotting it on a map.
 
 #+begin_src ipython
-import cartopy.crs as ccrs
-from shapely import Point
-
-plt.close()
-ax = plt.axes(projection=ccrs.PlateCarree())
-ax.coastlines()
-ax.gridlines(draw_labels=True)
+fig, ax, scat = output.cf_geom.plot_var_map("surface_soil_moisture", s=0.1)
 ax.set_extent([-10, 30, 35, 65])
-plt.scatter(
-    output.longitude,
-    output.latitude,
-    s=0.1,
-    alpha=0.1
-)
 #+end_src
 
 #+RESULTS:
 :results:
-: <matplotlib.collections.PathCollection at 0x7f01908dd4f0>
-[[file:./obipy-resources/CLjFXU.png]]
+[[file:./obipy-resources/FEQwsL.png]]
 :end:
 
 Having the data as an Xarray makes it handy to do transformations. For example, we can group by location_id and get the average surface soil moisture at each. First, we need to load the ~location_id~ into memory, since it currently exists as a chunked dask array, and the groupby method only works with numpy arrays.
@@ -258,17 +227,19 @@ output["location_id"].load()
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'location_id' (obs: 45007)>
-  array([1258693., 1259680., 1260057., ..., 1260222., 1260311., 1260455.])
+  <xarray.DataArray 'location_id' (obs: 22276)> Size: 89kB
+  array([1258693, 1259680, 1260057, ..., 1246815, 1247048, 1247425],
+        dtype=int32)
   Coordinates:
-      latitude   (obs) float64 49.91 49.96 49.98 49.82 ... 49.98 49.99 49.99 50.0
-      longitude  (obs) float64 19.94 19.78 19.35 19.84 ... 11.69 10.57 12.38 11.26
-      time       (obs) datetime64[ns] 2020-12-01T08:09:59.415000064 ... 2020-12...
+      latitude   (obs) float64 178kB 49.91 49.96 49.98 49.82 ... 49.27 49.28 49.3
+      longitude  (obs) float64 178kB 19.94 19.78 19.35 19.84 ... 17.17 17.86 17.43
+      time       (obs) datetime64[ns] 178kB 2020-12-01T08:09:59.415000064 ... 2...
   Dimensions without coordinates: obs
   Attributes:
       long_name:  Location identifier (Grid Point ID)
       valid_min:  0
       valid_max:  3300000
+      cf_role:    timeseries_id
 #+END_EXAMPLE
 :end:
 
@@ -281,11 +252,11 @@ avg_ssm.load()
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652)>
-  array([55.3      , 73.21357  , 54.573635 , ...,  3.9599998, 41.566666 ,
-         25.1      ], dtype=float32)
+  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652)> Size: 21kB
+  array([25.28142857, 74.35714286, 42.954     , ...,  3.96      ,
+         26.9       , 19.3125    ])
   Coordinates:
-    * location_id  (location_id) float64 1.163e+06 1.163e+06 ... 1.26e+06 1.26e+06
+    * location_id  (location_id) int32 11kB 1162818 1162873 ... 1260434 1260455
   Attributes:
       long_name:  surface soil moisture
       units:      percent saturation
@@ -294,7 +265,6 @@ avg_ssm.load()
 #+END_EXAMPLE
 :end:
 
-This takes 1.1 seconds on my own machine, which isn't too bad, but we're only working with 5 days of data here for a relatively small area. This operation could easily balloon in complexity and become intractable, especially if it needs to be repeated often. We also get warnings about slicing with an out-of-order index.
 
 However, if we use flox directly (a package from the developers of Xarray that is created to do faster groupbys with Xarray datasets), we can accomplish the same operation in a fraction of the time (88ms on my machine). When scaling up to much longer time periods and larger surface areas, these savings can make a huge difference.
 
@@ -315,11 +285,11 @@ avg_ssm_flox.load()
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652)>
-  array([55.3      , 73.21357  , 54.57363  , ...,  3.9599998, 41.566666 ,
-         25.100002 ], dtype=float32)
+  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652)> Size: 21kB
+  array([25.28142857, 74.35714286, 42.954     , ...,  3.96      ,
+         26.9       , 19.3125    ])
   Coordinates:
-    * location_id  (location_id) float64 1.163e+06 1.163e+06 ... 1.26e+06 1.26e+06
+    * location_id  (location_id) int32 11kB 1162818 1162873 ... 1260434 1260455
   Attributes:
       long_name:  surface soil moisture
       units:      percent saturation
@@ -331,10 +301,38 @@ avg_ssm_flox.load()
 Note: if, when using flox, you get an error about needing to provide ~expected_groups~, make sure you've ~load~ -ed the variables you'll be grouping your data by into memory first. If your dataset is too big for that, you can calculate the unique values of those variables and pass them in a tuple to the ~expected_groups~ parameter. For example, if we want to calculate seasonal soil moisture averages per location, we can add a grouping of the ~time~ variable to our ~xarray_reduce~ arguments. However, if we haven't loaded ~location_id~ into memory yet, we'll get an error:
 
 #+begin_src ipython
-short_dates = (datetime(2020, 12, 1), datetime(2020, 12, 2))
-ds = swath_collection.read(bbox=bounds, date_range=dates)
+ds = output
 xarray_reduce(ds["surface_soil_moisture"], ds["location_id"], ds["time"].dt.hour, func="mean")
 #+end_src
+
+#+RESULTS:
+:results:
+#+BEGIN_EXAMPLE
+  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652, hour: 8)> Size: 170kB
+  array([[         nan,  16.61333333,  19.59      , ...,          nan,
+           33.295     ,  40.95      ],
+         [         nan,  49.68      ,  60.32      , ...,          nan,
+           83.39333333, 100.        ],
+         [         nan,  30.645     ,  45.17      , ...,          nan,
+           54.155     ,          nan],
+         ...,
+         [  3.96      ,          nan,          nan, ...,          nan,
+                   nan,          nan],
+         [         nan,  26.9       ,          nan, ...,          nan,
+                   nan,          nan],
+         [ 14.49      ,  22.53      ,  12.83      , ...,          nan,
+                   nan,  27.4       ]])
+  Coordinates:
+    * location_id  (location_id) int32 11kB 1162818 1162873 ... 1260434 1260455
+    * hour         (hour) int64 64B 7 8 9 10 17 18 19 20
+  Attributes:
+      long_name:  surface soil moisture
+      units:      percent saturation
+      valid_min:  0
+      valid_max:  10000
+#+END_EXAMPLE
+:end:
+
 
 We didn't get this error before because we had already loaded ~location_id~ into memory. Loading a single variable into memory shouldn't be much of a problem, but if it is, here's how you would use ~expected_groups~ to solve it instead:
 
@@ -353,23 +351,23 @@ xarray_reduce(
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652, hour: 9)>
-  array([[91.71     , 37.46     , 71.503334 , ..., 55.53     , 40.95     ,
-                 nan],
-         [75.7      , 56.953327 , 63.656666 , ..., 80.432495 , 94.45     ,
-                 nan],
-         [52.       , 42.173332 , 57.54333  , ..., 58.72333  ,        nan,
-                 nan],
+  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652, hour: 8)> Size: 170kB
+  array([[         nan,  16.61333333,  19.59      , ...,          nan,
+           33.295     ,  40.95      ],
+         [         nan,  49.68      ,  60.32      , ...,          nan,
+           83.39333333, 100.        ],
+         [         nan,  30.645     ,  45.17      , ...,          nan,
+           54.155     ,          nan],
          ...,
-         [ 3.9599998,        nan,        nan, ...,        nan,        nan,
-                 nan],
-         [       nan, 26.9      , 70.9      , ...,        nan,        nan,
-                 nan],
-         [14.49     , 21.055    , 12.83     , ...,        nan, 31.404999 ,
-                 nan]], dtype=float32)
+         [  3.96      ,          nan,          nan, ...,          nan,
+                   nan,          nan],
+         [         nan,  26.9       ,          nan, ...,          nan,
+                   nan,          nan],
+         [ 14.49      ,  22.53      ,  12.83      , ...,          nan,
+                   nan,  27.4       ]])
   Coordinates:
-    * location_id  (location_id) float64 1.163e+06 1.163e+06 ... 1.26e+06 1.26e+06
-    * hour         (hour) int32 7 8 9 10 17 18 19 20 21
+    * location_id  (location_id) int32 11kB 1162818 1162873 ... 1260434 1260455
+    * hour         (hour) int64 64B 7 8 9 10 17 18 19 20
   Attributes:
       long_name:  surface soil moisture
       units:      percent saturation
@@ -434,7 +432,7 @@ simple_map(lons, lats, avg_ssm_flox, cmc.roma, (output.time.values.min(), output
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/DGLKhg.png]]
+[[file:./obipy-resources/XZlbm3.png]]
 :end:
 
 
@@ -447,7 +445,7 @@ simple_map(lons, lats, avg_sms, "viridis", (output.time.values.min(), output.tim
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/b2HrXM.png]]
+[[file:./obipy-resources/hEoppG.png]]
 :end:
 
 
@@ -458,6 +456,10 @@ week_dates = (datetime(2020, 12, 1), datetime(2020, 12, 8))
 week_data = swath_collection.read(date_range=week_dates, bbox=bounds)
 date_groups = week_data.groupby("time.date")
 #+end_src
+
+#+RESULTS:
+:results:
+:end:
 
 #+begin_src ipython
 for dt, ds in date_groups:
@@ -477,7 +479,7 @@ plt.tight_layout()
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/UGmdA8.png]]
+[[file:./obipy-resources/HzmTug.png]]
 :end:
 
 
@@ -491,82 +493,78 @@ five_years_data = swath_collection.read(location_id=gpis, date_range=five_years)
 climatology = output.groupby("time.dayofyear").mean("obs")
 #+end_src
 
-If you need to do several operations on larger chunks of time, it could be useful to convert the data to a cell file collection and work off of that. (see CellFileCollection section below)
+If you need to do several operations on larger chunks of time, it could be useful to convert the data to a cell file collection and work off of that. (see ~CellGridFiles~ section below)
 
 ** Converting swath collections to cell collections
 
-To convert a collection of swath files into a collection of cell files, we only need to call a single method from our SwathFileCollection. We pass it at least an output directory path (~out_dir~), where the outputs will be written, and we can also pass it several other options.
+To convert a collection of swath files into a collection of cell files, we only need to call a single method from ~SwathGridFiles~. We pass it at least an output directory path (~out_dir~), where the outputs will be written, and we can also pass it several other options.
 
 #+begin_src ipython :eval no
-
-# without setting this variable as False, the package will warn the user and wait for confirmation before running, since a careless use of `stack` pointing to the wrong directory could delete or ruin a lot of data.
-rat.process_warnings = False
 # where to save the files
 cell_file_directory = ""
-# a list of swath file names to write, if you have a specific list
-fnames = None
-# the date range to stack data from
-date_range = None
-# mode : "w" for creating new files if any already exist, "a" to append data to existing cell files
-# note that old data and new data will not be sorted after the append
-mode = "w"
-# the number of processes to use when writing the data.
-# does NOT have anything to do with xarray's dask processing
-# I've found that using too many processes, even on machines with many cores, may not be optimal.
-# A good number is 8.
-processes = 8
+
 
 # the maximum size of the data buffer before dumping to file (actual maximum memory used will be higher)
 # default is 6144MB
-buffer_memory_mb = None
+max_nbytes = None
 
-swath_collection.stack(
+# the date range to use. This should be a tuple of datetime.datetime objects
+date_range = None
+
+# Pass a list of cell numbers (integers) here if you only want to stack data for a certain set of cells. This is mainly useful for testing purposes, since even splitting a day's worth of swath data into files for all of its constituent cells is a lengthy process.
+cells=None
+
+# mode : "w" for creating new files if any already exist, "a" to append data to existing cell files
+# note that old data and new data will not be sorted after the append
+mode = "w"
+
+swath_collection.stack_to_cell_files(
     output_dir=cell_file_directory,
-    fnames=fnames,
+    max_nbytes=max_nbytes,
     date_range=date_range,
     mode=mode,
     processes=processes,
-    buffer_memory_mb=buffer_memory_mb
 )
 #+end_src
 
-The output cells are in /indexed ragged array/ format. In order to convert them to /contiguous/ ragged array format, we can create a ~CellFileCollection~ from the output directory, and call the method ~to_contiguous()~:
+
+~stack_to_cell_files~ works by iterating through the source swath files one at a time, opening them as xarray datasets, performing any necessary preprocessing, and concatenating each new dataset to all of the previous ones. Once that dataset's `nbytes` attribute reaches `max_nbytes`, reading is paused while the combined dataset is dumped out into one file in /indexed ragged array/ format for each of its constituent cells. Once the cells are written, the process starts again. On all dumps, data for any cells that already have a file is appended to those files, so it's important to make sure that a fresh export is pointed to an empty directory.
+
+
+The output cells are in /indexed ragged array/ format. In order to convert them to /contiguous/ ragged array format, we can create a ~CellGridFiles~ object from the output directory, and call the method ~convert_to_contiguous()~:
 
 #+begin_src ipython :eval no
-cell_collection = rat.CellFileCollection.from_product_id(cell_file_directory, product_id="H121_v1.0")
-contiguous_cell_file_directory = ""
-cell_collection.to_contiguous(contiguous_cell_file_directory)
+cell_collection = CellGridFiles.from_product_id(cell_file_directory, product_id="H121_v1.0")
+contiguous_cell_file_directory = "contiguous_directory_name"
+cell_collection.convert_to_contiguous(contiguous_cell_file_directory)
 #+end_src
 
-This will sort the entire dataset first by time and then by ~locationIndex~, and then replace the dataset's ~locationIndex~ variable with a ~row_size~ variable. At this point it is no longer practically possible to append new data to the dataset without first re-converting it to indexed ragged array format and then converting back.
+This will sort the entire dataset first by time and then by ~location_id~, and then replace the dataset's ~locationIndex~ variable with a ~row_size~ variable. At this point it is no longer practically possible to append new data to the dataset without first re-converting it to indexed ragged array format and then converting back.
 
 
-* Working with collections of cell files
-Right now, although ~CellFileCollection~ exists, it currently is optimized for use under the hood of ~CellFileCollectionStack~. Ideally both could be used by users, but there are still some bugs to be worked out and some refactoring to do. To work with a single collection of cell files, simply create a ~CellFileCollectionStack~ with a single collection inside.
-
-* Working with stacks of cell file collections
+* Working with gridded cell files
 
 ** Creating a cell file collection
 
 #+begin_src ipython
 from datetime import datetime
-from importlib import reload
 from time import time
 
-import ascat.read_native.ragged_array_ts as rat
+from ascat.read_native.cell_collection import CellGridFiles
 #+end_src
 
 #+RESULTS:
 :results:
 :end:
 
-Our cell files, in this case, all live in a single directory, so that's the path we'll pass to ~rat.CellFileCollectionStack.from_product_id()~. If we had multiple sets of cell files contained in different directories, we could pass a list of these directories' paths, assuming they were all of the same product type (and therefore had the same dimensions, data variables, etc).
+Our cell files, in this case, all live in a single directory, so that's the path we'll pass to ~CellGridFiles.from_product_id()~. 
 
-The product id, ~"H121_V1.0"~, refers to a specific handler class defined in ~ascat.read_native.xarray_io~. There are several of these already defined for various products we use, and it is also possible to define your own handler class if you need to process a product we haven't included in this package already.
+The product id, ~"H121_V1.0"~, refers to a specific handler class defined in ~ascat.read_native.product_info~. There are several of these already defined for various products we use, and it is also possible to define your own handler class if you need to process a product we haven't included in this package already.
 
 #+begin_src ipython
-cell_source = "/home/charriso/p14/data-write/USERS/charriso/h121_merged/metop_abc/"
-cell_collection = rat.CellFileCollectionStack.from_product_id(cell_source, "H121_V1.0")
+cell_source = "/data-write/RADAR/hsaf/h121_v2.0/time_series/"
+# cell_source = "/data-write/RADAR/charriso/test_stack/"
+cell_collection = CellGridFiles.from_product_id(cell_source, "H121_V2.0")
 #+end_src
 
 #+RESULTS:
@@ -574,152 +572,166 @@ cell_collection = rat.CellFileCollectionStack.from_product_id(cell_source, "H121
 :end:
 
 ** Reading from a cell file collection
-We can read data from a specific geographic and temporal extent, but if you have a single collection, it may actually take longer to create an xarray dataset if you try to trim down the time range. In this case it is best to only subset by geographic extent on read, and then do any temporal subsetting after the xarray dataset is created, but before the data is actually loaded into memory with ~.load()~.
 
-On the other hand, if you have a stack with multiple collections that cover different time ranges, you can possibly save a lot of time when reading using temporal subsetting. (Imagine you have dozens of weekly cell collections and only need two weeks - no need to even look at the other files).
+The options for geographic extent are ~cell~, ~bbox~, ~coords~, ~geom~, and ~location_id~. ~cell~ is a list of cell indices, ~bbox~ is a tuple of (latmin, latmax, lonmin, lonmax), ~geom~ is a shapely geometry object, and ~location_id~ is a list of location indices.
 
-Our options for geographic extent are ~cell~, ~bbox~, ~geom~, and ~location_id~. ~cell~ is a list of cell indices, ~bbox~ is a tuple of (latmin, latmax, lonmin, lonmax), ~geom~ is a shapely geometry object, and ~location_id~ is a list of location indices.
+Let's say we want to read within a bounding box.
 
 #+begin_src ipython
+import numpy as np
 bounds = (43, 51, 11, 21) #latmin, latmax, lonmin, lonmax
-dates = (np.datetime64(datetime(2020, 12, 1)), np.datetime64(datetime(2020, 12, 15)))
+#bounds = (49, 51, 20, 21) #latmin, latmax, lonmin, lonmax
+dates = (np.datetime64(datetime(2019, 2, 1)), np.datetime64(datetime(2019, 3, 15)))
 #+end_src
 
 #+RESULTS:
 :results:
 :end:
 
-
 #+begin_src ipython
-output_bbox = cell_collection.read(bbox=bounds)#, date_range=dates)
+output_bbox = cell_collection.read(bbox=bounds, date_range=dates)#, date_range=dates)#bbox=bounds, date_range=dates, parallel=True)
 output_bbox
 #+end_src
 
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.Dataset>
-  Dimensions:                            (obs: 59143813, locations: 4378)
+  <xarray.Dataset> Size: 106MB
+  Dimensions:                            (obs: 1607249, locations: 12174)
   Coordinates:
-      time                               (obs) datetime64[ns] 2007-01-01T08:00:...
-      lon                                (locations) float32 ...
-      lat                                (locations) float32 ...
-      alt                                (locations) float32 ...
+      time                               (obs) datetime64[ns] 13MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      lon                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
+      lat                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
+      alt                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
   Dimensions without coordinates: obs, locations
-  Data variables: (12/22)
-      locationIndex                      (obs) int64 ...
-      as_des_pass                        (obs) float32 ...
-      swath_indicator                    (obs) float32 ...
-      surface_soil_moisture              (obs) float32 ...
-      surface_soil_moisture_noise        (obs) float32 ...
-      backscatter40                      (obs) float32 ...
+  Data variables: (12/21)
+      as_des_pass                        (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      swath_indicator                    (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      surface_flag                       (obs) uint8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      surface_soil_moisture              (obs) float32 6MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      surface_soil_moisture_noise        (obs) float32 6MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      backscatter40                      (obs) float32 6MB dask.array<chunksize=(1000000,), meta=np.ndarray>
       ...                                 ...
-      topographic_complexity             (obs) float32 ...
-      subsurface_scattering_probability  (obs) float32 ...
-      global_attributes_flag             (locations) int64 ...
-      sat_id                             (obs) float32 ...
-      location_id                        (locations) int64 ...
-      location_description               (locations) object ...
-  Attributes: (12/15)
-      title:             ASCAT surface soil moisture near real-time product
-      summary:           ASCAT surface soil moisture expressed in degree of sat...
-      doi:               unset
-      keywords:          Metop-A ASCAT surface soil moisture
-      history:           original generated product
-      institution:       H SAF
-      ...                ...
-      disposition_mode:  Operational
-      environment:       Operational
-      references:        h-saf.eumetsat.int
-      software_version:  warp_h_nrt 0.0.0
-      conventions:       CF-1.10
-      featureType:       timeSeries
+      topographic_complexity             (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      subsurface_scattering_probability  (obs) float64 13MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      sat_id                             (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      row_size                           (locations) int32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
+      location_id                        (locations) int64 97kB dask.array<chunksize=(12174,), meta=np.ndarray>
+      location_description               (locations) <U1 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
+  Attributes:
+      id:            1394.nc
+      date_created:  2024-10-25 18:38:34
+      featureType:   timeSeries
 #+END_EXAMPLE
 :end:
 
 
+
+Now let's map the average surface soil moisture over the area and time range we selected.
+
+
 #+begin_src ipython
-date_range_data = output_bbox.sel(obs=(output_bbox["time"] > dates[0]) & (output_bbox["time"] < dates[1]))
-date_range_data
+
+indexed_bbox = output_bbox.cf_geom.to_indexed_ragged()#.sortby("time")
+indexed_bbox#.load()
 #+end_src
 
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.Dataset>
-  Dimensions:                            (obs: 226965, locations: 4378)
+  <xarray.Dataset> Size: 119MB
+  Dimensions:                            (obs: 1607249, locations: 12174)
   Coordinates:
-      time                               (obs) datetime64[ns] 2020-12-01T08:11:...
-      lon                                (locations) float32 ...
-      lat                                (locations) float32 ...
-      alt                                (locations) float32 ...
+      time                               (obs) datetime64[ns] 13MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      lon                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
+      lat                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
+      alt                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
   Dimensions without coordinates: obs, locations
-  Data variables: (12/22)
-      locationIndex                      (obs) int64 ...
-      as_des_pass                        (obs) float32 ...
-      swath_indicator                    (obs) float32 ...
-      surface_soil_moisture              (obs) float32 ...
-      surface_soil_moisture_noise        (obs) float32 ...
-      backscatter40                      (obs) float32 ...
+  Data variables: (12/21)
+      locationIndex                      (obs) int64 13MB 0 0 0 ... 12173 12173
+      as_des_pass                        (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      swath_indicator                    (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      surface_flag                       (obs) uint8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      surface_soil_moisture              (obs) float32 6MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      surface_soil_moisture_noise        (obs) float32 6MB dask.array<chunksize=(1000000,), meta=np.ndarray>
       ...                                 ...
-      topographic_complexity             (obs) float32 ...
-      subsurface_scattering_probability  (obs) float32 ...
-      global_attributes_flag             (locations) int64 ...
-      sat_id                             (obs) float32 ...
-      location_id                        (locations) int64 ...
-      location_description               (locations) object ...
-  Attributes: (12/15)
-      title:             ASCAT surface soil moisture near real-time product
-      summary:           ASCAT surface soil moisture expressed in degree of sat...
-      doi:               unset
-      keywords:          Metop-A ASCAT surface soil moisture
-      history:           original generated product
-      institution:       H SAF
-      ...                ...
-      disposition_mode:  Operational
-      environment:       Operational
-      references:        h-saf.eumetsat.int
-      software_version:  warp_h_nrt 0.0.0
-      conventions:       CF-1.10
-      featureType:       timeSeries
+      wetland_fraction                   (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      topographic_complexity             (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      subsurface_scattering_probability  (obs) float64 13MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      sat_id                             (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      location_id                        (locations) int64 97kB dask.array<chunksize=(12174,), meta=np.ndarray>
+      location_description               (locations) <U1 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
+  Attributes:
+      id:            1394.nc
+      date_created:  2024-10-25 18:38:34
+      featureType:   timeSeries
 #+END_EXAMPLE
 :end:
 
-Now let's map the average surface soil moisture over the area and time range we selected.
-
 #+begin_src ipython
 from flox.xarray import xarray_reduce
-avg_sm = xarray_reduce(date_range_data["surface_soil_moisture"], date_range_data["locationIndex"], func="mean")
+
+indexed_bbox = indexed_bbox.chunk({"obs": 1000000, "locations": -1})
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
+
+#+begin_src ipython
+avg_sm = xarray_reduce(indexed_bbox["surface_soil_moisture"], indexed_bbox["locationIndex"].load(), func="mean")
+avg_sm.attrs["long_name"] = "Surface soil moisture"
+avg_sm.attrs["units"] = "% saturation"
+
 avg_sm
 #+end_src
 
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'surface_soil_moisture' (locationIndex: 4000)>
-  array([73.23913 , 85.52    , 52.248085, ..., 64.45    , 35.750626,
-         62.632   ], dtype=float32)
+  <xarray.DataArray 'surface_soil_moisture' (locationIndex: 12174)> Size: 49kB
+  dask.array<groupby_nanmean, shape=(12174,), dtype=float32, chunksize=(12174,), chunktype=numpy.ndarray>
   Coordinates:
-    * locationIndex  (locationIndex) int64 1 2 4 5 6 ... 4373 4374 4375 4376 4377
+    * locationIndex  (locationIndex) int64 97kB 0 1 2 3 ... 12171 12172 12173
   Attributes:
-      long_name:    surface soil moisture
-      units:        percent saturation
-      valid_min:    0
-      valid_max:    10000
-      coordinates:  time latitude longitude
+      name:       surface_soil_moisture
+      long_name:  Surface soil moisture
+      units:      % saturation
 #+END_EXAMPLE
 :end:
 
 #+begin_src ipython
-import numpy as np
-lons = date_range_data.lon.values[avg_sm.locationIndex.values]
-lats = date_range_data.lat.values[avg_sm.locationIndex.values]
-simple_map(lons, lats, avg_sm, cmc.roma, (date_range_data.time.values.min(), date_range_data.time.values.max()))
+avg_sm.load()#.chunk(-1)#.load()
 #+end_src
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/1Fsj8R.png]]
+#+BEGIN_EXAMPLE
+  <xarray.DataArray 'surface_soil_moisture' (locationIndex: 12174)> Size: 49kB
+  array([      nan,       nan,       nan, ..., 63.389572,       nan,
+         65.09921 ], dtype=float32)
+  Coordinates:
+    * locationIndex  (locationIndex) int64 97kB 0 1 2 3 ... 12171 12172 12173
+  Attributes:
+      name:       surface_soil_moisture
+      long_name:  Surface soil moisture
+      units:      % saturation
+#+END_EXAMPLE
+:end:
+
+
+#+begin_src ipython
+
+import cmcrameri.cm as cmc
+import numpy as np
+lons = output_bbox.lon[avg_sm.locationIndex].values
+lats = output_bbox.lat[avg_sm.locationIndex].values
+simple_map(lons, lats, avg_sm, cmc.roma, (output_bbox.time.values.min(), output_bbox.time.values.max()))
+#+end_src
+
+#+RESULTS:
+:results:
+[[file:./obipy-resources/MsyVaP.png]]
 :end:
 
 
@@ -727,6 +739,7 @@ When we read data using cell ids, the process is just as easy:
 
 #+begin_src ipython
 output_cells = cell_collection.read(cell=[1431, 1432, 1395, 1396])
+output_cells = output_cells.cf_geom.to_indexed_ragged().sortby("time")
 #+end_src
 
 #+RESULTS:

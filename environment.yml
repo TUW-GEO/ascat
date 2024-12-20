@@ -11,6 +11,7 @@ dependencies:
   - xarray
   - dask
   - shapely
+  - pyresample
   - pip
   - pip:
       - cadati
@@ -27,3 +28,4 @@ dependencies:
       - build
       - flake8
       - yapf
+      - cf_xarray
