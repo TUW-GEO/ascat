@@ -1004,6 +1004,8 @@ class Filenames:
             # Special case when the data object meant to be written to a single filename is a list
             raise ValueError("Number of data objects must match number of filenames.")
 
+        return
+
     def read(self, parallel=False, closer_attr=None, **kwargs):
         """
         Read all data from files.
