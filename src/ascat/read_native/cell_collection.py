@@ -139,8 +139,10 @@ class RaggedArrayCell(Filenames):
             # ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
 
             if ds.cf_geom.array_type == "contiguous" and date_range is not None:
-                ds = self._trim_var_range(ds.chunk({"obs": 1000000, "locations": -1}),
-                                          "time", *date_range).chunk({"obs": 1000000, "locations": -1})
+                ds = self._dim_safe_rechunk(ds)
+                ds = self._trim_var_range(ds, "time", *date_range)
+                ds = self._dim_safe_rechunk(ds)
+
             if ds.cf_geom.array_type != "contiguous":
                 ds = self._trim_to_gpis(ds.chunk({"obs": 1000000}), gpis=location_id, lookup_vector=lookup_vector)
 
@@ -280,6 +282,13 @@ class RaggedArrayCell(Filenames):
             and var not in ["row_size", "locationIndex"]
         ]]
 
+    @staticmethod
+    def _dim_safe_rechunk(data):
+        if "locations" in data.dims:
+            return data.chunk({"obs": 1000000, "locations": -1})
+        return data.chunk({"obs": 1000000})
+
+
     def _merge(self, data):
         """
         Merge datasets with potentially different locations dimensions.
@@ -335,11 +344,13 @@ class RaggedArrayCell(Filenames):
 
     def _merge_contiguous(self, data):
         preprocessed = [self._preprocess(ds).chunk({"obs":-1}) for ds in data if ds is not None]
-        merged_ds = xr.merge(
-           [xr.concat([ds.drop_dims("locations") if "locations" in ds.dims
+        merged_ds = self._dim_safe_rechunk(
+            xr.merge(
+                [xr.concat([ds.drop_dims("locations") if "locations" in ds.dims
                        else self._only_obs_vars(ds)
                        for ds in preprocessed], dim="obs"),
-             xr.concat([ds.drop_dims("obs") for ds in preprocessed], dim="locations")],
+                 xr.concat([ds.drop_dims("obs") for ds in preprocessed], dim="locations")],
+            )
         )
         return merged_ds
 
