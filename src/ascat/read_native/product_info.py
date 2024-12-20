@@ -12,12 +12,17 @@ from pygeogrids.netcdf import load_grid
 from pathlib import Path
 
 from ascat.read_native.cell_collection import RaggedArrayCell
-from ascat.read_native.cell_collection import OrthoMultiCell
+from ascat.read_native.cell_collection import OrthoMultiTimeseriesCell
 
-
-class RaggedArrayCellProduct:
-    file_class = RaggedArrayCell
+class BaseCellProduct:
     fn_format = "{:04d}.nc"
+
+    @classmethod
+    def preprocessor(cls, ds):
+        return ds
+
+class RaggedArrayCellProduct(BaseCellProduct):
+    file_class = RaggedArrayCell
     sample_dim = "obs"
     instance_dim = "locations"
 
@@ -31,15 +36,33 @@ class RaggedArrayCellProduct:
             ds["location_id"].attrs["cf_role"] = "timeseries_id"
         if ds.attrs.get("featureType") is None:
             ds = ds.assign_attrs({"featureType": "timeSeries"})
+        if ds.attrs.get("grid_mapping_name") is None:
+            ds.attrs["grid_mapping_name"] = cls.grid_name
         return ds
 
+class ErsCell(RaggedArrayCellProduct):
+    @classmethod
+    def preprocessor(cls, ds):
+        ds = super().preprocessor(ds).chunk({"obs": -1})
+        for var in ds.variables:
+            if ds[var].dtype == np.float32:
+                ds[var] = ds[var].where(ds[var] > -2147483600)
+            if var == "alt":
+                ds[var] = ds[var].where(ds[var] < 999999)
 
-    
-class ErsHCell(RaggedArrayCellProduct):
+            parts = var.split("_")
+            if parts[0] in ["fore", "mid", "aft"]:
+                if parts[0] == "fore":
+                    parts[0] = "for"
+                ds = ds.rename({var:
+                                "_".join(parts[1:] + [parts[0]])})
+        return ds
+
+class ErsHCell(ErsCell):
     grid_name = "fibgrid_12.5"
 
 
-class ErsNCell(RaggedArrayCellProduct):
+class ErsNCell(ErsCell):
     grid_name = "fibgrid_25"
 
 
@@ -55,6 +78,8 @@ class AscatH129v1Cell(RaggedArrayCellProduct):
 class AscatH121v1Cell(RaggedArrayCellProduct):
     grid_name = "fibgrid_12.5"
 
+class AscatH121v2Cell(RaggedArrayCellProduct):
+    grid_name = "fibgrid_12.5"
 
 class AscatH122Cell(RaggedArrayCellProduct):
     grid_name = "fibgrid_6.25"
@@ -66,6 +91,19 @@ class AscatSIG0Cell6250m(RaggedArrayCellProduct):
 
 class AscatSIG0Cell12500m(RaggedArrayCellProduct):
     grid_name = "fibgrid_12.5"
+
+class OrthoMultiArrayCellProduct(BaseCellProduct):
+    file_class = OrthoMultiTimeseriesCell
+    sample_dim = "obs"
+    instance_dim = "locations"
+
+    @classmethod
+    def preprocessor(cls, ds):
+        if "location_id" in ds.variables:
+            ds["location_id"].attrs["cf_role"] = "timeseries_id"
+        if ds.attrs.get("featureType") is None:
+            ds = ds.assign_attrs({"featureType": "timeSeries"})
+        return ds
 
 
 class SwathProduct:
@@ -532,6 +570,7 @@ cell_io_catalog = {
     "H129": AscatH129Cell,
     "H129_V1.0": AscatH129v1Cell,
     "H121_V1.0": AscatH121v1Cell,
+    "H121_V2.0": AscatH121v2Cell,
     "H122": AscatH122Cell,
     "SIG0_6.25": AscatSIG0Cell6250m,
     "SIG0_12.5": AscatSIG0Cell12500m,

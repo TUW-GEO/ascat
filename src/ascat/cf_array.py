@@ -31,15 +31,17 @@ import numpy as np
 import xarray as xr
 
 
-def check_orthomulti(ds):
+def check_orthomulti_ts(ds):
     # Assumptions:
     # - two dimensions [DONE]
     # - single variable with only the sample dimension (e.g. time) [TODO]
     # - data variables have sample and instance dimension [TODO]
     # - data variables have ALL instance dimension coordinates listed as coordinates [TODO]
-    if len(ds.dims) != 2:
-        return False
-    return True
+    if len(ds.dims) == 2:
+        for v in ds.variables:
+            if "cf_role" in ds[v].attrs and ds[v].attrs["cf_role"] == "timeseries_id":
+                return True
+    return False
 
 
 def cf_array_type(ds):
@@ -50,22 +52,22 @@ def cf_array_type(ds):
             return "indexed"
         if "sample_dimension" in ds[v].attrs:
             return "contiguous"
-    if check_orthomulti(ds):
-        return "orthomulti"
+    if check_orthomulti_ts(ds):
+        return "orthomulti_ts"
     raise ValueError("Array type could not be determined.")
 
 
 def cf_array_class(ds, array_type, **kwargs):
     if array_type == "point":
-        return PointArray(ds, **kwargs)
+        return TimeseriesPointArray(ds, **kwargs)
     if array_type == "indexed":
         return RaggedArray(ds, **kwargs)
     if array_type == "contiguous":
         return RaggedArray(ds, **kwargs)
-    if array_type == "orthomulti":
-        return OrthoMultiArray(ds, **kwargs)
+    if array_type == "orthomulti_ts":
+        return OrthoMultiTimeseriesArray(ds, **kwargs)
     raise ValueError(f"Array type '{array_type}' not recognized."
-                     "Should be one of 'point', 'indexed', 'contiguous', 'orthomulti'.")
+                     "Should be one of 'point', 'indexed', 'contiguous', 'orthomulti_ts'.")
 
 
 def point_to_indexed(
@@ -305,9 +307,11 @@ class CFDiscreteGeom:
         raise NotImplementedError
 
 
-
-
 class PointArray(CFDiscreteGeom):
+    pass
+
+
+class TimeseriesPointArray(PointArray):
     """
     Assumptions made beyond basic CF conventions:
 
@@ -484,7 +488,8 @@ class RaggedArray(CFDiscreteGeom):
                 self._ra_type = "contiguous"
                 self._count_var = v
                 self._sample_dimension = ds[v].attrs["sample_dimension"]
-                self._instance_dimension = ds[v].dims[0]
+                if len(ds[v].dims) > 0:
+                    self._instance_dimension = ds[v].dims[0]
                 return self._ra_type
 
         raise ValueError("Ragged array type could not be determined.")
@@ -575,7 +580,6 @@ class RaggedArray(CFDiscreteGeom):
                 self._instance_dimension,
                 self.timeseries_id,
                 self._count_var,
-                self._index_var,
                 instance_vals=instance_vals,
                 instance_lookup_vector=instance_lookup_vector,
             )
@@ -589,6 +593,7 @@ class RaggedArray(CFDiscreteGeom):
             self._sample_dimension = sample_dim
         return self._data
 
+
     @staticmethod
     def _select_instances_contiguous(
         ds: xr.Dataset,
@@ -596,36 +601,32 @@ class RaggedArray(CFDiscreteGeom):
         instance_dim: str,
         timeseries_id: str,
         count_var: str,
-        index_var: str,
         instance_vals: Sequence[int] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
     ) -> xr.Dataset:
-        instance_vals = instance_vals or []
+        if instance_vals is None:
+            instance_vals = []
 
-
-        # In this case we /can/ use the lookup vector but it will be slower
+        # For contiguous using the lookup vector would be slower, so if we get only that,
+        # we'll just turn it into an instance_vals array.
         if len(instance_vals) == 0:
-            if instance_lookup_vector is not None:
-                instance_counts = ds[count_var].values
-                sample_instances = np.repeat(ds[instance_dim].values, instance_counts)
-                sample_instance_ids = np.repeat(ds[timeseries_id].values, instance_counts)
-                sample_bools = instance_lookup_vector[sample_instance_ids]
-                instances_sample_idxs = np.unique(sample_instances, return_index=True)[1]
-                instances_bools = sample_bools[instances_sample_idxs]
-                return ds.sel({sample_dim: sample_bools, instance_dim: instances_bools})
-            else:
-                sample_bools = []
-                instances_idxs = []
+            if instance_lookup_vector is not None and sum(instance_lookup_vector) > 0:
+                instance_vals = np.where(instance_lookup_vector)[0]
 
-        if len(instance_vals) == 1:
-            instances_idx = np.where(ds[timeseries_id] == instance_vals[0])[0][0]
+        def get_single_instance_idxs(ds, instance_val):
+            instances_idx = np.where(ds[timeseries_id] == instance_val)[0]
+            if len(instances_idx) == 0:
+                return None
+            instances_idx = instances_idx[0]
             sample_start = int(
                 ds[count_var].isel({instance_dim: slice(0, instances_idx)}).sum().values
             )
             sample_end = int(
                 sample_start + ds[count_var].isel({instance_dim: instances_idx}).values
             )
+            return sample_start, sample_end, instances_idx
 
+        def select_single_instance(sample_start, sample_end, instances_idx):
             return ds.isel(
                 {
                     sample_dim: slice(sample_start, sample_end),
@@ -633,28 +634,28 @@ class RaggedArray(CFDiscreteGeom):
                 }
             )
 
-        else:
-            instances_idxs = np.where(np.isin(ds[timeseries_id], instance_vals))[0]
-
-        if instances_idxs.size > 0:
-            sample_starts = [
-                int(ds[count_var].isel({instance_dim: slice(0, i)}).sum().values)
-                for i in instances_idxs
-            ]
-            sample_ends = [
-                int(start + ds[count_var].isel({instance_dim: i}).values)
-                for start, i in zip(sample_starts, instances_idxs)
-            ]
+        def select_several_instances(sample_starts, sample_ends, instances_idxs):
             sample_idxs = np.concatenate(
                 [range(start, end) for start, end in zip(sample_starts, sample_ends)]
             )
-            # locations_idxs = [i for i in locations_idxs]
-        else:
-            sample_idxs = []
-            instances_idxs = []
+            return ds.isel({sample_dim: sample_idxs,
+                            instance_dim: np.array(instances_idxs)})
 
-        ds = ds.isel({sample_dim: sample_idxs, instance_dim: instances_idxs})
-        return ds
+        if len(instance_vals) == 1:
+            if get_single_instance_idxs(ds, instance_vals[0]) is None:
+                return None
+            return select_single_instance(*get_single_instance_idxs(ds, instance_vals[0]))
+        else:
+            ds[count_var].load()
+            ds[timeseries_id].load()
+            results = [get_single_instance_idxs(ds, instance_val) for instance_val in instance_vals]
+            results = [r for r in results if r is not None]
+            if len(results) == 0:
+                return None
+            return select_several_instances(
+                *zip(*results)
+            )
+
 
     @staticmethod
     def _contiguous_to_indexed(
@@ -715,9 +716,9 @@ class RaggedArray(CFDiscreteGeom):
         return contiguous_to_point(ds, sample_dim, instance_dim, count_var)
 
 
-class OrthoMultiArray(CFDiscreteGeom):
-    def __init__(self, xarray_obj: xr.Dataset):
-        ...
+class OrthoMultiTimeseriesArray(CFDiscreteGeom):
+    # def __init__(self, xarray_obj: xr.Dataset):
+    #     ...
         # self._obj = xarray_obj
         # self._ra_type = None
         # self._sample_dimension = None
@@ -730,33 +731,27 @@ class OrthoMultiArray(CFDiscreteGeom):
 
     @property
     def array_type(self):
-        if check_orthomulti(self._data):
-            return "orthomulti"
+        if check_orthomulti_ts(self._data):
+            for v in self._data.variables:
+                if "cf_role" in self._data[v].attrs and self._data[v].attrs["cf_role"] == "timeseries_id":
+                    self._timeseries_id = v
+                    self._instance_dimension = self._data[v].dims[0]
+                    break
+            return "orthomulti_ts"
         else:
-            raise ValueError("Dataset is not an orthomulti array.")
-
-
-    def to_indexed_ragged(self):
-        ...
-
-    def to_contiguous_ragged(self):
-        ...
-
-    def to_point_array(self):
-        ...
+            raise ValueError("Dataset is not an orthomulti timeseries array.")
 
     def sel_instances(
         self,
         instance_vals: Sequence[int|str] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
-        timeseries_id: str | None = None,
     ):
         return self._select_instances(
             self._data,
             self._instance_dimension,
+            self._timeseries_id,
             instance_vals,
             instance_lookup_vector,
-            timeseries_id,
         )
 
     def set_sample_dimension(self, sample_dim: str):
@@ -765,33 +760,27 @@ class OrthoMultiArray(CFDiscreteGeom):
             self._sample_dimension = sample_dim
         return self._data
 
-    @staticmethod
-    def _orthomulti_to_contiguous():
-        ...
-
-    @staticmethod
-    def _orthomulti_to_indexed():
-        ...
-
-    @staticmethod
-    def _orthomulti_to_point():
-        ...
+    def to_raster(self,
+                  x_var,
+                  y_var):
+        return self._data.reset_index(self._timeseries_id)\
+                         .set_index({self._instance_dimension: [x_var, y_var]})\
+                         .unstack(self._instance_dimension)
 
     @staticmethod
     def _select_instances(
         ds: xr.Dataset,
         instance_dim: str,
+        timeseries_id: str,
         instance_vals: Sequence[int|str] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
-        timeseries_id: str = "location_id",
     ) -> xr.Dataset:
         """
-        Selects requested instances from an orthomulti array dataset.
+        Selects requested instances from an orthomulti timeseries array dataset.
 
         Returns a dataset containing the requested instances. If instances are requested
         that are not in the dataset, no error will be thrown.
         """
-        instance_vals = instance_vals or []
         if instance_lookup_vector is not None:
             instance_bool = instance_lookup_vector[ds[timeseries_id]]
         else:

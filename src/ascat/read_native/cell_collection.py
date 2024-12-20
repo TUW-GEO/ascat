@@ -25,39 +25,30 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import multiprocessing as mp
 from functools import partial
 from pathlib import Path
-
-from tqdm import tqdm
 
 import xarray as xr
 import numpy as np
 
-from ascat.read_native.xarray_accessors import *
-from ascat.read_native.grid_registry import GridRegistry
+import ascat.read_native.xarray_accessors
+from ascat.grids import GridRegistry
 
-from ascat.file_handling import MultiFileHandler
 from ascat.file_handling import Filenames
 from ascat.utils import get_grid_gpis
 from ascat.utils import append_to_netcdf
+
 
 class RaggedArrayCell(Filenames):
     """
     Class to read and merge ragged array cell files.
     """
-    # def __init__(self, filenames):
-        # self.filename = filename
-        # self.ds = data          #
-        # self.chunks = chunks
-
     def _read(
         self,
         filename,
         location_id=None,
         lookup_vector=None,
         date_range=None,
-        generic=True,
         preprocessor=None,
         **xarray_kwargs
     ):
@@ -68,9 +59,13 @@ class RaggedArrayCell(Filenames):
         ----------
         filename : str
             File to read.
-        generic : bool, optional
-            If True, the data is returned as a generic Indexed Ragged Array file for
-            easy merging. If False, the file is returned as its native ragged array type.
+        location_id : int or list of int
+            Location id. Only used for selecting points from contiguous ragged arrays.
+            Not used for indexed ragged arrays or point arrays.
+        lookup_vector : np.ndarray
+            Lookup vector for faster selection.
+        date_range : tuple of np.datetime64
+            Tuple of (start, end) dates.
         preprocessor : callable, optional
             Function to preprocess the dataset.
         xarray_kwargs : dict
@@ -81,20 +76,27 @@ class RaggedArrayCell(Filenames):
         ds : xarray.Dataset
             Dataset.
         """
-        ds = xr.open_dataset(filename, **xarray_kwargs)
+        if ds := self.cache.get(filename):
+            pass
+        else:
+            ds = xr.open_dataset(filename, engine = "h5netcdf", **xarray_kwargs)
+            self.cache[filename] = ds
+
         if preprocessor:
             ds = preprocessor(ds)
         ds = self._ensure_obs(ds)
 
-        # we need to make sure the time variable is in memory before converting to
-        # a point array, since reordering this as a dask array will explode the process
-        # graph later on
-        ds.time.load()
+        if ds.cf_geom.array_type == "contiguous":
+            ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
 
-        ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
-        ds = self._ensure_point(ds)
-        if date_range is not None:
-            ds = self._trim_var_range(ds, "time", *date_range)
+        elif ds.cf_geom.array_type == "indexed":
+            ds.time.load()
+            # we need to make sure the time variable is in memory before converting to
+            # a point array, since reordering this as a dask array will explode the process
+            # graph later on
+            ds = self._ensure_point(ds)
+            if date_range is not None:
+                ds = self._trim_var_range(ds, "time", *date_range)
 
         return ds
 
@@ -104,7 +106,7 @@ class RaggedArrayCell(Filenames):
              location_id=None,
              lookup_vector=None,
              preprocessor=None,
-             return_format="indexed",
+             return_format=None,
              parallel=False,
              **kwargs):
         """
@@ -132,15 +134,30 @@ class RaggedArrayCell(Filenames):
 
         if ds is not None:
             ds.set_close(partial(super()._multi_file_closer, closers))
+            # ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
 
-            if return_format == "point":
-                return ds
+            if ds.cf_geom.array_type == "contiguous" and date_range is not None:
+                ds = self._dim_safe_rechunk(ds)
+                ds = self._trim_var_range(ds, "time", *date_range)
+                ds = self._dim_safe_rechunk(ds)
 
-            if return_format == "indexed":
-                return ds.cf_geom.to_indexed_ragged()
+            if ds.cf_geom.array_type != "contiguous":
+                ds = self._trim_to_gpis(ds.chunk({"obs": 1000000}), gpis=location_id, lookup_vector=lookup_vector)
 
-            if return_format == "contiguous":
-                return ds.cf_geom.to_contiguous_ragged()
+            if return_format is not None:
+                if return_format == "point":
+                    return ds.cf_geom.to_point_array()
+
+                elif return_format == "indexed":
+                    return ds.cf_geom.to_indexed_ragged()
+
+                elif return_format == "contiguous":
+                    return ds.cf_geom.to_contiguous_ragged()
+                else:
+                    raise ValueError("return_format must be 'point', 'indexed', "
+                                     "'contiguous', or None (default, returns as read)")
+            return ds
+
 
     @staticmethod
     def _indexed_or_contiguous(ds):
@@ -165,12 +182,29 @@ class RaggedArrayCell(Filenames):
             mask = (ds[var_name] >= var_min) & (ds[var_name] <= var_max)
         else:
             mask = (ds[var_name] >= var_min) & (ds[var_name] < var_max)
-        return ds.sel(obs=mask.compute())
+
+        mask = mask.compute()
+        if ds.cf_geom.array_type == "contiguous" and "locations" in ds.dims:
+            # location_ids = np.repeat(ds.location_id, ds.row_size)
+            # filtered_ids = location_ids.data[mask.data]
+            # new_row_sizes = np.array([np.sum(filtered_ids == loc)
+            #                           for loc in ds.location_id.data])
+            # ds = ds.sel(obs=mask)
+            # ds["row_size"].values = new_row_sizes
+            # return ds
+            group_indices = np.repeat(np.arange(ds.row_size.size), ds.row_size)
+            kept_counts = np.bincount(group_indices,
+                                      weights=mask.astype(int),
+                                      minlength=ds.row_size.size).astype(np.int32)
+            ds = ds.sel(obs=mask)
+            ds["row_size"].values = kept_counts
+            return ds
+        else:
+            return ds.sel(obs=mask)
 
 
     @staticmethod
     def _ensure_obs(ds):
-        # basic heuristic - if obs isn't present, assume it's instead "time"
         ds = ds.cf_geom.set_sample_dimension("obs")
         return ds
 
@@ -246,7 +280,14 @@ class RaggedArrayCell(Filenames):
             and var not in ["row_size", "locationIndex"]
         ]]
 
-    def _merge(self, data, **kwargs):
+    @staticmethod
+    def _dim_safe_rechunk(data):
+        if "locations" in data.dims:
+            return data.chunk({"obs": 1000000, "locations": -1})
+        return data.chunk({"obs": 1000000})
+
+
+    def _merge(self, data):
         """
         Merge datasets with potentially different locations dimensions.
 
@@ -263,6 +304,26 @@ class RaggedArrayCell(Filenames):
         if data == []:
             return None
 
+        if data[0].cf_geom.array_type == "indexed":
+            return self._merge_indexed(data)
+        elif data[0].cf_geom.array_type == "point":
+            return self._merge_point(data)
+        elif data[0].cf_geom.array_type == "contiguous":
+            return self._merge_contiguous(data)
+        else:
+            raise ValueError("Array type must be 'contiguous', 'indexed', or 'point'")
+
+
+    def _merge_indexed(self, data):
+        merged_ds = xr.concat(
+            [self._preprocess(ds).chunk({"obs":-1}).cf_geom.to_point_array()
+                for ds in data if ds is not None],
+            dim="obs",
+            combine_attrs="drop_conflicts",
+        ).cf_geom.to_indexed_ragged()
+        return merged_ds
+
+    def _merge_point(self, data):
         merged_ds = xr.concat(
             [self._preprocess(ds).chunk({"obs":-1})
                 for ds in data if ds is not None],
@@ -270,9 +331,23 @@ class RaggedArrayCell(Filenames):
             # data_vars="minimal",
             # coords="minimal",
             combine_attrs="drop_conflicts",
-            **kwargs,
         )
+        return merged_ds
 
+    @staticmethod
+    def _only_obs_vars(ds):
+        return ds[[var for var in ds.variables if "obs" in ds[var].dims]]
+
+    def _merge_contiguous(self, data):
+        preprocessed = [self._preprocess(ds).chunk({"obs":-1}) for ds in data if ds is not None]
+        merged_ds = self._dim_safe_rechunk(
+            xr.merge(
+                [xr.concat([ds.drop_dims("locations") if "locations" in ds.dims
+                       else self._only_obs_vars(ds)
+                       for ds in preprocessed], dim="obs"),
+                 xr.concat([ds.drop_dims("obs") for ds in preprocessed], dim="locations")],
+            )
+        )
         return merged_ds
 
     def _preprocess(self, ds):
@@ -337,61 +412,32 @@ class RaggedArrayCell(Filenames):
         """
         if ra_type == "contiguous":
             data = self._ensure_contiguous(data)
-        elif ra_type == "indexed":
+        if ra_type == "indexed":
             data = self._ensure_indexed(data)
-        elif ra_type == "point":
+        if ra_type == "point":
             data = self._ensure_point(data)
-        else:
-            raise ValueError("ra_type must be 'contiguous', 'indexed', or 'point'")
 
         if postprocessor is not None:
             data = postprocessor(data)
 
-        # data = data[self._var_order(data)]
-
-        # custom_variable_attrs = self._kwargs.get(
-        #     "attributes", None) or self.custom_variable_attrs
-        # custom_global_attrs = self._kwargs.get(
-        #     "global_attributes", None) or self.custom_global_attrs
-        # data = self._set_attributes(data, custom_variable_attrs,
-        #                               custom_global_attrs)
-
-        # custom_variable_encodings = kwargs.pop(
-        #     "encoding", None) or self.custom_variable_encodings
-        # out_encoding = kwargs.pop("encoding", {})
-        # out_encoding = create_variable_encodings(data, out_encoding)
-        #
         data.encoding["unlimited_dims"] = ["obs"]
 
-        # for var, var_encoding in out_encoding.items():
-        #     if "_FillValue" in var_encoding and "_FillValue" in data[
-        #             var].attrs:
-        #         del data[var].attrs["_FillValue"]
-
         if mode == "a" and ra_type in ["indexed", "point"]:
-            if not Path(filename).exists():
-                data.to_netcdf(filename, **kwargs)
-            else:
+            if Path(filename).exists():
                 append_to_netcdf(filename, data, unlimited_dim="obs")
-            return
+                data.close()
+                return
 
         data.to_netcdf(filename,
-                       # encoding=out_encoding,
                        **kwargs)
+        data.close()
 
 
-class OrthoMultiCell(Filenames):
+class OrthoMultiTimeseriesCell(Filenames):
     """
     Class to read and merge orthomulti cell files.
     """
-    # def __init__(self, filename, chunks=None):
-    #     self.filename = filename
-    #     if chunks is None:
-    #         chunks = {"time": 1000, "locations": 1000}
-    #     self.chunks = chunks
-    #     self.ds = None
-
-    def _read(self, filename, generic=True, preprocessor=None, **xarray_kwargs):
+    def _read(self, filename, preprocessor=None, **xarray_kwargs):
         """
         Open one OrthoMulti file as an xarray.Dataset and preprocess it if necessary.
 
@@ -399,9 +445,6 @@ class OrthoMultiCell(Filenames):
         ----------
         filename : str
             File to read.
-        generic : bool, optional
-            If True, the data is returned as a generic Indexed Ragged Array file for
-            easy merging. If False, the file is returned as its native ragged array type.
         preprocessor : callable, optional
             Function to preprocess the dataset.
         xarray_kwargs : dict
@@ -417,20 +460,19 @@ class OrthoMultiCell(Filenames):
             ds = preprocessor(ds)
         return ds
 
-
-    def read(self, date_range=None, valid_gpis=None, lookup_vector=None, preprocessor=None, **kwargs):
+    def read(self,
+             date_range=None,
+             location_id=None,
+             lookup_vector=None,
+             preprocessor=None,
+             return_format=None,
+             parallel=False,
+             **kwargs):
         ds = super().read(preprocessor=preprocessor, **kwargs)
-        # ds = ds.set_index(locations="location_id")
-        # ds = ds.chunk(self.chunks)
         if date_range is not None:
             ds = ds.sel(time=slice(*date_range))
-        if lookup_vector is not None:
-            ds = self._trim_to_gpis(ds, lookup_vector=lookup_vector)
-        elif valid_gpis is not None:
-            # ds = ds.sel(locations=valid_gpis)
-            ds = self._trim_to_gpis(ds, gpis=valid_gpis)
-        # should I do it this way or just return the ds without having it be a class attribute?
-        # self.ds = ds
+        ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
+
         return ds
 
     def _merge(self, data):
@@ -450,20 +492,18 @@ class OrthoMultiCell(Filenames):
         if data == []:
             return None
 
-        # This handles the case where the datasets have different time dimensions but
-        # I'm not sure if I actually need to handle that case since the datasets I've
-        # seen have all the years in each cell and just need to be combined by location.
-        # This is robust, so I'll leave it for now, but consider some logic
-        # to do just a standard concat by "locations" dim if the time dims are the same.
-        #
-        # Another note - need to chunk here before combining or else it tries to load
-        # everything into memory at once. This isn't necessary if doing a regular concat
-        # along a single dimension.
+        # ensures that time dimensions are aligned in case they are not
+        data = xr.align(*data, join="outer")
 
-        merged_ds = xr.combine_by_coords(
-            [ds.chunk(-1) for ds in data if ds is not None],
+        data = [ds.chunk(-1).set_index(locations="location_id")
+                for ds in data if ds is not None]
+        merged_ds = xr.concat(
+            data,
+            dim="locations",
             combine_attrs="drop_conflicts",
-        )
+        ).rename_vars({"locations": "location_id"})
+        merged_ds["location_id"].attrs["cf_role"] = "timeseries_id"
+
         return merged_ds
 
     @staticmethod
@@ -484,20 +524,14 @@ class OrthoMultiCell(Filenames):
             Dataset with only the gpis in the list.
         """
         if ds is None:
-            return None
-        if gpis is None and lookup_vector is None:
-            pass
+            return
 
-        elif gpis is None:
-            ds_location_ids = ds["location_id"].data
-            locs_idx = lookup_vector[ds_location_ids]
-            ds = ds.sel(locations=locs_idx)
-        else:
-            ds = ds.where(ds["location_id"].isin(gpis).compute(), drop=True)
+        if (gpis is None or len(gpis) == 0) and (lookup_vector is None or len(lookup_vector)==0):
+            return ds
 
-        return ds
+        return ds.cf_geom.sel_instances(gpis, lookup_vector)
 
-grid_registry = GridRegistry()
+
 class CellGridFiles():
 
     def __init__(
@@ -515,6 +549,7 @@ class CellGridFiles():
         self.fn_format = fn_format
         self.sf_format = sf_format
         self._preprocessor = preprocessor
+        self._active_reader = None
 
 
     @classmethod
@@ -534,7 +569,7 @@ class CellGridFiles():
         init_options = {
             "root_path": root_path,
             "file_class": product_class.file_class,
-            "grid": grid_registry.get(grid_name),
+            "grid": GridRegistry().get(grid_name),
             "fn_format": product_class.fn_format,
             "preprocessor": product_class.preprocessor,
             **kwargs
@@ -542,17 +577,16 @@ class CellGridFiles():
         init_options = {**init_options}
         return cls(**init_options)
 
-    def fn_search(self, cell, sf_args=None):
+    def fn_search(self, cell):
         # get the paths to files matching a cell if the files exist
 
         filename = self.fn_format.format(cell)
-        if sf_args is not None:
-            subfolder = self.sf_format.format(**sf_args)
-            return list(self.root_path.glob(subfolder / filename))
+        if self.sf_format is not None:
+            subfolder = self.sf_format
+            files = list(self.root_path.glob(subfolder + "/" + filename))
+            return files
         else:
-            # Should it return all below root path if no subfolder is specified?
-            #return list(self.root_path.glob("**/" + filename))
-            return list(self.root_path.glob(filename))
+            return list(self.root_path.glob("**/" + filename))
 
     def convert_to_contiguous(self, out_dir, print_progress=True, **kwargs):
         """
@@ -583,7 +617,12 @@ class CellGridFiles():
         # get list of every filename in the collection
         filenames = self.spatial_search()
         files = self.file_class(filenames)
-        files.reprocess(out_dir, func, parallel=parallel, **kwargs)
+        files.reprocess(out_dir,
+                        func,
+                        parallel=parallel,
+                        read_kwargs={"preprocessor": self._preprocessor},
+                        **kwargs)
+
 
     def spatial_search(
             self,
@@ -762,6 +801,11 @@ class CellGridFiles():
             bbox=bbox,
             geom=geom,
         )
+        if ((self._active_reader is None)
+            or not
+            all(filename in self._active_reader.cache for filename in filenames)):
+            self._active_reader = self.file_class(filenames)
+
         if cell is not None:
             valid_gpis = None
             lookup_vector = None
@@ -777,7 +821,10 @@ class CellGridFiles():
                 return_lookup=True
             )
 
-        return self.file_class(filenames).read(date_range=date_range,
-                                               lookup_vector=lookup_vector,
-                                               preprocessor=self._preprocessor,
-                                               **kwargs)
+        out_ds = self._active_reader.read(date_range=date_range,
+                                          location_id=valid_gpis,
+                                          lookup_vector=lookup_vector,
+                                          preprocessor=self._preprocessor,
+                                          **kwargs)
+
+        return out_ds

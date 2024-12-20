@@ -38,7 +38,7 @@ from pyresample import kd_tree
 from pyresample.geometry import AreaDefinition
 from pyresample.geometry import SwathDefinition
 
-from ascat.read_native.grid_registry import GridRegistry #grid_registry
+from ascat.grids import GridRegistry
 
 from ascat.utils import get_grid_gpis
 from ascat.file_handling import Filenames
@@ -128,7 +128,7 @@ class Swath(Filenames):
             return None
 
         merged_ds = xr.concat(
-            [ds for ds in data if ds is not None],
+            [ds for ds in data if ds is not None and len(ds["obs"]) > 0],
             dim="obs",
             combine_attrs=self.combine_attributes,
             data_vars="minimal",
@@ -604,7 +604,6 @@ class SwathGridFiles(ChronFiles):
         dt_start, dt_end = date_range
         filenames = self.swath_search(
             dt_start, dt_end, dt_delta, search_date_fmt, date_field, end_inclusive,
-            # cell, location_id, coords, bbox, geom,
             **fmt_kwargs,
         )
 
@@ -636,19 +635,6 @@ class SwathGridFiles(ChronFiles):
         data = self.cls(filenames).read(**read_kwargs)
 
         if data:
-            # data.attrs["grid_mapping_name"] = self.grid_name
-
-            # if cell is not None:
-            #     data = data.pgg.sel_cells(cell)
-            # elif location_id is not None:
-            #     data = data.pgg.sel_gpis(location_id, gpi_var="location_id")
-            # elif coords is not None:
-            #     data = data.pgg.sel_coords(coords, max_coord_dist=max_coord_dist)
-            # elif bbox is not None:
-            #     data = data.pgg.sel_bbox(bbox)
-            # elif geom is not None:
-            #     data = data.pgg.sel_geom(geom)
-
             if date_range is not None:
                 mask = (data["time"] >= date_range[0]) & (data["time"] <= date_range[1])
                 data = data.sel(obs=mask.compute())
@@ -679,7 +665,7 @@ class SwathGridFiles(ChronFiles):
         for ds in swath.iter_read_nbytes(max_nbytes,
                                          preprocessor=self.preprocessor,
                                          print_progress=print_progress,
-                                         chunks="auto"):
+                                         chunks=-1):
             ds_cells = self.grid.gpi2cell(ds["location_id"])
             if isinstance(ds_cells, np.ma.MaskedArray):
                 ds_cells = ds_cells.compressed()
@@ -711,3 +697,5 @@ class SwathGridFiles(ChronFiles):
                                ra_type="point",
                                mode="a",
                                print_progress=print_progress)
+        if print_progress:
+            print("\n")

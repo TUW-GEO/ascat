@@ -35,6 +35,7 @@ import warnings
 from pathlib import Path
 from datetime import timedelta
 from datetime import datetime
+from collections import defaultdict
 
 import numpy as np
 
@@ -846,6 +847,7 @@ class Filenames:
             raise ValueError("filenames must be a string or list of strings.")
 
         self.filenames = [Path(f) for f in filenames]
+        self.cache = {}
 
     def _read(self, filename, **kwargs):
         """
@@ -914,9 +916,11 @@ class Filenames:
                   func,
                   parallel=False,
                   print_progress=False,
-                  **kwargs):
+                  read_kwargs=None,
+                  **write_kwargs):
         """
         Reprocess data from all files through `func`, writing the results to `out_dir`.
+        Assumes that if any files have the same name, they should be merged.
 
         Parameters
         ----------
@@ -929,26 +933,38 @@ class Filenames:
         **kwargs : dict
             Additional keyword arguments for writing.
         """
+        read_kwargs = read_kwargs or {}
         if parallel:
             read_ = delayed(self._read)
             getattr_ = delayed(getattr)
             func_ = delayed(func)
+            merge_ = delayed(self._merge)
             # data = compute(data)[0]
         else:
             read_ = self._read
             getattr_ = getattr
             func_ = func
+            merge_ = self._merge
 
         filenames = self.filenames
+
+        name_to_paths = defaultdict(list)
+        for path in filenames:
+            name_to_paths[path.name].append(path)
+
+        out_filenames = [out_dir / name for name in name_to_paths]
+        out_path_groups = list(name_to_paths.values())
+
         if print_progress:
-            filenames = tqdm(filenames)
-            filenames.set_description("Opening files...")
+            out_path_groups = tqdm(out_path_groups)
+            out_path_groups.set_description("Opening files...")
 
-        data = [func_(read_(f)) for f in filenames]
+        data = [merge_([func_(read_(f, **read_kwargs)) for f in paths])
+                for paths in out_path_groups]
 
-        self.filenames = [out_dir / f.name for f in self.filenames]
+        self.filenames = out_filenames
 
-        self.write(data, parallel=parallel, print_progress=print_progress, **kwargs)
+        self.write(data, parallel=parallel, print_progress=print_progress, **write_kwargs)
 
     def write(self, data, parallel=False, print_progress=False, **kwargs):
         """
@@ -988,6 +1004,8 @@ class Filenames:
             # Special case when the data object meant to be written to a single filename is a list
             raise ValueError("Number of data objects must match number of filenames.")
 
+        return
+
     def read(self, parallel=False, closer_attr=None, **kwargs):
         """
         Read all data from files.
@@ -1007,7 +1025,7 @@ class Filenames:
         data = [read_(f, **kwargs) for f in self.filenames]
         # data = [d for d in self.iter_read(**kwargs)]
         if closer_attr is not None:
-            closers = [getattr_(d, closer_attr) for d in data]
+            closers = [getattr_(d, closer_attr) for d in data if d is not None]
 
         if parallel:
             data = compute(data, scheduler="processes")[0]
