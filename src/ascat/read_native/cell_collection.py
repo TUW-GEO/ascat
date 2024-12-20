@@ -181,8 +181,8 @@ class RaggedArrayCell(Filenames):
         else:
             mask = (ds[var_name] >= var_min) & (ds[var_name] < var_max)
 
-        if ds.cf_geom.array_type == "contiguous":
-            mask = mask.compute()
+        mask = mask.compute()
+        if ds.cf_geom.array_type == "contiguous" and "locations" in ds.dims:
             # location_ids = np.repeat(ds.location_id, ds.row_size)
             # filtered_ids = location_ids.data[mask.data]
             # new_row_sizes = np.array([np.sum(filtered_ids == loc)
