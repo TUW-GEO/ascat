@@ -580,7 +580,6 @@ class RaggedArray(CFDiscreteGeom):
                 self._instance_dimension,
                 self.timeseries_id,
                 self._count_var,
-                self._index_var,
                 instance_vals=instance_vals,
                 instance_lookup_vector=instance_lookup_vector,
             )
@@ -602,7 +601,6 @@ class RaggedArray(CFDiscreteGeom):
         instance_dim: str,
         timeseries_id: str,
         count_var: str,
-        index_var: str,
         instance_vals: Sequence[int] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
     ) -> xr.Dataset:
