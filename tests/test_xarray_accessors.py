@@ -50,7 +50,6 @@ class TestCFDiscreteGeometryAccessor(unittest.TestCase):
             "file_class": RaggedArrayCell,
             "fn_format": "{:04d}.nc",
             # "sf_format": sf_templ,
-            # "grid": product_info.grid_registry.get("Fib12.5")["grid"],
         }
 
     def setUp(self):
@@ -108,7 +107,6 @@ class TestPyGeoGriddedArrayAccessor(unittest.TestCase):
             "file_class": RaggedArrayCell,
             "fn_format": "{:04d}.nc",
             # "sf_format": sf_templ,
-            # "grid": product_info.grid_registry.get("Fib12.5")["grid"],
         }
 
     def setUp(self):

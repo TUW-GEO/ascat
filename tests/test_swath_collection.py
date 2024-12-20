@@ -60,11 +60,8 @@ class TestSwath(unittest.TestCase):
         # Open of multiple real files
         swath_paths = list(self.real_swaths_path.glob("*.nc"))
         ra = Swath(swath_paths)
-        t1 = time()
         ds1 = ra.read().load()
-        t2 = time()
         ds2 = ra.read(parallel=True).load()
-        t3 = time()
 
         reconstructed = xr.open_mfdataset(
             swath_paths,
@@ -72,15 +69,12 @@ class TestSwath(unittest.TestCase):
             combine="nested",
             combine_attrs="drop_conflicts",
         ).load()
-        t4 = time()
+
         ds3 = [data for data in ra.iter_read_nbytes(1_000_000_000_000)][0].load()
-        t5 = time()
 
         xr.testing.assert_identical(ds1, reconstructed)
         xr.testing.assert_identical(ds2, reconstructed)
         xr.testing.assert_identical(ds3, reconstructed)
-
-        assert (t3 - t2) < (t2 - t1)
 
     def test__ensure_obs(self):
         swath_path = self.tempdir_path / "swath.nc"

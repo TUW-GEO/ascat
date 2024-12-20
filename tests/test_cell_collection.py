@@ -109,14 +109,10 @@ class TestOrthoMultiCellFile(unittest.TestCase):
 
         era5 = CellGridFiles.from_product_class(era5_path, ERA5Cell)
         era5_bbox = era5.read(bbox=bbox)
-        print(bbox)
-        print(era5_bbox)
 
         bbox = [b+5 for b in bbox]
         gldas = CellGridFiles.from_product_class(gldas_path, GLDASCell)
         gldas_bbox = gldas.read(bbox=bbox)
-        print(bbox)
-        print(gldas_bbox)
 
     def test_cellgridfiles_read(self):
         gldas_path = Path("tests/ascat_test_data/warp/gldas_2023/")
@@ -146,7 +142,7 @@ class TestOrthoMultiCellFile(unittest.TestCase):
         del grid
 
         gldas_files = CellGridFiles.from_product_class(gldas_path, GLDASCell)
-        print(gldas_files.read().cf_geom.to_raster(x_var="lon", y_var="lat"))
+        gldas_files.read().cf_geom.to_raster(x_var="lon", y_var="lat")
 
 
 
@@ -364,7 +360,7 @@ class TestCellGridFiles(unittest.TestCase):
         self.assertEqual(contig_collection.file_class, RaggedArrayCell)
 
     def test_spatial_search(self):
-        root_path = self.tempdir_path / "contiguous"
+        root_path = self.tempdir_path / "contiguous" / "metop_a"
         contig_collection = CellGridFiles(
             **self._init_options(root_path)
         )
@@ -437,9 +433,6 @@ class TestCellGridFiles(unittest.TestCase):
             **self._init_options(root_path, {"sat_str": "{sat}"}, {"sat_str": {"sat": "metop_[abc]"}})
         )
         ds = indexed_collection.read(bbox=(70.5, 75, 175.5, 179))
-        print(ds)
-        print(ds.lon.values)
-        print(ds.lat.values)
 
     def test_read_contiguous(self):
         root_path = self.tempdir_path / "contiguous"
@@ -447,9 +440,6 @@ class TestCellGridFiles(unittest.TestCase):
             **self._init_options(root_path, {"sat_str": "{sat}"}, {"sat_str": {"sat": "metop_[abc]"}})
         )
         ds = indexed_collection.read(bbox=(70.5, 75, 175.5, 179))
-        print(ds)
-        print(ds.lon.values)
-        print(ds.lat.values)
 
     def test_read_single_ts_indexed(self):
         files = list(self.indexed_cells_path.glob("*.nc"))
@@ -457,7 +447,6 @@ class TestCellGridFiles(unittest.TestCase):
         one_valid_gpi = [first_file_ds["location_id"][first_file_ds["locationIndex"][5]].values]
         collection = CellGridFiles.from_product_class(self.indexed_cells_path, RaggedArrayDummyCellProduct)
         ds = collection.read(location_id=one_valid_gpi)
-        print(ds)
 
     def test_read_n_ts_from_one_cell_indexed(self):
         n = 5
@@ -484,13 +473,9 @@ class TestCellGridFiles(unittest.TestCase):
         first_file_ds = xr.open_dataset(files[0])
         second_file_ds = xr.open_dataset(files[1])
 
-        print(files[0], files[1])
-        print(first_file_ds)
         n_valid_gpis_1 = np.unique([first_file_ds["location_id"][first_file_ds["locationIndex"]].values])[:n]
-        print(second_file_ds)
         n_valid_gpis_2 = np.unique([second_file_ds["location_id"][second_file_ds["locationIndex"]].values])[:n]
         n_times_2_valid_gpis = np.concatenate([n_valid_gpis_1, n_valid_gpis_2])
-        print(len(n_times_2_valid_gpis))
 
         collection = CellGridFiles.from_product_class(self.indexed_cells_path, RaggedArrayDummyCellProduct)
 
@@ -521,7 +506,6 @@ class TestCellGridFiles(unittest.TestCase):
         one_valid_gpi = [valid_gpis[0]]
         collection = CellGridFiles.from_product_class(self.contiguous_cells_path, RaggedArrayDummyCellProduct)
         ds = collection.read(location_id=one_valid_gpi)
-        print(ds)
 
     def test_read_n_ts_from_one_cell_contiguous(self):
         n = 5
@@ -547,15 +531,11 @@ class TestCellGridFiles(unittest.TestCase):
         first_file_ds = xr.open_dataset(files[0])
         second_file_ds = xr.open_dataset(files[1])
 
-        print(files[0], files[1])
-        print(first_file_ds)
         valid_gpis_1 = np.unique(np.repeat(first_file_ds["location_id"].values, first_file_ds["row_size"].values))
         n_valid_gpis_1 = valid_gpis_1[:n]
-        print(second_file_ds)
         valid_gpis_2 = np.unique(np.repeat(second_file_ds["location_id"].values, second_file_ds["row_size"].values))
         n_valid_gpis_2 = valid_gpis_2[:n]
         n_times_2_valid_gpis = np.concatenate([n_valid_gpis_1, n_valid_gpis_2])
-        print(len(n_times_2_valid_gpis))
 
         collection = CellGridFiles.from_product_class(self.contiguous_cells_path, RaggedArrayDummyCellProduct)
 
