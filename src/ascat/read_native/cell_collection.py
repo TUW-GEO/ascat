@@ -59,6 +59,13 @@ class RaggedArrayCell(Filenames):
         ----------
         filename : str
             File to read.
+        location_id : int or list of int
+            Location id. Only used for selecting points from contiguous ragged arrays.
+            Not used for indexed ragged arrays or point arrays.
+        lookup_vector : np.ndarray
+            Lookup vector for faster selection.
+        date_range : tuple of np.datetime64
+            Tuple of (start, end) dates.
         preprocessor : callable, optional
             Function to preprocess the dataset.
         xarray_kwargs : dict
