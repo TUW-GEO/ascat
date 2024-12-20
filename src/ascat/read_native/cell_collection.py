@@ -408,14 +408,14 @@ class RaggedArrayCell(Filenames):
         data.encoding["unlimited_dims"] = ["obs"]
 
         if mode == "a" and ra_type in ["indexed", "point"]:
-            if not Path(filename).exists():
-                data.to_netcdf(filename, **kwargs)
-            else:
+            if Path(filename).exists():
                 append_to_netcdf(filename, data, unlimited_dim="obs")
-            return
+                data.close()
+                return
 
         data.to_netcdf(filename,
                        **kwargs)
+        data.close()
 
 
 class OrthoMultiTimeseriesCell(Filenames):
