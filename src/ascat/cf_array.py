@@ -646,6 +646,8 @@ class RaggedArray(CFDiscreteGeom):
                 return None
             return select_single_instance(*get_single_instance_idxs(ds, instance_vals[0]))
         else:
+            ds[count_var].load()
+            ds[timeseries_id].load()
             results = [get_single_instance_idxs(ds, instance_val) for instance_val in instance_vals]
             results = [r for r in results if r is not None]
             if len(results) == 0:
