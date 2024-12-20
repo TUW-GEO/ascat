@@ -155,7 +155,6 @@ def swath_stacker_main(cli_args):
 
     quiet = args.quiet
 
-
     fmt_kwargs = args.fmt_kwargs
 
     swath_files = SwathGridFiles.from_product_id(filepath, product_id)

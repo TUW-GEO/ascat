@@ -220,7 +220,6 @@ class CFDiscreteGeometryAccessor:
         scat = ax.scatter(lon, lat, c=c, **kwargs)
         return fig, ax, scat
 
-
     def to_point_array(self):
         return self._obj.to_point_array()
 

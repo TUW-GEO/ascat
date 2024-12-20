@@ -95,8 +95,6 @@ class RaggedArrayCell(Filenames):
             # a point array, since reordering this as a dask array will explode the process
             # graph later on
             ds = self._ensure_point(ds)
-            # we ONLY trim the date range if we have an indexed array - making it much
-            # faster to recombine. Otherwise we do it after merging.
             if date_range is not None:
                 ds = self._trim_var_range(ds, "time", *date_range)
 
@@ -321,8 +319,6 @@ class RaggedArrayCell(Filenames):
             [self._preprocess(ds).chunk({"obs":-1}).cf_geom.to_point_array()
                 for ds in data if ds is not None],
             dim="obs",
-            # data_vars="minimal",
-            # coords="minimal",
             combine_attrs="drop_conflicts",
         ).cf_geom.to_indexed_ragged()
         return merged_ds
@@ -626,6 +622,7 @@ class CellGridFiles():
                         parallel=parallel,
                         read_kwargs={"preprocessor": self._preprocessor},
                         **kwargs)
+
 
     def spatial_search(
             self,
