@@ -27,3 +27,4 @@ dependencies:
       - build
       - flake8
       - yapf
+      - cf_xarray
