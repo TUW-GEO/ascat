@@ -139,6 +139,19 @@ class PyGeoGriddedArrayAccessor:
             instance_lookup_vector=lookup_vector,
         )
 
+    def lonlat_vars_from_gpi_var(
+        self,
+        gpi_var,
+        lon_var="lon",
+        lat_var="lat"
+    ) -> tuple[xr.DataArray, xr.DataArray]:
+        grid = self.grid
+        lons, lats = grid.gpi2lonlat(self._obj[gpi_var])
+        return (
+            xr.DataArray(lons, dims=self._obj[gpi_var].dims, name=lon_var),
+            xr.DataArray(lats, dims=self._obj[gpi_var].dims, name=lat_var)
+        )
+
 
 
 @xr.register_dataset_accessor("cf_geom")
