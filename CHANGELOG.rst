@@ -2,6 +2,15 @@
 Changelog
 =========
 
+Version 2.4.4
+=============
+
+- Fix numpy v2.0 related issues
+- Fix CI settings
+- Add EODAG tutorial
+- Add Filename class
+- Level 1 and 2 reader use new Filename class
+
 Version 2.4.3
 =============
 
