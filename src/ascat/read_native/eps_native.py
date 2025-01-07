@@ -1975,7 +1975,7 @@ def read_szf_fmv_13(eps_file, ignore_noise_ool=False):
 
     fields = [("longitude_full", long_nan), ("latitude_full", long_nan),
               ("sigma0_full", long_nan), ("inc_angle_full", uint_nan),
-              ("azi_angle_full", int_nan), ("flagfield", int_nan)]
+              ("azi_angle_full", int_nan), ("flagfield", uint_nan)]
 
     for f, nan_val in fields:
         data[f] = eps_file.mdr[f.upper()].flatten()
