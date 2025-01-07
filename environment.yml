@@ -11,7 +11,7 @@ dependencies:
   - xarray
   - dask
   - shapely
-  - libtiff
+  - pyproj
   - pip
   - pip:
       - cadati
