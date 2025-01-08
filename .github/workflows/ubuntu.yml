@@ -22,9 +22,9 @@ jobs:
           submodules: false # does not work with self-hosted testdata
       - name: install libtiff dependency
         run: |
-          apt-get update
-          apt-get install -y libtiff5
-          apt-get install -y libtinfo5
+          sudo apt-get update
+          sudo apt-get install -y libtiff5
+          sudo apt-get install -y libtinfo5
       - name: Checkout test data
         shell: bash -l {0}
         run : |
