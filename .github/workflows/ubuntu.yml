@@ -23,8 +23,7 @@ jobs:
       - name: install libtiff dependency
         run: |
           sudo apt-get update
-          sudo apt-get install -y libtiff5
-          sudo apt-get install -y libtinfo5
+          sudo apt-get install -y libtiff-dev
       - name: Checkout test data
         shell: bash -l {0}
         run : |
