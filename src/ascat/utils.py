@@ -459,6 +459,7 @@ def get_grid_gpis(
     else:
         gpis = None
 
+    gpis = np.unique(gpis)
     if return_lookup:
         lookup_vector = gpis_to_lookup(grid, gpis)
         return gpis, lookup_vector
