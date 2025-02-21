@@ -428,8 +428,14 @@ class RaggedArrayCell(Filenames):
                 data.close()
                 return
 
-        data.to_netcdf(filename,
-                       **kwargs)
+        import warnings
+        with warnings.catch_warnings():
+            # NetCDF will sometimes warn us about endianness for some reason and idk why
+            warnings.filterwarnings("ignore",
+                                    message="endian-ness of dtype and endian kwarg do not match, using endian kwarg",
+                                    category=UserWarning)
+            data.to_netcdf(filename,
+                        **kwargs)
         data.close()
 
 
