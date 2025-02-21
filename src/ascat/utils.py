@@ -34,6 +34,10 @@ from tempfile import NamedTemporaryFile
 import numpy as np
 import xarray as xr
 
+import netCDF4
+
+from shapely.geometry import Point
+
 int8_nan = np.iinfo(np.int8).min
 uint8_nan = np.iinfo(np.uint8).max
 int16_nan = np.iinfo(np.int16).min
@@ -383,6 +387,270 @@ def get_roi_subset(ds, roi):
 
     return ds
 
+def get_grid_gpis(
+        grid,
+        cell=None,
+        location_id=None,
+        coords=None,
+        bbox=None,
+        geom=None,
+        max_coord_dist=np.inf,
+        return_lookup: bool = False,
+):
+    """
+    Get grid point indices.
+
+    Parameters
+    ----------
+    grid : pygeogrids.CellGrid
+        Grid object.
+    cell : int or iterable of int, optional
+        Cell number(s).
+    location_id : int or iterable of int, optional
+        Location ID.
+    coords : tuple, optional
+        Tuple of (lon, lat) coordinates.
+    bbox : tuple, optional
+        Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+    geom : shapely.geometry.BaseGeometry, optional
+        Geometry object.
+    max_coord_dist : float, optional
+        Maximum distance from coordinates to return a gpi.
+
+    Returns
+    -------
+    gpi : int
+        Grid point index.
+    lookup_vector : numpy.ndarray
+        Lookup vector. (only if return_lookup is True)
+    """
+    if cell is not None:
+        gpis, _, _ = grid.grid_points_for_cell(cell)
+    elif location_id is not None:
+        gpis = location_id
+        if not isinstance(gpis, list) and not isinstance(gpis, np.ndarray):
+            gpis = [gpis]
+        gpis = np.array(gpis)
+    elif coords is not None:
+        gpis, dist = grid.find_nearest_gpi(*coords)
+        gpis = np.array(gpis)
+        dist = np.array(dist)
+        gpis = gpis[dist <= max_coord_dist]
+
+    elif bbox is not None:
+        gpis = grid.get_bbox_grid_points(*bbox)
+    elif geom is not None:
+        lonmin, latmin, lonmax, latmax = geom.bounds
+        bbox_gpis, bbox_lats, bbox_lons = grid.get_bbox_grid_points(
+            latmin,
+            latmax,
+            lonmin,
+            lonmax,
+            both=True
+        )
+        if len(bbox_gpis) > 0:
+            gpis = [
+                gpi
+                for gpi, lat, lon in zip(bbox_gpis, bbox_lats, bbox_lons)
+                if geom.contains(Point(lon, lat))
+            ]
+        else:
+            gpis = None
+    else:
+        gpis = None
+
+    gpis = np.unique(gpis)
+    if return_lookup:
+        lookup_vector = gpis_to_lookup(grid, gpis)
+        return gpis, lookup_vector
+
+    return gpis
+
+def gpis_to_lookup(grid, gpis):
+    """
+    Create lookup vector from grid point indices.
+
+    Parameters
+    ----------
+    grid : pygeogrids.BasicGrid
+        Grid object.
+    gpis : numpy.ndarray
+        Grid point indices.
+
+    Returns
+    -------
+    lookup_vector : numpy.ndarray
+        Lookup vector.
+    """
+    if gpis is not None:
+        lookup_vector = np.zeros(grid.gpis.max()+1, dtype=bool)
+        lookup_vector[gpis] = 1
+        return lookup_vector
+
+def append_to_netcdf(filename, ds_to_append, unlimited_dim):
+    """Appends an xarray dataset to an existing netCDF file along a given unlimited dim.
+
+    Parameters
+    ----------
+    filename : str or Path
+        Filename of netCDF file to append to.
+    ds_to_append : xarray.Dataset
+        Dataset to append.
+    unlimited_dim : str or list of str
+        Name of the unlimited dimension to append along.
+
+    Raises
+    ------
+    ValueError
+        If more than one unlimited dim is given.
+    """
+    # By @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
+    with netCDF4.Dataset(filename, mode='a') as nc:
+        nc.set_auto_maskandscale(False)
+        nc_coord = nc.dimensions[unlimited_dim]
+        nc_shape = len(nc_coord)
+
+        added_size = ds_to_append.sizes[unlimited_dim]
+        variables, _ = xr.conventions.encode_dataset_coordinates(ds_to_append)
+
+        for name, data in variables.items():
+            if unlimited_dim not in data.dims:
+                # Nothing to do, data assumed to the identical
+                continue
+
+            nc_variable = nc[name]
+            _expand_variable(nc_variable, data, unlimited_dim, nc_shape,
+                             added_size)
+
+def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
+    # Adapted from @hmaarrfk on github: https://github.com/pydata/xarray/issues/1672
+    # For time deltas, we must ensure that we use the same encoding as
+    # what was previously stored.
+    # We likely need to do this as well for variables that had custom
+    # encodings too
+    data.encoding = dict()
+    if hasattr(nc_variable, 'calendar'):
+        data.encoding['calendar'] = nc_variable.calendar
+    if hasattr(nc_variable, 'calender'):
+        data.encoding['calendar'] = nc_variable.calender
+
+    if hasattr(nc_variable, 'dtype'):
+        data.encoding['dtype'] = nc_variable.dtype
+    if hasattr(nc_variable, 'units'):
+        data.encoding['units'] = nc_variable.units
+    if hasattr(nc_variable,
+               '_FillValue') and data.attrs.get('_FillValue') is None:
+        data.encoding['_FillValue'] = nc_variable._FillValue
+    if hasattr(nc_variable,
+               'missing_value') and data.attrs.get('missing_value') is None:
+        data.encoding['missing_value'] = nc_variable.missing_value
+
+    data_encoded = xr.conventions.encode_cf_variable(data)
+
+    left_slices = data.dims.index(expanding_dim)
+    right_slices = data.ndim - left_slices - 1
+    nc_slice = ((slice(None),) * left_slices +
+                (slice(nc_shape, nc_shape + added_size),) + (slice(None),) *
+                (right_slices))
+    nc_variable[nc_slice] = data_encoded.data
+
+def create_variable_encodings(ds,
+                              custom_variable_encodings=None,
+                              custom_dtypes=None):
+    """
+    Create an encoding dictionary for a dataset, optionally
+    overriding the default encoding or adding additional
+    encoding parameters.
+    New parameters cannot be added to default encoding for
+    a variable, only overridden.
+
+    E.g. if you want to add a "units" encoding to "lon",
+    you should also pass "dtype", "zlib", "complevel",
+    and "_FillValue" if you don't want to lose those.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset.
+    custom_variable_encodings : dict, optional
+        Custom encodings.
+
+    Returns
+    -------
+    ds : xarray.Dataset
+        Dataset with encodings.
+    """
+    if custom_variable_encodings is None:
+        custom_variable_encodings = {}
+
+    if "row_size" in ds.data_vars:
+        # contiguous RA case
+        first_var = {"row_size": {"dtype": "int64"}}
+        coord_vars = {
+            "lon": {"dtype": "float32",},
+            "lat": {"dtype": "float32",},
+            "alt": {"dtype": "float32",},
+        }
+    elif "locationIndex" in ds.data_vars:
+        # indexed RA case
+        first_var = {"locationIndex": {"dtype": "int64"}}
+        coord_vars = {
+            "lon": {"dtype": "float32"},
+            "lat": {"dtype": "float32"},
+            "alt": {"dtype": "float32"},
+        }
+    else:
+        # swath file case
+        first_var = {}
+        coord_vars = {
+            "lon": {"dtype": "float32"},
+            "lat": {"dtype": "float32"},
+            # "longitude": {"dtype": "float32"},
+            # "latitude": {"dtype": "float32"},
+        }
+
+    # default encodings for coordinates and row_size
+    default_encoding = {
+        **first_var,
+        **coord_vars,
+        "location_id": {
+            "dtype": "int64",
+        },
+        "time": {
+            "dtype": "float64",
+            "units": "days since 1900-01-01 00:00:00",
+        },
+    }
+
+    for _, var_encoding in default_encoding.items():
+        if var_encoding["dtype"] != "int64":
+            var_encoding["_FillValue"] = None
+        var_encoding["zlib"] = True
+        var_encoding["complevel"] = 4
+
+    for var, dtype in ds.dtypes.items():
+        if var not in default_encoding:
+            dtype = ds[var].encoding.get("dtype", dtype)
+            default_encoding[var] = {
+                "dtype": dtype,
+                "zlib": bool(np.issubdtype(dtype, np.number)),
+                "complevel": 4,
+                "_FillValue": dtype_to_nan[dtype],
+            }
+
+    if custom_dtypes is not None:
+        custom_variable_encodings = {
+            var: {
+                "dtype": custom_dtypes[var],
+                "zlib": bool(np.issubdtype(custom_dtypes[var], np.number)),
+                "complevel": 4,
+                "_FillValue": dtype_to_nan[custom_dtypes[var]],
+            } for var in custom_dtypes.names if var in ds.data_vars
+        }
+
+    encoding = {**default_encoding, **custom_variable_encodings}
+
+    return encoding
 def get_file_format(filename):
     """
     Try to guess the file format from the extension.
