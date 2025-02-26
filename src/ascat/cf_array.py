@@ -418,6 +418,31 @@ class TimeseriesPointArray(PointArray):
             sort_vars or self._contiguous_sort_vars,
         )
 
+    def resample_to_orthomulti(
+            self,
+            instance_dim: str = "locations",
+            timeseries_id: str = "location_id",
+            count_var: str = "row_size",
+            instance_vars: Sequence[str] | None = None,
+            coord_vars: Sequence[str] | None = None,
+            sort_vars: Sequence[str] | None = None,
+            vars_to_resample: Sequence[str] | None = None,
+            resample_method: callable = np.mean,
+            resample_period: str = "1M",
+    ):
+        return self._resample_point_to_orthomulti(
+            self._data,
+            self._sample_dimension,
+            instance_dim,
+            timeseries_id,
+            count_var,
+            instance_vars or self._instance_vars,
+            coord_vars or self._coord_vars,
+            sort_vars or self._contiguous_sort_vars,
+            vars_to_resample,
+            resample_method,
+            resample_period,
+        )
 
     def to_point_array(self):
         return self._data
@@ -507,6 +532,32 @@ class TimeseriesPointArray(PointArray):
                 ds[c] = ds[c].max("time", keep_attrs=True)
         ds.attrs.pop("featureType")
         return ds
+
+
+    @staticmethod
+    def _resample_point_to_orthomulti(
+        ds: xr.Dataset,
+        sample_dim: str,
+        instance_dim: str,
+        timeseries_id: str,
+        count_var: str = "row_size",
+        instance_vars: Sequence[str] | None = None,
+        coord_vars: Sequence[str] | None = None,
+        sort_vars: Sequence[str] | None = None,
+        vars_to_resample: Sequence[str] | None = None,
+        resample_method: callable = np.mean,
+        resample_period: str = "1M",
+    ) -> xr.Dataset:
+        """
+        At the moment, minimum resolution is 1D
+        """
+        ds = ds.rename({sample_dim: "time"}).set_xindex("time")
+        ds = ds.set_index(event=["time", timeseries_id]).unstack("event")
+        ds = ds.resample(time=resample_period).apply(resample_method)
+        ds.attrs.pop("featureType")
+        return ds
+
+
 
 class RaggedArray(CFDiscreteGeom):
     @property
