@@ -398,8 +398,26 @@ class TimeseriesPointArray(PointArray):
             sort_vars or self._contiguous_sort_vars,
         )
 
-    def to_orthomulti(self):
-        pass
+    def to_orthomulti(
+            self,
+            instance_dim: str = "locations",
+            timeseries_id: str = "location_id",
+            count_var: str = "row_size",
+            instance_vars: Sequence[str] | None = None,
+            coord_vars: Sequence[str] | None = None,
+            sort_vars: Sequence[str] | None = None,
+    ):
+        return self._point_to_orthomulti(
+            self._data,
+            self._sample_dimension,
+            instance_dim,
+            timeseries_id,
+            count_var,
+            instance_vars or self._instance_vars,
+            coord_vars or self._coord_vars,
+            sort_vars or self._contiguous_sort_vars,
+        )
+
 
     def to_point_array(self):
         return self._data
@@ -468,6 +486,27 @@ class TimeseriesPointArray(PointArray):
             sort_vars,
         )
 
+    @staticmethod
+    def _point_to_orthomulti(
+        ds: xr.Dataset,
+        sample_dim: str,
+        instance_dim: str,
+        timeseries_id: str,
+        count_var: str = "row_size",
+        instance_vars: Sequence[str] | None = None,
+        coord_vars: Sequence[str] | None = None,
+        sort_vars: Sequence[str] | None = None,
+    ) -> xr.Dataset:
+        """
+        At the moment, minimum resolution is 1D
+        """
+        ds = ds.rename({sample_dim: "time"}).set_xindex("time")
+        ds = ds.set_index(event=["time", timeseries_id]).unstack("event")
+        for c in ds.coords:
+            if "time" in ds[c].dims and c != "time":
+                ds[c] = ds[c].max("time", keep_attrs=True)
+        ds.attrs.pop("featureType")
+        return ds
 
 class RaggedArray(CFDiscreteGeom):
     @property
