@@ -242,8 +242,11 @@ class CFDiscreteGeometryAccessor:
     def to_contiguous_ragged(self, **kwargs):
         return self._obj.to_contiguous_ragged(**kwargs)
 
-    def to_orthomulti(self):
-        return self._obj.to_orthomulti()
+    def to_orthomulti(self, **kwargs):
+        return self._obj.to_orthomulti(**kwargs)
+
+    def resample_to_orthomulti(self, **kwargs):
+        return self._obj.resample_to_orthomulti(**kwargs)
 
     def to_raster(self, *args, **kwargs):
         return self._obj.to_raster(*args, **kwargs)
