@@ -11,7 +11,7 @@ from pygeogrids.netcdf import load_grid
 
 from pathlib import Path
 
-from ascat.cell import RaggedArrayCell
+from ascat.cell import RaggedArrayTs
 from ascat.cell import OrthoMultiTimeseriesCell
 
 class BaseCellProduct:
@@ -22,7 +22,7 @@ class BaseCellProduct:
         return ds
 
 class RaggedArrayCellProduct(BaseCellProduct):
-    file_class = RaggedArrayCell
+    file_class = RaggedArrayTs
     sample_dim = "obs"
     instance_dim = "locations"
 

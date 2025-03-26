@@ -39,7 +39,7 @@ from ascat.utils import get_grid_gpis
 from ascat.utils import append_to_netcdf
 
 
-class RaggedArrayCell(Filenames):
+class RaggedArrayTs(Filenames):
     """
     Class to read and merge ragged array cell files.
     """

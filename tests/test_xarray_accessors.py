@@ -13,7 +13,7 @@ from ascat.read_native import generate_test_data as gtd
 # from ascat.read_native.product_info import cell_io_catalog
 
 from ascat.read_native.xarray_accessors import *
-from ascat.cell import RaggedArrayCell
+from ascat.cell import RaggedArrayTs
 
 
 def add_sat_id(ds, sat_name):
@@ -47,7 +47,7 @@ class TestCFDiscreteGeometryAccessor(unittest.TestCase):
     def _init_options(root_path, sf_templ=None, sf_read_fmt=None):
         return {
             "root_path": root_path,
-            "file_class": RaggedArrayCell,
+            "file_class": RaggedArrayTs,
             "fn_format": "{:04d}.nc",
             # "sf_format": sf_templ,
         }
@@ -104,7 +104,7 @@ class TestPyGeoGriddedArrayAccessor(unittest.TestCase):
     def _init_options(root_path, sf_templ=None, sf_read_fmt=None):
         return {
             "root_path": root_path,
-            "file_class": RaggedArrayCell,
+            "file_class": RaggedArrayTs,
             "fn_format": "{:04d}.nc",
             # "sf_format": sf_templ,
         }

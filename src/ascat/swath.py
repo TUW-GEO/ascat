@@ -651,7 +651,7 @@ class SwathGridFiles(ChronFiles):
         """
         Stack all swath files to cell files, writing them in parallel.
         """
-        from ascat.cell import RaggedArrayCell
+        from ascat.cell import RaggedArrayTs
 
         fmt_kwargs = fmt_kwargs or {}
         if date_range is not None:
@@ -690,7 +690,7 @@ class SwathGridFiles(ChronFiles):
                     cell_fname = Path(out_dir)/self.cell_fn_format.format(c)
                     cell_fnames.append(cell_fname)
 
-            writer_class = RaggedArrayCell(cell_fnames)
+            writer_class = RaggedArrayTs(cell_fnames)
             writer_class.write(ds_list,
                                parallel=True,
                                postprocessor=self.postprocessor,

@@ -11,7 +11,7 @@ import ascat.read_native.generate_test_data as gtd
 
 from ascat.grids import GridRegistry, NamedFileGridRegistry
 from ascat.read_native.product_info import RaggedArrayCellProduct, OrthoMultiArrayCellProduct
-from ascat.cell import RaggedArrayCell
+from ascat.cell import RaggedArrayTs
 from ascat.cell import OrthoMultiTimeseriesCell
 from ascat.cell import CellGridFiles
 
@@ -164,13 +164,13 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test_init(self):
         contiguous_ragged_path = self.tempdir_path/ "contiguous" / "2588_contiguous_ragged.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
+        ra = RaggedArrayTs(contiguous_ragged_path)
         self.assertEqual(ra.filenames[0], contiguous_ragged_path)
         # self.assertIsNone(ra.ds)
 
     def test_read(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
+        ra = RaggedArrayTs(contiguous_ragged_path)
         ds = ra.read(chunks={"obs": 3})
         self.assertIsInstance(ds, xr.Dataset)
         self.assertIn("lon", ds)
@@ -184,7 +184,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test__ensure_obs(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
+        ra = RaggedArrayTs(contiguous_ragged_path)
         ds = xr.open_dataset(contiguous_ragged_path)
         # original_dim = ds["time"]
         self.assertNotIn("obs", ds.dims)
@@ -197,13 +197,13 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test__indexed_or_contiguous(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
+        ra = RaggedArrayTs(contiguous_ragged_path)
         ds = xr.open_dataset(contiguous_ragged_path)
         self.assertEqual(ra._indexed_or_contiguous(ds), "contiguous")
 
     def test__ensure_indexed(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2588.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
+        ra = RaggedArrayTs(contiguous_ragged_path)
         ds = xr.open_dataset(contiguous_ragged_path)
         self.assertNotIn("locationIndex", ds)
         self.assertIn("row_size", ds)
@@ -222,7 +222,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test__ensure_contiguous(self):
         indexed_ragged_path = self.tempdir_path / "indexed" / "2588.nc"
-        ra = RaggedArrayCell(indexed_ragged_path)
+        ra = RaggedArrayTs(indexed_ragged_path)
         ds = xr.open_dataset(indexed_ragged_path)
         ds = ds.chunk({"time": 1_000_000})
         self.assertIn("locationIndex", ds)
@@ -241,7 +241,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test__trim_to_gpis(self):
         indexed_ragged_path = self.tempdir_path / "indexed" / "2588.nc"
-        ra = RaggedArrayCell(indexed_ragged_path)
+        ra = RaggedArrayTs(indexed_ragged_path)
         ds = xr.open_dataset(indexed_ragged_path)
         ds = ra._ensure_obs(ds)
         ds = ds.chunk({"obs": 1_000_000})
@@ -253,7 +253,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test__trim_var_range(self):
         indexed_ragged_path = self.tempdir_path / "indexed" / "2588.nc"
-        ra = RaggedArrayCell(indexed_ragged_path)
+        ra = RaggedArrayTs(indexed_ragged_path)
         ds = xr.open_dataset(indexed_ragged_path)
         ds = ra._ensure_obs(ds)
         ds = ds.chunk({"obs": 1_000_000})
@@ -266,7 +266,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
 
     def test_back_and_forth(self):
         contiguous_ragged_path = self.tempdir_path / "contiguous" / "2587.nc"
-        ra = RaggedArrayCell(contiguous_ragged_path)
+        ra = RaggedArrayTs(contiguous_ragged_path)
         orig_ds = xr.open_dataset(contiguous_ragged_path)
         ds = ra._ensure_contiguous(orig_ds)
         xr.testing.assert_equal(orig_ds, ds)
@@ -274,8 +274,8 @@ class TestRaggedArrayCellFile(unittest.TestCase):
     def test_merge(self):
         fname1 = self.tempdir_path / "contiguous" / "2588.nc"
         fname2 = self.tempdir_path / "contiguous" / "2587.nc"
-        ra1 = RaggedArrayCell(fname1)
-        ra2 = RaggedArrayCell(fname2)
+        ra1 = RaggedArrayTs(fname1)
+        ra2 = RaggedArrayTs(fname2)
         ds1 = ra1.read(return_format="point")
         ds2 = ra2.read(return_format="point")
         merged = ra1.merge([ds1, ds2]).cf_geom.to_indexed_ragged()
@@ -291,7 +291,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
     def test__merge_contiguous(self):
         fname1 = self.tempdir_path / "contiguous" / "2588.nc"
         fname2 = self.tempdir_path / "contiguous" / "2587.nc"
-        ra = RaggedArrayCell([fname1, fname2])
+        ra = RaggedArrayTs([fname1, fname2])
         ds = ra.read()
 
 
@@ -329,7 +329,7 @@ class TestCellGridFiles(unittest.TestCase):
     def _init_options(root_path, sf_templ=None, sf_read_fmt=None):
         return {
             "root_path": root_path,
-            "file_class": RaggedArrayCell,
+            "file_class": RaggedArrayTs,
             "fn_format": "{:04d}.nc",
             #"sf_format": sf_templ,
             "grid": grid_registry.get("fibgrid_12.5"),
@@ -357,7 +357,7 @@ class TestCellGridFiles(unittest.TestCase):
         )
         self.assertEqual(contig_collection._fn(2588).name, "2588.nc")
         self.assertEqual(contig_collection.root_path, self.tempdir_path / "contiguous")
-        self.assertEqual(contig_collection.file_class, RaggedArrayCell)
+        self.assertEqual(contig_collection.file_class, RaggedArrayTs)
 
     def test_spatial_search(self):
         root_path = self.tempdir_path / "contiguous" / "metop_a"
