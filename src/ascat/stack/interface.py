@@ -32,8 +32,8 @@ from datetime import datetime
 
 import re
 
-from ascat.read_native.cell_collection import CellGridFiles
-from ascat.read_native.swath_collection import SwathGridFiles
+from ascat.cell import CellGridFiles
+from ascat.swath import SwathGridFiles
 
 
 # based on https://stackoverflow.com/a/42865957/2002471

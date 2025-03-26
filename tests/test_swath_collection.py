@@ -11,8 +11,8 @@ import numpy as np
 
 import ascat.read_native.generate_test_data as gtd
 
-from ascat.read_native.swath_collection import Swath
-from ascat.read_native.swath_collection import SwathGridFiles
+from ascat.swath import Swath
+from ascat.swath import SwathGridFiles
 from ascat.read_native.product_info import AscatH129Swath
 
 
@@ -362,7 +362,7 @@ class TestSwathGridFiles(unittest.TestCase):
                 )
 
         # reprocess to contiguous
-        from ascat.read_native.cell_collection import CellGridFiles
+        from ascat.cell import CellGridFiles
         cf = CellGridFiles.from_product_id(out_dir, "h129")
 
         contig_out_dir = self.tempdir_path / "contig_cells_out"

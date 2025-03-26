@@ -11,9 +11,9 @@ import ascat.read_native.generate_test_data as gtd
 
 from ascat.grids import GridRegistry, NamedFileGridRegistry
 from ascat.read_native.product_info import RaggedArrayCellProduct, OrthoMultiArrayCellProduct
-from ascat.read_native.cell_collection import RaggedArrayCell
-from ascat.read_native.cell_collection import OrthoMultiTimeseriesCell
-from ascat.read_native.cell_collection import CellGridFiles
+from ascat.cell import RaggedArrayCell
+from ascat.cell import OrthoMultiTimeseriesCell
+from ascat.cell import CellGridFiles
 
 
 class RaggedArrayDummyCellProduct(RaggedArrayCellProduct):

@@ -13,7 +13,7 @@ from ascat.read_native import generate_test_data as gtd
 # from ascat.read_native.product_info import cell_io_catalog
 
 from ascat.read_native.xarray_accessors import *
-from ascat.read_native.cell_collection import RaggedArrayCell
+from ascat.cell import RaggedArrayCell
 
 
 def add_sat_id(ds, sat_name):

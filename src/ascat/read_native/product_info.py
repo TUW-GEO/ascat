@@ -11,8 +11,8 @@ from pygeogrids.netcdf import load_grid
 
 from pathlib import Path
 
-from ascat.read_native.cell_collection import RaggedArrayCell
-from ascat.read_native.cell_collection import OrthoMultiTimeseriesCell
+from ascat.cell import RaggedArrayCell
+from ascat.cell import OrthoMultiTimeseriesCell
 
 class BaseCellProduct:
     fn_format = "{:04d}.nc"
@@ -111,7 +111,7 @@ class OrthoMultiArrayCellProduct(BaseCellProduct):
 
 
 class SwathProduct:
-    from ascat.read_native.swath_collection import Swath
+    from ascat.swath import Swath
     file_class = Swath
 
 class AscatSwathProduct(SwathProduct):

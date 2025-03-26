@@ -651,7 +651,7 @@ class SwathGridFiles(ChronFiles):
         """
         Stack all swath files to cell files, writing them in parallel.
         """
-        from ascat.read_native.cell_collection import RaggedArrayCell
+        from ascat.cell import RaggedArrayCell
 
         fmt_kwargs = fmt_kwargs or {}
         if date_range is not None:

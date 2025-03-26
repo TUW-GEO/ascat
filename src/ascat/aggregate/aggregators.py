@@ -37,7 +37,7 @@ import xarray as xr
 from flox.xarray import xarray_reduce
 from dask.array import unique as da_unique
 
-from ascat.read_native.swath_collection import SwathGridFiles
+from ascat.swath import SwathGridFiles
 from ascat.read_native.xarray_io import get_swath_product_id
 from ascat.read_native.xarray_io import dtype_to_nan
 
