@@ -31,7 +31,7 @@ from pathlib import Path
 import xarray as xr
 import numpy as np
 
-import ascat.read_native.xarray_accessors
+import ascat.accessors
 from ascat.grids import GridRegistry
 
 from ascat.file_handling import Filenames

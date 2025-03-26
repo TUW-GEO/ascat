@@ -12,7 +12,7 @@ from ascat.read_native import generate_test_data as gtd
 
 # from ascat.read_native.product_info import cell_io_catalog
 
-from ascat.read_native.xarray_accessors import *
+from ascat.accessors import *
 from ascat.cell import RaggedArrayTs
 
 
