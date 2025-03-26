@@ -33,6 +33,8 @@ import xarray as xr
 from pygeogrids.grids import genreg_grid
 from pygeogrids.netcdf import load_grid, save_grid
 
+from ascat.utils import dtype_to_nan
+
 
 def retrieve_or_store_grid_lut(src_grid,
                                src_grid_id,
@@ -65,7 +67,7 @@ def retrieve_or_store_grid_lut(src_grid,
     """
     if store_path == None:
         trg_grid = genreg_grid(trg_grid_size, trg_grid_size)
-        grid_lut = trg_grid.calc_lut(src_grid)
+        grid_lut = trg_grid.calc_lut(src_grid).reshape(trg_grid.shape)
     else:
         store_path = Path(store_path)
 
@@ -116,17 +118,6 @@ def regrid_swath_ds(ds, src_grid, trg_grid, grid_lut):
     idx = index_lut[grid_lut]
     nan_pos = idx == -1
 
-    missing_value = {
-        "time": 0,
-        "backscatter_flag": 255,
-        "correction_flag": 255,
-        "processing_flag": 255,
-        "surface_flag": 255,
-        "surface_soil_moisture": -2**15,
-        "backscatter40": -2**31,
-        "location_id": -2**31,
-    }
-
     coords = {
         "latitude": np.int32(trg_grid.lat2d[:, 0] / 1e-6),
         "longitude": np.int32(trg_grid.lon2d[0] / 1e-6)
@@ -150,9 +141,12 @@ def regrid_swath_ds(ds, src_grid, trg_grid, grid_lut):
         regrid_ds[var].attrs = ds[var].attrs
         regrid_ds[var].encoding = {"zlib": True, "complevel": 4}
 
-        if hasattr(ds[var], "missing_value"):
-            regrid_ds[var].data[nan_pos] = ds[var].missing_value
+        if hasattr(ds[var], "_FillValue"):
+            regrid_ds[var].data[nan_pos] = ds[var]._FillValue
         else:
-            regrid_ds[var].data[nan_pos] = missing_value[var]
+            if var == "time":
+                regrid_ds[var].data[nan_pos] = 0
+            else:
+                regrid_ds[var].data[nan_pos] = dtype_to_nan[ds[var].dtype]
 
     return regrid_ds
