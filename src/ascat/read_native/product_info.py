@@ -119,7 +119,6 @@ class AscatSwathProduct(SwathProduct):
 
     @classmethod
     def preprocess_(cls, ds):
-        ds["location_id"] = ds["location_id"].astype(np.int32)
         ds["location_id"].attrs["cf_role"] = "timeseries_id"
         ds.attrs["global_attributes_flag"] = 1
         ds.attrs["featureType"] = "point"
