@@ -146,7 +146,9 @@ def point_to_contiguous(
 
     for var in instance_vars:
         if var in ds:
+            encoding = ds[var].encoding
             ds[var] = (instance_dim, ds[var][unique_index_1d].data, ds[var].attrs)
+            ds[var].encoding = encoding
             if var in coord_vars:
                 ds = ds.set_coords(var)
     ds = ds.assign_attrs({"featureType": "timeSeries"})
