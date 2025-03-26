@@ -162,13 +162,6 @@ class CFDiscreteGeometryAccessor:
         self._coord_vars = None
         self._instance_vars = None
 
-        # # get from self._obj
-        # self._arr_type = None
-        # self._sample_dimension = None
-        # self._instance_dimension = None
-        # self._count_var = None
-        # self._index_var = None
-
     @property
     def array_type(self) -> str:
         return cf_array_type(self._ds)
@@ -218,8 +211,6 @@ class CFDiscreteGeometryAccessor:
 
     def plot_var_map(self,
                      c_var: str,
-                     # x_var: str | None = None,
-                     # y_var: str | None = None,
                      **kwargs):
         """
         Plot a map of a variable. Assumes cf conventions for lon and lat.

@@ -939,7 +939,6 @@ class Filenames:
             getattr_ = delayed(getattr)
             func_ = delayed(func)
             merge_ = delayed(self._merge)
-            # data = compute(data)[0]
         else:
             read_ = self._read
             getattr_ = getattr
@@ -1023,7 +1022,6 @@ class Filenames:
             getattr_ = getattr
 
         data = [read_(f, **kwargs) for f in self.filenames]
-        # data = [d for d in self.iter_read(**kwargs)]
         if closer_attr is not None:
             closers = [getattr_(d, closer_attr) for d in data if d is not None]
 

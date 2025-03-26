@@ -51,11 +51,6 @@ class Swath(Filenames):
     """
     Class to read and merge swath files given one or more file paths.
     """
-    # def __init__(self, filename, chunks=1_000_000):
-    #     self.filename = filename
-    #     self.chunks = chunks
-    #     self.ds = None
-
     def _read(self, filename, generic=True, preprocessor=None, **xarray_kwargs):
         """
         Open one swath file as an xarray.Dataset and preprocess it if necessary.
@@ -352,9 +347,6 @@ class SwathGridFiles(ChronFiles):
             fn_read_fmt=product_class.fn_read_fmt,
             sf_read_fmt=product_class.sf_read_fmt,
             preprocessor=product_class.preprocess_,
-
-            # fn_write_fmt=io_class.fn_write_fmt,
-            # sf_write_fmt=io_class.sf_write_fmt,
         )
 
 
@@ -366,14 +358,6 @@ class SwathGridFiles(ChronFiles):
             coords=None,
             bbox=None,
             geom=None,
-            # mask_and_scale=True,
-            # date_range=None,
-            # **kwargs,
-            # timestamp,
-            # search_date_fmt="%Y%m%d*",
-            # date_field="date",
-            # date_field_fmt="%Y%m%d",
-            # return_date=False
     ):
         """
         Filter a search result for cells matching a spatial criterion.

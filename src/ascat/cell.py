@@ -134,7 +134,6 @@ class RaggedArrayTs(Filenames):
 
         if ds is not None:
             ds.set_close(partial(super()._multi_file_closer, closers))
-            # ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
 
             if ds.cf_geom.array_type == "contiguous" and date_range is not None:
                 ds = self._dim_safe_rechunk(ds)
@@ -177,7 +176,6 @@ class RaggedArrayTs(Filenames):
 
     @staticmethod
     def _trim_var_range(ds, var_name, var_min, var_max, end_inclusive=False):
-        # if var_name in ds:
         if end_inclusive:
             mask = (ds[var_name] >= var_min) & (ds[var_name] <= var_max)
         else:
@@ -185,13 +183,6 @@ class RaggedArrayTs(Filenames):
 
         mask = mask.compute()
         if ds.cf_geom.array_type == "contiguous" and "locations" in ds.dims:
-            # location_ids = np.repeat(ds.location_id, ds.row_size)
-            # filtered_ids = location_ids.data[mask.data]
-            # new_row_sizes = np.array([np.sum(filtered_ids == loc)
-            #                           for loc in ds.location_id.data])
-            # ds = ds.sel(obs=mask)
-            # ds["row_size"].values = new_row_sizes
-            # return ds
             group_indices = np.repeat(np.arange(ds.row_size.size), ds.row_size)
             kept_counts = np.bincount(group_indices,
                                       weights=mask.astype(int),
@@ -328,8 +319,6 @@ class RaggedArrayTs(Filenames):
             [self._preprocess(ds).chunk({"obs":-1})
                 for ds in data if ds is not None],
             dim="obs",
-            # data_vars="minimal",
-            # coords="minimal",
             combine_attrs="drop_conflicts",
         )
         return merged_ds
@@ -434,8 +423,7 @@ class RaggedArrayTs(Filenames):
             warnings.filterwarnings("ignore",
                                     message="endian-ness of dtype and endian kwarg do not match, using endian kwarg",
                                     category=UserWarning)
-            data.to_netcdf(filename,
-                        **kwargs)
+            data.to_netcdf(filename, **kwargs)
         data.close()
 
 
@@ -681,7 +669,6 @@ class CellGridFiles():
             matched_cells = self.grid.arrcell
 
         matched_cells = np.unique(matched_cells)
-        # self.grid.allpoints
 
         filenames = []
         for cell in matched_cells:
@@ -720,7 +707,6 @@ class CellGridFiles():
         cells : list of int
             Cells.
         """
-        # gpis, _ = self.grid.find_nearest_gpi(*coords)
         gpis = get_grid_gpis(self.grid, coords=coords)
         cells = self._cells_for_location_id(gpis)
         return cells
@@ -739,7 +725,6 @@ class CellGridFiles():
         cells : list of int
             Cells.
         """
-        # gpis = self.grid.get_bbox_grid_points(*bbox)
         gpis = get_grid_gpis(self.grid, bbox=bbox)
         cells = self._cells_for_location_id(gpis)
         return cells

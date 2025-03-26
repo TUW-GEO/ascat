@@ -88,28 +88,6 @@ def point_to_indexed(
     )
     ds[index_var] = (sample_dim, instanceIndex, {"instance_dimension": instance_dim})
 
-    # potential_instance_vars = [
-    #     "lon",
-    #     "lat",
-    #     "alt",
-    #     "longitude",
-    #     "latitude",
-    #     "altitude",
-    #     "location_description",
-    # ]
-    # instance_vars = instance_vars or potential_instance_vars
-
-    # potential_coord_vars = [
-    #     timeseries_id,
-    #     "lon",
-    #     "lat",
-    #     "alt",
-    #     "longitude",
-    #     "latitude",
-    #     "altitude",
-    # ]
-    # coord_vars = coord_vars or potential_coord_vars
-
     for var in instance_vars:
         if var in ds:
             ds = ds.assign(
@@ -196,8 +174,6 @@ def indexed_to_contiguous(
     """
     Convert an indexed ragged array dataset to a contiguous ragged array dataset
     """
-    # if not ds.chunks:
-    #     ds = ds.chunk({"obs": 1_000_000})
     sort_vars = sort_vars or []
 
     ds = ds.sortby([index_var, *sort_vars])
@@ -776,8 +752,6 @@ class RaggedArray(CFDiscreteGeom):
         """
         Convert an indexed ragged array dataset to a contiguous ragged array dataset
         """
-        # if not ds.chunks:
-        #     ds = ds.chunk({"obs": 1_000_000})
         return indexed_to_contiguous(
             ds, sample_dim, instance_dim, count_var, index_var, sort_vars
         )
@@ -811,18 +785,6 @@ class RaggedArray(CFDiscreteGeom):
 
 
 class OrthoMultiTimeseriesArray(CFDiscreteGeom):
-    # def __init__(self, xarray_obj: xr.Dataset):
-    #     ...
-        # self._obj = xarray_obj
-        # self._ra_type = None
-        # self._sample_dimension = None
-        # self._instance_dimension = None
-        # self._count_var = None
-        # self._index_var = None
-        # self._timeseries_id = None
-        # self.array_type
-        #
-
     @property
     def array_type(self):
         if check_orthomulti_ts(self._data):
