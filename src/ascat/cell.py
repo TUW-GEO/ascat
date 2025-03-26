@@ -812,7 +812,10 @@ class CellGridFiles():
             all(filename in self._active_reader.cache for filename in filenames)):
             self._active_reader = self.file_class(filenames)
 
-        if cell is not None:
+        if all(criterion is None for criterion in [cell, location_id, coords, bbox, geom]):
+            valid_gpis = None
+            lookup_vector = None
+        elif cell is not None:
             valid_gpis = None
             lookup_vector = None
         else:

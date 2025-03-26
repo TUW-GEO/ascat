@@ -133,7 +133,10 @@ class TestOrthoMultiCellFile(unittest.TestCase):
             assert t2-t1 < first_load_time
 
         gldas_files = CellGridFiles.from_product_class(gldas_path, GLDASCell)
-        gldas_files.read()
+        ds = gldas_files.read()
+        # assert it's a dataset and not empty
+        assert isinstance(ds, xr.Dataset)
+        assert len(ds) > 0
 
     def test_to_raster(self):
         gldas_path = Path("tests/ascat_test_data/warp/gldas_2023/")
