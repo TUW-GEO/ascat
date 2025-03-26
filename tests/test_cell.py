@@ -92,27 +92,6 @@ class TestOrthoMultiCellFile(unittest.TestCase):
         # just make sure it works for now
         gldas.read()
 
-    def test_bla(self):
-        lon_min, lon_max = 9, 10
-        lat_min, lat_max = 45, 46
-        bbox = lat_min, lat_max, lon_min, lon_max
-
-        from pathlib import Path
-
-        era5_path = Path("/data-read/RADAR/warp/era5_land_2024")
-        grid_path = era5_path / "grid.nc"
-        NamedFileGridRegistry.register("era5land", str(grid_path))
-
-        gldas_path = Path("/data-read/RADAR/warp/gldas_2024")
-        gldas_grid_path = gldas_path / "grid.nc"
-        NamedFileGridRegistry.register("gldas", str(gldas_grid_path))
-
-        era5 = CellGridFiles.from_product_class(era5_path, ERA5Cell)
-        era5_bbox = era5.read(bbox=bbox)
-
-        bbox = [b+5 for b in bbox]
-        gldas = CellGridFiles.from_product_class(gldas_path, GLDASCell)
-        gldas_bbox = gldas.read(bbox=bbox)
 
     def test_cellgridfiles_read(self):
         gldas_path = Path("tests/ascat_test_data/warp/gldas_2023/")

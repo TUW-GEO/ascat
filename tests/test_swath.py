@@ -229,22 +229,6 @@ class TestSwathGridFiles(unittest.TestCase):
         )
         self.assertGreater(len(files), 0)
 
-    def test_real(self):
-        swath_source = "/data-write/RADAR/hsaf/h121_v1.0/swaths"
-        swath_collection = SwathGridFiles.from_product_id(swath_source, "H121_V1.0")
-
-        bounds = (45, 50, 10, 20) #latmin, latmax, lonmin, lonmax
-        dates = (datetime(2020, 12, 1), datetime(2020, 12, 2))
-
-        # read from one sat
-        # this works because it has been set up in the product class
-        output = swath_collection.read(date_range=dates, bbox=bounds, sat="c")
-        print(output)
-
-        # read from all sats
-        output = swath_collection.read(date_range=dates, bbox=bounds)
-        print(output)
-
     def test_read(self):
         # test read
         swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
