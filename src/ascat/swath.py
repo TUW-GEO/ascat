@@ -78,7 +78,7 @@ class Swath(Filenames):
         """
         ds = xr.open_dataset(
             filename,
-            engine="netcdf4",
+            engine="h5netcdf",
             **xarray_kwargs,
         )
         if ds["location_id"].dtype != np.int32:
