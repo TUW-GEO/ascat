@@ -38,8 +38,8 @@ from flox.xarray import xarray_reduce
 from dask.array import unique as da_unique
 
 from ascat.swath import SwathGridFiles
-from ascat.read_native.xarray_io import get_swath_product_id
-from ascat.read_native.xarray_io import dtype_to_nan
+from ascat.read_native.product_info import get_swath_product_id
+from ascat.utils import dtype_to_nan
 
 
 class TemporalSwathAggregator:

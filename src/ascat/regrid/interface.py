@@ -31,8 +31,8 @@ from pathlib import Path
 
 import xarray as xr
 
-from ascat.read_native.xarray_io import get_swath_product_id
-from ascat.read_native.xarray_io import swath_io_catalog
+from ascat.read_native.product_info import get_swath_product_id
+from ascat.read_native.product_info import swath_io_catalog
 from ascat.regrid.regrid import regrid_swath_ds
 from ascat.regrid.regrid import retrieve_or_store_grid_lut
 
