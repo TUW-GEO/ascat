@@ -260,12 +260,13 @@ class TestSwathGridFiles(unittest.TestCase):
             bbox=bbox,
         )
         merged_ds.load()
-        self.assertLess(merged_ds.time.max(), np.datetime64(datetime(2021, 1, 30)))
-        self.assertGreater(merged_ds.time.min(), np.datetime64(datetime(2021, 1, 15)))
-        self.assertLess(merged_ds.latitude.max(), bbox[1])
-        self.assertGreater(merged_ds.latitude.min(), bbox[0])
-        self.assertLess(merged_ds.longitude.max(), bbox[3])
-        self.assertGreater(merged_ds.longitude.min(), bbox[2])
+
+        self.assertLess(merged_ds.time.max().values, np.datetime64(datetime(2021, 1, 30)))
+        self.assertGreater(merged_ds.time.min().values, np.datetime64(datetime(2021, 1, 15)))
+        self.assertLess(merged_ds.latitude.max().values, bbox[1])
+        self.assertGreater(merged_ds.latitude.min().values, bbox[0])
+        self.assertLess(merged_ds.longitude.max().values, bbox[3])
+        self.assertGreater(merged_ds.longitude.min().values, bbox[2])
 
         # test extract from main folder
         swath_path = "tests/ascat_test_data/hsaf/h129/swaths/metop_a/2021"
@@ -280,13 +281,14 @@ class TestSwathGridFiles(unittest.TestCase):
             (datetime(2021, 1, 15), datetime(2021, 1, 30)),
             bbox=bbox,
         )
+        merged_ds.load()
 
-        self.assertLess(merged_ds.time.max(), np.datetime64(datetime(2021, 1, 30)))
-        self.assertGreater(merged_ds.time.min(), np.datetime64(datetime(2021, 1, 15)))
-        self.assertLess(merged_ds.latitude.max(), bbox[1])
-        self.assertGreater(merged_ds.latitude.min(), bbox[0])
-        self.assertLess(merged_ds.longitude.max(), bbox[3])
-        self.assertGreater(merged_ds.longitude.min(), bbox[2])
+        self.assertLess(merged_ds.time.max().values, np.datetime64(datetime(2021, 1, 30)))
+        self.assertGreater(merged_ds.time.min().values, np.datetime64(datetime(2021, 1, 15)))
+        self.assertLess(merged_ds.latitude.max().values, bbox[1])
+        self.assertGreater(merged_ds.latitude.min().values, bbox[0])
+        self.assertLess(merged_ds.longitude.max().values, bbox[3])
+        self.assertGreater(merged_ds.longitude.min().values, bbox[2])
 
 
     # def test__trim_to_gpis(self):
@@ -381,7 +383,7 @@ class TestSwathGridFiles(unittest.TestCase):
 
         # assert that the data is the same as the original
         for cell, cell_file in zip(cells_to_test, out_dir.rglob("*.nc")):
-            idx_ds = xr.open_dataset(cell_file, decode_cf=True, mask_and_scale=False)
+            idx_ds = xr.open_dataset(cell_file, decode_cf=True, mask_and_scale=False).cf_geom.to_indexed_ragged()
             ctg_ds = xr.open_dataset(contig_out_dir / f"{cell}.nc", decode_cf=True, mask_and_scale=False,)
             round_trip_ds = ctg_ds.cf_geom.to_indexed_ragged()
 
