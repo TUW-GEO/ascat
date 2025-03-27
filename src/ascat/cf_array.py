@@ -687,7 +687,7 @@ class RaggedArray(CFDiscreteGeom):
             instances_idx = np.where(ds[timeseries_id] == instance_val)[0]
             if len(instances_idx) == 0:
                 return None
-            instances_idx = instances_idx[0]
+            instances_idx = int(instances_idx[0])
             sample_start = int(
                 ds[count_var].isel({instance_dim: slice(0, instances_idx)}).sum().values
             )
@@ -696,7 +696,7 @@ class RaggedArray(CFDiscreteGeom):
             )
             return sample_start, sample_end, instances_idx
 
-        def select_single_instance(sample_start, sample_end, instances_idx):
+        def select_single_instance(ds, sample_start, sample_end, instances_idx):
             return ds.isel(
                 {
                     sample_dim: slice(sample_start, sample_end),
@@ -704,25 +704,34 @@ class RaggedArray(CFDiscreteGeom):
                 }
             )
 
-        def select_several_instances(sample_starts, sample_ends, instances_idxs):
+        def select_several_instances(ds, sample_starts, sample_ends, instances_idxs):
             sample_idxs = np.concatenate(
-                [range(start, end) for start, end in zip(sample_starts, sample_ends)]
+                [range(start, end)
+                 for start, end
+                 in zip(sample_starts, sample_ends)
+                 if end > start]
             )
             return ds.isel({sample_dim: sample_idxs,
                             instance_dim: np.array(instances_idxs)})
 
+
         if len(instance_vals) == 1:
             if get_single_instance_idxs(ds, instance_vals[0]) is None:
                 return None
-            return select_single_instance(*get_single_instance_idxs(ds, instance_vals[0]))
+            return select_single_instance(ds, *get_single_instance_idxs(ds, instance_vals[0]))
         else:
+            instance_vals = np.unique(instance_vals)
             ds[count_var].load()
             ds[timeseries_id].load()
-            results = [get_single_instance_idxs(ds, instance_val) for instance_val in instance_vals]
+            results = [get_single_instance_idxs(ds, instance_val)
+                       for instance_val in instance_vals]
             results = [r for r in results if r is not None]
             if len(results) == 0:
                 return None
+            if not ds.chunks:
+                ds = ds.chunk({sample_dim: -1})
             return select_several_instances(
+                ds,
                 *zip(*results)
             )
 
