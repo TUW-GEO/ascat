@@ -160,6 +160,7 @@ class Swath(Filenames):
             "featureType"
         ]
         if "global_attributes_flag" in attrs_list[0].keys():
+            attrs_list[0].pop("global_attributes_flag")
             result = {}
             for attr in global_attributes_to_pass_on_merge:
                 if val := attrs_list[0].get(attr, False):
