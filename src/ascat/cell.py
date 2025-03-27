@@ -306,13 +306,19 @@ class RaggedArrayTs(Filenames):
 
 
     def _merge_indexed(self, data):
-        merged_ds = xr.concat(
-            [self._preprocess(ds).chunk({"obs":-1}).cf_geom.to_point_array()
-                for ds in data if ds is not None],
+        preprocessed_point_arrays_to_merge = [(self._preprocess(ds)
+                                               .chunk({"obs":-1})
+                                               .cf_geom.to_point_array())
+                                              for ds in data if ds is not None]
+        merged_point_ds = xr.concat(
+            preprocessed_point_arrays_to_merge,
             dim="obs",
+            data_vars="minimal",
+            compat="equals",
             combine_attrs="drop_conflicts",
-        ).cf_geom.to_indexed_ragged()
-        return merged_ds
+        )
+        merged_indexed_ds = merged_point_ds.cf_geom.to_indexed_ragged()
+        return merged_indexed_ds
 
     def _merge_point(self, data):
         merged_ds = xr.concat(
@@ -328,15 +334,20 @@ class RaggedArrayTs(Filenames):
         return ds[[var for var in ds.variables if "obs" in ds[var].dims]]
 
     def _merge_contiguous(self, data):
-        preprocessed = [self._preprocess(ds).chunk({"obs":-1}) for ds in data if ds is not None]
-        merged_ds = self._dim_safe_rechunk(
-            xr.merge(
-                [xr.concat([ds.drop_dims("locations") if "locations" in ds.dims
-                       else self._only_obs_vars(ds)
-                       for ds in preprocessed], dim="obs"),
-                 xr.concat([ds.drop_dims("obs") for ds in preprocessed], dim="locations")],
-            )
-        )
+        preprocessed = [self._preprocess(ds).chunk({"obs": -1})
+                        for ds in data if ds is not None]
+        obs_dim_ds_to_concat = [self._only_obs_vars(ds) for ds in preprocessed]
+        non_obs_dim_ds_to_concat = [ds.drop_dims("obs") for ds in preprocessed]
+        obs_dim_ds = xr.concat(obs_dim_ds_to_concat, dim="obs")
+        # any variables without dims will be in non_obs_dim_ds, we handle them
+        # by assuming they should be equal on all merged data - not sure if this
+        # is the right choice. We could also override.
+        non_obs_dim_ds = xr.concat(non_obs_dim_ds_to_concat,
+                                   dim="locations",
+                                   data_vars="minimal",
+                                   compat="equals")
+        merged_ds = xr.merge([obs_dim_ds, non_obs_dim_ds])
+        merged_ds = self._dim_safe_rechunk(merged_ds)
         return merged_ds
 
     def _preprocess(self, ds):
