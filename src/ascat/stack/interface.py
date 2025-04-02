@@ -115,7 +115,6 @@ def parse_args_swath_stacker(args):
         action="store_true",
         help="Do not print progress information"
     )
-
     parser.add_argument(
         "fmt_kwargs",
         help="Format keyword arguments, depends on the product format used. Example: 'sat=A year=2008'",
@@ -128,8 +127,7 @@ def parse_args_swath_stacker(args):
 
 def swath_stacker_main(cli_args):
     """
-    Regrid an ASCAT swath file or directory of swath files
-    to a regular grid and write the results to disk.
+    Main function for stacking ASCAT swath files into a cell grid given command line arguments.
 
     Parameters
     ----------
