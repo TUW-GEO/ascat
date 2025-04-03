@@ -559,7 +559,7 @@ class CellGridFiles():
 
     @classmethod
     def from_product_id(cls, root_path, product_id, **kwargs):
-        from ascat.read_native.product_info import cell_io_catalog
+        from ascat.product_info import cell_io_catalog
         product_id = product_id.upper()
         if product_id in cell_io_catalog:
             product_class = cell_io_catalog[product_id]

@@ -300,7 +300,7 @@ class SwathGridFiles(ChronFiles):
         ... )
 
         """
-        from ascat.read_native.product_info import swath_io_catalog
+        from ascat.product_info import swath_io_catalog
         product_id = product_id.upper()
         if product_id in swath_io_catalog:
             product_class = swath_io_catalog[product_id]

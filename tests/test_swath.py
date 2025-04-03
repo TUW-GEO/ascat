@@ -13,7 +13,7 @@ import ascat.read_native.generate_test_data as gtd
 
 from ascat.swath import Swath
 from ascat.swath import SwathGridFiles
-from ascat.read_native.product_info import AscatH129Swath
+from ascat.product_info import AscatH129Swath
 
 
 def gen_dummy_swathfiles(directory, sat_name=None):
