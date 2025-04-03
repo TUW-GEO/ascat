@@ -309,6 +309,58 @@ class AscatH121v1Swath(AscatSwathProduct):
             },
         }
 
+class AscatH121v2Swath(AscatSwathProduct):
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
+    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}", "month_folder": "{month}"}
+    date_field_fmt = "%Y%m%d%H%M%S"
+    grid_name = "fibgrid_12.5"
+    cell_fn_format = "{:04d}.nc"
+    beams_vars = []
+    ts_dtype = np.dtype([
+        ("sat_id", np.int8),
+        ("as_des_pass", np.int8),
+        ("swath_indicator", np.int8),
+        ("surface_soil_moisture", np.float32),
+        ("surface_soil_moisture_noise", np.float32),
+        ("backscatter40", np.float32),
+        ("slope40", np.float32),
+        ("curvature40", np.float32),
+        ("surface_soil_moisture_sensitivity", np.float32),
+        ("backscatter_flag", np.uint8),
+        ("correction_flag", np.uint8),
+        ("processing_flag", np.uint8),
+        ("surface_flag", np.uint8),
+        ("snow_cover_probability", np.int8),
+        ("frozen_soil_probability", np.int8),
+        ("wetland_fraction", np.int8),
+        ("topographic_complexity", np.int8),
+        ("subsurface_scattering_probability", np.int8),
+    ])
+
+    @staticmethod
+    def fn_read_fmt(timestamp, sat="[ABC]"):
+        sat = sat.upper()
+        return {
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": sat,
+            "placeholder": "*",
+            "placeholder1": "*"
+        }
+
+    @staticmethod
+    def sf_read_fmt(timestamp, sat="[abc]"):
+        sat = sat.lower()
+        return {
+            "satellite_folder": {
+                "satellite": f"metop_{sat}"
+            },
+            "year_folder": {
+                "year": f"{timestamp.year}"
+            },
+            "month_folder": {
+                "month": f"{timestamp.month}".zfill(2)
+            },
+        }
 
 class AscatH122Swath(AscatSwathProduct):
     fn_pattern = "ascat_ssm_nrt_6.25km_{placeholder}Z_{date}Z_metop-{sat}_h122.nc"
@@ -585,6 +637,7 @@ swath_io_catalog = {
     "H129": AscatH129Swath,
     "H129_V1.0": AscatH129v1Swath,
     "H121_V1.0": AscatH121v1Swath,
+    "H121_V2.0": AscatH121v2Swath,
     "H122": AscatH122Swath,
     "SIG0_6.25": AscatSIG0Swath6250m,
     "SIG0_12.5": AscatSIG0Swath12500m,
@@ -597,6 +650,8 @@ swath_fname_regex_lookup = {
         "H129_V1.0",
     "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H121_C_LIIB_.*_.*_.*____.nc":
         "H121_V1.0",
+    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H121_C_LIIB_.*_.*_.*____.nc":
+        "H121_V2.0",
     "ascat_ssm_nrt_6.25km_.*Z_.*Z_metop-[ABC]_h122.nc":
         "H122",
     "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-6.25_C_LIIB_.*_.*_.*____.nc":
