@@ -782,12 +782,19 @@ class CellGridFiles():
         location_id : int or list of int
             Location id.
         coords : tuple of numeric or tuple of iterable of numeric
-            Tuple of (lon, lat) coordinates.
+            Tuple of (lon, lat) coordinates. lon and lat could each be numpy arrays in
+            order to read multiple coordinates. For each coordinate the nearest grid point
+            within `max_coord_dist` (in spherical cartesian coordinates) will be selected.
+
+            Note that if any passed coordinates share the same nearest grid point, that grid
+            point will only be represented once in the output dataset.
         bbox : tuple
             Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        geom : shapely.geometry
+            Geometry object.
         max_coord_dist : float
             The maximum distance a coordinate's nearest grid point can be from it to be
-            selected.
+            selected (in spherical cartesian coordinates). Default is np.inf.
         date_range : tuple of np.datetime64
             Tuple of (start, end) dates.
 
