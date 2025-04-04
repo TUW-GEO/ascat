@@ -1,0 +1,232 @@
+#+title: Stacking gridded swath files into cells
+#+PROPERTY: header-args:ipython :session stack_swaths
+
+#+begin_src elisp :exports none
+(micromamba-activate "ascat_env")
+#+end_src
+
+* Introduction
+* Using the command-line interface
+The simplest interface for stacking swath files into cells is the command-line interface included with this package.
+
+Make sure you've created and activated an appropriate Python environment first.
+
+--------------------------------------------------------------------------------
+*TL;DR*: in a shell run something like:
+#+begin_example :eval no
+ascat_swaths_to_cells /path/to/my/swath/files/ /path/to/my/new/cell/files/ H121_V2.0 contiguous --start_date 2023-01-01 --end_date 2024-01-01
+#+end_example
+
+The output cells will be in point array format.
+
+You can then convert to indexed or contiguous ragged array format:
+#+begin_example
+ascat_convert_cell_format /path/to/my/new/cell/files/ /path/to/my/converted/cell/files/ H121_V2.0 contiguous
+#+end_example
+--------------------------------------------------------------------------------
+
+Have a look at the help to see required arguments
+
+#+begin_src ipython :results output drawer
+! ascat_swaths_to_cells  --help
+#+end_src
+
+#+RESULTS:
+:results:
+usage: ascat_swaths_to_cells [-h] [--start_date START_DATE]
+                             [--end_date END_DATE] [--dump_size DUMP_SIZE]
+                             [--cells CELLS [CELLS ...]] [--quiet]
+                             FILEPATH OUTPATH PRODUCT_ID [fmt_kwargs ...]
+
+Stack ASCAT swath files to a cell grid
+
+positional arguments:
+  FILEPATH              Path to folder containing swath files
+  OUTPATH               Path to the output data
+  PRODUCT_ID            Product identifier
+  fmt_kwargs            Format keyword arguments, depends on the product
+                        format used. Example: 'sat=A year=2008'
+
+options:
+  -h, --help            show this help message and exit
+  --start_date START_DATE
+                        Start date in format YYYY-MM-DD. Must also provide end
+                        date if this is provided.
+  --end_date END_DATE   End date in format YYYY-MM-DD. Must also provide start
+                        date if this is provided.
+  --dump_size DUMP_SIZE
+                        Size at which to dump the data to disk before reading
+                        more (default: 1GB)
+  --cells CELLS [CELLS ...]
+                        Numbers of the cells to process (default: None)
+  --quiet               Do not print progress information
+:end:
+
+So we need to pass at least three positional arguments to the stacker:
+
+1) ~FILEPATH~ - This is a path to the parent directory of the product's swath files.
+2) ~OUTPATH~ - A path to the directory you'd like to send output to.
+3) ~PRODUCT_ID~ - The name of the product you're processing. The program chooses a product reader based on this string, which makes certain assumptions about filename and directory structure. Several products are included in the ASCAT package, and to use them your directory structure must adhere to what they assume. Otherwise you may also create your own product readers. (TODO make a link here)
+
+After the positional arguments we can also pass as many keyword arguments as we want:
++ ~fmt_kwargs~ - These are keyword arguments that will be passed on to the product reader's ~fn_read_fmt~ and ~sf_read_fmt~ (functions that tell the package how to find your files).
+
+We can also pass some options:
++ ~--start_date~ and ~--end_date~ - in YYYY-MM-DD format. Sets the time range of swath files to stack.
+
++ ~--dump_size~ - the size of the buffer to fill with read data before dumping to cell files and reading more data. Make this too big and merging/processing will take a while after reading. Too small and repeated writes will be a bottleneck. Even if you have a lot of memory something like ~8GB~ is a good value.
+
+To check which ~product_id~ -s are available to you, use ~ascat_product_info~
+
+#+begin_src ipython :results output drawer
+! ascat_product_info
+#+end_src
+
+#+RESULTS:
+:results:
+Available Swath Products:
+H129
+H129_V1.0
+H121_V1.0
+H121_V2.0
+H122
+SIG0_6.25
+SIG0_12.5
+
+Available Cell Products:
+H129
+H129_V1.0
+H121_V1.0
+H121_V2.0
+H122
+SIG0_6.25
+SIG0_12.5
+ERSH
+ERSN
+:end:
+
+To learn more about a product's reader pass its ~product_id~:
+
+#+begin_src ipython :results output drawer
+! ascat_product_info h121_v2.0
+#+end_src
+
+#+RESULTS:
+:results:
+Swath Product Information:
+class AscatH121v2Swath(AscatSwathProduct):
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
+    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}", "month_folder": "{month}"}
+    date_field_fmt = "%Y%m%d%H%M%S"
+    grid_name = "fibgrid_12.5"
+    cell_fn_format = "{:04d}.nc"
+    beams_vars = []
+    ts_dtype = np.dtype([
+        ("sat_id", np.int8),
+        ("as_des_pass", np.int8),
+        ("swath_indicator", np.int8),
+        ("surface_soil_moisture", np.float32),
+        ("surface_soil_moisture_noise", np.float32),
+        ("backscatter40", np.float32),
+        ("slope40", np.float32),
+        ("curvature40", np.float32),
+        ("surface_soil_moisture_sensitivity", np.float32),
+        ("backscatter_flag", np.uint8),
+        ("correction_flag", np.uint8),
+        ("processing_flag", np.uint8),
+        ("surface_flag", np.uint8),
+        ("snow_cover_probability", np.int8),
+        ("frozen_soil_probability", np.int8),
+        ("wetland_fraction", np.int8),
+        ("topographic_complexity", np.int8),
+        ("subsurface_scattering_probability", np.int8),
+    ])
+
+    @staticmethod
+    def fn_read_fmt(timestamp, sat="[ABC]"):
+        sat = sat.upper()
+        return {
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": sat,
+            "placeholder": "*",
+            "placeholder1": "*"
+        }
+
+    @staticmethod
+    def sf_read_fmt(timestamp, sat="[abc]"):
+        sat = sat.lower()
+        return {
+            "satellite_folder": {
+                "satellite": f"metop_{sat}"
+            },
+            "year_folder": {
+                "year": f"{timestamp.year}"
+            },
+            "month_folder": {
+                "month": f"{timestamp.month}".zfill(2)
+            },
+        }
+
+class AscatSwathProduct(SwathProduct):
+    grid_name = None
+
+    @classmethod
+    def preprocess_(cls, ds):
+        ds["location_id"].attrs["cf_role"] = "timeseries_id"
+        ds.attrs["global_attributes_flag"] = 1
+        ds.attrs["featureType"] = "point"
+        # if "grid_mapping_name" not in ds.attrs:
+        ds.attrs["grid_mapping_name"] = cls.grid_name
+        if "spacecraft" in ds.attrs:
+            # Assumption: the spacecraft attribute is something like "metop-a"
+            sat_id = {"a": 3, "b": 4, "c": 5}
+            sat = ds.attrs["spacecraft"][-1].lower()
+            ds["sat_id"] = ("obs",
+                            np.repeat(sat_id[sat], ds["location_id"].size))
+            del ds.attrs["spacecraft"]
+        return ds
+
+    @staticmethod
+    def postprocess_(ds):
+        for key, item in {"latitude": "lat", "longitude": "lon", "altitude": "alt"}.items():
+            if key in ds:
+                ds = ds.rename({key: item})
+        if "altitude" not in ds:
+            ds["alt"] = ("locations", np.full_like(ds["lat"], fill_value=np.nan))
+        return ds
+
+class SwathProduct:
+    from ascat.swath import Swath
+    file_class = Swath
+
+Cell Product Information:
+class AscatH121v2Cell(RaggedArrayCellProduct):
+    grid_name = "fibgrid_12.5"
+
+class RaggedArrayCellProduct(BaseCellProduct):
+    file_class = RaggedArrayTs
+    sample_dim = "obs"
+    instance_dim = "locations"
+
+    @classmethod
+    def preprocessor(cls, ds):
+        if "row_size" in ds.variables:
+            ds["row_size"].attrs["sample_dimension"] = cls.sample_dim
+        if "locationIndex" in ds.variables:
+            ds["locationIndex"].attrs["instance_dimension"] = cls.instance_dim
+        if "location_id" in ds.variables:
+            ds["location_id"].attrs["cf_role"] = "timeseries_id"
+        if ds.attrs.get("featureType") is None:
+            ds = ds.assign_attrs({"featureType": "timeSeries"})
+        if ds.attrs.get("grid_mapping_name") is None:
+            ds.attrs["grid_mapping_name"] = cls.grid_name
+        return ds
+
+class BaseCellProduct:
+    fn_format = "{:04d}.nc"
+
+    @classmethod
+    def preprocessor(cls, ds):
+        return ds
+
+:end:
