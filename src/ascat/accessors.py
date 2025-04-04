@@ -31,6 +31,7 @@ import numpy as np
 import xarray as xr
 import cf_xarray
 from cartopy import crs as ccrs
+from cartopy import feature
 from shapely.geometry.base import BaseGeometry
 
 from pygeogrids import BasicGrid, CellGrid
@@ -222,6 +223,25 @@ class CFDiscreteGeometryAccessor:
         fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()})
         ax.coastlines()
         scat = ax.scatter(lon, lat, c=c, **kwargs)
+        return fig, ax, scat
+
+    def map_footprint(self, **kwargs):
+        """
+        Map all the unique locations in the array.
+        """
+        lon = self._ds.cf["longitude"]
+        lat = self._ds.cf["latitude"]
+        unique_lons, unique_lats = np.unique(
+            np.column_stack((lon, lat)), axis=0
+        ).T
+        fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()})
+        ax.coastlines()
+        ax.add_feature(feature.BORDERS, linestyle='-', alpha=.5)
+        scat = ax.scatter(
+            x=unique_lons,
+            y=unique_lats,
+            **kwargs
+        )
         return fig, ax, scat
 
     def to_point_array(self):
