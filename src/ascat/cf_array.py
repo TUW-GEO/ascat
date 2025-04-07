@@ -212,12 +212,18 @@ def contiguous_to_point(
     instance_dim: str,
     count_var: str,
 ):
-    """Convert a ragged array dataset to a Point Array.
+    """Convert a contiguous ragged array dataset to a Point Array.
 
     Parameters
     ----------
     ds : xarray.Dataset
         Dataset.
+    sample_dim : str
+        Name of the sample dimension.
+    instance_dim : str
+        Name of the instance dimension.
+    count_var : str
+        Name of the count variable.
 
     Returns
     -------
@@ -249,6 +255,18 @@ class CFDiscreteGeom:
         instance_vars: Sequence[str] | None = None,
         contiguous_sort_vars: Sequence[str] | None = None,
     ):
+        """
+        Parameters
+        ----------
+        xarray_obj : xarray.Dataset
+            Xarray dataset.
+        coord_vars : Sequence[str], optional
+            Coordinate variables, by default None.
+        instance_vars : Sequence[str], optional
+            Instance variables, by default None.
+        contiguous_sort_vars : Sequence[str], optional
+            Variables that each timeseries should be sorted by in contiguous ragged array format.
+        """
         self._data = xarray_obj
         self._coord_vars = coord_vars or [
             "lon",
@@ -811,6 +829,16 @@ class OrthoMultiTimeseriesArray(CFDiscreteGeom):
         instance_vals: Sequence[int|str] | np.ndarray | None = None,
         instance_lookup_vector: np.ndarray | None = None,
     ):
+        """
+        Select requested timeseries instances from an orthomulti timeseries array dataset.
+
+        Parameters
+        ----------
+        instance_vals : Sequence[int|str] | np.ndarray | None, optional
+            List of instance values to select, by default None
+        instance_lookup_vector : np.ndarray | None, optional
+            Lookup vector for instance values, by default None
+        """
         return self._select_instances(
             self._data,
             self._instance_dimension,
