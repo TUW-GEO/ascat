@@ -60,9 +60,9 @@ class Swath(Filenames):
         filename : str
             File to read.
         generic : bool, optional
-            Not yet implemented.
+            Not yet implemented, kept to match the signature.
         preprocessor : callable, optional
-            Function to preprocess the dataset.
+            Function to preprocess the dataset after opening.
         xarray_kwargs : dict
             Additional keyword arguments passed to xarray.open_dataset.
 
@@ -91,6 +91,20 @@ class Swath(Filenames):
     ):
         """
         Read the file or a subset of it.
+
+        Parameters
+        ----------
+        parallel : bool, optional
+            If True, read files in parallel.
+        mask_and_scale : bool, optional
+            If True, mask and scale the data.
+        kwargs : dict
+            Additional keyword arguments passed to `Filenames.read`.
+
+        Returns
+        -------
+        ds : xarray.Dataset
+            Dataset.
         """
 
         ds, closers = super().read(closer_attr="_close",
@@ -134,6 +148,9 @@ class Swath(Filenames):
 
     @staticmethod
     def _ensure_obs(ds):
+        """
+        Makes sure that the sample dimension is named `obs`.
+        """
         ds = ds.cf_geom.set_sample_dimension("obs")
         return ds
 
@@ -168,9 +185,10 @@ class Swath(Filenames):
             return result
 
         variable_attrs = attrs_list
+
         # this code taken straight from xarray/core/merge.py
         # Replicates the functionality of "drop_conflicts"
-        # but just for variable attributes
+        # but just for variable attributes.
         result = {}
         dropped_keys = set()
         for attrs in variable_attrs:
@@ -222,12 +240,18 @@ class SwathGridFiles(ChronFiles):
             Filename template (e.g. "{date}_ascat.nc").
         sf_templ : dict, optional
             Subfolder template defined as dictionary (default: None).
+        grid_name : str
+            Name of the grid - must be registered in the grid registry.
+        date_field_fmt : str
+            Date field format (e.g. "%Y%m%d").
+        cell_fn_format : str, optional
+            String to use to format cell file names (e.g. "{:04d}.nc").
         cls_kwargs : dict, optional
             Class keyword arguments (default: None).
         err : bool, optional
             Set true if a file error should be re-raised instead of
             reporting a warning.
-            Default: False
+            Default: True
         fn_read_fmt : str or function, optional
             Filename format for read operation.
         sf_read_fmt : str or function, optional
@@ -236,6 +260,11 @@ class SwathGridFiles(ChronFiles):
             Filename format for write operation.
         sf_write_fmt : str or function, optional
             Subfolder format for write operation.
+        preprocessor : callable, optional
+            Function to preprocess datasets after opening.
+        postprocessor : callable, optional
+            Function to pass to the `postprocessor` argument of `ascat.cell.RaggedArrayTs.write`
+            when stacking to cell files.
         cache_size : int, optional
             Number of files to keep in memory (default=0).
         """
@@ -503,6 +532,8 @@ class SwathGridFiles(ChronFiles):
             Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
         geom : shapely.geometry
             Geometry.
+        fmt_kwargs : dict
+            Additional keyword arguments passed to ascat.file_handling.ChronFiles.search_period.
 
         Returns
         -------
@@ -531,6 +562,11 @@ class SwathGridFiles(ChronFiles):
             geom=geom,
         )
 
+        if len(filtered_filenames) == 0:
+            raise FileNotFoundError(
+                f"No files found for {dt_start} to {dt_end} with the given spatial criteria."
+            )
+
         return filtered_filenames
 
     def read(
@@ -554,10 +590,8 @@ class SwathGridFiles(ChronFiles):
 
         Parameters
         ----------
-        dt_start : datetime
-            Start date.
-        dt_end : datetime
-            End date.
+        date_range : tuple of datetime.datetime
+            Start and end date.
         dt_delta : timedelta
             Time delta.
         search_date_fmt : str
@@ -565,15 +599,21 @@ class SwathGridFiles(ChronFiles):
         date_field : str
             Date field.
         end_inclusive : bool
-            End date inclusive.
+            If True (default), include data from the end date in the result. Otherwise,
+            exclude it.
         cell : int or list of int
             Grid cell number to read.
         location_id : int or list of int
-            Location id.
+            Location id to read.
         coords : tuple of numeric or tuple of iterable of numeric
-            Tuple of (lon, lat) coordinates.
+            Tuple of (lon, lat) coordinates to read.
+        max_coord_dist : float
+            Maximum distance in meters to search for grid points near the given
+            coordinates. If None, the default is np.inf.
         bbox : tuple
-            Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+            Tuple of (latmin, latmax, lonmin, lonmax) coordinates to bound the data.
+        geom : shapely.geometry
+            Geometry to bound the data.
 
         Returns
         -------
@@ -629,6 +669,21 @@ class SwathGridFiles(ChronFiles):
                             print_progress=True,):
         """
         Stack all swath files to cell files, writing them in parallel.
+
+        Parameters
+        ----------
+        out_dir : str
+            Output directory.
+        max_nbytes : int
+            Maximum number of bytes to open as xarray datasets before dumping to disk.
+        date_range : tuple of datetime.datetime, optional
+            Start and end date for the search.
+        fmt_kwargs : dict, optional
+            Additional keyword arguments passed to ascat.file_handling.ChronFiles.search_period.
+        cells : list of int, optional
+            List of grid cell numbers to read. If None (default), all cells are read.
+        print_progress : bool, optional
+            If True (default), print progress bars.
         """
         from ascat.cell import RaggedArrayTs
 
