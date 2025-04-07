@@ -58,7 +58,7 @@ from ascat.grids import GridRegistry, NamedFileGridRegistry
 
 #+begin_src ipython :tangle debug_tutorial.py
 path_to_ascat = "/data-write/RADAR/hsaf/h121_v1.0/cells/"
-h121 = CellGridFiles.from_product_id(path_to_ascat, "h121_v1.0")
+h121 = CellGridFiles.from_product_id(path_to_ascat, "h121")
 
 import numpy as np
 # The CellGridFiles reader wants bounding boxes in (latmin, latmax, lonmin, lonmax) format

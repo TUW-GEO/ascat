@@ -23,11 +23,11 @@ import numpy as np
 
 Our cell files, in this case, all live in a single directory, so that's the path we'll pass to ~CellGridFiles.from_product_id()~.
 
-The product id, ~"H121_V1.0"~, refers to a specific handler class defined in ~ascat.read_native.product_info~. There are several of these already defined for various products we use at TU Wien, and it is also possible to define your own handler class if you need to process a product we haven't included in this package already.
+The product id, ~"H121"~, refers to a specific handler class defined in ~ascat.read_native.product_info~. There are several of these already defined for various products we use at TU Wien, and it is also possible to define your own handler class if you need to process a product we haven't included in this package already.
 
 #+begin_src ipython :results none
 cell_source = "/data-write/RADAR/hsaf/h121_v2.0/time_series/metop_abc"
-cell_collection = CellGridFiles.from_product_id(cell_source, "H121_V2.0")
+cell_collection = CellGridFiles.from_product_id(cell_source, "H121")
 #+end_src
 
 

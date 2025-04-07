@@ -75,14 +75,11 @@ class AscatH129Cell(RaggedArrayCellProduct):
     # sf_pattern = {"sat_str": "{sat}"}
 
 
-class AscatH129v1Cell(RaggedArrayCellProduct):
+class AscatH129Cell(RaggedArrayCellProduct):
     grid_name = "fibgrid_6.25"
 
 
-class AscatH121v1Cell(RaggedArrayCellProduct):
-    grid_name = "fibgrid_12.5"
-
-class AscatH121v2Cell(RaggedArrayCellProduct):
+class AscatH121Cell(RaggedArrayCellProduct):
     grid_name = "fibgrid_12.5"
 
 class AscatH122Cell(RaggedArrayCellProduct):
@@ -176,7 +173,7 @@ class AscatH129Swath(AscatSwathProduct):
         }
 
 
-class AscatH129v1Swath(AscatSwathProduct):
+class AscatH129Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
@@ -206,36 +203,7 @@ class AscatH129v1Swath(AscatSwathProduct):
         }
 
 
-class AscatH121v1Swath(AscatSwathProduct):
-    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
-    date_field_fmt = "%Y%m%d%H%M%S"
-    grid_name = "fibgrid_12.5"
-    cell_fn_format = "{:04d}.nc"
-
-    @staticmethod
-    def fn_read_fmt(timestamp, sat="[ABC]"):
-        sat = sat.upper()
-        return {
-            "date": timestamp.strftime("%Y%m%d*"),
-            "sat": sat,
-            "placeholder": "*",
-            "placeholder1": "*"
-        }
-
-    @staticmethod
-    def sf_read_fmt(timestamp, sat="[abc]"):
-        sat = sat.lower()
-        return {
-            "satellite_folder": {
-                "satellite": f"metop_{sat}"
-            },
-            "year_folder": {
-                "year": f"{timestamp.year}"
-            },
-        }
-
-class AscatH121v2Swath(AscatSwathProduct):
+class AscatH121Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}", "month_folder": "{month}"}
     date_field_fmt = "%Y%m%d%H%M%S"
@@ -392,9 +360,7 @@ class AscatSIG0Swath12500m(AscatSwathProduct):
 
 cell_io_catalog = {
     "H129": AscatH129Cell,
-    "H129_V1.0": AscatH129v1Cell,
-    "H121_V1.0": AscatH121v1Cell,
-    "H121_V2.0": AscatH121v2Cell,
+    "H121": AscatH121Cell,
     "H122": AscatH122Cell,
     "SIG0_6.25": AscatSIG0Cell6250m,
     "SIG0_12.5": AscatSIG0Cell12500m,
@@ -404,23 +370,17 @@ cell_io_catalog = {
 
 swath_io_catalog = {
     "H129": AscatH129Swath,
-    "H129_V1.0": AscatH129v1Swath,
-    "H121_V1.0": AscatH121v1Swath,
-    "H121_V2.0": AscatH121v2Swath,
+    "H121": AscatH121Swath,
     "H122": AscatH122Swath,
     "SIG0_6.25": AscatSIG0Swath6250m,
     "SIG0_12.5": AscatSIG0Swath12500m,
 }
 
 swath_fname_regex_lookup = {
-    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25-H129_C_LIIB_.*_.*_.*____.nc":
-        "H129",
     "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25km-H129_C_LIIB_.*_.*_.*____.nc":
-        "H129_V1.0",
+        "H129",
     "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H121_C_LIIB_.*_.*_.*____.nc":
-        "H121_V1.0",
-    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H121_C_LIIB_.*_.*_.*____.nc":
-        "H121_V2.0",
+        "H121",
     "ascat_ssm_nrt_6.25km_.*Z_.*Z_metop-[ABC]_h122.nc":
         "H122",
     "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-6.25_C_LIIB_.*_.*_.*____.nc":

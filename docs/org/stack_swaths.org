@@ -14,14 +14,14 @@ Make sure you've created and activated an appropriate Python environment first.
 --------------------------------------------------------------------------------
 *TL;DR*: in a shell run something like:
 #+begin_example :eval no
-ascat_swaths_to_cells /path/to/my/swath/files/ /path/to/my/new/cell/files/ H121_V2.0 contiguous --start_date 2023-01-01 --end_date 2024-01-01
+ascat_swaths_to_cells /path/to/my/swath/files/ /path/to/my/new/cell/files/ H121 contiguous --start_date 2023-01-01 --end_date 2024-01-01
 #+end_example
 
 The output cells will be in point array format.
 
 You can then convert to indexed or contiguous ragged array format:
 #+begin_example
-ascat_convert_cell_format /path/to/my/new/cell/files/ /path/to/my/converted/cell/files/ H121_V2.0 contiguous
+ascat_convert_cell_format /path/to/my/new/cell/files/ /path/to/my/converted/cell/files/ H121 contiguous
 #+end_example
 --------------------------------------------------------------------------------
 
@@ -86,18 +86,14 @@ To check which ~product_id~ -s are available to you, use ~ascat_product_info~
 :results:
 Available Swath Products:
 H129
-H129_V1.0
-H121_V1.0
-H121_V2.0
+H121
 H122
 SIG0_6.25
 SIG0_12.5
 
 Available Cell Products:
 H129
-H129_V1.0
-H121_V1.0
-H121_V2.0
+H121
 H122
 SIG0_6.25
 SIG0_12.5
@@ -108,13 +104,13 @@ ERSN
 To learn more about a product's reader pass its ~product_id~:
 
 #+begin_src ipython :results output drawer
-! ascat_product_info h121_v2.0
+! ascat_product_info h121
 #+end_src
 
 #+RESULTS:
 :results:
 Swath Product Information:
-class AscatH121v2Swath(AscatSwathProduct):
+class AscatH121Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}", "month_folder": "{month}"}
     date_field_fmt = "%Y%m%d%H%M%S"
@@ -154,7 +150,6 @@ class AscatSwathProduct(SwathProduct):
         ds["location_id"].attrs["cf_role"] = "timeseries_id"
         ds.attrs["global_attributes_flag"] = 1
         ds.attrs["featureType"] = "point"
-        # if "grid_mapping_name" not in ds.attrs:
         ds.attrs["grid_mapping_name"] = cls.grid_name
         if "spacecraft" in ds.attrs:
             # Assumption: the spacecraft attribute is something like "metop-a"
@@ -179,7 +174,7 @@ class SwathProduct:
     file_class = Swath
 
 Cell Product Information:
-class AscatH121v2Cell(RaggedArrayCellProduct):
+class AscatH121Cell(RaggedArrayCellProduct):
     grid_name = "fibgrid_12.5"
 
 class RaggedArrayCellProduct(BaseCellProduct):
