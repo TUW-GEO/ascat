@@ -116,12 +116,16 @@ class RaggedArrayTs(Filenames):
         ----------
         date_range : tuple of np.datetime64
             Tuple of (start, end) dates.
-        valid_gpis : list of int
-            List of valid gpis.
+        location_id : list of int
+            List of timeseries IDs to read.
         lookup_vector : np.ndarray
             Lookup vector.
         preprocessor : callable, optional
             Function to preprocess the dataset.
+        return_format : str, optional
+            CF discrete geometry format to return data as. Can be "point", "indexed", or "contiguous".
+        parallel : bool, optional
+            Whether or not to read/preprocess in parallel. Default is False.
         **kwargs : dict
         """
         ds, closers = super().read(date_range=date_range,
@@ -376,7 +380,11 @@ class RaggedArrayTs(Filenames):
         ds : xarray.Dataset
             Dataset.
         gpis : list or list-like
-            List of gpis to keep.
+            List of gpis to keep. One of gpis or lookup_vector
+            must be provided.
+        lookup_vector : np.ndarray
+            Lookup vector from gpi numbers to bools for inclusion. One of gpis or lookup_vector
+            must be provided.
 
         Returns
         -------
@@ -470,9 +478,24 @@ class OrthoMultiTimeseriesCell(Filenames):
              location_id=None,
              lookup_vector=None,
              preprocessor=None,
-             return_format=None,
              parallel=False,
              **kwargs):
+        """
+        Read data from OrthoMulti Cell files.
+
+        Parameters
+        ----------
+        date_range : tuple of np.datetime64
+            Tuple of (start, end) dates.
+        location_id : list of int
+            List of timeseries IDs to read.
+        lookup_vector : np.ndarray
+            Lookup vector.
+        preprocessor : callable, optional
+            Function to preprocess the dataset.
+        parallel : bool, optional
+            Whether or not to read/preprocess in parallel. Default is False.
+        """
         ds = super().read(preprocessor=preprocessor, **kwargs)
         if date_range is not None:
             ds = ds.sel(time=slice(*date_range))
@@ -522,6 +545,8 @@ class OrthoMultiTimeseriesCell(Filenames):
             Dataset.
         gpis : list or list-like
             List of gpis to keep.
+        lookup_vector : np.ndarray
+            Lookup vector from gpi numbers to bools for inclusion.
 
         Returns
         -------
@@ -548,6 +573,24 @@ class CellGridFiles():
         sf_format=None,
         preprocessor=None,
     ):
+        """
+        Initialize cell grid files.
+
+        Parameters
+        ----------
+        root_path : str or Path
+            Root path where the cell files are stored.
+        file_class : class
+            Class to use for file handling (e.g., RaggedArrayTs or OrthoMultiTimeseriesCell).
+        grid : str or Grid
+            Grid name or object defining the spatial grid structure.
+        fn_format : str, optional
+            Format string for cell file names, default is "{cell:04d}.nc".
+        sf_format : str, optional
+            Format string for subdirectories, if any.
+        preprocessor : callable, optional
+            Function to preprocess datasets when reading.
+        """
         self.root_path = Path(root_path)
         self.file_class = file_class
         self.grid = grid
@@ -584,7 +627,6 @@ class CellGridFiles():
 
     def fn_search(self, cell):
         # get the paths to files matching a cell if the files exist
-
         filename = self.fn_format.format(cell)
         if self.sf_format is not None:
             subfolder = self.sf_format
@@ -595,12 +637,14 @@ class CellGridFiles():
 
     def convert_to_contiguous(self, out_dir, print_progress=True, **kwargs):
         """
-        Convert all files in the collection to contiguous format.
+        Convert all files in the collection to contiguous format and write to disk.
 
         Parameters
         ----------
         out_dir : str
             Output directory.
+        print_progress : bool, optional
+            Whether to print progress messages to console. Default is True.
         kwargs : dict
             Keyword arguments passed to the reprocess method.
         """
@@ -613,8 +657,12 @@ class CellGridFiles():
 
         Parameters
         ----------
+        out_dir : str
+            Output directory.
         func : callable
             Function to apply to each file.
+        parallel : bool, optional
+            Whether to process files in parallel. Default is True.
         kwargs : dict
             Keyword arguments passed to func.
         """
@@ -638,7 +686,8 @@ class CellGridFiles():
             geom=None,
     ):
         """
-        Search files for cells matching a spatial criterion.
+        Search files for cells matching a spatial criterion. All args are declared
+        as optional; but one and only one should be passed.
 
         Parameters
         ----------
@@ -650,15 +699,13 @@ class CellGridFiles():
             Tuple of (lon, lat) coordinates.
         bbox : tuple
             Tuple of (latmin, latmax, lonmin, lonmax) coordinates.
+        geom : shapely.geometry
+            Geometry object.
 
         Returns
         -------
         filenames : list of str
             Filenames.
-
-        Notes
-        -----
-        TODO maybe can get rid of all the _cells_for_* methods and just do them here
         """
         if cell is not None:
             # guarantee cell is a list
@@ -742,12 +789,12 @@ class CellGridFiles():
 
     def _cells_for_geom(self, geom):
         """
-        Get cells for bounding box.
+        Get cells for geometry.
 
         Parameters
         ----------
-        bbox : tuple
-            Bounding box.
+        geom : shapely.geometry
+            Geometry object.
 
         Returns
         -------
@@ -800,8 +847,9 @@ class CellGridFiles():
 
         Returns
         -------
-        filenames : list of str
-            Filenames.
+        xarray.Dataset
+            Filtered and merged data for the specified spatiotemporal region.
+
         """
         filenames = self.spatial_search(
             cell=cell,
