@@ -201,8 +201,6 @@ class SwathGridFiles(ChronFiles):
         grid_name,
         date_field_fmt,
         cell_fn_format=None,
-        beams_vars=None,
-        ts_dtype=None,
         cls_kwargs=None,
         err=True,
         fn_read_fmt=None,
@@ -264,8 +262,6 @@ class SwathGridFiles(ChronFiles):
         self.grid = registry.get(grid_name)
 
         self.cell_fn_format = cell_fn_format
-        self.beams_vars = beams_vars
-        self.ts_dtype = ts_dtype
         self.preprocessor = preprocessor
         self.postprocessor = postprocessor
 
@@ -343,8 +339,6 @@ class SwathGridFiles(ChronFiles):
             grid_name=product_class.grid_name,
             cell_fn_format=product_class.cell_fn_format,
             date_field_fmt=product_class.date_field_fmt,
-            beams_vars=product_class.beams_vars,
-            ts_dtype=product_class.ts_dtype,
             fn_read_fmt=product_class.fn_read_fmt,
             sf_read_fmt=product_class.sf_read_fmt,
             preprocessor=product_class.preprocess_,

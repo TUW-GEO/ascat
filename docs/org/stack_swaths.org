@@ -120,27 +120,6 @@ class AscatH121v2Swath(AscatSwathProduct):
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_12.5"
     cell_fn_format = "{:04d}.nc"
-    beams_vars = []
-    ts_dtype = np.dtype([
-        ("sat_id", np.int8),
-        ("as_des_pass", np.int8),
-        ("swath_indicator", np.int8),
-        ("surface_soil_moisture", np.float32),
-        ("surface_soil_moisture_noise", np.float32),
-        ("backscatter40", np.float32),
-        ("slope40", np.float32),
-        ("curvature40", np.float32),
-        ("surface_soil_moisture_sensitivity", np.float32),
-        ("backscatter_flag", np.uint8),
-        ("correction_flag", np.uint8),
-        ("processing_flag", np.uint8),
-        ("surface_flag", np.uint8),
-        ("snow_cover_probability", np.int8),
-        ("frozen_soil_probability", np.int8),
-        ("wetland_fraction", np.int8),
-        ("topographic_complexity", np.int8),
-        ("subsurface_scattering_probability", np.int8),
-    ])
 
     @staticmethod
     def fn_read_fmt(timestamp, sat="[ABC]"):

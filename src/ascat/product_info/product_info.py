@@ -122,7 +122,6 @@ class AscatSwathProduct(SwathProduct):
         ds["location_id"].attrs["cf_role"] = "timeseries_id"
         ds.attrs["global_attributes_flag"] = 1
         ds.attrs["featureType"] = "point"
-        # if "grid_mapping_name" not in ds.attrs:
         ds.attrs["grid_mapping_name"] = cls.grid_name
         if "spacecraft" in ds.attrs:
             # Assumption: the spacecraft attribute is something like "metop-a"
@@ -153,37 +152,6 @@ class AscatH129Swath(AscatSwathProduct):
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_6.25"
     cell_fn_format = "{:04d}.nc"
-    beams_vars = ["backscatter", "incidence_angle", "azimuth_angle", "kp"]
-    ts_dtype = np.dtype([
-        ("sat_id", np.int8),
-        ("as_des_pass", np.int8),
-        ("swath_indicator", np.int8),
-        ("backscatter_for", np.float32),
-        ("backscatter_mid", np.float32),
-        ("backscatter_aft", np.float32),
-        ("incidence_angle_for", np.float32),
-        ("incidence_angle_mid", np.float32),
-        ("incidence_angle_aft", np.float32),
-        ("azimuth_angle_for", np.float32),
-        ("azimuth_angle_mid", np.float32),
-        ("azimuth_angle_aft", np.float32),
-        ("kp_for", np.float32),
-        ("kp_mid", np.float32),
-        ("kp_aft", np.float32),
-        ("surface_soil_moisture", np.float32),
-        ("surface_soil_moisture_noise", np.float32),
-        ("backscatter40", np.float32),
-        ("slope40", np.float32),
-        ("curvature40", np.float32),
-        ("surface_soil_moisture_sensitivity", np.float32),
-        ("correction_flag", np.uint8),
-        ("processing_flag", np.uint8),
-        ("surface_flag", np.uint8),
-        ("snow_cover_probability", np.int8),
-        ("frozen_soil_probability", np.int8),
-        ("wetland_fraction", np.int8),
-        ("topographic_complexity", np.int8),
-    ])
 
     @staticmethod
     def fn_read_fmt(timestamp, sat="[ABC]"):
@@ -214,27 +182,6 @@ class AscatH129v1Swath(AscatSwathProduct):
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_6.25"
     cell_fn_format = "{:04d}.nc"
-    beams_vars = []
-    ts_dtype = np.dtype([
-        ("sat_id", np.int8),
-        ("as_des_pass", np.int8),
-        ("swath_indicator", np.int8),
-        ("surface_soil_moisture", np.float32),
-        ("surface_soil_moisture_noise", np.float32),
-        ("backscatter40", np.float32),
-        ("slope40", np.float32),
-        ("curvature40", np.float32),
-        ("surface_soil_moisture_sensitivity", np.float32),
-        ("backscatter_flag", np.uint8),
-        ("correction_flag", np.uint8),
-        ("processing_flag", np.uint8),
-        ("surface_flag", np.uint8),
-        ("snow_cover_probability", np.int8),
-        ("frozen_soil_probability", np.int8),
-        ("wetland_fraction", np.int8),
-        ("topographic_complexity", np.int8),
-        ("subsurface_scattering_probability", np.int8),
-    ])
 
     @staticmethod
     def fn_read_fmt(timestamp, sat="[ABC]"):
@@ -265,27 +212,6 @@ class AscatH121v1Swath(AscatSwathProduct):
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_12.5"
     cell_fn_format = "{:04d}.nc"
-    beams_vars = []
-    ts_dtype = np.dtype([
-        ("sat_id", np.int8),
-        ("as_des_pass", np.int8),
-        ("swath_indicator", np.int8),
-        ("surface_soil_moisture", np.float32),
-        ("surface_soil_moisture_noise", np.float32),
-        ("backscatter40", np.float32),
-        ("slope40", np.float32),
-        ("curvature40", np.float32),
-        ("surface_soil_moisture_sensitivity", np.float32),
-        ("backscatter_flag", np.uint8),
-        ("correction_flag", np.uint8),
-        ("processing_flag", np.uint8),
-        ("surface_flag", np.uint8),
-        ("snow_cover_probability", np.int8),
-        ("frozen_soil_probability", np.int8),
-        ("wetland_fraction", np.int8),
-        ("topographic_complexity", np.int8),
-        ("subsurface_scattering_probability", np.int8),
-    ])
 
     @staticmethod
     def fn_read_fmt(timestamp, sat="[ABC]"):
@@ -315,27 +241,6 @@ class AscatH121v2Swath(AscatSwathProduct):
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_12.5"
     cell_fn_format = "{:04d}.nc"
-    beams_vars = []
-    ts_dtype = np.dtype([
-        ("sat_id", np.int8),
-        ("as_des_pass", np.int8),
-        ("swath_indicator", np.int8),
-        ("surface_soil_moisture", np.float32),
-        ("surface_soil_moisture_noise", np.float32),
-        ("backscatter40", np.float32),
-        ("slope40", np.float32),
-        ("curvature40", np.float32),
-        ("surface_soil_moisture_sensitivity", np.float32),
-        ("backscatter_flag", np.uint8),
-        ("correction_flag", np.uint8),
-        ("processing_flag", np.uint8),
-        ("surface_flag", np.uint8),
-        ("snow_cover_probability", np.int8),
-        ("frozen_soil_probability", np.int8),
-        ("wetland_fraction", np.int8),
-        ("topographic_complexity", np.int8),
-        ("subsurface_scattering_probability", np.int8),
-    ])
 
     @staticmethod
     def fn_read_fmt(timestamp, sat="[ABC]"):
@@ -368,32 +273,6 @@ class AscatH122Swath(AscatSwathProduct):
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_6.25"
     cell_fn_format = "{:04d}.nc"
-    beams_vars = []
-    ts_dtype = np.dtype([
-        ("sat_id", np.int64),
-        ("as_des_pass", np.int8),
-        ("swath_indicator", np.int8),
-        ("surface_soil_moisture", np.float32),
-        ("surface_soil_moisture_noise", np.float32),
-        ("sigma40", np.float32),
-        ("sigma40_noise", np.float32),
-        ("slope40", np.float32),
-        ("slope40_noise", np.float32),
-        ("curvature40", np.float32),
-        ("curvature40_noise", np.float32),
-        ("dry40", np.float32),
-        ("dry40_noise", np.float32),
-        ("wet40", np.float32),
-        ("wet40_noise", np.float32),
-        ("surface_soil_moisture_sensitivity", np.float32),
-        ("surface_soil_moisture_climatology", np.float32),
-        ("correction_flag", np.uint8),
-        ("processing_flag", np.uint8),
-        ("snow_cover_probability", np.int8),
-        ("frozen_soil_probability", np.int8),
-        ("wetland_fraction", np.int8),
-        ("topographic_complexity", np.int8),
-    ])
 
     @staticmethod
     def fn_read_fmt(timestamp, sat="[ABC]"):
@@ -426,61 +305,6 @@ class AscatSIG0Swath6250m(AscatSwathProduct):
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_6.25"
     cell_fn_format = "{:04d}.nc"
-    beams_vars = [
-        "backscatter",
-        "backscatter_std",
-        "incidence_angle",
-        "azimuth_angle",
-        "kp",
-        "n_echos",
-        "all_backscatter",
-        "all_backscatter_std",
-        "all_incidence_angle",
-        "all_azimuth_angle",
-        "all_kp",
-        "all_n_echos",
-    ]
-    ts_dtype = np.dtype([
-        ("sat_id", np.int8),
-        ("as_des_pass", np.int8),
-        ("swath_indicator", np.int8),
-        ("backscatter_for", np.float32),
-        ("backscatter_mid", np.float32),
-        ("backscatter_aft", np.float32),
-        ("backscatter_std_for", np.float32),
-        ("backscatter_std_mid", np.float32),
-        ("backscatter_std_aft", np.float32),
-        ("incidence_angle_for", np.float32),
-        ("incidence_angle_mid", np.float32),
-        ("incidence_angle_aft", np.float32),
-        ("azimuth_angle_for", np.float32),
-        ("azimuth_angle_mid", np.float32),
-        ("azimuth_angle_aft", np.float32),
-        ("kp_for", np.float32),
-        ("kp_mid", np.float32),
-        ("kp_aft", np.float32),
-        ("n_echos_for", np.int8),
-        ("n_echos_mid", np.int8),
-        ("n_echos_aft", np.int8),
-        ("all_backscatter_for", np.float32),
-        ("all_backscatter_mid", np.float32),
-        ("all_backscatter_aft", np.float32),
-        ("all_backscatter_std_for", np.float32),
-        ("all_backscatter_std_mid", np.float32),
-        ("all_backscatter_std_aft", np.float32),
-        ("all_incidence_angle_for", np.float32),
-        ("all_incidence_angle_mid", np.float32),
-        ("all_incidence_angle_aft", np.float32),
-        ("all_azimuth_angle_for", np.float32),
-        ("all_azimuth_angle_mid", np.float32),
-        ("all_azimuth_angle_aft", np.float32),
-        ("all_kp_for", np.float32),
-        ("all_kp_mid", np.float32),
-        ("all_kp_aft", np.float32),
-        ("all_n_echos_for", np.int8),
-        ("all_n_echos_mid", np.int8),
-        ("all_n_echos_aft", np.int8),
-    ])
 
     @staticmethod
     def fn_read_fmt(timestamp, sat="[ABC]"):
@@ -528,61 +352,6 @@ class AscatSIG0Swath12500m(AscatSwathProduct):
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_12.5"
     cell_fn_format = "{:04d}.nc"
-    beams_vars = [
-        "backscatter",
-        "backscatter_std",
-        "incidence_angle",
-        "azimuth_angle",
-        "kp",
-        "n_echos",
-        "all_backscatter",
-        "all_backscatter_std",
-        "all_incidence_angle",
-        "all_azimuth_angle",
-        "all_kp",
-        "all_n_echos",
-    ]
-    ts_dtype = np.dtype([
-        ("sat_id", np.int8),
-        ("as_des_pass", np.int8),
-        ("swath_indicator", np.int8),
-        ("backscatter_for", np.float32),
-        ("backscatter_mid", np.float32),
-        ("backscatter_aft", np.float32),
-        ("backscatter_std_for", np.float32),
-        ("backscatter_std_mid", np.float32),
-        ("backscatter_std_aft", np.float32),
-        ("incidence_angle_for", np.float32),
-        ("incidence_angle_mid", np.float32),
-        ("incidence_angle_aft", np.float32),
-        ("azimuth_angle_for", np.float32),
-        ("azimuth_angle_mid", np.float32),
-        ("azimuth_angle_aft", np.float32),
-        ("kp_for", np.float32),
-        ("kp_mid", np.float32),
-        ("kp_aft", np.float32),
-        ("n_echos_for", np.int8),
-        ("n_echos_mid", np.int8),
-        ("n_echos_aft", np.int8),
-        ("all_backscatter_for", np.float32),
-        ("all_backscatter_mid", np.float32),
-        ("all_backscatter_aft", np.float32),
-        ("all_backscatter_std_for", np.float32),
-        ("all_backscatter_std_mid", np.float32),
-        ("all_backscatter_std_aft", np.float32),
-        ("all_incidence_angle_for", np.float32),
-        ("all_incidence_angle_mid", np.float32),
-        ("all_incidence_angle_aft", np.float32),
-        ("all_azimuth_angle_for", np.float32),
-        ("all_azimuth_angle_mid", np.float32),
-        ("all_azimuth_angle_aft", np.float32),
-        ("all_kp_for", np.float32),
-        ("all_kp_mid", np.float32),
-        ("all_kp_aft", np.float32),
-        ("all_n_echos_for", np.int8),
-        ("all_n_echos_mid", np.int8),
-        ("all_n_echos_aft", np.int8),
-    ])
 
     @staticmethod
     def fn_read_fmt(timestamp, sat="[ABC]"):
