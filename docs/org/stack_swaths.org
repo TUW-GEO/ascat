@@ -31,37 +31,6 @@ Have a look at the help to see required arguments
 ! ascat_swaths_to_cells  --help
 #+end_src
 
-#+RESULTS:
-:results:
-usage: ascat_swaths_to_cells [-h] [--start_date START_DATE]
-                             [--end_date END_DATE] [--dump_size DUMP_SIZE]
-                             [--cells CELLS [CELLS ...]] [--quiet]
-                             FILEPATH OUTPATH PRODUCT_ID [fmt_kwargs ...]
-
-Stack ASCAT swath files to a cell grid
-
-positional arguments:
-  FILEPATH              Path to folder containing swath files
-  OUTPATH               Path to the output data
-  PRODUCT_ID            Product identifier
-  fmt_kwargs            Format keyword arguments, depends on the product
-                        format used. Example: 'sat=A year=2008'
-
-options:
-  -h, --help            show this help message and exit
-  --start_date START_DATE
-                        Start date in format YYYY-MM-DD. Must also provide end
-                        date if this is provided.
-  --end_date END_DATE   End date in format YYYY-MM-DD. Must also provide start
-                        date if this is provided.
-  --dump_size DUMP_SIZE
-                        Size at which to dump the data to disk before reading
-                        more (default: 1GB)
-  --cells CELLS [CELLS ...]
-                        Numbers of the cells to process (default: None)
-  --quiet               Do not print progress information
-:end:
-
 So we need to pass at least three positional arguments to the stacker:
 
 1) ~FILEPATH~ - This is a path to the parent directory of the product's swath files.
@@ -82,125 +51,55 @@ To check which ~product_id~ -s are available to you, use ~ascat_product_info~
 ! ascat_product_info
 #+end_src
 
-#+RESULTS:
-:results:
-Available Swath Products:
-H129
-H121
-H122
-SIG0_6.25
-SIG0_12.5
-
-Available Cell Products:
-H129
-H121
-H122
-SIG0_6.25
-SIG0_12.5
-ERSH
-ERSN
-:end:
-
 To learn more about a product's reader pass its ~product_id~:
 
 #+begin_src ipython :results output drawer
 ! ascat_product_info h121
 #+end_src
 
-#+RESULTS:
-:results:
-Swath Product Information:
-class AscatH121Swath(AscatSwathProduct):
-    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}", "month_folder": "{month}"}
-    date_field_fmt = "%Y%m%d%H%M%S"
-    grid_name = "fibgrid_12.5"
-    cell_fn_format = "{:04d}.nc"
+* Using Python
 
-    @staticmethod
-    def fn_read_fmt(timestamp, sat="[ABC]"):
-        sat = sat.upper()
-        return {
-            "date": timestamp.strftime("%Y%m%d*"),
-            "sat": sat,
-            "placeholder": "*",
-            "placeholder1": "*"
-        }
+The CLI described above is just a wrapper for a python function. If you need more control over the processing or want to include this as a step in a pipeline, you can make a ~SwathGridFiles~ object and call ~.stack_to_cell_files~ on it directly.
 
-    @staticmethod
-    def sf_read_fmt(timestamp, sat="[abc]"):
-        sat = sat.lower()
-        return {
-            "satellite_folder": {
-                "satellite": f"metop_{sat}"
-            },
-            "year_folder": {
-                "year": f"{timestamp.year}"
-            },
-            "month_folder": {
-                "month": f"{timestamp.month}".zfill(2)
-            },
-        }
+We pass it at least an output directory path (~out_dir~), where the outputs will be written, and we can also pass it several other options.
 
-class AscatSwathProduct(SwathProduct):
-    grid_name = None
+#+begin_src ipython :eval no
+# where to save the files
+cell_file_directory = ""
 
-    @classmethod
-    def preprocess_(cls, ds):
-        ds["location_id"].attrs["cf_role"] = "timeseries_id"
-        ds.attrs["global_attributes_flag"] = 1
-        ds.attrs["featureType"] = "point"
-        ds.attrs["grid_mapping_name"] = cls.grid_name
-        if "spacecraft" in ds.attrs:
-            # Assumption: the spacecraft attribute is something like "metop-a"
-            sat_id = {"a": 3, "b": 4, "c": 5}
-            sat = ds.attrs["spacecraft"][-1].lower()
-            ds["sat_id"] = ("obs",
-                            np.repeat(sat_id[sat], ds["location_id"].size))
-            del ds.attrs["spacecraft"]
-        return ds
 
-    @staticmethod
-    def postprocess_(ds):
-        for key, item in {"latitude": "lat", "longitude": "lon", "altitude": "alt"}.items():
-            if key in ds:
-                ds = ds.rename({key: item})
-        if "altitude" not in ds:
-            ds["alt"] = ("locations", np.full_like(ds["lat"], fill_value=np.nan))
-        return ds
+# the maximum size of the data buffer before dumping to file (actual maximum memory used will be higher)
+# default is 6144MB
+max_nbytes = None
 
-class SwathProduct:
-    from ascat.swath import Swath
-    file_class = Swath
+# the date range to use. This should be a tuple of datetime.datetime objects
+date_range = None
 
-Cell Product Information:
-class AscatH121Cell(RaggedArrayCellProduct):
-    grid_name = "fibgrid_12.5"
+# Pass a list of cell numbers (integers) here if you only want to stack data for a certain set of cells. This is mainly useful for testing purposes, since even splitting a day's worth of swath data into files for all of its constituent cells is a lengthy process.
+cells=None
 
-class RaggedArrayCellProduct(BaseCellProduct):
-    file_class = RaggedArrayTs
-    sample_dim = "obs"
-    instance_dim = "locations"
+# mode : "w" for creating new files if any already exist, "a" to append data to existing cell files
+# note that old data and new data will not be sorted after the append
+mode = "w"
 
-    @classmethod
-    def preprocessor(cls, ds):
-        if "row_size" in ds.variables:
-            ds["row_size"].attrs["sample_dimension"] = cls.sample_dim
-        if "locationIndex" in ds.variables:
-            ds["locationIndex"].attrs["instance_dimension"] = cls.instance_dim
-        if "location_id" in ds.variables:
-            ds["location_id"].attrs["cf_role"] = "timeseries_id"
-        if ds.attrs.get("featureType") is None:
-            ds = ds.assign_attrs({"featureType": "timeSeries"})
-        if ds.attrs.get("grid_mapping_name") is None:
-            ds.attrs["grid_mapping_name"] = cls.grid_name
-        return ds
+swath_collection.stack_to_cell_files(
+    output_dir=cell_file_directory,
+    max_nbytes=max_nbytes,
+    date_range=date_range,
+    mode=mode,
+    processes=processes,
+)
+#+end_src
 
-class BaseCellProduct:
-    fn_format = "{:04d}.nc"
 
-    @classmethod
-    def preprocessor(cls, ds):
-        return ds
+~stack_to_cell_files~ works by iterating through the source swath files one at a time, opening them as xarray datasets, performing any necessary preprocessing, and concatenating each new dataset to all of the previous ones. Once that dataset's `nbytes` attribute reaches `max_nbytes`, reading is paused while the combined dataset is dumped out into one file in /timeseries point array/ format for each of its constituent cells. Once the cells are written, the process starts again. On all dumps, data for any cells that already have a file is appended to those files, so it's important to make sure that a fresh export is pointed to an empty directory.
 
-:end:
+The output cells are in /timeseries point array/ format. In order to convert them to /contiguous/ ragged array format, we can create a ~CellGridFiles~ object from the output directory, and call the method ~convert_to_contiguous()~:
+
+#+begin_src ipython :eval no
+cell_collection = CellGridFiles.from_product_id(cell_file_directory, product_id="H121")
+contiguous_cell_file_directory = "contiguous_directory_name"
+cell_collection.convert_to_contiguous(contiguous_cell_file_directory)
+#+end_src
+
+This will sort the entire dataset first by time and then by ~location_id~, and then replace the dataset's ~locationindex~ variable with a ~row_size~ variable. at this point it is no longer practically possible to append new data to the dataset without first re-converting it to indexed ragged array format and then converting back.
