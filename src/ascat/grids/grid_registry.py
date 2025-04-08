@@ -61,11 +61,27 @@ class GridRegistry:
         grid_type_name: str,
         grid_class: type,
     ):
+        """
+        Register a grid class with a name for later retrieval.
+
+        e.g. `register("fibgrid", FibGrid)` or `register("named", NamedFileGrid)`
+        """
         if grid_type_name in self._registry:
             return
         self._registry[grid_type_name] = grid_class
 
     def get(self, grid_name):
+        """
+        Retrieve a grid instance based on its name.
+
+        The grid name can be a simple name (e.g. "fibgrid") or a more complex
+        name with parameters (e.g. "fibgrid_0.1"). The latter will be split
+        into the grid type and its parameters.
+
+        Parameters
+        ----------
+            grid_name (str): The name of the grid to retrieve.
+        """
         match grid_name.split("_"):
             case ["fibgrid", grid_spacing]:
                 grid_type = "fibgrid"
