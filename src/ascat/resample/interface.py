@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien
+# Copyright (c) 2025, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -36,13 +36,14 @@ from pyresample import kd_tree, SwathDefinition
 from ascat.utils import dtype_to_nan
 from ascat.read_native.xarray_io import get_swath_product_id
 from ascat.read_native.xarray_io import swath_io_catalog
-from ascat.regrid.regrid import regrid_swath_ds
 from ascat.regrid.regrid import retrieve_or_store_grid_lut
 
+from ascat.regrid.interface import swath_regrid_main
 
-def parse_args_swath_regrid(args):
+
+def parse_args_swath_resample(args):
     """
-    Parse command line arguments for regridding an ASCAT swath file
+    Parse command line arguments for resampling an ASCAT swath file
     to a regular grid.
 
     Parameters
@@ -56,14 +57,14 @@ def parse_args_swath_regrid(args):
         Argument Parser object.
     """
     parser = argparse.ArgumentParser(
-        description="Regrid an ASCAT swath file to a regular grid")
+        description="Resample an ASCAT swath file to a regular grid")
     parser.add_argument(
         "filepath", metavar="FILEPATH", help="Path to file or folder")
     parser.add_argument(
         "outpath", metavar="OUTPATH", help="Path to the output data")
     parser.add_argument(
-        "regrid_deg",
-        metavar="REGRID_DEG",
+        "resample_deg",
+        metavar="RESAMPLE_DEG",
         type=float,
         help="Target grid spacing in degrees")
     parser.add_argument(
@@ -73,14 +74,14 @@ def parse_args_swath_regrid(args):
     parser.add_argument(
         "--suffix",
         metavar="SUFFIX",
-        help="File suffix (default: _REGRID_DEGdeg)")
+        help="File suffix (default: _RESAMPLE_DEGdeg)")
 
     return parser.parse_args(args)
 
 
-def swath_regrid_main(cli_args):
+def swath_resample_main(cli_args):
     """
-    Regrid an ASCAT swath file or directory of swath files
+    Resample an ASCAT swath file or directory of swath files
     to a regular grid and write the results to disk.
 
     Parameters
@@ -88,9 +89,9 @@ def swath_regrid_main(cli_args):
     cli_args : list
         Command line arguments.
     """
-    args = parse_args_swath_regrid(cli_args)
+    args = parse_args_swath_resample(cli_args)
     filepath = Path(args.filepath)
-    trg_grid_size = args.regrid_deg
+    trg_grid_size = args.resample_deg
 
     outpath = Path(args.outpath)
     outpath.parent.mkdir(parents=True, exist_ok=True)
@@ -98,7 +99,7 @@ def swath_regrid_main(cli_args):
     if args.suffix:
         suffix = args.suffix
     else:
-        suffix = f"_{args.regrid_deg}deg"
+        suffix = f"_{args.resample_deg}deg"
 
     if filepath.is_dir():
         files = list(filepath.glob("**/*.nc"))
@@ -125,116 +126,178 @@ def swath_regrid_main(cli_args):
                                                     trg_grid_id, trg_grid_size,
                                                     args.grid_store)
 
-    # latitude/longitude
+    radius = 10000.
+    k = 6
 
-
-    # fields to weights
-    # --------
-    # surface soil moisture
-    # surface soil moisture noise
-    # surface soil moisture sensitivity
-    # backscatter40
-    # slope40
-    # curvature40
-
-    # majority
-    # --------
-    # processing_flag
-    # correction_flag
-    # backscatter40_flag
-
-    # snow cover probability
-    # frozen soil probability
-    # subsurface_scattering_prob
-    # wetland_fraction
-    # topographic_complexity
-    # surface_flag
-    # surface_flag_source
-
-    # closest
-    # --------
-    # time
-    # as_des_pass
-    # swath_indicator
-
-
+    # defintion of target grid - regular lat/lon grid
     target_def = SwathDefinition(lons=trg_grid.arrlon, lats=trg_grid.arrlat)
+    output_shape = trg_grid.shape
+    dim = ("latitude", "longitude")
 
     for f in files:
         outfile = outpath / Path(f.stem + suffix + f.suffix)
 
         with xr.open_dataset(f, decode_cf=False, mask_and_scale=False) as ds:
 
-            field = "surface_soil_moisture"
-            valid = ds[field] != ds[field]._FillValue
-
             lons = ds["longitude"] * ds["longitude"].scale_factor
             lats = ds["latitude"] * ds["latitude"].scale_factor
-
-            swath_def = SwathDefinition(lons=lons[valid], lats=lats[valid])
-            valid = ds[field] != ds[field]._FillValue
-            data = ds[field].data[valid]
-            fill_value = ds[field]._FillValue
-            output_shape = trg_grid.shape
-
-            radius = 10000.
-            k = 6
-            valid_input_index, valid_output_index, index_array, distance_array = \
-                       kd_tree.get_neighbour_info(swath_def, target_def,
-                                                  radius, neighbours=k)
-
-            weight_funcs = lambda r: 1 / r**2
-            result = kd_tree.get_sample_from_neighbour_info(
-                "custom",
-                output_shape,
-                data,
-                valid_input_index,
-                valid_output_index,
-                index_array,
-                distance_array=distance_array,
-                weight_funcs=weight_funcs,
-                fill_value=fill_value,
-                with_uncert=False)
 
             coords = {
                 "latitude": np.int32(trg_grid.lat2d[:, 0] / 1e-6),
                 "longitude": np.int32(trg_grid.lon2d[0] / 1e-6)
             }
 
-            regrid_ds = xr.Dataset(coords=coords)
-            regrid_ds.attrs = ds.attrs
+            resampled_ds = xr.Dataset(coords=coords)
+            resampled_ds.attrs = ds.attrs
 
-            regrid_ds["latitude"].attrs = ds["latitude"].attrs
-            regrid_ds["longitude"].attrs = ds["longitude"].attrs
-            dim = ("latitude", "longitude")
+            resampled_ds["latitude"].attrs = ds["latitude"].attrs
+            resampled_ds["longitude"].attrs = ds["longitude"].attrs
 
-            for var in ds.variables:
-                if var != field:
+            swath_def = SwathDefinition(lons=lons, lats=lats)
+            valid_input_index, valid_output_index, index_array, distance_array = \
+                    kd_tree.get_neighbour_info(swath_def, target_def,
+                                                radius, neighbours=k)
+
+            invalid_pos = index_array == lons.size
+            index_array = index_array.astype(np.int32)
+            index_array[invalid_pos] = -1
+
+            var_list = [
+                ("time", "nn"),
+                ("as_des_pass", "nn"),
+                ("swath_indicator", "nn"),
+                ("surface_flag", "nn"),
+                ("surface_flag_source", "nn"),
+                ("surface_soil_moisture", "idw"),
+                ("surface_soil_moisture_noise", "idw"),
+                ("surface_soil_moisture_sensitivity", "idw"),
+                ("backscatter40", "idw"),
+                ("slope40", "idw"),
+                ("curvature40", "idw"),
+                ("snow_cover_probability", "idw"),
+                ("frozen_soil_probability", "idw"),
+                ("topographic_complexity", "idw"),
+                ("wetland_fraction", "idw"),
+                ("subsurface_scattering_prob", "idw"),
+                ("processing_flag", "major"),
+                ("correction_flag", "major"),
+                ("backscatter40_flag", "major"),
+            ]
+
+            for var, method in var_list:
+
+                if var not in ds:
                     continue
 
-                if var in ["latitude", "longitude"]:
-                    continue
+                data = ds[var].data[valid_input_index][index_array]
+                data[invalid_pos] = ds[var]._FillValue
 
-                if ds[var].size == 1:
-                    continue
+                resam_data = np.zeros(
+                    data.shape[0], dtype=ds[var].dtype) + ds[var]._FillValue
 
-                regrid_ds[var] = (dim, result)
-                regrid_ds[var].attrs = ds[var].attrs
-                regrid_ds[var].encoding = {"zlib": True, "complevel": 4}
+                if method == "idw":
+                    p = 2
+                    weights = 1 / (distance_array**p)
+                    invalid = invalid_pos | (data == ds[var]._FillValue)
+                    weights[invalid] = 0
+                    total_weights = weights.sum(axis=1)
+                    idx = total_weights != 0
+                    resam_data[idx] = np.sum(
+                        weights * data, axis=1)[idx] / total_weights[idx]
+                elif method == "nn":
+                    mask = index_array != -1
+                    first_idx = np.where(
+                        mask.any(axis=1), mask.argmax(axis=1), -1)
+                    valid_mask = first_idx != -1
+                    valid_rows = np.arange(index_array.shape[0])[valid_mask]
+                    resam_data[valid_rows] = data[valid_rows,
+                                                  first_idx[valid_rows]]
+                else:
+                    raise ValueError("Resampling method unknown")
+
+                resampled_ds[var] = (dim, resam_data.reshape(output_shape))
+                resampled_ds[var].attrs = ds[var].attrs
+                resampled_ds[var].encoding = {"zlib": True, "complevel": 4}
+
+            # var = "time"
+            # valid = ds[var] != ds[var]._FillValue
+            # swath_def = SwathDefinition(lons=lons[valid], lats=lats[valid])
+            # valid_input_index, valid_output_index, index_array, distance_array = \
+            #         kd_tree.get_neighbour_info(swath_def, target_def,
+            #                                     radius, neighbours=1)
+
+            # for var in nn_vars:
+
+            #     resampled_data = kd_tree.get_sample_from_neighbour_info(
+            #         "nn",
+            #         output_shape,
+            #         ds[var].data[valid],
+            #         valid_input_index,
+            #         valid_output_index,
+            #         index_array,
+            #         fill_value=ds[var]._FillValue,
+            #         with_uncert=False)
+
+            #     resampled_ds[var] = (dim, resampled_data)
+            #     resampled_ds[var].attrs = ds[var].attrs
+            #     resampled_ds[var].encoding = {"zlib": True, "complevel": 4}
+
+            # var = "surface_soil_moisture"
+            # valid = ds[var] != ds[var]._FillValue
+            # swath_def = SwathDefinition(lons=lons[valid], lats=lats[valid])
+            # valid_input_index, valid_output_index, index_array, distance_array = \
+            #         kd_tree.get_neighbour_info(swath_def, target_def,
+            #                                     radius, neighbours=k)
+
+            # for var in w_sm_vars:
+
+            #     resampled_data = kd_tree.get_sample_from_neighbour_info(
+            #         "custom",
+            #         output_shape,
+            #         ds[var].data[valid],
+            #         valid_input_index,
+            #         valid_output_index,
+            #         index_array,
+            #         distance_array=distance_array,
+            #         weight_funcs=weight_funcs,
+            #         fill_value=ds[var]._FillValue,
+            #         with_uncert=False)
+
+            #     resampled_ds[var] = (dim, resampled_data)
+            #     resampled_ds[var].attrs = ds[var].attrs
+            #     resampled_ds[var].encoding = {"zlib": True, "complevel": 4}
+
+            # var = "backscatter40"
+            # valid = ds[var] != ds[var]._FillValue
+            # swath_def = SwathDefinition(lons=lons[valid], lats=lats[valid])
+            # valid_input_index, valid_output_index, index_array, distance_array = \
+            #         kd_tree.get_neighbour_info(swath_def, target_def,
+            #                                     radius, neighbours=k)
+
+            # for var in w_sig_vars:
+
+            #     resampled_data = kd_tree.get_sample_from_neighbour_info(
+            #         "custom",
+            #         output_shape,
+            #         ds[var].data[valid],
+            #         valid_input_index,
+            #         valid_output_index,
+            #         index_array,
+            #         distance_array=distance_array,
+            #         weight_funcs=weight_funcs,
+            #         fill_value=ds[var]._FillValue,
+            #         with_uncert=False)
+
+            #     resampled_ds[var] = (dim, resampled_data)
+            #     resampled_ds[var].attrs = ds[var].attrs
+            #     resampled_ds[var].encoding = {"zlib": True, "complevel": 4}
+
+            resampled_ds.to_netcdf(outfile)
 
 
-            var = "location_id"
-            regrid_ds[var] = (dim, result)
-            regrid_ds[var].attrs = ds[var].attrs
-            regrid_ds[var].encoding = {"zlib": True, "complevel": 4}
-
-            # regrid_ds = regrid_swath_ds(ds, src_grid, trg_grid, grid_lut)
-            regrid_ds.to_netcdf(outfile)
-
-
-def run_swath_regrid():
-    """Run command line interface for temporal aggregation of ASCAT data."""
-    swath_regrid_main(sys.argv[1:])
+def run_swath_resample():
+    """Run command line interface for reample ASCAT swath data."""
+    swath_resample_main(sys.argv[1:])
 
 
 if __name__ == '__main__':
@@ -251,4 +314,12 @@ if __name__ == '__main__':
         outpath,
         "0.1",
     ]
-    swath_regrid_main(cli_args)
+    swath_resample_main(cli_args)
+
+    # cli_args = [
+    #     filename,
+    #     outpath,
+    #     "0.1",
+    #     "--suffix", "regrid"
+    # ]
+    # swath_regrid_main(cli_args)
