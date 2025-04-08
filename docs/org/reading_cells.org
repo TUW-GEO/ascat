@@ -7,8 +7,8 @@
 #+end_src
 
 
-* Introduction
-** TODO A discussion of the timeseries file format, fibgrid/cells
+# * Introduction
+# ** TODO A discussion of the timeseries file format, fibgrid/cells
 
 * Working with gridded cell files
 ** Creating a cell file collection
@@ -75,7 +75,7 @@ Notice that despite passing four different sets of coordinates, ~budapest_coords
 To have a quick look at the locations your data covers, you can use the ~.cf_geom.map_footprint()~ method to plot the locations on a map. This will map the locations of the grid points in your dataset, and you can use this to check that you've read the data you expected.
 
 #+begin_src ipython
-fig, ax, scat = capitals_ds.cf_geom.map_footprint(s=4)
+fig, ax, scat = capitals_ds.cf_geom.map_footprint(s=8)
 ax.set_extent([10, 23, 44, 53])
 #+end_src
 
