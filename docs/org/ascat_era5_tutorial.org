@@ -57,7 +57,7 @@ from ascat.grids import GridRegistry, NamedFileGridRegistry
 
 
 #+begin_src ipython :tangle debug_tutorial.py
-path_to_ascat = "/data-write/RADAR/hsaf/h121_v1.0/cells/"
+path_to_ascat = "/data-write/RADAR/hsaf/h121_v2.0/time_series/metop_abc/"
 h121 = CellGridFiles.from_product_id(path_to_ascat, "h121")
 
 import numpy as np
@@ -72,7 +72,7 @@ Next we need to get the ERA5 data we want. This is also a collection of gridded 
 
 Because the ASCAT products use a Fibonacci grid of a defined spacing, the ASCAT package can generate the grid information automatically behind the scenes, and you don't even need to think about it.
 
-This product, though, relies upon a ~grid.nc~ file that lives inside the cell file directory to define the grid. We don't (as users) know what it would take to recreate it, so we need to tell the package to just get the grid for this product type from this specific filepath. To do that, we can import the NamedGridRegistry and register the path to this grid with a string name to identify it. N.B. that this string should not contain any underscores (~"_"~)!
+This product, though, relies upon a ~grid.nc~ file that lives inside the cell file directory to define the grid. We don't (as users) know what it would take to recreate it, so we need to tell the package to just get the grid for this product type from this specific filepath. To do that, we can import the NamedFileGridRegistry and register the path to this grid with a string name to identify it. N.B. that this string should not contain any underscores (~"_"~)!
 
 #+begin_src ipython
 from ascat.grids import NamedFileGridRegistry
@@ -85,7 +85,7 @@ NamedFileGridRegistry.register("era5land", str(grid_path))
 That's all there is to defining the grid. Now we can just create a class that inherits from the basic ~OrthoMultiArrayCellProduct~ and defines the grid name for this product.
 
 #+begin_src ipython
-from ascat.read_native.product_info import OrthoMultiArrayCellProduct
+from ascat.product_info import OrthoMultiArrayCellProduct
 class ERA5Cell(OrthoMultiArrayCellProduct):
     grid_name = "era5land"
 
