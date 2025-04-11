@@ -122,13 +122,6 @@ plt.tight_layout()
 
 ** Mapping data from SwathGridFiles
 
-We can check the spatial coverage of the data by plotting it on a map.
-
-#+begin_src ipython :results raw drawer
-fig, ax, scat = central_europe_ds.cf_geom.plot_var_map("surface_soil_moisture", s=0.1)
-ax.set_extent([-10, 30, 35, 65])
-#+end_src
-
 Having the data as an Xarray makes it handy to do transformations. For example, we can group by location_id and get the average surface soil moisture at each. First, we need to load the ~location_id~ into memory, since it currently exists as a chunked dask array, and the groupby method only works with numpy arrays.
 
 #+begin_src ipython :results output drawer

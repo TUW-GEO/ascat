@@ -49,6 +49,27 @@ NB: Merging the data from multiple cells can be a time-consuming process, and th
 
 Let's look at some examples of actually using the reader.
 
+#+begin_src ipython
+def map_footprint(ds, **kwargs):
+    """
+    Map all the unique locations in the array.
+    """
+    lon = ds.cf["longitude"]
+    lat = ds.cf["latitude"]
+    unique_lons, unique_lats = np.unique(
+        np.column_stack((lon, lat)), axis=0
+    ).T
+    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()})
+    ax.coastlines()
+    ax.add_feature(feature.BORDERS, linestyle='-', alpha=.5)
+    scat = ax.scatter(
+        x=unique_lons,
+        y=unique_lats,
+        **kwargs
+    )
+    return fig, ax, scat
+#+end_src
+
 *** By coordinates
 We can read a single coordinate:
 
@@ -72,10 +93,10 @@ print(capitals_ds)
 
 Notice that despite passing four different sets of coordinates, ~budapest_coords~ and ~near_budapest_coords~ both had the same nearest grid point, so we only have three locations in the resulting dataset.
 
-To have a quick look at the locations your data covers, you can use the ~.cf_geom.map_footprint()~ method to plot the locations on a map. This will map the locations of the grid points in your dataset, and you can use this to check that you've read the data you expected.
+To have a quick look at the locations your data covers, you can use the ~map_footprint()~ function defined above to plot the grid points it contains on a map.
 
 #+begin_src ipython
-fig, ax, scat = capitals_ds.cf_geom.map_footprint(s=8)
+fig, ax, scat = map_footprint(capitals_ds, s=8)
 ax.set_extent([10, 23, 44, 53])
 #+end_src
 
@@ -150,7 +171,7 @@ cell_collection.read(cell=[1431, 1432], date_range=date_range).load()
 Finally let's have a look at the area we've been reading:
 
 #+begin_src ipython :results raw drawer
-_,_,_ = vienna_cell_ds.cf_geom.map_footprint(s=1)
+_,_,_ = map_footprint(vienna_cell_ds, s=1)
 #+end_src
 
 
@@ -170,7 +191,7 @@ Let's have a look:
 
 #+begin_src ipython
 from cartopy import feature
-fig, ax, scat = vienna_bbox_ds.cf_geom.map_footprint(s=4)
+fig, ax, scat = map_footprint(vienna_bbox_ds, s=4)
 ax.add_feature(feature.RIVERS)
 ax.set_extent([14, 19, 46, 50])
 #+end_src
@@ -191,7 +212,7 @@ print(central_europe_2018)
 #+end_src
 
 #+begin_src ipython
-fig, ax, scat = central_europe_2018.cf_geom.map_footprint(s=1)
+fig, ax, scat = map_footprint(central_europe_2018, s=1)
 ax.add_feature(feature.RIVERS)
 #+end_src
 
@@ -235,7 +256,7 @@ print(baltics_ds)
 #+end_src
 
 #+begin_src ipython
-fig, ax, scat = baltics_ds.cf_geom.map_footprint(s=1)
+fig, ax, scat = map_footprint(baltics_ds, s=1)
 #+end_src
 
 
