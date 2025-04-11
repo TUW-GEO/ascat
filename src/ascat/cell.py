@@ -37,6 +37,7 @@ from ascat.grids import GridRegistry
 from ascat.file_handling import Filenames
 from ascat.utils import get_grid_gpis
 from ascat.utils import append_to_netcdf
+import warnings
 
 
 class RaggedArrayTs(Filenames):
@@ -887,4 +888,10 @@ class CellGridFiles():
                                           preprocessor=self._preprocessor,
                                           **kwargs)
 
+        if out_ds is None:
+            warning_str = ("No data found for specified criteria, returning None:\n"
+                           f"cell={cell}, location_id={location_id}, coords={coords}, bbox={bbox}, geom={geom},\n"
+                           f"max_coord_dist={max_coord_dist}, date_range={date_range}")
+            warnings.warn(warning_str, UserWarning, 2)
+            return out_ds
         return out_ds

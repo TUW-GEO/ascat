@@ -43,6 +43,7 @@ from ascat.grids import GridRegistry
 from ascat.utils import get_grid_gpis
 from ascat.file_handling import Filenames
 from ascat.file_handling import ChronFiles
+import warnings
 
 
 registry = GridRegistry()
@@ -659,6 +660,11 @@ class SwathGridFiles(ChronFiles):
                 data = data.sel(obs=mask.compute())
 
             return data
+        warning_str = ("No data found for specified criteria, returning None:\n"
+                        f"date_range={date_range}\n"
+                        f"cell={cell}, location_id={location_id}, coords={coords}, bbox={bbox},\n"
+                        f"geom={geom}, max_coord_dist={max_coord_dist}, \n")
+        warnings.warn(warning_str, UserWarning, 2)
 
     def stack_to_cell_files(self,
                             out_dir,
