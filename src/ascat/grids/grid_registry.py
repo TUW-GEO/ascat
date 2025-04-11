@@ -82,19 +82,18 @@ class GridRegistry:
         ----------
             grid_name (str): The name of the grid to retrieve.
         """
-        match grid_name.split("_"):
-            case ["fibgrid", grid_spacing]:
-                grid_type = "fibgrid"
-                grid_spacing = float(grid_spacing)
-                args = (grid_spacing,)
+        parts = grid_name.split("_")
 
-            case [grid_name]:
-                grid_type = "named"
-                args = (grid_name,)
-
-            case [name, *args]:
-                grid_type = name
-                args = tuple(args)
+        if len(parts) >= 2 and parts[0] == "fibgrid":
+            grid_type = "fibgrid"
+            grid_spacing = float(parts[1])
+            args = (grid_spacing,)
+        elif len(parts) == 1:
+            grid_type = "named"
+            args = (grid_name,)
+        else:
+            grid_type = parts[0]
+            args = tuple(parts[1:])
 
         grid_class = self._registry.get(grid_type)
         if grid_class is None:
