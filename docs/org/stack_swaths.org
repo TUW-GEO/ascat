@@ -50,21 +50,21 @@ To check which ~product_id~ -s are available to use, use ~ascat_product_info~
 ! ascat_product_info
 #+end_src
 
-To learn more about a product's reader pass its ~product_id~:
+To see how a product's readers have been defined, pass its ~product_id~:
 
 #+begin_src ipython :results output drawer
 ! ascat_product_info h121
 #+end_src
 
 
-Once you have the right product id chosen or set up, pass your swath file root, output directory, and product id to `ascat_swaths_to_cells`, along with any other arguments.
+Once you have the right product id chosen or set up, pass your swath file root, output directory, and product id to ~ascat_swaths_to_cells~, along with any other arguments.
 
 #+begin_example
 ascat_swaths_to_cells /path/to/my/swath/files/ /path/to/my/new/cell/files/ H121 --start_date 2023-01-01 --end_date 2023-12-31
 #+end_example
 
 
-~ascat_swaths_to_cells~ works by iterating through the source swath files one at a time, opening them as xarray datasets, performing any necessary preprocessing, and concatenating each new dataset to all of the previous ones. Once that dataset's `nbytes` attribute reaches ~dump_size~, reading is paused while the combined dataset is dumped out into one file in /timeseries point array/ format for each of its constituent cells. Once the cells are written, the process starts again.
+~ascat_swaths_to_cells~ works by iterating through the source swath files one at a time, opening them as xarray datasets, performing any necessary preprocessing, and concatenating each new dataset to all of the previous ones. Once that dataset's ~nbytes~ attribute reaches ~dump_size~, reading is paused while the combined dataset is dumped out into one file in /timeseries point array/ format for each of its constituent cells. Once the cells are written, the process starts again.
 
 On all dumps, data for any cells that already have a file is appended to those files. This is useful if you want to add new data to an existing stack, but if you want to make a fresh export, it's important to make sure the CLI is pointed to an empty directory.
 
@@ -115,6 +115,8 @@ mode = "w"
 
 
 #+begin_src ipython
+from ascat.cell import CellGridFiles
+
 cell_collection = CellGridFiles.from_product_id(cell_file_directory, product_id="H121")
 contiguous_cell_file_directory = "contiguous_directory_name"
 # # uncomment to run
@@ -124,6 +126,6 @@ contiguous_cell_file_directory = "contiguous_directory_name"
 Conversion to contiguous ragged array format will sort the sample dimension first by time and then by ~location_id~. At this point it is no longer practically possible to append new data to the dataset without first re-converting it to indexed ragged array format and then converting back.
 
 * Adding a custom product class
-To add your own product classes you'll need to clone this repository and install it in your environment as an editable package (e.g. ~pip install -e /home/username/Clones/ascat~). Then you can edit ~.../ascat/src/ascat/product_info/product_info.py~ to add your own classes following the examples of the existing ones. Best to copy-paste, e.g. `AscatH129Swath` and edit the fields accordingly.
+To add your own product classes you'll need to clone this repository and install it in your environment as an editable package (e.g. ~pip install -e /home/username/Clones/ascat~). Then you can edit ~.../ascat/src/ascat/product_info/product_info.py~ to add your own classes following the examples of the existing ones. Best to copy-paste, e.g. ~AscatH129Swath~ and edit the fields accordingly.
 
 Once your product class is written, add it to the ~swath_io_catalog~ dictionary, along with a key to access it. Then you can use this key to specify your custom product when running the CLI.
