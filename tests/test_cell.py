@@ -380,6 +380,7 @@ class TestCellGridFiles(unittest.TestCase):
         coord = (175.8, 70.01)
         ds = contig_collection.read(coords=coord)
         ds.load()
+        assert len(ds.time) >= 1
 
     def test_read_with_two_valid_coords(self):
         root_path = self.tempdir_path / "contiguous"
@@ -389,6 +390,7 @@ class TestCellGridFiles(unittest.TestCase):
         coords = (np.array([175.8, 175.4]),
                   np.array([70.01, 70.05]))
         ds = contig_collection.read(coords=coords)
+        assert len(ds.time) >= 1
 
     def test_read_with_invalid_coords(self):
         root_path = self.tempdir_path / "contiguous"
@@ -398,6 +400,7 @@ class TestCellGridFiles(unittest.TestCase):
         coords = (np.array([1, 2, 0]),
                   np.array([10, 20, 0]))
         ds = contig_collection.read(coords=coords)
+        assert ds is None
 
     def test_read_with_two_valid_coords_and_invalid_coord(self):
         root_path = self.tempdir_path / "contiguous"
@@ -408,6 +411,7 @@ class TestCellGridFiles(unittest.TestCase):
                   np.array([70.01, 70.05, 0]))
         ds = contig_collection.read(coords=coords)
         ds.load()
+        assert len(ds.time) >= 1
 
     def test_read_indexed(self):
         root_path = self.tempdir_path / "indexed"
@@ -422,6 +426,7 @@ class TestCellGridFiles(unittest.TestCase):
             **self._init_options(root_path, {"sat_str": "{sat}"}, {"sat_str": {"sat": "metop_[abc]"}})
         )
         ds = indexed_collection.read(bbox=(70.5, 75, 175.5, 179))
+        assert len(ds.time) >= 1
 
     def test_read_single_ts_indexed(self):
         files = list(self.indexed_cells_path.glob("*.nc"))
@@ -429,6 +434,8 @@ class TestCellGridFiles(unittest.TestCase):
         one_valid_gpi = [first_file_ds["location_id"][first_file_ds["locationIndex"][5]].values]
         collection = CellGridFiles.from_product_class(self.indexed_cells_path, RaggedArrayDummyCellProduct)
         ds = collection.read(location_id=one_valid_gpi)
+        assert len(ds.cf_geom.to_indexed_ragged().locations) == 1
+        assert len(ds.time) >= 1
 
     def test_read_n_ts_from_one_cell_indexed(self):
         n = 5
@@ -472,6 +479,7 @@ class TestCellGridFiles(unittest.TestCase):
 
         collection = CellGridFiles.from_product_class(self.indexed_cells_path, RaggedArrayDummyCellProduct)
         ds = collection.read(cell=first_cell)
+        assert len(ds.time) >= 1
 
     def test_read_two_cells_indexed(self):
         files = list(self.indexed_cells_path.glob("*.nc"))
@@ -480,6 +488,7 @@ class TestCellGridFiles(unittest.TestCase):
 
         collection = CellGridFiles.from_product_class(self.indexed_cells_path, RaggedArrayDummyCellProduct)
         ds = collection.read(cell=[first_cell, second_cell])
+        assert len(ds.time) >= 1
 
     def test_read_single_ts_contiguous(self):
         files = list(self.contiguous_cells_path.glob("*.nc"))
@@ -488,6 +497,7 @@ class TestCellGridFiles(unittest.TestCase):
         one_valid_gpi = [valid_gpis[0]]
         collection = CellGridFiles.from_product_class(self.contiguous_cells_path, RaggedArrayDummyCellProduct)
         ds = collection.read(location_id=one_valid_gpi)
+        assert len(ds.time) >= 1
 
     def test_read_n_ts_from_one_cell_contiguous(self):
         n = 5
@@ -505,7 +515,8 @@ class TestCellGridFiles(unittest.TestCase):
 
         # Try reading one by one in a loop
         for gpi in n_valid_gpis:
-            collection.read(location_id=gpi, return_format="point")
+            new_ds = collection.read(location_id=gpi, return_format="point")
+            assert len(new_ds.time) >= 1
 
     def test_read_2n_ts_from_two_cells_contiguous(self):
         n = 5
@@ -532,6 +543,7 @@ class TestCellGridFiles(unittest.TestCase):
 
         collection = CellGridFiles.from_product_class(self.contiguous_cells_path, RaggedArrayDummyCellProduct)
         ds = collection.read(cell=first_cell)
+        assert len(ds.time) >= 1
 
     def test_read_two_cells_contiguous(self):
         files = list(self.contiguous_cells_path.glob("*.nc"))
@@ -540,7 +552,36 @@ class TestCellGridFiles(unittest.TestCase):
 
         collection = CellGridFiles.from_product_class(self.contiguous_cells_path, RaggedArrayDummyCellProduct)
         ds = collection.read(cell=[first_cell, second_cell])
+        assert len(ds.time) >= 1
 
+    def test_a_thing(self):
+        # lon_min, lon_max = 9, 15
+        # lat_min, lat_max = 45, 48
+        lon_min, lon_max = 11, 21
+        lat_min, lat_max = 43, 51
+        bbox = lat_min, lat_max, lon_min, lon_max
+
+        from ascat.cell import CellGridFiles
+
+        from ascat.grids import GridRegistry, NamedFileGridRegistry
+
+        # contig
+        # path_to_ascat = "/data-write/RADAR/hsaf/h121_v2.0/time_series/metop_abc/"
+        # h121 = CellGridFiles.from_product_id(path_to_ascat, "h121")
+        # point
+        path_to_ascat = "/data-read/RADAR/hsaf/h121_v1.0b/ts/"
+        h121 = CellGridFiles.from_product_id(path_to_ascat, "h121")
+
+        # The CellGridFiles reader wants bounding boxes in (latmin, latmax, lonmin, lonmax) format
+        ascat_bbox = h121.read(bbox=bbox)
+        ascat_bbox = ascat_bbox.load()
+
+    def test_another_thing(self):
+        from ascat.cell import CellGridFiles
+        cell_source = "/data-write/RADAR/hsaf/h121_v2.0/time_series/"
+        cell_collection = CellGridFiles.from_product_id(cell_source, "H121")
+        vienna_ts = cell_collection.read(coords=(48.2, 16.4))
+        print(vienna_ts)
 
 if __name__ == "__main__":
     unittest.main()
