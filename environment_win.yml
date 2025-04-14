@@ -6,6 +6,7 @@ dependencies:
   - pandas
   - pygrib
   - netCDF4
+  - h5netcdf
   - pykdtree
   - h5py
   - xarray
