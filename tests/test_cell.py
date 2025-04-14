@@ -554,34 +554,5 @@ class TestCellGridFiles(unittest.TestCase):
         ds = collection.read(cell=[first_cell, second_cell])
         assert len(ds.time) >= 1
 
-    def test_a_thing(self):
-        # lon_min, lon_max = 9, 15
-        # lat_min, lat_max = 45, 48
-        lon_min, lon_max = 11, 21
-        lat_min, lat_max = 43, 51
-        bbox = lat_min, lat_max, lon_min, lon_max
-
-        from ascat.cell import CellGridFiles
-
-        from ascat.grids import GridRegistry, NamedFileGridRegistry
-
-        # contig
-        # path_to_ascat = "/data-write/RADAR/hsaf/h121_v2.0/time_series/metop_abc/"
-        # h121 = CellGridFiles.from_product_id(path_to_ascat, "h121")
-        # point
-        path_to_ascat = "/data-read/RADAR/hsaf/h121_v1.0b/ts/"
-        h121 = CellGridFiles.from_product_id(path_to_ascat, "h121")
-
-        # The CellGridFiles reader wants bounding boxes in (latmin, latmax, lonmin, lonmax) format
-        ascat_bbox = h121.read(bbox=bbox)
-        ascat_bbox = ascat_bbox.load()
-
-    def test_another_thing(self):
-        from ascat.cell import CellGridFiles
-        cell_source = "/data-write/RADAR/hsaf/h121_v2.0/time_series/"
-        cell_collection = CellGridFiles.from_product_id(cell_source, "H121")
-        vienna_ts = cell_collection.read(coords=(48.2, 16.4))
-        print(vienna_ts)
-
 if __name__ == "__main__":
     unittest.main()
