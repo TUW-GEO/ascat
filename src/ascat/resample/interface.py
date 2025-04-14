@@ -77,7 +77,8 @@ def parse_args_swath_resample(args):
         metavar="N",
         type=int,
         default=6,
-        help="Number of neighbours to consider for each grid point (default: 6)")
+        help="Number of neighbours to consider for each grid point (default: 6)"
+    )
     parser.add_argument(
         "--radius",
         metavar="RADIUS",
@@ -123,7 +124,8 @@ def swath_resample_main(cli_args):
 
     k = args.neighbours
     if (k < 1) or (k > 100):
-        raise ValueError(f"Number of neighbours outside limits 1 < {k} < {100}")
+        raise ValueError(
+            f"Number of neighbours outside limits 1 < {k} < {100}")
 
     first_file = files[0]
 
@@ -142,7 +144,6 @@ def swath_resample_main(cli_args):
     trg_grid, grid_lut = retrieve_or_store_grid_lut(src_grid, src_grid_id,
                                                     trg_grid_id, trg_grid_size,
                                                     args.grid_store)
-
 
     var_list = [
         ("time", "nn"),
@@ -244,50 +245,3 @@ def swath_resample_main(cli_args):
 def run_swath_resample():
     """Run command line interface for reample ASCAT swath data."""
     swath_resample_main(sys.argv[1:])
-
-
-def test_single():
-    from ascat.regrid.interface import swath_regrid_main
-
-    filename = "/data-write/USERS/shahn/ascat_test_data/W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPC-12.5km-H121_C_LIIB_20241022071120_20240601140000_20240601145959____.nc"
-
-    outpath = "/data-write/USERS/shahn/ascat_test_data_output/"
-
-    cli_args = [
-        filename,
-        outpath,
-        "0.1",
-        "--grid_store",
-        "/home/shahn/Downloads",
-        "--neighbours", "50",
-        "--radius", "25000",
-    ]
-    swath_resample_main(cli_args)
-
-    # cli_args = [
-    #     filename,
-    #     outpath,
-    #     "0.1",
-    #     "--suffix", "regrid"
-    # ]
-    # swath_regrid_main(cli_args)
-
-
-def process_test_data():
-
-    in_path = Path("/data-write/RADAR/hsaf/h121_v2.0/netcdf/metop_b/2024/06/")
-    nc_files = list(in_path.glob("*.nc"))
-    out_path = "/data-write/USERS/shahn/ascat_cgls_test_data/"
-
-    for filename in nc_files:
-        cli_args = [
-            str(filename),
-            out_path,
-            "0.1",
-        ]
-        swath_resample_main(cli_args)
-
-
-if __name__ == '__main__':
-    test_single()
-    # process_test_data()
