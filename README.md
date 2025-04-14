@@ -74,12 +74,20 @@ Surface soil moisture and backscatter40 from ASCAT swath files can be aggregated
 
 There is also an option that no masking is applied using the argument ``--no-mask``.
 
-### Regridding of ASCAT SSM swath files ###
+### Re-gridding of ASCAT SSM swath files ###
 
-ASCAT swath files contain data that are provided on a Discrete Global Grid (DGG) and can be converted to a regular lat/lon grid. Either a single swath file or folder containing the swath files can be used as input argument.
+ASCAT swath files contain data that are provided on a Discrete Global Grid (DGG) and can be converted to a regular lat/lon grid using a nearest neighbor approach. Either a single swath file or folder containing the swath files can be used as input argument.
 
 > ```bash
 > ascat_swath_regrid /path/to/input/file /path/to/output 0.1 --grid_store /path/to/tmp/folder --suffix _regrid_0.1deg
+> ```
+
+### Resampling of ASCAT SSM swath files ###
+
+ASCAT swath files contain data that are provided on a Discrete Global Grid (DGG) and can be converted to a regular lat/lon grid using an inverse distance weighting. Either a single swath file or folder containing the swath files can be used as input argument.
+
+> ```bash
+> ascat_swath_resample /path/to/input/file /path/to/output 0.1 --grid_store /path/to/tmp/folder --suffix _resample_0.1deg --neighbour 6 --radius 10000
 > ```
 
 ## Contribute ##
