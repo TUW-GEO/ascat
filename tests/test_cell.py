@@ -15,6 +15,9 @@ from ascat.cell import RaggedArrayTs
 from ascat.cell import OrthoMultiTimeseriesCell
 from ascat.cell import CellGridFiles
 
+from get_path import get_testdata_path
+
+TESTDATA_PATH = get_testdata_path()
 
 class RaggedArrayDummyCellProduct(RaggedArrayCellProduct):
     sample_dim = "time"
@@ -71,8 +74,8 @@ class TestOrthoMultiCellFile(unittest.TestCase):
 
     def test_init(self):
         # contiguous_ragged_path = self.tempdir_path/ "contiguous" / "2588_contiguous_ragged.nc"
-        gldas_path = "tests/ascat_test_data/warp/gldas_2023/"
-        gldas_0029_path = Path("tests/ascat_test_data/warp/gldas_2023/0029.nc")
+        gldas_path = TESTDATA_PATH / "warp/gldas_2023/"
+        gldas_0029_path = TESTDATA_PATH / "warp/gldas_2023/0029.nc"
         gldas_0029 = OrthoMultiTimeseriesCell(gldas_0029_path)
         self.assertTrue(gldas_0029_path.samefile(gldas_0029.filenames[0]))
 
@@ -85,7 +88,7 @@ class TestOrthoMultiCellFile(unittest.TestCase):
         # self.assertIsNone(ra.ds))
 
     def test_read(self):
-        gldas_path = "tests/ascat_test_data/warp/gldas_2023/"
+        gldas_path = TESTDATA_PATH / "warp/gldas_2023/"
         cellnum_glob = "[0-9]" * 4 + ".nc"
         gldas_files = list(Path(gldas_path).glob(cellnum_glob))
         gldas = OrthoMultiTimeseriesCell(gldas_files)
@@ -94,7 +97,7 @@ class TestOrthoMultiCellFile(unittest.TestCase):
 
 
     def test_cellgridfiles_read(self):
-        gldas_path = Path("tests/ascat_test_data/warp/gldas_2023/")
+        gldas_path = TESTDATA_PATH / "warp/gldas_2023/"
         grid = gldas_path / "grid.nc"
         NamedFileGridRegistry.register("gldas", str(grid))
         del grid
@@ -118,7 +121,7 @@ class TestOrthoMultiCellFile(unittest.TestCase):
         assert len(ds) > 0
 
     def test_to_raster(self):
-        gldas_path = Path("tests/ascat_test_data/warp/gldas_2023/")
+        gldas_path = TESTDATA_PATH / "warp/gldas_2023/"
         grid = gldas_path / "grid.nc"
         NamedFileGridRegistry.register("gldas", str(grid))
         del grid
@@ -138,7 +141,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
     def setUp(self):
         self.tempdir = TemporaryDirectory()
         self.tempdir_path = Path(self.tempdir.name)
-        self.indexed_cells_path = Path("tests/ascat_test_data/hsaf/h129/stack_cells/")
+        self.indexed_cells_path = TESTDATA_PATH / "hsaf/h129/stack_cells/"
         gen_dummy_cellfiles(self.tempdir_path)
 
     def tearDown(self):
@@ -320,7 +323,7 @@ class TestCellGridFiles(unittest.TestCase):
     def setUp(self):
         self.tempdir = TemporaryDirectory()
         self.tempdir_path = Path(self.tempdir.name)
-        # self.indexed_cells_path = Path("tests/ascat_test_data/hsaf/h129/stack_cells/")
+        # self.indexed_cells_path = TESTDATA_PATH / "hsaf/h129/stack_cells/"
         gen_dummy_cellfiles(self.tempdir_path)
         gen_dummy_cellfiles(self.tempdir_path, "metop_a")
         gen_dummy_cellfiles(self.tempdir_path, "metop_b")

@@ -14,7 +14,9 @@ import ascat.read_native.generate_test_data as gtd
 from ascat.swath import Swath
 from ascat.swath import SwathGridFiles
 from ascat.product_info import AscatH129Swath
+from get_path import get_testdata_path
 
+TESTDATA_PATH = get_testdata_path()
 
 def gen_dummy_swathfiles(directory, sat_name=None):
     if sat_name is not None:
@@ -29,7 +31,7 @@ class TestSwath(unittest.TestCase):
         self.tempdir = TemporaryDirectory()
         self.tempdir_path = Path(self.tempdir.name)
         self.real_swaths_path = Path(
-            "tests/ascat_test_data/hsaf/h129/swaths/metop_a/2021/01"
+            TESTDATA_PATH / "hsaf/h129/swaths/metop_a/2021/01"
         )
         gen_dummy_swathfiles(self.tempdir_path)
 
@@ -167,7 +169,7 @@ class TestSwathGridFiles(unittest.TestCase):
         # we can create a SwathGridFiles object that points directly to a directory
         # and read the files within it, without passing a "sat" argument to
         # sf.search_period().
-        swath_path = "tests/ascat_test_data/hsaf/h129/swaths/metop_a/2021/01"
+        swath_path = TESTDATA_PATH / "hsaf/h129/swaths/metop_a/2021/01"
 
         sf = SwathGridFiles(
             swath_path,
@@ -194,7 +196,7 @@ class TestSwathGridFiles(unittest.TestCase):
         # pass sat="[bc]".
         # The default value is "[abc]" which will take all three (or whatever
         # is available)
-        swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
+        swath_path = TESTDATA_PATH / "hsaf/h129/swaths"
         sf = SwathGridFiles(
             swath_path,
             fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc",
@@ -214,7 +216,7 @@ class TestSwathGridFiles(unittest.TestCase):
         self.assertGreater(len(files), 0)
 
     def test_from_product_id(self):
-        swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
+        swath_path = TESTDATA_PATH / "hsaf/h129/swaths"
         sf = SwathGridFiles.from_product_id(swath_path, "h129")
         files = sf.search_period(
             datetime(2021, 1, 15), datetime(2021, 1, 30), date_field_fmt="%Y%m%d%H%M%S"
@@ -223,7 +225,7 @@ class TestSwathGridFiles(unittest.TestCase):
         self.assertGreater(len(files), 0)
 
     def test_from_io_class(self):
-        swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
+        swath_path = TESTDATA_PATH / "hsaf/h129/swaths"
         sf = SwathGridFiles.from_product_class(swath_path, AscatH129Swath)
         files = sf.search_period(
             datetime(2021, 1, 15), datetime(2021, 1, 30), date_field_fmt="%Y%m%d%H%M%S"
@@ -232,7 +234,7 @@ class TestSwathGridFiles(unittest.TestCase):
 
     def test_read(self):
         # test read
-        swath_path = "tests/ascat_test_data/hsaf/h129/swaths"
+        swath_path = TESTDATA_PATH / "hsaf/h129/swaths"
         sf = SwathGridFiles.from_product_id(swath_path, "h129")
         files = sf.search_period(
             datetime(2021, 1, 15), datetime(2021, 1, 30), date_field_fmt="%Y%m%d%H%M%S"
@@ -254,7 +256,7 @@ class TestSwathGridFiles(unittest.TestCase):
         self.assertGreater(merged_ds.longitude.min().values, bbox[2])
 
         # test extract from main folder
-        swath_path = "tests/ascat_test_data/hsaf/h129/swaths/metop_a/2021/01"
+        swath_path = TESTDATA_PATH / "hsaf/h129/swaths/metop_a/2021/01"
         sf = SwathGridFiles.from_product_id(swath_path, "h129")
         files = sf.search_period(
             datetime(2021, 1, 15), datetime(2021, 1, 30), date_field_fmt="%Y%m%d%H%M%S"
@@ -305,7 +307,7 @@ class TestSwathGridFiles(unittest.TestCase):
     #     self.assertTrue(np.all(trimmed_ds["time"].values >= start_dt))
 
     def test_stack_to_cell_files(self):
-        swath_path = "tests/ascat_test_data/hsaf/h129/swaths/"
+        swath_path = TESTDATA_PATH / "hsaf/h129/swaths/"
         sf = SwathGridFiles.from_product_id(swath_path, "h129")
         out_dir = self.tempdir_path / "cells_out"
         out_dir.mkdir(parents=True, exist_ok=True)
