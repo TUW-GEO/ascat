@@ -1,5 +1,6 @@
 import inspect
 from enum import Enum
+from pathlib import Path
 from typing import Dict, Type, Any, Tuple
 
 from fibgrid.realization import FibGrid
@@ -34,7 +35,7 @@ class NamedFileGridRegistry:
     @classmethod
     def register(cls, grid_name: str, grid_path: str) -> None:
         """Register a named grid with its file path."""
-        cls._grids[grid_name] = grid_path
+        cls._grids[grid_name] = Path(grid_path)
 
     @classmethod
     def get(cls, grid_name: str) -> str:
