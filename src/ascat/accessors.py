@@ -29,7 +29,6 @@ from typing import Any, Sequence
 
 import numpy as np
 import xarray as xr
-import cf_xarray
 from shapely.geometry.base import BaseGeometry
 
 from pygeogrids import BasicGrid, CellGrid
