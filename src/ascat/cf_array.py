@@ -25,7 +25,7 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Optional, Sequence
+from typing import Union, Sequence
 
 import numpy as np
 import xarray as xr
@@ -76,8 +76,8 @@ def point_to_indexed(
     instance_dim: str,
     timeseries_id: str,
     index_var: str = "locationIndex",
-    instance_vars: Optional[Sequence[str]] = None,
-    coord_vars: Optional[Sequence[str]] = None,
+    instance_vars: Union[Sequence[str], None] = None,
+    coord_vars: Union[Sequence[str], None] = None,
 ) -> xr.Dataset:
     coord_vars = coord_vars or []
     instance_vars = instance_vars or []
@@ -105,9 +105,9 @@ def point_to_contiguous(
     instance_dim: str,
     timeseries_id: str,
     count_var: str = "row_size",
-    instance_vars: Optional[Sequence[str]] = None,
-    coord_vars: Optional[Sequence[str]] = None,
-    sort_vars: Optional[Sequence[str]] = None,
+    instance_vars: Union[Sequence[str], None] = None,
+    coord_vars: Union[Sequence[str], None] = None,
+    sort_vars: Union[Sequence[str], None] = None,
 ) -> xr.Dataset:
     coord_vars = coord_vars or []
     sort_vars = sort_vars or []
@@ -169,7 +169,7 @@ def indexed_to_contiguous(
     instance_dim: str,
     count_var: str,
     index_var: str,
-    sort_vars: Optional[Sequence[str]] = None,
+    sort_vars: Union[Sequence[str], None] = None,
 ) -> xr.Dataset:
     """
     Convert an indexed ragged array dataset to a contiguous ragged array dataset
@@ -251,9 +251,9 @@ class CFDiscreteGeom:
     def __init__(
         self,
         xarray_obj: xr.Dataset,
-        coord_vars: Optional[Sequence[str]] = None,
-        instance_vars: Optional[Sequence[str]] = None,
-        contiguous_sort_vars: Optional[Sequence[str]] = None,
+        coord_vars: Union[Sequence[str], None] = None,
+        instance_vars: Union[Sequence[str], None] = None,
+        contiguous_sort_vars: Union[Sequence[str], None] = None,
     ):
         """
         Parameters
@@ -343,8 +343,8 @@ class TimeseriesPointArray(PointArray):
 
     def sel_instances(
         self,
-        instance_vals: Optional[Sequence[int|str] | np.ndarray] = None,
-        instance_lookup_vector: Optional[np.ndarray] = None,
+        instance_vals: Union[Sequence[int|str], np.ndarray, None] = None,
+        instance_lookup_vector: Union[np.ndarray, None] = None,
         timeseries_id: str = "location_id",
     ):
         ds = self._data
@@ -361,8 +361,8 @@ class TimeseriesPointArray(PointArray):
         instance_dim: str = "locations",
         timeseries_id: str = "location_id",
         index_var: str = "locationIndex",
-        instance_vars: Optional[Sequence[str]] = None,
-        coord_vars: Optional[Sequence[str]] = None,
+        instance_vars: Union[Sequence[str], None] = None,
+        coord_vars: Union[Sequence[str], None] = None,
     ) -> xr.Dataset:
         return self._point_to_indexed(
             self._data,
@@ -379,9 +379,9 @@ class TimeseriesPointArray(PointArray):
         instance_dim: str = "locations",
         timeseries_id: str = "location_id",
         count_var: str = "row_size",
-        instance_vars: Optional[Sequence[str]] = None,
-        coord_vars: Optional[Sequence[str]] = None,
-        sort_vars: Optional[Sequence[str]] = None,
+        instance_vars: Union[Sequence[str], None] = None,
+        coord_vars: Union[Sequence[str], None] = None,
+        sort_vars: Union[Sequence[str], None] = None,
     ) -> xr.Dataset:
         return self._point_to_contiguous(
             self._data,
@@ -399,9 +399,9 @@ class TimeseriesPointArray(PointArray):
             instance_dim: str = "locations",
             timeseries_id: str = "location_id",
             count_var: str = "row_size",
-            instance_vars: Optional[Sequence[str]] = None,
-            coord_vars: Optional[Sequence[str]] = None,
-            sort_vars: Optional[Sequence[str]] = None,
+            instance_vars: Union[Sequence[str], None] = None,
+            coord_vars: Union[Sequence[str], None] = None,
+            sort_vars: Union[Sequence[str], None] = None,
     ):
         return self._point_to_orthomulti(
             self._data,
@@ -419,10 +419,10 @@ class TimeseriesPointArray(PointArray):
             instance_dim: str = "locations",
             timeseries_id: str = "location_id",
             count_var: str = "row_size",
-            instance_vars: Optional[Sequence[str]] = None,
-            coord_vars: Optional[Sequence[str]] = None,
-            sort_vars: Optional[Sequence[str]] = None,
-            vars_to_resample: Optional[Sequence[str]] = None,
+            instance_vars: Union[Sequence[str], None] = None,
+            coord_vars: Union[Sequence[str], None] = None,
+            sort_vars: Union[Sequence[str], None] = None,
+            vars_to_resample: Union[Sequence[str], None] = None,
             resample_method: callable = np.mean,
             resample_period: str = "1M",
     ):
@@ -453,8 +453,8 @@ class TimeseriesPointArray(PointArray):
     def _select_instances(
         ds: xr.Dataset,
         sample_dim: str,
-        instance_vals: Optional[Sequence[int|str] | np.ndarray] = None,
-        instance_lookup_vector: Optional[np.ndarray] = None,
+        instance_vals: Union[Sequence[int|str], np.ndarray, None] = None,
+        instance_lookup_vector: Union[np.ndarray, None] = None,
         timeseries_id: str = "location_id",
     ) -> xr.Dataset:
         if not ds.chunks:
@@ -474,8 +474,8 @@ class TimeseriesPointArray(PointArray):
         instance_dim: str,
         timeseries_id: str,
         index_var: str = "locationIndex",
-        instance_vars: Optional[Sequence[str]] = None,
-        coord_vars: Optional[Sequence[str]] = None,
+        instance_vars: Union[Sequence[str], None] = None,
+        coord_vars: Union[Sequence[str], None] = None,
     ) -> xr.Dataset:
         return point_to_indexed(
             ds,
@@ -494,9 +494,9 @@ class TimeseriesPointArray(PointArray):
         instance_dim: str,
         timeseries_id: str,
         count_var: str = "row_size",
-        instance_vars: Optional[Sequence[str]] = None,
-        coord_vars: Optional[Sequence[str]] = None,
-        sort_vars: Optional[Sequence[str]] = None,
+        instance_vars: Union[Sequence[str], None] = None,
+        coord_vars: Union[Sequence[str], None] = None,
+        sort_vars: Union[Sequence[str], None] = None,
     ) -> xr.Dataset:
         return point_to_contiguous(
             ds,
@@ -516,9 +516,9 @@ class TimeseriesPointArray(PointArray):
         instance_dim: str,
         timeseries_id: str,
         count_var: str = "row_size",
-        instance_vars: Optional[Sequence[str]] = None,
-        coord_vars: Optional[Sequence[str]] = None,
-        sort_vars: Optional[Sequence[str]] = None,
+        instance_vars: Union[Sequence[str], None] = None,
+        coord_vars: Union[Sequence[str], None] = None,
+        sort_vars: Union[Sequence[str], None] = None,
     ) -> xr.Dataset:
         """
         At the moment, minimum resolution is 1D
@@ -539,10 +539,10 @@ class TimeseriesPointArray(PointArray):
         instance_dim: str,
         timeseries_id: str,
         count_var: str = "row_size",
-        instance_vars: Optional[Sequence[str]] = None,
-        coord_vars: Optional[Sequence[str]] = None,
-        sort_vars: Optional[Sequence[str]] = None,
-        vars_to_resample: Optional[Sequence[str]] = None,
+        instance_vars: Union[Sequence[str], None] = None,
+        coord_vars: Union[Sequence[str], None] = None,
+        sort_vars: Union[Sequence[str], None] = None,
+        vars_to_resample: Union[Sequence[str], None] = None,
         resample_method: callable = np.mean,
         resample_period: str = "1M",
     ) -> xr.Dataset:
@@ -615,7 +615,7 @@ class RaggedArray(CFDiscreteGeom):
     def to_contiguous_ragged(
         self,
         count_var: str = "row_size",
-        sort_vars: Optional[Sequence[str]] = None
+        sort_vars: Union[Sequence[str], None] = None
     ) -> xr.Dataset:
         if self.array_type == "contiguous":
             return self._data
@@ -649,8 +649,8 @@ class RaggedArray(CFDiscreteGeom):
 
     def sel_instances(
         self,
-        instance_vals: Optional[Sequence[int|str] | np.ndarray] = None,
-        instance_lookup_vector: Optional[np.ndarray] = None,
+        instance_vals: Union[Sequence[int|str], np.ndarray, None] = None,
+        instance_lookup_vector: Union[np.ndarray, None] = None,
     ) -> xr.Dataset:
         if self.array_type == "indexed":
             # convert to point array, select there, convert back\
@@ -689,8 +689,8 @@ class RaggedArray(CFDiscreteGeom):
         instance_dim: str,
         timeseries_id: str,
         count_var: str,
-        instance_vals: Optional[Sequence[int] | np.ndarray] = None,
-        instance_lookup_vector: Optional[np.ndarray] = None,
+        instance_vals: Union[Sequence[int], np.ndarray, None] = None,
+        instance_lookup_vector: Union[np.ndarray, None] = None,
     ) -> xr.Dataset:
         if instance_vals is None:
             instance_vals = []
@@ -774,7 +774,7 @@ class RaggedArray(CFDiscreteGeom):
         instance_dim: str,
         count_var: str,
         index_var: str,
-        sort_vars: Optional[Sequence[str]] = None,
+        sort_vars: Union[Sequence[str], None] = None,
     ) -> xr.Dataset:
         """
         Convert an indexed ragged array dataset to a contiguous ragged array dataset
@@ -826,17 +826,17 @@ class OrthoMultiTimeseriesArray(CFDiscreteGeom):
 
     def sel_instances(
         self,
-        instance_vals: Optional[Sequence[int|str] | np.ndarray] = None,
-        instance_lookup_vector: Optional[np.ndarray] = None,
+        instance_vals: Union[Sequence[int|str], np.ndarray, None] = None,
+        instance_lookup_vector: Union[np.ndarray, None] = None,
     ):
         """
         Select requested timeseries instances from an orthomulti timeseries array dataset.
 
         Parameters
         ----------
-        instance_vals : Optional[Sequence[int|str] | np.ndarray], optional
+        instance_vals : Union[Sequence[int|str], np.ndarray], optional
             List of instance values to select, by default None
-        instance_lookup_vector : Optional[np.ndarray], optional
+        instance_lookup_vector : Union[np.ndarray], optional
             Lookup vector for instance values, by default None
         """
         return self._select_instances(
@@ -865,8 +865,8 @@ class OrthoMultiTimeseriesArray(CFDiscreteGeom):
         ds: xr.Dataset,
         instance_dim: str,
         timeseries_id: str,
-        instance_vals: Optional[Sequence[int|str] | np.ndarray] = None,
-        instance_lookup_vector: Optional[np.ndarray] = None,
+        instance_vals: Union[Sequence[int|str], np.ndarray, None] = None,
+        instance_lookup_vector: Union[np.ndarray, None] = None,
     ) -> xr.Dataset:
         """
         Selects requested instances from an orthomulti timeseries array dataset.

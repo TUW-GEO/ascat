@@ -25,7 +25,7 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Any, Optional, Sequence
+from typing import Any, Union, Sequence
 
 import numpy as np
 import xarray as xr
@@ -60,7 +60,7 @@ class PyGeoGriddedArrayAccessor:
     def set_grid_name(
         self,
         grid_name: str,
-        grid_class: Optional[type] = None,
+        grid_class: Union[type, None] = None,
     ):
         try:
             self._grid = registry.get(grid_name)
@@ -123,8 +123,8 @@ class PyGeoGriddedArrayAccessor:
 
     def sel_gpis(
         self,
-        gpis: Optional[Sequence[int]] = None,
-        lookup_vector: Optional[np.ndarray] = None,
+        gpis: Union[Sequence[int], None] = None,
+        lookup_vector: Union[np.ndarray, None] = None,
     ) -> xr.Dataset:
         if lookup_vector is None:
             _, lookup_vector = get_grid_gpis(
@@ -197,8 +197,8 @@ class CFDiscreteGeometryAccessor:
 
     def sel_instances(
         self,
-        instance_vals: Optional[Sequence[int | str] | np.ndarray] = None,
-        instance_lookup_vector: Optional[np.ndarray[Any, np.dtype[np.bool]]] = None,
+        instance_vals: Union[Sequence[int, str], np.ndarray, None] = None,
+        instance_lookup_vector: Union[np.ndarray[Any, np.dtype[np.bool]], None] = None,
         **kwargs,
     ):
         return self._obj.sel_instances(
