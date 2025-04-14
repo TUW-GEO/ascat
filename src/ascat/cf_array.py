@@ -459,7 +459,7 @@ class TimeseriesPointArray(PointArray):
         timeseries_id: str = "location_id",
     ) -> xr.Dataset:
         if not ds.chunks:
-            ds = ds.chunk({"obs": -1})
+            ds = ds.chunk({sample_dim: -1})
         if instance_vals is None:
             instance_vals = []
         if instance_lookup_vector is not None:
