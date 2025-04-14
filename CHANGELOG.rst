@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 2.5.0
+=============
+
+- Rewrite xarray readers/writers
+- Add CLI for resampling ASCAT swath data
+
 Version 2.4.4
 =============
 
