@@ -343,7 +343,7 @@ class TimeseriesPointArray(PointArray):
 
     def sel_instances(
         self,
-        instance_vals: Union[Sequence[int|str], np.ndarray, None] = None,
+        instance_vals: Union[Sequence[Union[int, str]], np.ndarray, None] = None,
         instance_lookup_vector: Union[np.ndarray, None] = None,
         timeseries_id: str = "location_id",
     ):
@@ -453,7 +453,7 @@ class TimeseriesPointArray(PointArray):
     def _select_instances(
         ds: xr.Dataset,
         sample_dim: str,
-        instance_vals: Union[Sequence[int|str], np.ndarray, None] = None,
+        instance_vals: Union[Sequence[Union[int, str]], np.ndarray, None] = None,
         instance_lookup_vector: Union[np.ndarray, None] = None,
         timeseries_id: str = "location_id",
     ) -> xr.Dataset:
@@ -649,7 +649,7 @@ class RaggedArray(CFDiscreteGeom):
 
     def sel_instances(
         self,
-        instance_vals: Union[Sequence[int|str], np.ndarray, None] = None,
+        instance_vals: Union[Sequence[Union[int, str]], np.ndarray, None] = None,
         instance_lookup_vector: Union[np.ndarray, None] = None,
     ) -> xr.Dataset:
         if self.array_type == "indexed":
@@ -826,7 +826,7 @@ class OrthoMultiTimeseriesArray(CFDiscreteGeom):
 
     def sel_instances(
         self,
-        instance_vals: Union[Sequence[int|str], np.ndarray, None] = None,
+        instance_vals: Union[Sequence[Union[int, str]], np.ndarray, None] = None,
         instance_lookup_vector: Union[np.ndarray, None] = None,
     ):
         """
@@ -834,7 +834,7 @@ class OrthoMultiTimeseriesArray(CFDiscreteGeom):
 
         Parameters
         ----------
-        instance_vals : Union[Sequence[int|str], np.ndarray], optional
+        instance_vals : Union[Sequence[Union[int, str]], np.ndarray], optional
             List of instance values to select, by default None
         instance_lookup_vector : Union[np.ndarray], optional
             Lookup vector for instance values, by default None
@@ -865,7 +865,7 @@ class OrthoMultiTimeseriesArray(CFDiscreteGeom):
         ds: xr.Dataset,
         instance_dim: str,
         timeseries_id: str,
-        instance_vals: Union[Sequence[int|str], np.ndarray, None] = None,
+        instance_vals: Union[Sequence[Union[int, str]], np.ndarray, None] = None,
         instance_lookup_vector: Union[np.ndarray, None] = None,
     ) -> xr.Dataset:
         """
