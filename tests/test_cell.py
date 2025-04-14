@@ -72,9 +72,9 @@ class TestOrthoMultiCellFile(unittest.TestCase):
     def test_init(self):
         # contiguous_ragged_path = self.tempdir_path/ "contiguous" / "2588_contiguous_ragged.nc"
         gldas_path = "tests/ascat_test_data/warp/gldas_2023/"
-        gldas_0029_path = "tests/ascat_test_data/warp/gldas_2023/0029.nc"
+        gldas_0029_path = Path("tests/ascat_test_data/warp/gldas_2023/0029.nc")
         gldas_0029 = OrthoMultiTimeseriesCell(gldas_0029_path)
-        self.assertEqual(str(gldas_0029.filenames[0]), gldas_0029_path)
+        self.assertTrue(gldas_0029_path.samefile(gldas_0029.filenames[0]))
 
         cellnum_glob = "[0-9]" * 4 + ".nc"
         gldas_files = list(Path(gldas_path).glob(cellnum_glob))
