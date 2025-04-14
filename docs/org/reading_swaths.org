@@ -1,0 +1,264 @@
+#+title: Reading ASCAT swath files
+#+PROPERTY: header-args:ipython :session swaths_tutorial
+#+OX-IPYNB-LANGUAGE: ipython
+
+#+begin_src elisp :exports none
+(micromamba-activate "ascat_env")
+#+end_src
+
+* Working with gridded swath files
+** Creating a SwathGridFiles object
+If we have a collection of time-series swath files, we can create a SwathGridFiles object that will handle them as a group.
+
+#+begin_src ipython
+from datetime import datetime
+from ascat.swath import SwathGridFiles
+#+end_src
+
+#+begin_src ipython
+swath_source = "/data-write/RADAR/hsaf/h121_v2.0/netcdf"
+#+end_src
+
+It's important to understand the structure of the data, so that SwathGridFiles can find and parse all of the data that is requested from it. Handily, this package comes with existing parsers for several ASCAT products. These can be used with ~SwathGridFiles.from_product_id()~:
+
+#+begin_src ipython
+swath_collection = SwathGridFiles.from_product_id(swath_source, "H121")
+#+end_src
+
+The currently included project ids are the keys of ~ascat.product_info.swath_io_catalog~
+
+#+begin_src ipython :results raw
+from ascat.product_info import swath_io_catalog
+swath_io_catalog.keys()
+#+end_src
+
+If your data structure does not match anything included in the package, you can write a class inheriting from ~ascat.product_info.AscatSwathProduct~, e.g.
+
+#+begin_src ipython :eval no
+from ascat.product_info import AscatSwathProduct
+class MyAscatH121Swath(AscatSwathProduct):
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
+    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
+    date_field_fmt = "%Y%m%d%H%M%S"
+    grid_name = "fibgrid_12.5"
+    cell_fn_format = "{:04d}.nc"
+
+    @staticmethod
+    def fn_read_fmt(timestamp, sat="[ABC]"):
+        sat = sat.upper()
+        return {
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": sat,
+            "placeholder": "*",
+            "placeholder1": "*"
+        }
+
+    @staticmethod
+    def sf_read_fmt(timestamp, sat="[abc]"):
+        sat = sat.lower()
+        return {
+            "satellite_folder": {
+                "satellite": f"metop_{sat}"
+            },
+            "year_folder": {
+                "year": f"{timestamp.year}"
+            },
+        }
+#+end_src
+
+After creating your IO class, you can use it to make a collection by passing it to the SwathGridFiles class:
+
+#+begin_src ipython :eval no
+custom_swath_collection = SwathGridFiles.from_product_class(swath_source, product_class=MyAscatH121Swath)
+#+end_src
+
+Regardless of how you define you define your collection, once created it can be used to read data from your swath collection for a given date range and geographic extent. It can also be used to stack data in the collection into cellwise timeseries in point-array format, according to the CellGrid defined in the IO class.
+
+** Getting data from SwathGridFiles
+
+Let's start with a rectangular, roughly country-sized area in Central Europe, and a time period of four days.
+
+#+begin_src ipython
+bounds = (45, 50, 10, 20) #latmin, latmax, lonmin, lonmax
+dates = (datetime(2020, 12, 1), datetime(2020, 12, 3))
+#+end_src
+
+By calling the ~read~ method of SwathGridFiles, we open up every swath file within the ~date_range~ we've passed, check whether it intersects with the requested bounding box, concatenate the ones we need together into an xarray dataset, then filter out any observations that don't intersect with the bounding box we've passed to ~bbox~. Other spatial selections we could pass to ~read~ are ~cell~ (cell number or list of cell numbers in the swath data's grid system), ~location_id~ (grid point ID or list of IDs in the swath data's grid system), ~coords~ (lat/lon coordinate or list of coordinates that will be converted to the nearest grid point ID or list of grid point IDs), or ~geom~ (a Shapely geometry).
+
+#+begin_src ipython :results output drawer
+central_europe_ds = swath_collection.read(bbox=bounds, date_range=dates)
+print(central_europe_ds)
+#+end_src
+
+Now we have a nice xarray dataset that we can work with however we wish. In this case, it's one-dimensional, so we are basically working with a tabular data structure. In order to work with it as 3-dimensional (latitude, longitude, time) raster data, we can aggregate it into timesteps.
+
+First, to make sure we got the desired data, let's make some plots.
+
+This is not a very useful plot, but it shows that the data covers the time range we requested, and that it includes data from all three Metop satellites.
+
+#+begin_src ipython :results raw
+%matplotlib inline
+from matplotlib import pyplot as plt
+import matplotlib.dates as mdates
+plt.close()
+fig, ax = plt.subplots()
+scatter = ax.scatter(central_europe_ds.time,
+                     central_europe_ds.longitude,
+                     s=0.01,
+                     c=central_europe_ds.sat_id,
+                     cmap="rainbow",
+                     alpha=0.8)
+legend1 = ax.legend(*scatter.legend_elements(), title="Satellite")
+for i in range(3):
+    legend1.get_texts()[i].set_text(f"Metop {chr(65+i)}")
+ax.add_artist(legend1)
+plt.xlabel("Time")
+plt.ylabel("Latitude (degrees)")
+ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d\n%H:%M"))
+plt.xticks(rotation=30)
+plt.tight_layout()
+#+end_src
+
+
+** Mapping data from SwathGridFiles
+
+Having the data as an Xarray makes it handy to do transformations. For example, we can group by location_id and get the average surface soil moisture at each. First, we need to load the ~location_id~ into memory, since it currently exists as a chunked dask array, and the groupby method only works with numpy arrays.
+
+#+begin_src ipython :results output drawer
+print(central_europe_ds["location_id"].load())
+#+end_src
+
+#+begin_src ipython :results output drawer
+%%time
+avg_ssm = central_europe_ds["surface_soil_moisture"].groupby(central_europe_ds["location_id"]).mean("obs")
+print(avg_ssm.load())
+#+end_src
+
+
+However, if we use flox directly (a package from the developers of Xarray that is created to do faster groupbys with Xarray datasets), we can accomplish the same operation in a fraction of the time (88ms on my machine). When scaling up to much longer time periods and larger surface areas, these savings can make a huge difference.
+
+#+begin_src ipython
+from flox.xarray import xarray_reduce
+#+end_src
+
+#+begin_src ipython :results output drawer
+%%time
+avg_ssm_flox = xarray_reduce(central_europe_ds["surface_soil_moisture"], central_europe_ds["location_id"], func="mean")
+print(avg_ssm_flox.load())
+#+end_src
+
+Note: if, when using flox, you get an error about needing to provide ~expected_groups~, make sure you've ~load~ -ed the variables you'll be grouping your data by into memory first. If your dataset is too big for that, you can calculate the unique values of those variables and pass them in a tuple to the ~expected_groups~ parameter. For example, if we want to calculate seasonal soil moisture averages per location, we can add a grouping of the ~time~ variable to our ~xarray_reduce~ arguments. However, if we haven't loaded ~location_id~ into memory yet, we'll get an error:
+
+#+begin_src ipython
+ds = central_europe_ds
+xarray_reduce(ds["surface_soil_moisture"],
+              ds["location_id"],
+              ds["time"].dt.hour, func="mean", fill_value=False)
+#+end_src
+
+
+We didn't get this error before because we had already loaded ~location_id~ into memory. Loading a single variable into memory shouldn't be much of a problem, but if it is, here's how you would use ~expected_groups~ to solve it instead:
+
+#+begin_src ipython
+import numpy as np
+xarray_reduce(
+    ds["surface_soil_moisture"],
+    ds["location_id"],
+    ds["time"].dt.hour,
+    expected_groups=(np.unique(central_europe_ds["location_id"].values),
+                     np.unique(central_europe_ds["time"].dt.hour.values)),
+    func="mean",
+    fill_value=False
+).load()
+#+end_src
+
+
+Here's a function for plotting a data array variable on a simple map given the longitudes and latitudes of each point
+
+#+begin_src ipython
+def simple_map(lons, lats, color_var, cmap, dates=None, cbar_label=None):
+    plt.close()
+    ax = plt.axes(projection=ccrs.PlateCarree())
+    ax.coastlines()
+    gl = ax.gridlines(draw_labels=True)
+    gl.bottom_labels = False
+    gl.right_labels = False
+    ax.set_extent([lons.min()-5, lons.max()+5, lats.min()-5, lats.max()+5])
+    plt.scatter(
+        lons,
+        lats,
+        c=color_var,
+        cmap=cmap,
+        s=1,
+        # alpha=0.8,
+        # clim=(0, 100)
+    )
+    if cbar_label is None:
+        cbar_label = (
+            f"Average {color_var.long_name}\n"
+            f"({color_var.units})\n"
+        )
+    if dates is not None:
+        cbar_label += f"\n{np.datetime_as_string(dates[0], unit='s')} - {np.datetime_as_string(dates[1], unit='s')}"
+
+    plt.colorbar(label=(cbar_label),
+                 shrink=0.5,
+                 pad=0.05,
+                 orientation="horizontal"
+    )
+    plt.tight_layout()
+
+#+end_src
+
+And here is our mean soil moisture!
+
+#+begin_src ipython
+import cmcrameri.cm as cmc
+lons, lats = swath_collection.grid.gpi2lonlat(avg_ssm_flox.location_id.values)
+simple_map(lons, lats, avg_ssm_flox, cmc.roma, (central_europe_ds.time.values.min(), central_europe_ds.time.values.max()))
+#+end_src
+
+
+Now it's easy to make a map of any of the other variables in the dataset. Here's the average backscatter at 40 degrees incidence angle:
+
+#+begin_src ipython
+avg_sms = xarray_reduce(central_europe_ds["backscatter40"], central_europe_ds["location_id"], func="mean")
+simple_map(lons, lats, avg_sms, "viridis", (central_europe_ds.time.values.min(), central_europe_ds.time.values.max()))
+#+end_src
+
+
+Or we could make a timeseries plot of a variable at a single location or a collection of locations:
+
+#+begin_src ipython
+week_dates = (datetime(2020, 12, 1), datetime(2020, 12, 8))
+week_data = swath_collection.read(date_range=week_dates, bbox=bounds)
+date_groups = week_data.groupby("time.date")
+#+end_src
+
+#+begin_src ipython
+for dt, ds in date_groups:
+    plt.scatter(ds["time.date"], ds.backscatter40, color="black", s=1, alpha=0.01)
+
+plt.plot(date_groups.groups.keys(), date_groups.mean().backscatter40.values, color="red")
+
+plt.title("Daily backscatter values, Metop A, B and C\n"
+          "Latitudes 45-50, Longitudes 10-20")
+plt.ylabel(f"{ds.backscatter40.units}")
+plt.xlabel(f"date")
+plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+plt.gca().xaxis.set_major_locator(mdates.DayLocator(interval=1))
+plt.xticks(rotation=30)
+plt.tight_layout()
+#+end_src
+
+
+We can make a 5-year climatology for our data in three lines of code, but it will take a while to run, since we'll have to read metadata from thousands of files to compile the xarray dataset. Don't try this one at home.
+
+#+begin_src ipython :eval no
+# # five year climatology
+# five_years = [datetime(2015, 1, 1), datetime(2020, 1, 1)]
+# five_years_data = swath_collection.read(location_id=gpis, date_range=five_years)#.load()
+# climatology = central_europe_ds.groupby("time.dayofyear").mean("obs")
+#+end_src
+
+If you need to do several operations on larger chunks of time, it could be useful to convert the data to a cell file collection and work off of that. (See the swath stacking tutorial)

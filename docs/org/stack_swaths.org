@@ -1,0 +1,131 @@
+#+title: Stacking gridded swath files into cells
+#+PROPERTY: header-args:ipython :session stack_swaths
+
+#+begin_src elisp :exports none
+(micromamba-activate "ascat_env")
+#+end_src
+
+* Using the command-line interface
+The simplest interface for stacking swath files into cells is the command-line interface included with this package.
+
+Make sure you've created and activated an appropriate Python environment first.
+
+--------------------------------------------------------------------------------
+*TL;DR*: in a shell run something like:
+#+begin_example :eval no
+ascat_swaths_to_cells /path/to/my/swath/files/ /path/to/my/new/cell/files/ H121 contiguous --start_date 2023-01-01 --end_date 2024-01-01
+#+end_example
+
+The output cells will be in point array format.
+
+You can then convert to indexed or contiguous ragged array format:
+#+begin_example
+ascat_convert_cell_format /path/to/my/new/cell/files/ /path/to/my/converted/cell/files/ H121 contiguous
+#+end_example
+--------------------------------------------------------------------------------
+
+Have a look at the help to see required arguments
+
+#+begin_src ipython :results output drawer
+! ascat_swaths_to_cells  --help
+#+end_src
+
+So we need to pass at least three positional arguments to the stacker:
+
+1) ~FILEPATH~ - This is a path to the parent directory of the product's swath files.
+2) ~OUTPATH~ - A path to the directory you'd like to send output to.
+3) ~PRODUCT_ID~ - The name of the product you're processing. The program chooses a product reader based on this string, which makes certain assumptions about filename and directory structure. Several products are included in the ASCAT package, and to use them your directory structure must adhere to what they assume. Otherwise you may also create your own product readers. (TODO make a link here)
+
+After the positional arguments we can also pass as many keyword arguments as we want:
++ ~fmt_kwargs~ - These are keyword arguments that will be passed on to the product reader's ~fn_read_fmt~ and ~sf_read_fmt~ (functions that tell the package how to find your files).
+
+We can also pass some options:
++ ~--start_date~ and ~--end_date~ - in YYYY-MM-DD format. Sets the time range of swath files to stack.
+
++ ~--dump_size~ - the size of the buffer to fill with read data before dumping to cell files and reading more data. Make this too big and merging/processing will take a while after reading. Too small and repeated writes will be a bottleneck. Even if you have a lot of memory something like ~8GB~ is a good value.
+
+To check which ~product_id~ -s are available to use, use ~ascat_product_info~
+
+#+begin_src ipython :results output drawer
+! ascat_product_info
+#+end_src
+
+To see how a product's readers have been defined, pass its ~product_id~:
+
+#+begin_src ipython :results output drawer
+! ascat_product_info h121
+#+end_src
+
+
+Once you have the right product id chosen or set up, pass your swath file root, output directory, and product id to ~ascat_swaths_to_cells~, along with any other arguments.
+
+#+begin_example
+ascat_swaths_to_cells /path/to/my/swath/files/ /path/to/my/new/cell/files/ H121 --start_date 2023-01-01 --end_date 2023-12-31
+#+end_example
+
+
+~ascat_swaths_to_cells~ works by iterating through the source swath files one at a time, opening them as xarray datasets, performing any necessary preprocessing, and concatenating each new dataset to all of the previous ones. Once that dataset's ~nbytes~ attribute reaches ~dump_size~, reading is paused while the combined dataset is dumped out into one file in /timeseries point array/ format for each of its constituent cells. Once the cells are written, the process starts again.
+
+On all dumps, data for any cells that already have a file is appended to those files. This is useful if you want to add new data to an existing stack, but if you want to make a fresh export, it's important to make sure the CLI is pointed to an empty directory.
+
+The output cells are in /timeseries point array/ format. In order to convert them to /contiguous/ ragged array format, we can use the ~ascat_convert_cell_format~ CLI. Pass it the path to your newly-stacked cell files, an output directory to write the converted cell files to, a ~product_id~, and the argument ~contiguous~ (you could also use ~indexed~ here if you'd prefer that format).
+
+#+begin_example
+ascat_convert_cell_format /path/to/my/new/cell/files/ /path/to/my/converted/cell/files/ H121 contiguous
+#+end_example
+
+* Using Python
+
+The CLI described above is just a wrapper for a python function. If you need more control over the processing or want to include this as a step in a pipeline, you can make a ~SwathGridFiles~ object and call ~.stack_to_cell_files~ on it directly.
+
+We pass it at least an output directory path (~out_dir~), where the outputs will be written, and we can also pass it several other options.
+
+#+begin_src ipython
+from datetime import datetime
+from ascat.swath import SwathGridFiles
+
+swath_source = "/data-write/RADAR/hsaf/h121_v2.0/netcdf"
+swath_collection = SwathGridFiles.from_product_id(swath_source, "H121")
+
+# where to save the files
+cell_file_directory = ""
+
+
+# the maximum size of the data buffer before dumping to file (actual maximum memory used will be higher)
+max_nbytes = None
+
+# the date range to use. This should be a tuple of datetime.datetime objects
+date_range = (datetime(2019, 1, 1), datetime(2019, 12, 31))
+
+# Pass a list of cell numbers (integers) here if you only want to stack data for a certain set of cells. This is mainly useful for testing purposes, since even splitting a day's worth of swath data into files for all of its constituent cells is a lengthy process.
+cells=None
+
+# mode : "w" for creating new files if any already exist, "a" to append data to existing cell files
+mode = "w"
+
+# # uncomment to run
+# swath_collection.stack_to_cell_files(
+#     output_dir=cell_file_directory,
+#     max_nbytes=max_nbytes,
+#     date_range=date_range,
+#     mode=mode,
+#     processes=processes,
+# )
+#+end_src
+
+
+#+begin_src ipython
+from ascat.cell import CellGridFiles
+
+cell_collection = CellGridFiles.from_product_id(cell_file_directory, product_id="H121")
+contiguous_cell_file_directory = "contiguous_directory_name"
+# # uncomment to run
+# cell_collection.convert_to_contiguous(contiguous_cell_file_directory)
+#+end_src
+
+Conversion to contiguous ragged array format will sort the sample dimension first by time and then by ~location_id~. At this point it is no longer practically possible to append new data to the dataset without first re-converting it to indexed ragged array format and then converting back.
+
+* Adding a custom product class
+To add your own product classes you'll need to clone this repository and install it in your environment as an editable package (e.g. ~pip install -e /home/username/Clones/ascat~). Then you can edit ~.../ascat/src/ascat/product_info/product_info.py~ to add your own classes following the examples of the existing ones. Best to copy-paste, e.g. ~AscatH129Swath~ and edit the fields accordingly.
+
+Once your product class is written, add it to the ~swath_io_catalog~ dictionary, along with a key to access it. Then you can use this key to specify your custom product when running the CLI.

@@ -35,9 +35,15 @@ import warnings
 from pathlib import Path
 from datetime import timedelta
 from datetime import datetime
+from collections import defaultdict
 
 import numpy as np
 
+from tqdm import tqdm
+from tqdm.dask import TqdmCallback
+
+from dask.delayed import delayed
+from dask.base import compute
 
 class FilenameTemplate:
     """
@@ -642,7 +648,7 @@ class ChronFiles(MultiFileHandler):
 
         return date
 
-    def _merge_data(self, data):
+    def _merge_data(self, data, **kwargs):
         """
         Merge datasets after reading period. Needs to be overwritten
         by child class, otherwise data is returned as is.
@@ -651,20 +657,23 @@ class ChronFiles(MultiFileHandler):
         ----------
         data : list
             Data.
+        **kwargs : dict
+            Additional keyword arguments to the fid's merge method.
 
         Returns
         -------
         data : list
             Merged data.
         """
-        return self.fid.merge(data)
+        return self.fid.merge(data, **kwargs)
 
     def search_date(self,
                     timestamp,
                     search_date_fmt="%Y%m%d*",
                     date_field="date",
                     date_field_fmt="%Y%m%d",
-                    return_date=False):
+                    return_date=False,
+                    **fmt_kwargs):
         """
         Search files for given date.
 
@@ -688,11 +697,11 @@ class ChronFiles(MultiFileHandler):
         dates : list of datetime
             Parsed date of filename (only returned if return_date=True).
         """
-        fn_read_fmt, sf_read_fmt, _, _ = self._fmt(timestamp)
+        fn_read_fmt, sf_read_fmt, _, _ = self._fmt(timestamp, **fmt_kwargs)
         fn_read_fmt[date_field] = timestamp.strftime(search_date_fmt)
 
         fs = FileSearch(self.root_path, self.ft.fn_templ, self.ft.sf_templ)
-        key_func = lambda x: self._parse_date(x, date_field, date_field_fmt)
+        def key_func(x): return self._parse_date(x, date_field, date_field_fmt)
         filenames = sorted(fs.search(fn_read_fmt, sf_read_fmt), key=key_func)
 
         if return_date:
@@ -713,6 +722,7 @@ class ChronFiles(MultiFileHandler):
         date_field="date",
         date_field_fmt="%Y%m%d",
         end_inclusive=True,
+        **fmt_kwargs
     ):
         """
         Search files for time period.
@@ -750,7 +760,9 @@ class ChronFiles(MultiFileHandler):
                 search_date_fmt=search_date_fmt,
                 date_field=date_field,
                 date_field_fmt=date_field_fmt,
-                return_date=True)
+                return_date=True,
+                **fmt_kwargs,
+            )
             for f, dt in zip(files, dates):
                 if f not in filenames and dt >= dt_start and dt < dt_end:
                     filenames.append(f)
@@ -767,6 +779,7 @@ class ChronFiles(MultiFileHandler):
         date_field="date",
         date_field_fmt="%Y%m%d",
         end_inclusive=True,
+        fmt_kwargs={},
         **kwargs,
     ):
         """
@@ -797,7 +810,7 @@ class ChronFiles(MultiFileHandler):
         """
         filenames = self.search_period(dt_start - dt_buffer, dt_end, dt_delta,
                                        search_date_fmt, date_field,
-                                       date_field_fmt, end_inclusive)
+                                       date_field_fmt, end_inclusive, **fmt_kwargs)
 
         data = []
 
@@ -834,6 +847,7 @@ class Filenames:
             raise ValueError("filenames must be a string or list of strings.")
 
         self.filenames = [Path(f) for f in filenames]
+        self.cache = {}
 
     def _read(self, filename, **kwargs):
         """
@@ -897,32 +911,101 @@ class Filenames:
         """
         raise NotImplementedError
 
-    def write(self, data):
+    def reprocess(self,
+                  out_dir,
+                  func,
+                  parallel=False,
+                  print_progress=False,
+                  read_kwargs=None,
+                  **write_kwargs):
         """
-        Write data to file.
-
-        If there's only one filename, write provided data to that file.
+        Reprocess data from all files through `func`, writing the results to `out_dir`.
+        Assumes that if any files have the same name, they should be merged.
 
         Parameters
         ----------
-        data : object
-            The data to write.
-
-        TODO: Add support for writing to multiple files by passing a list of data and
-        checking if the number of data objects matches the number of filenames.
+        out_dir : Path
+            Directory to write the output files. This will be prepended to the filenames.
+        func : function
+            The function to apply to the data before writing out.
+        parallel : bool, optional
+            Whether to process the data in parallel (default: False).
+        **kwargs : dict
+            Additional keyword arguments for writing.
         """
-        n_filenames = len(self.filenames)
-        if n_filenames == 1:
-            filename = self.filenames[0]
-            filename.parent.mkdir(parents=True, exist_ok=True)
-            self._write(data, filename)
-        # elif n_filenames > 1:
-        #     if len(data) == n_filenames:
-        #         for f in self.filenames:
-        #             f.parent.mkdir(parents=True, exist_ok=True)
-        #             self.write(data, f)
+        read_kwargs = read_kwargs or {}
+        if parallel:
+            read_ = delayed(self._read)
+            getattr_ = delayed(getattr)
+            func_ = delayed(func)
+            merge_ = delayed(self._merge)
+        else:
+            read_ = self._read
+            getattr_ = getattr
+            func_ = func
+            merge_ = self._merge
 
-    def read(self, **kwargs):
+        filenames = self.filenames
+
+        name_to_paths = defaultdict(list)
+        for path in filenames:
+            name_to_paths[path.name].append(path)
+
+        out_filenames = [out_dir / name for name in name_to_paths]
+        out_path_groups = list(name_to_paths.values())
+
+        if print_progress:
+            out_path_groups = tqdm(out_path_groups)
+            out_path_groups.set_description("Opening files...")
+
+        data = [merge_([func_(read_(f, **read_kwargs)) for f in paths])
+                for paths in out_path_groups]
+
+        self.filenames = out_filenames
+
+        self.write(data, parallel=parallel, print_progress=print_progress, **write_kwargs)
+
+    def write(self, data, parallel=False, print_progress=False, **kwargs):
+        """
+        Write data to file.
+
+        If there's only one filename in `self.filenames`, write provided data to that file.
+        If there is more than one filename, write each element of the provided data list
+        to the corresponding filename.
+
+        Parameters
+        ----------
+        data :  list of objects
+            The data to write. Should be a list with the same length as self.filenames,
+            where each element is the data to be written to the corresponding filename.
+        """
+        if len(self.filenames) == 1 and not isinstance(data, list):
+            data = [data]
+
+
+        if len(data) == len(self.filenames):
+            if parallel:
+                write_ = delayed(self._write)
+                writers = [write_(d, f, **kwargs) for d, f in zip(data, self.filenames)]
+                if print_progress:
+                    with TqdmCallback(desc="Writing cells to disk...", total=len(writers)):
+                        compute(writers, scheduler="processes")
+                else:
+                    compute(writers, scheduler="processes")
+
+            else:
+                if print_progress:
+                    data = tqdm(data)
+                    data.set_description("Writing cells to disk...")
+                for d, f in zip(data, self.filenames):
+                    self._write(d, f, **kwargs)
+        else:
+            # Special case when the data object meant to be written to a single filename is a list
+            raise ValueError("Number of data objects must match number of filenames.")
+
+        return
+
+    def read(self, parallel=False, closer_attr=None, **kwargs):
         """
         Read all data from files.
 
@@ -931,11 +1014,30 @@ class Filenames:
         object
             Merged data from all files.
         """
-        data = [d for d in self.iter_read(**kwargs)]
+        if parallel:
+            read_ = delayed(self._read)
+            getattr_ = delayed(getattr)
+        else:
+            read_ = self._read
+            getattr_ = getattr
+
+        data = [read_(f, **kwargs) for f in self.filenames]
+        if closer_attr is not None:
+            closers = [getattr_(d, closer_attr) for d in data if d is not None]
+
+        if parallel:
+            data = compute(data, scheduler="processes")[0]
+            if closer_attr is not None:
+                closers = compute(closers)[0]
+
         data = self.merge(data)
+
+        if closer_attr is not None:
+            return data, closers
+
         return data
 
-    def iter_read(self, **kwargs):
+    def iter_read(self, print_progress=False, **kwargs):
         """
         Iterate over all files and yield data.
 
@@ -944,8 +1046,57 @@ class Filenames:
         object
             Data read from each file.
         """
-        for filename in self.filenames:
-            yield self._read(filename, **kwargs)
+        if print_progress:
+            filenames = tqdm(self.filenames)
+        else:
+            filenames = self.filenames
+
+        size = 0
+        for filename in filenames:
+            if print_progress:
+                filenames.set_description(f"Opening {Path(filename).name}, total {size} bytes...")
+            data = self._read(filename, **kwargs)
+            size += self._nbytes(data)
+            yield data
+
+    def iter_read_nbytes(self, max_nbytes, print_progress=False, **kwargs):
+        """
+        Iterate over all files and yield data until the specified number of bytes is reached.
+        If `_read` returns dask objects, they are computed (in parallel) before merging the data.
+        """
+        size = 0
+        data_list = []
+        for data in self.iter_read(print_progress, **kwargs):
+            data_size = self._nbytes(data)
+            size += data_size
+            if size > max_nbytes and size > data_size:
+                if print_progress:
+                    print(f"Opened {size} bytes, reading and merging data...")
+
+                    with TqdmCallback(desc="Reading data..."):
+                        out_data = compute(*[d for d in data_list],
+                                           scheduler="processes")
+                    print("Merging data...")
+                    out_data = self.merge(out_data)
+                else:
+                    out_data = self.merge(compute(*[d for d in data_list],
+                                                scheduler="processes"))
+                yield out_data
+                size = data_size
+                data_list = [data]
+            else:
+                data_list.append(data)
+        if data_list:
+            if print_progress:
+                print("All source files opened, reading and merging remaining data...")
+            yield self.merge(compute(*[d for d in data_list], scheduler="processes"))
+
+    @staticmethod
+    def _nbytes(data):
+        """
+        Returns size of data object in bytes.
+        """
+        raise NotImplementedError
 
     def merge(self, data):
         """
@@ -977,6 +1128,12 @@ class Filenames:
         This method can be overridden in subclasses if necessary.
         """
         pass
+
+    @staticmethod
+    def _multi_file_closer(closers):
+        for closer in closers:
+            closer()
+        return
 
 
 class CsvFile(Filenames):

@@ -1,0 +1,265 @@
+#+title: Reading HSAF ASCAT Timeseries files
+#+PROPERTY: header-args:ipython :results raw drawer :session cells_tutorial
+#+OX-IPYNB-LANGUAGE: ipython
+
+#+begin_src elisp :exports none
+(micromamba-activate "ascat_env")
+#+end_src
+
+
+# * Introduction
+# ** TODO A discussion of the timeseries file format, fibgrid/cells
+
+* Working with gridded cell files
+** Creating a cell file collection
+#+begin_src ipython :results none
+from ascat.cell import CellGridFiles
+from datetime import datetime
+import numpy as np
+#+end_src
+
+Our cell files, in this case, all live in a single directory, so that's the path we'll pass to ~CellGridFiles.from_product_id()~.
+
+The product id, ~"H121"~, refers to a specific handler class defined in ~ascat.read_native.product_info~. There are several of these already defined for various products we use at TU Wien, and it is also possible to define your own handler class if you need to process a product we haven't included in this package already.
+
+#+begin_src ipython :results none
+cell_source = "/data-write/RADAR/hsaf/h121_v2.0/time_series/metop_abc"
+cell_collection = CellGridFiles.from_product_id(cell_source, "H121")
+#+end_src
+
+
+** Reading from a cell file collection
+
+Reading data from our ~cell_collection~ is a simple matter of calling its ~.read()~ method. We can use several methods to define the area and date range we're interested in reading.
+
+We have several options for defining specific geographic points or extents to read: ~cell~, ~bbox~, ~coords~, ~geom~, and ~location_id~.
+~cell~ is a list of cell indices from the product's grid;
+~location_id~ is a list of location indices on the product's grid.
+~bbox~ is a tuple of (latmin, latmax, lonmin, lonmax) coordinates defining a bounding box;
+~coords~ is a tuple of (lat, lon) coordinates defining a single point;
+~geom~ is a shapely geometry object;
+
+We can also pass a ~date_range~ to select a time period we're interested in - a tuple of two ~np.datetime64~ objects.
+
+The ~read()~ method will find the data for the specified area and time range and merge data from multiple cells into a single xarray dataset if necessary. The logic for doing this merging is determined by the ~product_id~.
+
+The data will be mostly lazy-loaded to avoid consuming too much memory, but some coordinates or variables will simply have to be loaded for the merging logic to work if reading multiple cells.
+
+NB: Merging the data from multiple cells can be a time-consuming process, and the optimal order of read/spatial-filter/temporal-filter/merge operations can vary depending on the structure of the data. This has not been entirely optimized for all cases yet, so if you find that the read operation is taking an unreasonably long time, try eliminating your temporal constraints and filtering the data after reading it. If you are working with the same large area repeatedly, you may find it useful to use ~CellGridFiles~ to read it into a merged dataset once, then save that to a file and open it directly with Xarray in the future.
+
+Let's look at some examples of actually using the reader.
+
+#+begin_src ipython
+def map_footprint(ds, **kwargs):
+    """
+    Map all the unique locations in the array.
+    """
+    lon = ds.cf["longitude"]
+    lat = ds.cf["latitude"]
+    unique_lons, unique_lats = np.unique(
+        np.column_stack((lon, lat)), axis=0
+    ).T
+    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()})
+    ax.coastlines()
+    ax.add_feature(feature.BORDERS, linestyle='-', alpha=.5)
+    scat = ax.scatter(
+        x=unique_lons,
+        y=unique_lats,
+        **kwargs
+    )
+    return fig, ax, scat
+#+end_src
+
+*** By coordinates
+We can read a single coordinate:
+
+#+begin_src ipython :results output drawer
+vienna_coords = (16.4, 48.2)
+vienna_ts = cell_collection.read(coords=vienna_coords)
+print(vienna_ts)
+#+end_src
+
+Or several:
+
+#+begin_src ipython :results output drawer
+import numpy as np
+budapest_coords = (19.0, 47.5)
+near_budapest_coords = (19.01, 47.5)
+bratislava_coords = (17.1, 48.1)
+coords = np.array([vienna_coords, budapest_coords, near_budapest_coords, bratislava_coords]).T
+capitals_ds = cell_collection.read(coords=coords)
+print(capitals_ds)
+#+end_src
+
+Notice that despite passing four different sets of coordinates, ~budapest_coords~ and ~near_budapest_coords~ both had the same nearest grid point, so we only have three locations in the resulting dataset.
+
+To have a quick look at the locations your data covers, you can use the ~map_footprint()~ function defined above to plot the grid points it contains on a map.
+
+#+begin_src ipython
+fig, ax, scat = map_footprint(capitals_ds, s=8)
+ax.set_extent([10, 23, 44, 53])
+#+end_src
+
+*** By grid point ID
+If you already know the specific grid point(s) you'd like, you can pass them directly:
+#+begin_src ipython :results output drawer
+capitals_gpis = capitals_ds.location_id.values
+print(capitals_gpis)
+#+end_src
+
+#+begin_src ipython :results output drawer
+capitals_ds_from_gpis = cell_collection.read(location_id=capitals_gpis)
+print(capitals_ds_from_gpis)
+#+end_src
+
+We can see the results are equivalent:
+#+begin_src ipython :results output drawer
+print(capitals_ds_from_gpis.equals(capitals_ds))
+#+end_src
+
+*** By cell number
+If you know the cell number(s), you can pass these directly:
+
+#+begin_src ipython :results output drawer
+%%time
+vienna_cell_ds = cell_collection.read(cell=1431)
+print(vienna_cell_ds)
+#+end_src
+
+That was really fast, but note that this data has been lazy-loaded and is not actually in memory. Performing computations on it will require loading the data from disk. If you'll be doing complicated computations, you may want to load the data into memory manually first. This ensures you don't have to waste any time later doing any loading operations.
+
+#+begin_src ipython :results output drawer
+%%time
+cell_collection.read(cell=1431).load()
+#+end_src
+
+
+Note the significantly increased time to lazily read two cells compared to just one, due to the overhead of merging operations:
+
+#+begin_src ipython :results output drawer
+%%time
+cell_collection.read(cell=[1431, 1432])
+#+end_src
+
+But time to read /and/ load two cells is still just a bit more than twice the time as reading and loading a single cell:
+
+#+begin_src ipython :results output drawer
+%%time
+cell_collection.read(cell=[1431, 1432]).load()
+#+end_src
+
+
+When we add a date range, things take even longer in the specific case of contiguous ragged arrays - but at least you don't have to worry about the logic of selecting a time period from a ragged array.
+
+#+begin_src ipython :results output drawer
+date_range = (
+    np.datetime64(datetime(2014, 1, 1)),
+    np.datetime64(datetime(2015, 2, 1)),
+)
+#+end_src
+
+#+begin_src ipython :results output drawer
+%%time
+cell_collection.read(cell=[1431, 1432], date_range=date_range)
+#+end_src
+
+#+begin_src ipython :results output drawer
+%%time
+cell_collection.read(cell=[1431, 1432], date_range=date_range).load()
+#+end_src
+
+Finally let's have a look at the area we've been reading:
+
+#+begin_src ipython :results raw drawer
+_,_,_ = map_footprint(vienna_cell_ds, s=1)
+#+end_src
+
+
+*** By bounding box
+We can also read data within a bounding box defined by the coordinates (~latmin~, ~latmax~, ~lonmin~, ~lonmax~).
+
+This will return data for all grid points that fall within the specified bounding box. It's useful for regional analysis where you want to examine a specific geographic area.
+
+#+begin_src ipython :results output drawer
+# Define a bounding box around Vienna
+vienna_bbox = (48, 48.5, 16, 16.5)
+vienna_bbox_ds = cell_collection.read(bbox=vienna_bbox)
+print(vienna_bbox_ds)
+#+end_src
+
+Let's have a look:
+
+#+begin_src ipython
+from cartopy import feature
+fig, ax, scat = map_footprint(vienna_bbox_ds, s=4)
+ax.add_feature(feature.RIVERS)
+ax.set_extent([14, 19, 46, 50])
+#+end_src
+
+
+For larger regions, you might want to specify a date range to limit the amount of data loaded:
+
+#+begin_src ipython :results output drawer
+
+date_range = (
+    np.datetime64(datetime(2018, 1, 1)),
+    np.datetime64(datetime(2018, 12, 31))
+)
+
+central_europe_bbox = (46.0, 50.0, 15.0, 20.0)
+central_europe_2018 = cell_collection.read(bbox=central_europe_bbox, date_range=date_range)
+print(central_europe_2018)
+#+end_src
+
+#+begin_src ipython
+fig, ax, scat = map_footprint(central_europe_2018, s=1)
+ax.add_feature(feature.RIVERS)
+#+end_src
+
+*** By geometry (shapefile)
+If you have a shapefile you would like to use to filter your data, you will have to turn it into a shapely geometry object. There are a few ways you could do this (using ~geopandas~, ~fiona~, or ~ogr~, for example). Here we'll define a function that uses ~cartopy~'s shapereader to fetch a world country boundaries shapefile from Natural Earth, and then uses shapely to create a geometry object from the desired country names.
+
+#+begin_src ipython :results none
+import cartopy.io.shapereader as shpreader
+from shapely.ops import unary_union
+
+def get_country_geometries(country_names, resolution="10m", ne_product="admin_0_countries"):
+    countries = shpreader.Reader(
+        shpreader.natural_earth(
+            resolution=resolution,
+            category="cultural",
+            name=ne_product,
+        )
+    ).records()
+    if isinstance(country_names, str):
+        country_names = [country_names]
+    for i in range(len(country_names)):
+        country_names[i] = country_names[i].lower()
+
+    geometries = []
+    desired_shp = None
+    for loop_country in countries:
+        if loop_country.attributes["SOVEREIGNT"].lower() in country_names:
+            desired_shp = loop_country.geometry
+            if desired_shp is not None:
+                geometries.append(desired_shp)
+    return unary_union(geometries)
+#+end_src
+
+
+If we are interested in the Baltic countries, for example, we can simply pass a list of their names to ~get_country_geometries~, then pass the resulting geometry to the ~geom~ argument of ~cell_collection.read()~.
+
+#+begin_src ipython :results output drawer
+baltics = ["Estonia", "Latvia", "Lithuania"]
+baltics_ds = cell_collection.read(geom=get_country_geometries(baltics))
+print(baltics_ds)
+#+end_src
+
+#+begin_src ipython
+fig, ax, scat = map_footprint(baltics_ds, s=1)
+#+end_src
+
+
+#+begin_src ipython
+capitals_ds.lat.values
+#+end_src

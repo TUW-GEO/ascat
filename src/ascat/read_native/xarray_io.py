@@ -49,6 +49,7 @@ int64_nan = np.iinfo(np.int64).min
 uint64_nan = np.iinfo(np.uint64).max
 float32_nan = -999999.
 float64_nan = -999999.
+
 dtype_to_nan = {
     np.dtype('int8'): int8_nan,
     np.dtype('uint8'): uint8_nan,

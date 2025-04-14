@@ -37,9 +37,9 @@ import xarray as xr
 from flox.xarray import xarray_reduce
 from dask.array import unique as da_unique
 
-import ascat.read_native.ragged_array_ts as rat
-from ascat.read_native.xarray_io import get_swath_product_id
-from ascat.read_native.xarray_io import dtype_to_nan
+from ascat.swath import SwathGridFiles
+from ascat.product_info import get_swath_product_id
+from ascat.utils import dtype_to_nan
 
 
 class TemporalSwathAggregator:
@@ -108,7 +108,7 @@ class TemporalSwathAggregator:
         product = get_swath_product_id(first_fname)
         self.product = product
 
-        self.collection = rat.SwathFileCollection.from_product_id(
+        self.collection = SwathGridFiles.from_product_id(
             Path(filepath), product)
 
         self.grid = self.collection.grid
@@ -131,13 +131,14 @@ class TemporalSwathAggregator:
         }
 
     def _read_data(self):
-        """Read data."""
-        print("constructing dataset, this may take some time...")
-
+        if progress_to_stdout:
+            print("constructing dataset, this may take some time...")
         self.data = self.collection.read(
-            date_range=(self.start_dt, self.end_dt),)
-
-        print("done constructing dataset")
+            self.start_dt,
+            self.end_dt,
+        )
+        if progress_to_stdout:
+            print("done constructing dataset")
 
     def _set_metadata(self, ds):
         """Add appropriate metadata to datasets."""
@@ -197,7 +198,7 @@ class TemporalSwathAggregator:
             Output path.
         """
         product_id = self.product.lower().replace("_", "-")
-        grid_sampling = str(self.collection.ioclass.grid_sampling_km) + "km"
+        grid_sampling = str(self.collection.grid_sampling_km) + "km"
 
         if self.agg is not None:
             datasets = self.get_aggregated_time_steps()
@@ -259,8 +260,7 @@ class TemporalSwathAggregator:
             for timestep in time_steps:
                 step_start = timestep
                 step_end = timestep + self.timedelta
-                ds_step = self.collection.read(
-                    date_range=(step_start, step_end))
+                ds_step = self.collection.read(step_start, step_end)
                 step_end = step_end - pd.Timedelta("1s")
                 ds_step.attrs["start_time"] = np.datetime64(step_start).astype(
                     str)

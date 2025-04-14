@@ -13,6 +13,7 @@ Contents
    Overview <readme>
    examples.rst
    ascat_bufr_format
+   stack_swaths.ipynb
    xarray_readers_tutorial.ipynb
    License <license>
    Authors <authors>

@@ -51,3 +51,5 @@ MANIFEST
 # Per-project virtualenvs
 .venv*/
 miniconda.sh
+/prof/
+/coverage.json

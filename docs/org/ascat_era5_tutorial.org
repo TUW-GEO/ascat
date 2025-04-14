@@ -1,0 +1,175 @@
+#+title: Ascat Era5 Tutorial
+#+PROPERTY: header-args:ipython :results raw drawer :session tutorial :eval yes
+#+OX-IPYNB-LANGUAGE: ipython
+
+#+begin_src elisp :exports none
+(micromamba-activate "ascat_env")
+#+end_src
+
+
+* Introduction
+Often when working with scatterometer data, we'll want to combine it with data from other sources. Let's have a look at some examples of workflows with different cell datasets from TU Wien.
+
+
+* Masking ASCAT with ERA5 (Ragged Arrays and Orthomulti)
+Let's say we have data from ASCAT but we want to make a mask based on ERA5 temperature. Perhaps we want to look at surface soil moisture, but only where temperature was above freezing on a certain date.
+
+Let's have a look at how we'd do this for an example area over the alps:
+
+#+begin_src ipython :tangle debug_tutorial.py
+import cartopy
+import cartopy.crs as ccrs
+import matplotlib.pyplot as plt
+
+lon_min, lon_max = 9, 15
+lat_min, lat_max = 45, 48
+bbox = lat_min, lat_max, lon_min, lon_max
+
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection=ccrs.PlateCarree())
+
+ax.coastlines()
+ax.set_extent([lon_min-20, lon_max+10, lat_min-10, lat_max+15], crs=ccrs.PlateCarree())
+ax.gridlines(draw_labels=True)
+ax.stock_img()
+
+ax.plot([lon_min, lon_max, lon_max, lon_min, lon_min],
+        [lat_min, lat_min, lat_max, lat_max, lat_min],
+        color='red', linewidth=2, transform=ccrs.PlateCarree())
+
+plt.tight_layout()
+plt.show()
+#+end_src
+
+First let's get our datasets sorted out. We just define the path to the cell files and the product ID.
+
+** Loading ASCAT data
+
+ASCAT is a bit more simple, assuming we're working with a product defined in the package already.
+
+#+begin_src ipython :tangle debug_tutorial.py
+from datetime import datetime
+from time import time
+from ascat.cell import CellGridFiles
+
+from ascat.grids import GridRegistry, NamedFileGridRegistry
+#+end_src
+
+
+#+begin_src ipython :tangle debug_tutorial.py
+path_to_ascat = "/data-write/RADAR/hsaf/h121_v2.0/time_series/metop_abc/"
+h121 = CellGridFiles.from_product_id(path_to_ascat, "h121")
+
+import numpy as np
+# The CellGridFiles reader wants bounding boxes in (latmin, latmax, lonmin, lonmax) format
+ascat_bbox = h121.read(bbox=bbox,
+                       date_range=(np.datetime64("2019-01-01"), np.datetime64("2019-04-01")))
+ascat_bbox
+#+end_src
+
+** Loading ERA5 data
+Next we need to get the ERA5 data we want. This is also a collection of gridded cell files, so we will use the same CellGridFiles object to access the data, but we don't have a predefined product class for this in the ~ascat~ package, so we'll have to define one ourselves.
+
+Because the ASCAT products use a Fibonacci grid of a defined spacing, the ASCAT package can generate the grid information automatically behind the scenes, and you don't even need to think about it.
+
+This product, though, relies upon a ~grid.nc~ file that lives inside the cell file directory to define the grid. We don't (as users) know what it would take to recreate it, so we need to tell the package to just get the grid for this product type from this specific filepath. To do that, we can import the NamedFileGridRegistry and register the path to this grid with a string name to identify it. N.B. that this string should not contain any underscores (~"_"~)!
+
+#+begin_src ipython
+from ascat.grids import NamedFileGridRegistry
+from pathlib import Path
+era5_path = Path("/data-read/RADAR/warp/era5_land_2024")
+grid_path = era5_path / "grid.nc"
+NamedFileGridRegistry.register("era5land", str(grid_path))
+#+end_src
+
+That's all there is to defining the grid. Now we can just create a class that inherits from the basic ~OrthoMultiArrayCellProduct~ and defines the grid name for this product.
+
+#+begin_src ipython
+from ascat.product_info import OrthoMultiArrayCellProduct
+class ERA5Cell(OrthoMultiArrayCellProduct):
+    grid_name = "era5land"
+
+    @classmethod
+    def preprocessor(cls, ds):
+        ds["location_id"].attrs["cf_role"] = "timeseries_id"
+        return ds
+
+
+era5 = CellGridFiles.from_product_class(era5_path, ERA5Cell)
+era5_bbox = era5.read(bbox=bbox, date_range = (np.datetime64("2019-01-01"), np.datetime64("2019-04-01")))
+era5_bbox.load()
+#+end_src
+
+
+Let's take a look at a few frames of it.
+
+#+begin_src ipython
+# scatterplot using facets in xarray
+era5_raster = era5_bbox.cf_geom.to_raster(x_var="lon", y_var="lat")
+
+era5_raster.isel(time=slice(0,12))\
+           .t2m\
+           .plot\
+           .imshow(x="lon",
+                   y="lat",
+                   col="time",
+                   col_wrap=4,
+                   cmap="RdBu_r",
+                   subplot_kws={"projection": ccrs.PlateCarree()})
+# era5_bbox.isel(time=slice(-5, -1)).isel(time=0).plot.pcolormesh(x="lon", y="lat", hue="t2m")
+#+end_src
+
+We can see that there are four ERA5 temperature images per day here.
+
+** Aligning ERA5 with ASCAT
+Now, for each ASCAT observation, we can get the nearest temperature value from the ERA5 cube in both space and time just using a ~sel~.
+
+#+begin_src ipython
+# use sel with method=nearest to get the ERA5 data off each ASCAT observation
+ascat_obs_temps = era5_raster.t2m.sel(time=ascat_bbox.time, lat=ascat_bbox.lat, lon=ascat_bbox.lon, method="nearest")
+ascat_obs_temps
+#+end_src
+
+Notice that, while we have the same number of observations as in our ASCAT data, the coordinates are still taken from the ERA5 dataarray. This will interfere with alignment if we try to do operations between this and the ASCAT data, so we will just take the pure dask/numpy data array out of the xarray.DataArray.
+
+#+begin_src ipython
+ascat_obs_is_freezing = ascat_obs_temps.data < 273.15
+ascat_bbox["era5_freezing_flag"] = ("obs", ascat_obs_is_freezing)
+ascat_bbox
+#+end_src
+
+#+begin_src ipython
+masked_ssm = ascat_bbox.surface_soil_moisture.where(ascat_bbox.era5_freezing_flag)
+masked_ssm
+#+end_src
+
+
+Now let's compare the average SSM for a particular day to the average masked SSM:
+
+#+begin_src ipython
+import xarray as xr
+from flox.xarray import xarray_reduce
+ssm = ascat_bbox.surface_soil_moisture.persist()
+#+end_src
+
+#+begin_src ipython
+#masked_ssm = masked_ssm.persist()
+#+end_src
+
+#+begin_src ipython
+daily_mean_ssm = xarray_reduce(ssm,
+                               ascat_bbox["locationIndex"],
+                               ascat_bbox["time"].dt.date,
+                               func="mean")
+daily_mean_ssm = daily_mean_ssm.assign_coords({"lon": ascat_bbox["lon"][daily_mean_ssm["locationIndex"]]})
+daily_mean_ssm = daily_mean_ssm.rename({"locationIndex": "locations"}).to_dataset()
+daily_mean_ssm["locations"].attrs["cf_role"] = "timeseries_id"
+del daily_mean_ssm["locations"].attrs["instance_dimension"]
+daily_mean_ssm.cf_geom.to_raster(x_var="lon", y_var="lat")
+daily_mean_ssm.isel(date=slice(0,16)).plot.scatter(x="lon", y="lat", hue="surface_soil_moisture", col="date", col_wrap=4, s=15)
+#+end_src
+
+#+begin_src ipython
+daily_mean_masked_ssm = xarray_reduce(masked_ssm, ascat_bbox["location_id"], ascat_bbox["time"].dt.date, func="mean")
+daily_mean_masked_ssm.cf_geom.to_raster()
+#+end_src
