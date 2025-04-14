@@ -72,6 +72,18 @@ def parse_args_swath_resample(args):
         "--suffix",
         metavar="SUFFIX",
         help="File suffix (default: _RESAMPLE_DEGdeg)")
+    parser.add_argument(
+        "--neighbours",
+        metavar="N",
+        type=int,
+        default=6,
+        help="Number of neighbours to consider for each grid point (default: 6)")
+    parser.add_argument(
+        "--radius",
+        metavar="RADIUS",
+        type=float,
+        default=10000,
+        help="Cut off distance in meters (default: 10000)")
 
     return parser.parse_args(args)
 
@@ -105,6 +117,14 @@ def swath_resample_main(cli_args):
     else:
         raise RuntimeError("No files found at the provided filepath")
 
+    radius = args.radius
+    if (radius < 1000) or (radius > 100000):
+        raise ValueError(f"Radius outside limits: 1000 < {radius} < 100000")
+
+    k = args.neighbours
+    if (k < 1) or (k > 100):
+        raise ValueError(f"Number of neighbours outside limits 1 < {k} < {100}")
+
     first_file = files[0]
 
     product_id = get_swath_product_id(str(first_file.name))
@@ -123,8 +143,6 @@ def swath_resample_main(cli_args):
                                                     trg_grid_id, trg_grid_size,
                                                     args.grid_store)
 
-    radius = 10000.
-    k = 6
 
     var_list = [
         ("time", "nn"),
@@ -241,6 +259,8 @@ def test_single():
         "0.1",
         "--grid_store",
         "/home/shahn/Downloads",
+        "--neighbours", "50",
+        "--radius", "25000",
     ]
     swath_resample_main(cli_args)
 
@@ -252,9 +272,10 @@ def test_single():
     # ]
     # swath_regrid_main(cli_args)
 
+
 def process_test_data():
 
-    in_path = Path("/data-write/RADAR/hsaf/h121_v2.0/netcdf/metop_c/2024/06/")
+    in_path = Path("/data-write/RADAR/hsaf/h121_v2.0/netcdf/metop_b/2024/06/")
     nc_files = list(in_path.glob("*.nc"))
     out_path = "/data-write/USERS/shahn/ascat_cgls_test_data/"
 
@@ -270,4 +291,3 @@ def process_test_data():
 if __name__ == '__main__':
     test_single()
     # process_test_data()
-
