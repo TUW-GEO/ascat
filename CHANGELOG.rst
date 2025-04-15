@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.5.1
+=============
+
+- Fix pypi issue
+
 Version 2.5.0
 =============
 
