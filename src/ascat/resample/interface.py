@@ -91,8 +91,8 @@ def parse_args_swath_resample(args):
 
 def swath_resample_main(cli_args):
     """
-    Resample an ASCAT swath file or directory of swath files
-    to a regular grid and write the results to disk.
+    Read command line arguments and perform an inverse distance resampling
+    procedure on a single ASCAT swath file or directory of swath files.
 
     Parameters
     ----------
@@ -100,8 +100,12 @@ def swath_resample_main(cli_args):
         Command line arguments.
     """
     args = parse_args_swath_resample(cli_args)
+
     filepath = Path(args.filepath)
     trg_grid_size = args.resample_deg
+
+    k = args.neighbours
+    radius = args.radius
 
     outpath = Path(args.outpath)
     outpath.parent.mkdir(parents=True, exist_ok=True)
@@ -111,6 +115,43 @@ def swath_resample_main(cli_args):
     else:
         suffix = f"_{args.resample_deg}deg"
 
+    if args.grid_store:
+        grid_store = Path(args.grid_store)
+        grid_store.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        grid_store = None
+
+    inverse_distance_resampling(filepath, outpath, trg_grid_size, grid_store,
+                                suffix, k, radius)
+
+
+def inverse_distance_resampling(filepath,
+                                outpath,
+                                sampling,
+                                suffix,
+                                k=6,
+                                radius=10000.,
+                                grid_store=None):
+    """
+    Inverse distance resampling of ASCAT swath data.
+
+    Parameters
+    ----------
+    filepath : pathlib.Path
+        Path to file or folder.
+    outpath : pathlib.Path
+        Path to the output data.
+    sampling : float
+        Target grid spacing in degrees.
+    suffix : str
+        Filename suffix.
+    k : int, optional
+        Number of neighbours to consider for each grid point (default: 6)
+    radius : float, optional
+        Cut off distance in meters (default: 10000.)
+    grid_store : pathlib.Path, optional
+        Path for storing/loading lookup tables (default: None).
+    """
     if filepath.is_dir():
         files = list(filepath.glob("**/*.nc"))
     elif filepath.is_file() and filepath.suffix == ".nc":
@@ -118,32 +159,29 @@ def swath_resample_main(cli_args):
     else:
         raise RuntimeError("No files found at the provided filepath")
 
-    radius = args.radius
-    if (radius < 1000) or (radius > 100000):
-        raise ValueError(f"Radius outside limits: 1000 < {radius} < 100000")
-
-    k = args.neighbours
-    if (k < 1) or (k > 100):
-        raise ValueError(
-            f"Number of neighbours outside limits 1 < {k} < {100}")
-
     first_file = files[0]
-
     product_id = get_swath_product_id(str(first_file.name))
-
-    if product_id is None:
-        raise RuntimeError("Product identifier unknown")
 
     product = swath_io_catalog[product_id]
     src_grid = product.grid
     src_grid_size = product.grid_sampling_km
-
     src_grid_id = f"fib_grid_{src_grid_size}km"
-    trg_grid_id = f"reg_grid_{trg_grid_size}deg"
+
+    if product_id is None:
+        raise RuntimeError("Product identifier unknown")
+
+    if (radius < 1000) or (radius > 100000):
+        raise ValueError(f"Radius outside limits: 1000 < {radius} < 100000")
+
+    if (k < 1) or (k > 100):
+        raise ValueError(
+            f"Number of neighbours outside limits 1 < {k} < {100}")
+
+    trg_grid_id = f"reg_grid_{sampling}deg"
 
     trg_grid, grid_lut = retrieve_or_store_grid_lut(src_grid, src_grid_id,
-                                                    trg_grid_id, trg_grid_size,
-                                                    args.grid_store)
+                                                    trg_grid_id, sampling,
+                                                    grid_store)
 
     var_list = [
         ("time", "nn"),
@@ -167,7 +205,6 @@ def swath_resample_main(cli_args):
         ("backscatter40_flag", "bitwise_or"),
     ]
 
-    # defintion of target grid - regular lat/lon grid
     target_def = SwathDefinition(lons=trg_grid.arrlon, lats=trg_grid.arrlat)
     output_shape = trg_grid.shape
     dim = ("latitude", "longitude")
