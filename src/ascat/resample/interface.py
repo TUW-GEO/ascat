@@ -121,8 +121,8 @@ def swath_resample_main(cli_args):
     else:
         grid_store = None
 
-    inverse_distance_resampling(filepath, outpath, trg_grid_size, grid_store,
-                                suffix, k, radius)
+    inverse_distance_resampling(filepath, outpath, trg_grid_size, suffix, k,
+                                radius, grid_store)
 
 
 def inverse_distance_resampling(filepath,
