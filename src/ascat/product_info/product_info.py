@@ -1,18 +1,37 @@
-#!/usr/bin/env python3
+# Copyright (c) 2025, TU Wien
+# All rights reserved.
+
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#    * Redistributions of source code must retain the above copyright notice,
+#      this list of conditions and the following disclaimer.
+#    * Redistributions in binary form must reproduce the above copyright
+#      notice, this list of conditions and the following disclaimer in the
+#      documentation and/or other materials provided with the distribution.
+#    * Neither the name of TU Wien, Department of Geodesy and Geoinformation
+#      nor the names of its contributors may be used to endorse or promote
+#      products derived from this software without specific prior written
+#      permission.
+
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL TU WIEN DEPARTMENT OF GEODESY AND
+# GEOINFORMATION BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import re
 
 import numpy as np
 
-from fibgrid.realization import FibGrid
-
-from pygeogrids.grids import BasicGrid
-from pygeogrids.netcdf import load_grid
-
-from pathlib import Path
-
 from ascat.cell import RaggedArrayTs
 from ascat.cell import OrthoMultiTimeseriesCell
+
 
 class BaseCellProduct:
     fn_format = "{:04d}.nc"
@@ -20,6 +39,7 @@ class BaseCellProduct:
     @classmethod
     def preprocessor(cls, ds):
         return ds
+
 
 class RaggedArrayCellProduct(BaseCellProduct):
     file_class = RaggedArrayTs
@@ -40,7 +60,9 @@ class RaggedArrayCellProduct(BaseCellProduct):
             ds.attrs["grid_mapping_name"] = cls.grid_name
         return ds
 
+
 class ErsCell(RaggedArrayCellProduct):
+
     @classmethod
     def preprocessor(cls, ds):
         if "obs" in ds.dims:
@@ -58,9 +80,9 @@ class ErsCell(RaggedArrayCellProduct):
             if parts[0] in ["fore", "mid", "aft"]:
                 if parts[0] == "fore":
                     parts[0] = "for"
-                ds = ds.rename({var:
-                                "_".join(parts[1:] + [parts[0]])})
+                ds = ds.rename({var: "_".join(parts[1:] + [parts[0]])})
         return ds
+
 
 class ErsHCell(ErsCell):
     grid_name = "fibgrid_12.5"
@@ -72,18 +94,26 @@ class ErsNCell(ErsCell):
 
 class AscatH129Cell(RaggedArrayCellProduct):
     grid_name = "fibgrid_6.25"
-    # sf_pattern = {"sat_str": "{sat}"}
 
 
-class AscatH129Cell(RaggedArrayCellProduct):
+class AscatH130Cell(RaggedArrayCellProduct):
+    grid_name = "fibgrid_6.25"
+
+
+class AscatH122Cell(RaggedArrayCellProduct):
     grid_name = "fibgrid_6.25"
 
 
 class AscatH121Cell(RaggedArrayCellProduct):
     grid_name = "fibgrid_12.5"
 
-class AscatH122Cell(RaggedArrayCellProduct):
-    grid_name = "fibgrid_6.25"
+
+class AscatH139Cell(RaggedArrayCellProduct):
+    grid_name = "fibgrid_12.5"
+
+
+class AscatH29Cell(RaggedArrayCellProduct):
+    grid_name = "fibgrid_12.5"
 
 
 class AscatSIG0Cell6250m(RaggedArrayCellProduct):
@@ -92,6 +122,7 @@ class AscatSIG0Cell6250m(RaggedArrayCellProduct):
 
 class AscatSIG0Cell12500m(RaggedArrayCellProduct):
     grid_name = "fibgrid_12.5"
+
 
 class OrthoMultiArrayCellProduct(BaseCellProduct):
     file_class = OrthoMultiTimeseriesCell
@@ -110,6 +141,7 @@ class OrthoMultiArrayCellProduct(BaseCellProduct):
 class SwathProduct:
     from ascat.swath import Swath
     file_class = Swath
+
 
 class AscatSwathProduct(SwathProduct):
     grid_name = None
@@ -131,21 +163,22 @@ class AscatSwathProduct(SwathProduct):
 
     @staticmethod
     def postprocess_(ds):
-        for key, item in {"latitude": "lat", "longitude": "lon", "altitude": "alt"}.items():
+        for key, item in {
+                "latitude": "lat",
+                "longitude": "lon",
+                "altitude": "alt"
+        }.items():
             if key in ds:
                 ds = ds.rename({key: item})
         if "altitude" not in ds:
-            ds["alt"] = ("locations", np.full_like(ds["lat"], fill_value=np.nan))
+            ds["alt"] = ("locations",
+                         np.full_like(ds["lat"], fill_value=np.nan))
         return ds
-
 
 
 class AscatH129Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc"
-    sf_pattern = {
-        "satellite_folder": "metop_[abc]",
-        "year_folder": "{year}"
-    }
+    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_6.25"
     cell_fn_format = "{:04d}.nc"
@@ -169,46 +202,17 @@ class AscatH129Swath(AscatSwathProduct):
             },
             "year_folder": {
                 "year": f"{timestamp.year}"
-            },
-        }
-
-
-class AscatH129Swath(AscatSwathProduct):
-    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}", "month_folder": "{month}"}
-    date_field_fmt = "%Y%m%d%H%M%S"
-    grid_name = "fibgrid_6.25"
-    cell_fn_format = "{:04d}.nc"
-
-    @staticmethod
-    def fn_read_fmt(timestamp, sat="[ABC]"):
-        sat = sat.upper()
-        return {
-            "date": timestamp.strftime("%Y%m%d*"),
-            "sat": sat,
-            "placeholder": "*",
-            "placeholder1": "*"
-        }
-
-    @staticmethod
-    def sf_read_fmt(timestamp, sat="[abc]"):
-        sat = sat.lower()
-        return {
-            "satellite_folder": {
-                "satellite": f"metop_{sat}"
-            },
-            "year_folder": {
-                "year": f"{timestamp.year}"
-            },
-            "month_folder": {
-                "month": f"{timestamp.month}".zfill(2)
             },
         }
 
 
 class AscatH121Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H121_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}", "month_folder": "{month}"}
+    sf_pattern = {
+        "satellite_folder": "metop_[abc]",
+        "year_folder": "{year}",
+        "month_folder": "{month}"
+    }
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_12.5"
     cell_fn_format = "{:04d}.nc"
@@ -238,9 +242,10 @@ class AscatH121Swath(AscatSwathProduct):
             },
         }
 
+
 class AscatH122Swath(AscatSwathProduct):
-    fn_pattern = "ascat_ssm_nrt_6.25km_{placeholder}Z_{date}Z_metop-{sat}_h122.nc"
-    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H122_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
+    sf_pattern = {}
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_6.25"
     cell_fn_format = "{:04d}.nc"
@@ -251,20 +256,79 @@ class AscatH122Swath(AscatSwathProduct):
         return {
             "date": timestamp.strftime("%Y%m%d*"),
             "sat": sat,
-            "placeholder": "*"
+            "placeholder": "*",
+            "placeholder1": "*"
         }
 
     @staticmethod
-    def sf_read_fmt(timestamp, sat="[abc]"):
-        sat = sat.lower()
+    def sf_read_fmt(timestamp):
+        return {}
+
+
+class AscatH29Swath(AscatSwathProduct):
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H29_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
+    sf_pattern = {}
+    date_field_fmt = "%Y%m%d%H%M%S"
+    grid_name = "fibgrid_12.5"
+    cell_fn_format = "{:04d}.nc"
+
+    @staticmethod
+    def fn_read_fmt(timestamp, sat="[ABC]"):
+        sat = sat.upper()
         return {
-            "satellite_folder": {
-                "satellite": f"metop_{sat}"
-            },
-            "year_folder": {
-                "year": f"{timestamp.year}"
-            },
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": sat,
+            "placeholder": "*",
+            "placeholder1": "*"
         }
+
+    @staticmethod
+    def sf_read_fmt(timestamp):
+        return {}
+
+
+class AscatH130Swath(AscatSwathProduct):
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H130_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
+    sf_pattern = {}
+    date_field_fmt = "%Y%m%d%H%M%S"
+    grid_name = "fibgrid_6.25"
+    cell_fn_format = "{:04d}.nc"
+
+    @staticmethod
+    def fn_read_fmt(timestamp, sat="[ABC]"):
+        sat = sat.upper()
+        return {
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": sat,
+            "placeholder": "*",
+            "placeholder1": "*"
+        }
+
+    @staticmethod
+    def sf_read_fmt(timestamp):
+        return {}
+
+
+class AscatH139Swath(AscatSwathProduct):
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H139_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
+    sf_pattern = {}
+    date_field_fmt = "%Y%m%d%H%M%S"
+    grid_name = "fibgrid_12.5"
+    cell_fn_format = "{:04d}.nc"
+
+    @staticmethod
+    def fn_read_fmt(timestamp, sat="[ABC]"):
+        sat = sat.upper()
+        return {
+            "date": timestamp.strftime("%Y%m%d*"),
+            "sat": sat,
+            "placeholder": "*",
+            "placeholder1": "*"
+        }
+
+    @staticmethod
+    def sf_read_fmt(timestamp):
+        return {}
 
 
 class AscatSIG0Swath6250m(AscatSwathProduct):
@@ -363,8 +427,11 @@ class AscatSIG0Swath12500m(AscatSwathProduct):
 
 cell_io_catalog = {
     "H129": AscatH129Cell,
-    "H121": AscatH121Cell,
+    "H130": AscatH130Cell,
     "H122": AscatH122Cell,
+    "H121": AscatH121Cell,
+    "H139": AscatH139Cell,
+    "H29": AscatH29Cell,
     "SIG0_6.25": AscatSIG0Cell6250m,
     "SIG0_12.5": AscatSIG0Cell12500m,
     "ERSH": ErsHCell,
@@ -373,8 +440,11 @@ cell_io_catalog = {
 
 swath_io_catalog = {
     "H129": AscatH129Swath,
-    "H121": AscatH121Swath,
+    "H130": AscatH130Swath,
     "H122": AscatH122Swath,
+    "H121": AscatH121Swath,
+    "H139": AscatH139Swath,
+    "H29": AscatH29Swath,
     "SIG0_6.25": AscatSIG0Swath6250m,
     "SIG0_12.5": AscatSIG0Swath12500m,
 }
@@ -382,10 +452,16 @@ swath_io_catalog = {
 swath_fname_regex_lookup = {
     "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25km-H129_C_LIIB_.*_.*_.*____.nc":
         "H129",
+    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25km-H130_C_LIIB_.*_.*_.*____.nc":
+        "H130",
+    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-6.25km-H122_C_LIIB_.*_.*_.*____.nc":
+        "H122",
     "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H121_C_LIIB_.*_.*_.*____.nc":
         "H121",
-    "ascat_ssm_nrt_6.25km_.*Z_.*Z_metop-[ABC]_h122.nc":
-        "H122",
+    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H139_C_LIIB_.*_.*_.*____.nc":
+        "H139",
+    "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP[ABC]-12.5km-H29_C_LIIB_.*_.*_.*____.nc":
+        "H29",
     "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-6.25_C_LIIB_.*_.*_.*____.nc":
         "SIG0_6.25",
     "W_IT-HSAF-ROME,SAT,SIG0-ASCAT-METOP[ABC]-12.5_C_LIIB_.*_.*_.*____.nc":

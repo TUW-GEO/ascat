@@ -30,7 +30,6 @@ from functools import partial
 from pathlib import Path
 
 import dask
-import dask.array as da
 import numpy as np
 import xarray as xr
 
@@ -45,14 +44,19 @@ from ascat.file_handling import Filenames
 from ascat.file_handling import ChronFiles
 import warnings
 
-
 registry = GridRegistry()
+
 
 class Swath(Filenames):
     """
     Class to read and merge swath files given one or more file paths.
     """
-    def _read(self, filename, generic=True, preprocessor=None, **xarray_kwargs):
+
+    def _read(self,
+              filename,
+              generic=True,
+              preprocessor=None,
+              **xarray_kwargs):
         """
         Open one swath file as an xarray.Dataset and preprocess it if necessary.
 
@@ -84,12 +88,7 @@ class Swath(Filenames):
 
         return ds
 
-    def read(
-        self,
-        parallel=False,
-        mask_and_scale=True,
-        **kwargs
-    ):
+    def read(self, parallel=False, mask_and_scale=True, **kwargs):
         """
         Read the file or a subset of it.
 
@@ -108,10 +107,11 @@ class Swath(Filenames):
             Dataset.
         """
 
-        ds, closers = super().read(closer_attr="_close",
-                                   parallel=parallel,
-                                   mask_and_scale=mask_and_scale,
-                                   **kwargs)
+        ds, closers = super().read(
+            closer_attr="_close",
+            parallel=parallel,
+            mask_and_scale=mask_and_scale,
+            **kwargs)
         if ds is not None:
             ds.set_close(partial(super()._multi_file_closer, closers))
             return ds
@@ -174,8 +174,7 @@ class Swath(Filenames):
         """
         # we don't need to pass on anything from global attributes, except for these
         global_attributes_to_pass_on_merge = [
-            "grid_mapping_name",
-            "featureType"
+            "grid_mapping_name", "featureType"
         ]
         if "global_attributes_flag" in attrs_list[0].keys():
             attrs_list[0].pop("global_attributes_flag")
@@ -206,6 +205,7 @@ class Swath(Filenames):
             }
             dropped_keys |= {key for key in attrs if key not in result}
         return result
+
 
 class SwathGridFiles(ChronFiles):
     """
@@ -297,9 +297,9 @@ class SwathGridFiles(ChronFiles):
 
     @classmethod
     def from_product_id(
-            cls,
-            path,
-            product_id,
+        cls,
+        path,
+        product_id,
     ):
         """Create a SwathGridFiles object based on a product_id.
 
@@ -374,15 +374,14 @@ class SwathGridFiles(ChronFiles):
             preprocessor=product_class.preprocess_,
         )
 
-
     def _spatial_filter(
-            self,
-            filenames,
-            cell=None,
-            location_id=None,
-            coords=None,
-            bbox=None,
-            geom=None,
+        self,
+        filenames,
+        cell=None,
+        location_id=None,
+        coords=None,
+        bbox=None,
+        geom=None,
     ):
         """
         Filter a search result for cells matching a spatial criterion.
@@ -436,7 +435,10 @@ class SwathGridFiles(ChronFiles):
                 "bbox",
                 "",
                 "EPSG:4326",
-                {"proj": "latlong", "datum": "WGS84"},
+                {
+                    "proj": "latlong",
+                    "datum": "WGS84"
+                },
                 1000,
                 1000,
                 bbox,
@@ -449,13 +451,15 @@ class SwathGridFiles(ChronFiles):
 
         filtered_filenames = []
         for filename in filenames:
-            lazy_result = dask.delayed(self._check_intersection)(filename, spatial)
+            lazy_result = dask.delayed(self._check_intersection)(filename,
+                                                                 spatial)
             filtered_filenames.append(lazy_result)
 
         def none_filter(fname_list):
             return [l for l in fname_list if l is not None]
 
-        filtered_filenames = dask.delayed(none_filter)(filtered_filenames).compute()
+        filtered_filenames = dask.delayed(none_filter)(
+            filtered_filenames).compute()
 
         return filtered_filenames
 
@@ -623,7 +627,12 @@ class SwathGridFiles(ChronFiles):
         """
         dt_start, dt_end = date_range
         filenames = self.swath_search(
-            dt_start, dt_end, dt_delta, search_date_fmt, date_field, end_inclusive,
+            dt_start,
+            dt_end,
+            dt_delta,
+            search_date_fmt,
+            date_field,
+            end_inclusive,
             **fmt_kwargs,
         )
 
@@ -656,23 +665,27 @@ class SwathGridFiles(ChronFiles):
 
         if data:
             if date_range is not None:
-                mask = (data["time"] >= date_range[0]) & (data["time"] <= date_range[1])
+                mask = (data["time"] >= date_range[0]) & (
+                    data["time"] <= date_range[1])
                 data = data.sel(obs=mask.compute())
 
             return data
-        warning_str = ("No data found for specified criteria, returning None:\n"
-                        f"date_range={date_range}\n"
-                        f"cell={cell}, location_id={location_id}, coords={coords}, bbox={bbox},\n"
-                        f"geom={geom}, max_coord_dist={max_coord_dist}, \n")
+        warning_str = (
+            "No data found for specified criteria, returning None:\n"
+            f"date_range={date_range}\n"
+            f"cell={cell}, location_id={location_id}, coords={coords}, bbox={bbox},\n"
+            f"geom={geom}, max_coord_dist={max_coord_dist}, \n")
         warnings.warn(warning_str, UserWarning, 2)
 
-    def stack_to_cell_files(self,
-                            out_dir,
-                            max_nbytes,
-                            date_range=None,
-                            fmt_kwargs=None,
-                            cells=None,
-                            print_progress=True,):
+    def stack_to_cell_files(
+        self,
+        out_dir,
+        max_nbytes,
+        date_range=None,
+        fmt_kwargs=None,
+        cells=None,
+        print_progress=True,
+    ):
         """
         Stack all swath files to cell files, writing them in parallel.
 
@@ -696,16 +709,18 @@ class SwathGridFiles(ChronFiles):
         fmt_kwargs = fmt_kwargs or {}
         if date_range is not None:
             dt_start, dt_end = date_range
-            filenames = self.swath_search(dt_start, dt_end, cell=cells, **fmt_kwargs)
+            filenames = self.swath_search(
+                dt_start, dt_end, cell=cells, **fmt_kwargs)
         else:
             filenames = list(Path(self.root_path).glob("**/*.nc"))
 
         swath = self.cls(filenames)
 
-        for ds in swath.iter_read_nbytes(max_nbytes,
-                                         preprocessor=self.preprocessor,
-                                         print_progress=print_progress,
-                                         chunks=-1):
+        for ds in swath.iter_read_nbytes(
+                max_nbytes,
+                preprocessor=self.preprocessor,
+                print_progress=print_progress,
+                chunks=-1):
             ds_cells = self.grid.gpi2cell(ds["location_id"])
             if isinstance(ds_cells, np.ma.MaskedArray):
                 ds_cells = ds_cells.compressed()
@@ -723,19 +738,21 @@ class SwathGridFiles(ChronFiles):
             cell_fnames = []
             for i, c in enumerate(unique_cells):
                 if (cells is None) or (c in cells):
-                    cell_ds = ds.isel(obs=slice(cell_counts[i], cell_counts[i+1]))
+                    cell_ds = ds.isel(
+                        obs=slice(cell_counts[i], cell_counts[i + 1]))
                     if len(cell_ds) == 0:
                         continue
                     ds_list.append(cell_ds)
-                    cell_fname = Path(out_dir)/self.cell_fn_format.format(c)
+                    cell_fname = Path(out_dir) / self.cell_fn_format.format(c)
                     cell_fnames.append(cell_fname)
 
             writer_class = RaggedArrayTs(cell_fnames)
-            writer_class.write(ds_list,
-                               parallel=True,
-                               postprocessor=self.postprocessor,
-                               ra_type="point",
-                               mode="a",
-                               print_progress=print_progress)
+            writer_class.write(
+                ds_list,
+                parallel=True,
+                postprocessor=self.postprocessor,
+                ra_type="point",
+                mode="a",
+                print_progress=print_progress)
         if print_progress:
             print("\n")
