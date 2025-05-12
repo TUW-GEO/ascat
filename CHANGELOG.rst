@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.5.3
+=============
+
+- Fix swath stacking bug (missing scaling)
+
 Version 2.5.2
 =============
 
