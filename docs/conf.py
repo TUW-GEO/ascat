@@ -93,7 +93,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "ascat"
-copyright = "2024, TU Wien"
+copyright = "2025, TU Wien"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

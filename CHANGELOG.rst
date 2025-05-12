@@ -2,6 +2,23 @@
 Changelog
 =========
 
+Version 2.5.2
+=============
+
+- Add ASCAT SSM ICDR (H130, H139) to product info
+- Code formatting
+
+Version 2.5.1
+=============
+
+- Fix pypi issue
+
+Version 2.5.0
+=============
+
+- Rewrite xarray readers/writers
+- Add CLI for resampling ASCAT swath data
+
 Version 2.4.4
 =============
 

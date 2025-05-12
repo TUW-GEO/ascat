@@ -1,4 +1,4 @@
-# Copyright (c) 2024, TU Wien
+# Copyright (c) 2025, TU Wien
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
