@@ -544,6 +544,9 @@ def _expand_variable(nc_variable, data, expanding_dim, nc_shape, added_size):
     if hasattr(nc_variable,
                'missing_value') and data.attrs.get('missing_value') is None:
         data.encoding['missing_value'] = nc_variable.missing_value
+    if hasattr(nc_variable,
+               'scale_factor') and data.attrs.get('scale_factor') is None:
+        data.encoding['scale_factor'] = nc_variable.scale_factor
 
     data_encoded = xr.conventions.encode_cf_variable(data)
 
