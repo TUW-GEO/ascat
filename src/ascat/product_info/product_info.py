@@ -157,7 +157,7 @@ class AscatSwathProduct(SwathProduct):
             sat_id = {"a": 3, "b": 4, "c": 5}
             sat = ds.attrs["spacecraft"][-1].lower()
             ds["sat_id"] = ("obs",
-                            np.repeat(sat_id[sat], ds["location_id"].size))
+                            np.repeat(np.int8(sat_id[sat]), ds["location_id"].size))
             del ds.attrs["spacecraft"]
         return ds
 
