@@ -131,14 +131,12 @@ class TemporalSwathAggregator:
         }
 
     def _read_data(self):
-        if progress_to_stdout:
-            print("constructing dataset, this may take some time...")
+        print("constructing dataset, this may take some time...")
         self.data = self.collection.read(
             self.start_dt,
             self.end_dt,
         )
-        if progress_to_stdout:
-            print("done constructing dataset")
+        print("done constructing dataset")
 
     def _set_metadata(self, ds):
         """Add appropriate metadata to datasets."""
