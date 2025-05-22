@@ -31,6 +31,7 @@ from pathlib import Path
 
 import xarray as xr
 
+from ascat.grids.grid_registry import GridRegistry
 from ascat.product_info import get_swath_product_id
 from ascat.product_info import swath_io_catalog
 from ascat.regrid.regrid import regrid_swath_ds
@@ -111,9 +112,10 @@ def swath_regrid_main(cli_args):
     if product_id is None:
         raise RuntimeError("Product identifier unknown")
 
+    registry = GridRegistry()
     product = swath_io_catalog[product_id]
-    src_grid = product.grid
-    src_grid_size = product.grid_sampling_km
+    src_grid = registry.get(product.grid_name)
+    src_grid_size = src_grid.res
 
     src_grid_id = f"fib_grid_{src_grid_size}km"
     trg_grid_id = f"reg_grid_{trg_grid_size}deg"

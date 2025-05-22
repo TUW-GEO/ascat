@@ -198,7 +198,7 @@ class TemporalSwathAggregator:
             Output path.
         """
         product_id = self.product.lower().replace("_", "-")
-        grid_sampling = str(self.collection.grid_sampling_km) + "km"
+        grid_sampling = str(self.grid.res) + "km"
 
         if self.agg is not None:
             datasets = self.get_aggregated_time_steps()
