@@ -133,8 +133,7 @@ class TemporalSwathAggregator:
     def _read_data(self):
         print("constructing dataset, this may take some time...")
         self.data = self.collection.read(
-            self.start_dt,
-            self.end_dt,
+            (self.start_dt, self.end_dt)
         )
         print("done constructing dataset")
 
