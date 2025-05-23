@@ -33,8 +33,9 @@ import numpy as np
 import xarray as xr
 from pyresample import kd_tree, SwathDefinition
 
-from ascat.read_native.xarray_io import get_swath_product_id
-from ascat.read_native.xarray_io import swath_io_catalog
+from ascat.grids.grid_registry import GridRegistry
+from ascat.product_info import get_swath_product_id
+from ascat.product_info import swath_io_catalog
 from ascat.regrid.regrid import retrieve_or_store_grid_lut
 
 
@@ -162,9 +163,10 @@ def inverse_distance_resampling(filepath,
     first_file = files[0]
     product_id = get_swath_product_id(str(first_file.name))
 
+    registry = GridRegistry()
     product = swath_io_catalog[product_id]
-    src_grid = product.grid
-    src_grid_size = product.grid_sampling_km
+    src_grid = registry.get(product.grid_name)
+    src_grid_size = src_grid.res
     src_grid_id = f"fib_grid_{src_grid_size}km"
 
     if product_id is None:
