@@ -473,4 +473,6 @@ def get_swath_product_id(filename):
     for pattern, swath_product_id in swath_fname_regex_lookup.items():
         if re.match(pattern, filename):
             return swath_product_id
-    return None
+    raise ValueError(
+        f"Filename {filename} does not match any known swath product ID pattern."
+    )
