@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.5.4
+=============
+
+- Bugfix in SSM aggregation
+
 Version 2.5.3
 =============
 
