@@ -2,6 +2,13 @@
 Changelog
 =========
 
+Version 2.5.5
+=============
+
+-- Introduces a --product_id CLI argument in both swath_regrid and swath_resample interfaces
+-- Updates inverse_distance_resampling signature to accept product_id and attempts filename-based inference
+-- Hooks the resampling step into the temporal aggregation flow with new --resample flags
+
 Version 2.5.4
 =============
 
