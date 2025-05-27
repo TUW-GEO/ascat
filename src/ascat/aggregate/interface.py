@@ -31,6 +31,7 @@ from pathlib import Path
 
 import ascat.aggregate.aggregators as aggs
 from ascat.regrid.interface import swath_regrid_main
+from ascat.resample.interface import swath_resample_main
 
 
 def parse_args_temporal_swath_agg(args):
@@ -95,6 +96,24 @@ def parse_args_temporal_swath_agg(args):
         help=("Regrid the data to a regular grid with the given "
               " spacing in degrees"))
     parser.add_argument(
+        "--resample",
+        metavar="RESAMPLE_DEG",
+        type=float,
+        help=("Resample the data to a regular grid with the given "
+              " spacing in degrees"))
+    parser.add_argument(
+        "--resample_neighbours",
+        metavar="RESAMPLE_NEIGHBOURS",
+        type=int,
+        default=6,
+        help="Number of neighbours to consider for each grid point when resampling (default: 6)")
+    parser.add_argument(
+        "--resample_radius",
+        metavar="RESAMPLE_RADIUS",
+        type=float,
+        default=10000,
+        help="Cut off distance in meters (default: 10000)")
+    parser.add_argument(
         "--grid_store",
         metavar="GRID_STORE",
         help=("Path to a directory for storing grids and "
@@ -124,6 +143,8 @@ def temporal_swath_agg_main(cli_args):
         args.subsurface_scattering_mask, args.ssm_sensitivity_mask,
         args.no_masking)
 
+    product_id = transf.product
+
     outpath = Path(args.outpath)
     outpath.mkdir(parents=True, exist_ok=True)
 
@@ -136,8 +157,20 @@ def temporal_swath_agg_main(cli_args):
                 regrid_args.extend(["--grid_store", args.grid_store])
             if args.suffix is not None:
                 regrid_args.extend(["--suffix", args.suffix])
+            regrid_args.extend(["--product_id", product_id])
             swath_regrid_main(regrid_args)
 
+    if args.resample is not None:
+        for filename in filenames:
+            resample_args = [str(filename), str(outpath), str(args.resample)]
+            if args.grid_store is not None:
+                resample_args.extend(["--grid_store", args.grid_store])
+            if args.suffix is not None:
+                resample_args.extend(["--suffix", args.suffix])
+            resample_args.extend(["--neighbours", str(args.resample_neighbours)])
+            resample_args.extend(["--radius", str(args.resample_radius)])
+            resample_args.extend(["--product_id", product_id])
+            swath_resample_main(resample_args)
 
 def run_temporal_swath_agg():
     """
