@@ -65,6 +65,10 @@ def parse_args_swath_regrid(args):
         type=float,
         help="Target grid spacing in degrees")
     parser.add_argument(
+        "--product_id",
+        metavar="PRODUCT_ID",
+        help="Product identifier (e.g. H129, H125, H121, etc.). If not provided, an attempt is made to determine it from the file name.")
+    parser.add_argument(
         "--grid_store",
         metavar="GRID_STORE",
         help="Path for storing/loading lookup tables")
@@ -107,10 +111,22 @@ def swath_regrid_main(cli_args):
 
     first_file = files[0]
 
-    product_id = get_swath_product_id(str(first_file.name))
+    if args.product_id:
+        product_id = args.product_id
+    else:
+        try:
+            product_id = get_swath_product_id(str(first_file.name))
+        except ValueError:
+            raise RuntimeError(
+                f"Could not determine product identifier from file name {str(first_file.name)} "
+                "Please provide the --product_id argument."
+            )
 
     if product_id is None:
-        raise RuntimeError("Product identifier unknown")
+        raise RuntimeError(
+            "Could not determine product identifier from file name. "
+            "Please provide the --product_id argument."
+        )
 
     registry = GridRegistry()
     product = swath_io_catalog[product_id]

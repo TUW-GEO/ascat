@@ -124,6 +124,8 @@ def temporal_swath_agg_main(cli_args):
         args.subsurface_scattering_mask, args.ssm_sensitivity_mask,
         args.no_masking)
 
+    product_id = transf.product
+
     outpath = Path(args.outpath)
     outpath.mkdir(parents=True, exist_ok=True)
 
@@ -136,6 +138,7 @@ def temporal_swath_agg_main(cli_args):
                 regrid_args.extend(["--grid_store", args.grid_store])
             if args.suffix is not None:
                 regrid_args.extend(["--suffix", args.suffix])
+            regrid_args.extend(["--product_id", product_id])
             swath_regrid_main(regrid_args)
 
 
