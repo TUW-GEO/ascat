@@ -285,7 +285,7 @@ class TemporalSwathAggregator:
             grouped_ds = xarray_reduce(
                 ds[present_agg_vars],
                 ds["location_id"],
-                expected_groups=(expected_location_ids),
+                expected_groups=(expected_location_ids,),
                 func=self.agg)
 
             # convert the location_id back to an integer
