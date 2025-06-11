@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.6.1
+=============
+
+- Add new CLI argument "--sat" in the aggregation interface to allow users to filter METOP satellite data
+
 Version 2.6.0
 =============
 
