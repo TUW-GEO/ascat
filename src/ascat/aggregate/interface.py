@@ -56,6 +56,14 @@ def parse_args_temporal_swath_agg(args):
         help="Time period for aggregation (e.g. 1D, 1W, 1M, 1Y, 2D, etc.)")
     parser.add_argument("--agg", metavar="AGG", help="Aggregation")
     parser.add_argument(
+        "--sat",
+        metavar="SAT",
+        type=str,
+        default="*",
+        help=("Regex pattern indicating which METOP satellite(s) to use, "
+              " e.g. A, [BC], or '*' "
+              "(default: * for all satellites)"))
+    parser.add_argument(
         "--snow_cover_mask",
         metavar="SNOW_COVER_MASK",
         type=int,
@@ -141,7 +149,7 @@ def temporal_swath_agg_main(cli_args):
         args.filepath, args.start_dt, args.end_dt, args.t_delta, args.agg,
         args.snow_cover_mask, args.frozen_soil_mask,
         args.subsurface_scattering_mask, args.ssm_sensitivity_mask,
-        args.no_masking)
+        args.no_masking, sat=args.sat)
 
     product_id = transf.product
 

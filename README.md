@@ -68,8 +68,10 @@ The latest ASCAT swath files (H122, H29, H129, H121) can be aggregated and/or re
 
 Surface soil moisture and backscatter40 from ASCAT swath files can be aggregated over a user-defined time period (e.g. 1 day, 10 days, 1 month) choosing one of the following methods: "mean", "median", "mode", "std", "min", "max", "argmin", "argmax", "quantile", "first", "last". The time span for processing is determined by the start and end times specified. Additionally, thresholds can be set for masks - such as those for frozen soil probability, snow cover probability, subsurface scattering probability, and surface soil moisture sensitivity - to filter surface soil moisture data as part of the aggregation process.
 
+By default, data from all Metop satellites will be aggregated together. To aggregate from a subset of satellites, pass a regex matching any combination of `"A"`, `"B"`, and `"C"` to the `--sat` argument. E.g. `--sat A`, `--sat [AB]`, `--sat *`, `--sat [ABC]`, etc.
+
 > ```bash
-> ascat_swath_agg /path/to/input/h129_v1.0/swaths/ /path/to/output --start_dt 2020-06-15T00:00:00 --end_dt 2020-06-17T00:00:00 --t_delta 1D --agg mean --snow_cover_mask 80 --frozen_soil_mask 80 --subsurface_scattering_mask 10 --ssm_sensitivity_mask 1
+> ascat_swath_agg /path/to/input/h129_v1.0/swaths/ /path/to/output --start_dt 2020-06-15T00:00:00 --end_dt 2020-06-17T00:00:00 --t_delta 1D --agg mean --snow_cover_mask 80 --frozen_soil_mask 80 --subsurface_scattering_mask 10 --ssm_sensitivity_mask 1 --sat [AB]
 > ```
 
 There is also an option that no masking is applied using the argument ``--no-mask``.
