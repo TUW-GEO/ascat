@@ -2,6 +2,13 @@
 Changelog
 =========
 
+Version 2.6.0
+=============
+
+- Refactors the temporal aggregator to process and write each timestep
+  independently rather than loading and grouping the entire dataset at once
+- Add tqdm to dependencies
+
 Version 2.5.5
 =============
 
