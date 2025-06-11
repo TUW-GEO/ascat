@@ -85,6 +85,10 @@ class TemporalSwathAggregator:
             the source data.
         no_masking : boolean, optional
             Ignore all masks (default: False).
+        sat: str, optional
+            Regex pattern indicating which METOP satellite(s) to use, e.g. A, [BC], or '*'.
+            `None` will use the product's default satellite (usually all of them).
+            (default: None)
         """
         self.filepath = filepath
 
