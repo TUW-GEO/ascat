@@ -57,6 +57,7 @@ class TemporalSwathAggregator:
         subsurface_scattering_mask=5,
         ssm_sensitivity_mask=1,
         no_masking=False,
+        sat=None,
     ):
         """Initialize the class.
 
@@ -107,6 +108,11 @@ class TemporalSwathAggregator:
         first_fname = str(next(Path(filepath).rglob("*.nc")).name)
         product = get_swath_product_id(first_fname)
         self.product = product
+
+        if sat is not None:
+            self.fmt_kwargs = {"sat": sat}
+        else:
+            self.fmt_kwargs = {}
 
         self.collection = SwathGridFiles.from_product_id(
             Path(filepath), product)
@@ -237,7 +243,8 @@ class TemporalSwathAggregator:
             print("reading data for time step:", timestep, end="\r")
             step_start = timestep
             step_end = timestep + self.timedelta
-            ds_step = self.collection.read((step_start, step_end))
+            ds_step = self.collection.read((step_start, step_end),
+                                           **self.fmt_kwargs)
             step_end = step_end - pd.Timedelta("1s")
             ds_step.attrs["start_time"] = np.datetime64(step_start).astype(
                 str)
