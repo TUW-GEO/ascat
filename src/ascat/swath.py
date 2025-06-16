@@ -685,6 +685,7 @@ class SwathGridFiles(ChronFiles):
         fmt_kwargs=None,
         cells=None,
         print_progress=True,
+        parallel=True,
     ):
         """
         Stack all swath files to cell files, writing them in parallel.
@@ -703,6 +704,8 @@ class SwathGridFiles(ChronFiles):
             List of grid cell numbers to read. If None (default), all cells are read.
         print_progress : bool, optional
             If True (default), print progress bars.
+        parallel: bool, optional
+            If True, write data to files in parallel (use all available resources).
         """
         from ascat.cell import RaggedArrayTs
 
@@ -749,10 +752,11 @@ class SwathGridFiles(ChronFiles):
             writer_class = RaggedArrayTs(cell_fnames)
             writer_class.write(
                 ds_list,
-                parallel=True,
+                parallel=parallel,
                 postprocessor=self.postprocessor,
                 ra_type="point",
                 mode="a",
                 print_progress=print_progress)
+
         if print_progress:
             print("\n")
