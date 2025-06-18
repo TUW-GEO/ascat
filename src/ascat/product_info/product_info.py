@@ -177,7 +177,7 @@ class AscatSwathProduct(SwathProduct):
 
 
 class AscatH129Swath(AscatSwathProduct):
-    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc"
+    fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc"
     sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_6.25"

@@ -31,7 +31,7 @@ class TestSwath(unittest.TestCase):
         self.tempdir = TemporaryDirectory()
         self.tempdir_path = Path(self.tempdir.name)
         self.real_swaths_path = Path(
-            TESTDATA_PATH / "hsaf/h129/swaths/metop_a/2021/01"
+            TESTDATA_PATH / "hsaf/h129/swaths/metop_a/2021"
         )
         gen_dummy_swathfiles(self.tempdir_path)
 
@@ -169,12 +169,12 @@ class TestSwathGridFiles(unittest.TestCase):
         # we can create a SwathGridFiles object that points directly to a directory
         # and read the files within it, without passing a "sat" argument to
         # sf.search_period().
-        swath_path = TESTDATA_PATH / "hsaf/h129/swaths/metop_a/2021/01"
+        swath_path = TESTDATA_PATH / "hsaf/h129/swaths/metop_a/2021"
 
         sf = SwathGridFiles(
             swath_path,
-            fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc",
-            sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}", "month_folder": "{month}"},
+            fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc",
+            sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}"},
             date_field_fmt="%Y%m%d%H%M%S",
             grid_name="fibgrid_6.25",
             fn_read_fmt=_fn_read_fmt,
@@ -199,8 +199,8 @@ class TestSwathGridFiles(unittest.TestCase):
         swath_path = TESTDATA_PATH / "hsaf/h129/swaths"
         sf = SwathGridFiles(
             swath_path,
-            fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc",
-            sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}", "month_folder": "{month}"},
+            fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc",
+            sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}"},
             date_field_fmt="%Y%m%d%H%M%S",
             grid_name="fibgrid_6.25",
             fn_read_fmt=_fn_read_fmt,
@@ -256,7 +256,7 @@ class TestSwathGridFiles(unittest.TestCase):
         self.assertGreater(merged_ds.longitude.min().values, bbox[2])
 
         # test extract from main folder
-        swath_path = TESTDATA_PATH / "hsaf/h129/swaths/metop_a/2021/01"
+        swath_path = TESTDATA_PATH / "hsaf/h129/swaths/metop_a/2021"
         sf = SwathGridFiles.from_product_id(swath_path, "h129")
         files = sf.search_period(
             datetime(2021, 1, 15), datetime(2021, 1, 30), date_field_fmt="%Y%m%d%H%M%S"
