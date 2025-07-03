@@ -604,29 +604,43 @@ class ContiguousRaggedArray:
 
         return data
 
-    def sel_instances(self, i: np.array) -> xr.Dataset:
+    def sel_instances(self, i: np.ndarray) -> xr.Dataset:
         """
-        Read time series.
+        Read time series for given instance IDs using a LUT and preserve order.
 
         Parameters
         ----------
-        i : numpy.array
-            Instance identifier.
+        i : np.ndarray
+            Array of instance IDs.
 
         Returns
         -------
         ds : xr.Dataset
-            Time series for instance.
+            Dataset containing the selected instances in the correct order.
         """
-        obs = np.repeat(
-            np.arange(self.ds[self.count_var].size), self.ds[self.count_var])
+        i = np.asarray(i)
+        idx_array = self._instance_lookup[i]
 
-        self._lut[self._instance_lookup[np.asarray(i)]] = True
+        # mark selected instances in lookup table
+        self._lut[idx_array] = True
+
+        # map each sample index to its instance index
+        obs = np.repeat(np.arange(len(self._row_size)), self._row_size)
+
         data = self.ds.sel({
             self.sample_dim: self._lut[obs],
-            self.instance_dim: self._instance_lookup[i],
+            self.instance_dim: idx_array,
         })
+
+        # reset lookup table
         self._lut[:] = False
+
+        # sort the selected data to match the order in i
+        # assuming instance_dim is coordinate-based and one-dimensional
+        _, order = np.unique(i, return_inverse=True)
+
+        data = data.isel({self.instance_dim: order})
+        data = data.assign_coords({self.instance_dim: i})
 
         return data
 
@@ -1294,10 +1308,3 @@ def create_point_data():
     filename = Path(tmp_dir) / "point_data.nc"
     print(filename)
     ds.to_netcdf(filename)
-
-
-if __name__ == '__main__':
-    create_contiguous_ragged()
-    create_indexed_ragged()
-    create_ortho_multi()
-    create_point_data()
