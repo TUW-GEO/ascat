@@ -2,10 +2,11 @@
 Changelog
 =========
 
-Unreleased
-==========
+Version 2.6.2
+=============
 
 - Add switch to make parallel processing optional in `SwathGridFiles.stack_to_cell_files`
+- Add ragged array class for testing purposes
 
 Version 2.6.1
 =============
