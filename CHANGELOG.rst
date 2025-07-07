@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Unreleased
+=============
+- Update `product_info.AscatH129Swath.fn_pattern` to match operational product; update
+  tests to match
+
 Version 2.6.2
 =============
 
