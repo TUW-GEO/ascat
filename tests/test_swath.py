@@ -173,7 +173,7 @@ class TestSwathGridFiles(unittest.TestCase):
 
         sf = SwathGridFiles(
             swath_path,
-            fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc",
+            fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc",
             sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}"},
             date_field_fmt="%Y%m%d%H%M%S",
             grid_name="fibgrid_6.25",
@@ -199,7 +199,7 @@ class TestSwathGridFiles(unittest.TestCase):
         swath_path = TESTDATA_PATH / "hsaf/h129/swaths"
         sf = SwathGridFiles(
             swath_path,
-            fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{date}_{placeholder}_{placeholder1}____.nc",
+            fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc",
             sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}"},
             date_field_fmt="%Y%m%d%H%M%S",
             grid_name="fibgrid_6.25",
