@@ -178,7 +178,11 @@ class AscatSwathProduct(SwathProduct):
 
 class AscatH129Swath(AscatSwathProduct):
     fn_pattern = "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc"
-    sf_pattern = {"satellite_folder": "metop_[abc]", "year_folder": "{year}"}
+    sf_pattern = {
+        "satellite_folder": "metop_[abc]",
+        "year_folder": "{year}",
+        "month_folder": "{month}"
+    }
     date_field_fmt = "%Y%m%d%H%M%S"
     grid_name = "fibgrid_6.25"
     cell_fn_format = "{:04d}.nc"
@@ -202,6 +206,9 @@ class AscatH129Swath(AscatSwathProduct):
             },
             "year_folder": {
                 "year": f"{timestamp.year}"
+            },
+            "month_folder": {
+                "month": f"{timestamp.month}".zfill(2)
             },
         }
 
