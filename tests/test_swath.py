@@ -200,7 +200,7 @@ class TestSwathGridFiles(unittest.TestCase):
         sf = SwathGridFiles(
             swath_path,
             fn_templ="W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc",
-            sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}"},
+            sf_templ={"satellite_folder": "metop_[abc]", "year_folder": "{year}", "month_folder": "{month:02d}"},
             date_field_fmt="%Y%m%d%H%M%S",
             grid_name="fibgrid_6.25",
             fn_read_fmt=_fn_read_fmt,
