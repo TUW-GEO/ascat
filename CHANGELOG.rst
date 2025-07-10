@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.6.4
+=============
+- Update `product_info.AscatH129Swath.sf_pattern` and `.sf_read_fmt` to match operational
+  product; update tests to match
+
 Version 2.6.3
 =============
 - Update `product_info.AscatH129Swath.fn_pattern` to match operational product; update
