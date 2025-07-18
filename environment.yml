@@ -13,6 +13,7 @@ dependencies:
   - dask
   - shapely
   - pyresample
+  - zarr
   - pip
   - pip:
       - cadati

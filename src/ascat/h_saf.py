@@ -33,7 +33,10 @@ import glob
 import warnings
 from datetime import datetime
 
+import zarr
 import numpy as np
+import pandas as pd
+from fibgrid.realization import FibGrid
 
 try:
     import pygrib
@@ -318,3 +321,114 @@ class AscatSsmDataRecord(AscatGriddedNcTs):
 
         super().__init__(cdr_path, fn_format, grid_filename, static_layer_path,
                          **kwargs)
+
+
+class H121Zarr:
+    """
+    Class reading ASCAT SSM CDR v8 12.5 km (H121) in zarr data format
+    stored as incomplete multidimensional array representation.
+
+    This class is for testing purpose only.
+    """
+
+    def __init__(self):
+        """Initialize."""
+        self.path = "https://www.geo.tuwien.ac.at/shahn/h121/"
+        self.lut = zarr.open(self.path, mode="r", path="lut")[:]
+        self.data = zarr.open(self.path, mode="r")
+        self.grid = FibGrid(12.5)
+
+    def read(self, *args):
+        """
+        Read time series either by GPI (1 argument) or lon/lat (2 arguments).
+
+        Parameters
+        ----------
+        gpi : int
+            Grid point index.
+
+        or
+
+        lon : float
+            Longitude in degrees.
+        lat : float
+            Latitude in degrees.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Time series data.
+        """
+        if len(args) == 1:
+            gpi = args[0]
+            return self.read_gpi(gpi)
+        elif len(args) == 2:
+            lon, lat = args
+            return self.read_lonlat(lon, lat)
+        else:
+            raise ValueError("Pass either (gpi) or (lon, lat)")
+
+    def read_gpi(self, gpi):
+        """
+        Read time series for given grid point (Fibonacci 12.5 km).
+
+        Parameters
+        ----------
+        gpi : int32
+            Grid point index.
+
+        Returns
+        -------
+        df : pandas.DataFrame
+            Time series data.
+        """
+        return self._read_by_gpi(gpi)
+
+    def read_lonlat(self, lon, lat, max_dist=15000.):
+        """
+        Read the time series data for the grid point closest
+        to the given lon/lat coordinates.
+
+        Parameters
+        ----------
+        lon : float32
+            Longitude coordinate.
+        lat : float32
+            Latitude coordinate.
+        max_dist : float32
+            Maximum searching distance.
+
+        Returns
+        -------
+        df : pandas.DataFrame
+            Time series data.
+        """
+        gpi, distance = self.grid.find_nearest_gpi(lon, lat, max_dist)
+        return self._read_by_gpi(gpi)
+
+    def _read_by_gpi(self, gpi):
+        """
+        Read data from grid point index.
+        """
+        i = self.lut[gpi]
+        if i == 861789:
+            raise RuntimeError(f"Grid point {gpi} not found in data.")
+
+        dt = self.data["time"][i].astype(np.dtype("<M8[ns]"))
+
+        df = pd.DataFrame(
+            {
+                "as_des_pass": self.data["as_des_pass"][i],
+                "swath_indicator": self.data["swath_indicator"][i],
+                "ssm": self.data["surface_soil_moisture"][i],
+                "ssm_noise": self.data["surface_soil_moisture_noise"][i],
+                "backscatter40": self.data["backscatter40"][i],
+                "slope40": self.data["slope40"][i],
+                "curvature40": self.data["curvature40"][i],
+            },
+            index=dt)
+
+        df = df[df.index != np.datetime64("1970-01-01")]
+        df.replace(-2**31, np.nan, inplace=True)
+
+        return df
