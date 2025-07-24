@@ -25,7 +25,7 @@ If we have a collection of time-series swath files, we can create a SwathGridFil
 #+begin_src ipython
 from datetime import datetime
 from time import time
-from ascat.read_native.swath_collection import SwathGridFiles
+from ascat.swath import SwathGridFiles
 #+end_src
 
 #+RESULTS:
@@ -33,7 +33,7 @@ from ascat.read_native.swath_collection import SwathGridFiles
 :end:
 
 #+begin_src ipython
-swath_source = "/data-write/RADAR/hsaf/h121_v1.0/swaths"
+swath_source = "/data-write/RADAR/hsaf/h139"
 #+end_src
 
 #+RESULTS:
@@ -43,7 +43,7 @@ swath_source = "/data-write/RADAR/hsaf/h121_v1.0/swaths"
 It's important to understand the structure of the data, so that SwathGridFiles can find and parse all of the data that is requested from it. Handily, this package comes with existing parsers for several ASCAT products. These can be used with ~SwathGridFiles.from_product_id()~:
 
 #+begin_src ipython
-swath_collection = SwathGridFiles.from_product_id(swath_source, "H121_V1.0")
+swath_collection = SwathGridFiles.from_product_id(swath_source, "H139")
 #+end_src
 
 #+RESULTS:
@@ -53,13 +53,13 @@ swath_collection = SwathGridFiles.from_product_id(swath_source, "H121_V1.0")
 The currently included project ids are the keys of ~ascat.read_native.xarray_io.swath_io_catalog~
 
 #+begin_src ipython
-from ascat.read_native.product_info import swath_io_catalog
+from ascat.product_info import swath_io_catalog
 swath_io_catalog.keys()
 #+end_src
 
 #+RESULTS:
 :results:
-: dict_keys(['H129', 'H129_V1.0', 'H121_V1.0', 'H122', 'SIG0_6.25', 'SIG0_12.5'])
+: dict_keys(['H129', 'H130', 'H122', 'H121', 'H139', 'H29', 'SIG0_6.25', 'SIG0_12.5'])
 :end:
 
 If your data structure does not match anything included in the package, you can write a class inheriting from ~ascat.read_native.product_info.AscatSwathProduct~:
@@ -131,7 +131,7 @@ Let's start with a rectangular, roughly country-sized area in Central Europe, an
 
 #+begin_src ipython
 bounds = (45, 50, 10, 20) #latmin, latmax, lonmin, lonmax
-dates = (datetime(2020, 12, 1), datetime(2020, 12, 3))
+dates = (datetime(2024, 12, 1), datetime(2024, 12, 3))
 #+end_src
 
 #+RESULTS:
@@ -148,27 +148,27 @@ output
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.Dataset> Size: 3MB
-  Dimensions:                            (obs: 22276)
+  <xarray.Dataset> Size: 2MB
+  Dimensions:                            (obs: 14477)
   Coordinates:
-      latitude                           (obs) float64 178kB 49.91 49.96 ... 49.3
-      longitude                          (obs) float64 178kB 19.94 19.78 ... 17.43
-      time                               (obs) datetime64[ns] 178kB 2020-12-01T...
+      latitude                           (obs) float64 116kB dask.array<chunksize=(795,), meta=np.ndarray>
+      longitude                          (obs) float64 116kB dask.array<chunksize=(795,), meta=np.ndarray>
+      time                               (obs) datetime64[ns] 116kB dask.array<chunksize=(795,), meta=np.ndarray>
   Dimensions without coordinates: obs
-  Data variables: (12/19)
-      location_id                        (obs) int32 89kB 1258693 ... 1247425
-      as_des_pass                        (obs) float32 89kB 1.0 1.0 ... 0.0 0.0
-      swath_indicator                    (obs) float32 89kB 0.0 0.0 ... 1.0 1.0
-      surface_soil_moisture              (obs) float64 178kB 22.42 25.39 ... nan
-      surface_soil_moisture_noise        (obs) float64 178kB 6.4 6.17 ... nan nan
-      backscatter40                      (obs) float64 178kB -9.284 -9.371 ... nan
+  Data variables: (12/20)
+      location_id                        (obs) int32 58kB dask.array<chunksize=(795,), meta=np.ndarray>
+      as_des_pass                        (obs) float32 58kB dask.array<chunksize=(795,), meta=np.ndarray>
+      swath_indicator                    (obs) float32 58kB dask.array<chunksize=(795,), meta=np.ndarray>
+      surface_flag                       (obs) float32 58kB dask.array<chunksize=(795,), meta=np.ndarray>
+      surface_flag_source                (obs) float32 58kB dask.array<chunksize=(795,), meta=np.ndarray>
+      surface_soil_moisture              (obs) float64 116kB dask.array<chunksize=(795,), meta=np.ndarray>
       ...                                 ...
-      snow_cover_probability             (obs) float32 89kB 70.0 68.0 ... 51.0
-      frozen_soil_probability            (obs) float32 89kB 31.0 29.0 ... 39.0
-      wetland_fraction                   (obs) float32 89kB nan nan ... nan nan
-      topographic_complexity             (obs) float32 89kB 6.0 3.0 ... 7.0 3.0
-      subsurface_scattering_probability  (obs) float32 89kB nan nan ... nan nan
-      sat_id                             (obs) int64 178kB 3 3 3 3 3 ... 4 4 4 4 4
+      snow_cover_probability             (obs) float32 58kB dask.array<chunksize=(795,), meta=np.ndarray>
+      frozen_soil_probability            (obs) float32 58kB dask.array<chunksize=(795,), meta=np.ndarray>
+      wetland_fraction                   (obs) float32 58kB dask.array<chunksize=(795,), meta=np.ndarray>
+      topographic_complexity             (obs) float32 58kB dask.array<chunksize=(795,), meta=np.ndarray>
+      subsurface_scattering_probability  (obs) float32 58kB dask.array<chunksize=(795,), meta=np.ndarray>
+      sat_id                             (obs) int8 14kB dask.array<chunksize=(795,), meta=np.ndarray>
   Attributes:
       grid_mapping_name:  fibgrid_12.5
       featureType:        point
@@ -189,8 +189,8 @@ plt.close()
 fig, ax = plt.subplots()
 scatter = ax.scatter(output.time, output.longitude, s=0.01, c=output.sat_id, cmap="rainbow", alpha=0.8)
 legend1 = ax.legend(*scatter.legend_elements(), title="Satellite")
-for i in range(3):
-    legend1.get_texts()[i].set_text(f"Metop {chr(65+i)}")
+for i in range(2):
+    legend1.get_texts()[i].set_text(f"Metop {chr(65+i+1)}")
 ax.add_artist(legend1)
 plt.xlabel("Time")
 plt.ylabel("Latitude (degrees)")
@@ -201,7 +201,7 @@ plt.tight_layout()
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/k32Pzp.png]]
+[[file:./obipy-resources/XAfyxk.png]]
 :end:
 
 ** Mapping data from SwathGridFiles
@@ -215,7 +215,7 @@ ax.set_extent([-10, 30, 35, 65])
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/FEQwsL.png]]
+[[file:./obipy-resources/8R4gbx.png]]
 :end:
 
 Having the data as an Xarray makes it handy to do transformations. For example, we can group by location_id and get the average surface soil moisture at each. First, we need to load the ~location_id~ into memory, since it currently exists as a chunked dask array, and the groupby method only works with numpy arrays.
@@ -227,13 +227,13 @@ output["location_id"].load()
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'location_id' (obs: 22276)> Size: 89kB
-  array([1258693, 1259680, 1260057, ..., 1246815, 1247048, 1247425],
+  <xarray.DataArray 'location_id' (obs: 14477)> Size: 58kB
+  array([1259680, 1258693, 1260057, ..., 1259002, 1259612, 1260222],
         dtype=int32)
   Coordinates:
-      latitude   (obs) float64 178kB 49.91 49.96 49.98 49.82 ... 49.27 49.28 49.3
-      longitude  (obs) float64 178kB 19.94 19.78 19.35 19.84 ... 17.17 17.86 17.43
-      time       (obs) datetime64[ns] 178kB 2020-12-01T08:09:59.415000064 ... 2...
+      latitude   (obs) float64 116kB 49.96 49.91 49.98 50.0 ... 49.92 49.95 49.99
+      longitude  (obs) float64 116kB 19.78 19.94 19.35 18.93 ... 10.05 10.31 10.57
+      time       (obs) datetime64[ns] 116kB 2024-12-01T08:09:43.451000064 ... 2...
   Dimensions without coordinates: obs
   Attributes:
       long_name:  Location identifier (Grid Point ID)
@@ -252,9 +252,9 @@ avg_ssm.load()
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652)> Size: 21kB
-  array([25.28142857, 74.35714286, 42.954     , ...,  3.96      ,
-         26.9       , 19.3125    ])
+  <xarray.DataArray 'surface_soil_moisture' (location_id: 2712)> Size: 22kB
+  array([83.005     , 66.856     , 90.7125    , ..., 44.414     ,
+         60.188     , 34.41428571])
   Coordinates:
     * location_id  (location_id) int32 11kB 1162818 1162873 ... 1260434 1260455
   Attributes:
@@ -285,9 +285,9 @@ avg_ssm_flox.load()
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652)> Size: 21kB
-  array([25.28142857, 74.35714286, 42.954     , ...,  3.96      ,
-         26.9       , 19.3125    ])
+  <xarray.DataArray 'surface_soil_moisture' (location_id: 2712)> Size: 22kB
+  array([83.005     , 66.856     , 90.7125    , ..., 44.414     ,
+         60.188     , 34.41428571])
   Coordinates:
     * location_id  (location_id) int32 11kB 1162818 1162873 ... 1260434 1260455
   Attributes:
@@ -302,29 +302,18 @@ Note: if, when using flox, you get an error about needing to provide ~expected_g
 
 #+begin_src ipython
 ds = output
-xarray_reduce(ds["surface_soil_moisture"], ds["location_id"], ds["time"].dt.hour, func="mean")
+import numpy as np
+xarray_reduce(ds["surface_soil_moisture"], ds["location_id"], ds["time"].dt.hour, func="mean", fill_value=np.nan)
 #+end_src
 
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652, hour: 8)> Size: 170kB
-  array([[         nan,  16.61333333,  19.59      , ...,          nan,
-           33.295     ,  40.95      ],
-         [         nan,  49.68      ,  60.32      , ...,          nan,
-           83.39333333, 100.        ],
-         [         nan,  30.645     ,  45.17      , ...,          nan,
-           54.155     ,          nan],
-         ...,
-         [  3.96      ,          nan,          nan, ...,          nan,
-                   nan,          nan],
-         [         nan,  26.9       ,          nan, ...,          nan,
-                   nan,          nan],
-         [ 14.49      ,  22.53      ,  12.83      , ...,          nan,
-                   nan,  27.4       ]])
+  <xarray.DataArray 'surface_soil_moisture' (location_id: 2712, hour: 6)> Size: 130kB
+  dask.array<reshape, shape=(2712, 6), dtype=float64, chunksize=(1, 6), chunktype=numpy.ndarray>
   Coordinates:
     * location_id  (location_id) int32 11kB 1162818 1162873 ... 1260434 1260455
-    * hour         (hour) int64 64B 7 8 9 10 17 18 19 20
+    * hour         (hour) int64 48B 8 9 10 18 19 20
   Attributes:
       long_name:  surface soil moisture
       units:      percent saturation
@@ -344,30 +333,25 @@ xarray_reduce(
     ds["time"].dt.hour,
     expected_groups=(np.unique(output["location_id"].values),
                      np.unique(output["time"].dt.hour.values)),
-    func="mean"
+    func="mean",
+    fill_value=np.nan
 ).load()
 #+end_src
 
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'surface_soil_moisture' (location_id: 2652, hour: 8)> Size: 170kB
-  array([[         nan,  16.61333333,  19.59      , ...,          nan,
-           33.295     ,  40.95      ],
-         [         nan,  49.68      ,  60.32      , ...,          nan,
-           83.39333333, 100.        ],
-         [         nan,  30.645     ,  45.17      , ...,          nan,
-           54.155     ,          nan],
+  <xarray.DataArray 'surface_soil_moisture' (location_id: 2712, hour: 6)> Size: 130kB
+  array([[82.78 ,    nan,    nan,    nan, 83.475, 82.29 ],
+         [54.65 , 73.86 ,    nan,    nan, 65.975, 73.82 ],
+         [91.86 ,    nan,    nan,    nan, 89.565,    nan],
          ...,
-         [  3.96      ,          nan,          nan, ...,          nan,
-                   nan,          nan],
-         [         nan,  26.9       ,          nan, ...,          nan,
-                   nan,          nan],
-         [ 14.49      ,  22.53      ,  12.83      , ...,          nan,
-                   nan,  27.4       ]])
+         [35.06 , 41.37 ,    nan,    nan, 48.47 , 48.7  ],
+         [51.19 , 58.52 ,    nan, 74.52 , 58.355,    nan],
+         [22.26 ,  7.91 ,    nan,    nan, 47.995, 46.24 ]])
   Coordinates:
     * location_id  (location_id) int32 11kB 1162818 1162873 ... 1260434 1260455
-    * hour         (hour) int64 64B 7 8 9 10 17 18 19 20
+    * hour         (hour) int64 48B 8 9 10 18 19 20
   Attributes:
       long_name:  surface soil moisture
       units:      percent saturation
@@ -432,7 +416,7 @@ simple_map(lons, lats, avg_ssm_flox, cmc.roma, (output.time.values.min(), output
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/XZlbm3.png]]
+[[file:./obipy-resources/BQ0pmf.png]]
 :end:
 
 
@@ -445,14 +429,14 @@ simple_map(lons, lats, avg_sms, "viridis", (output.time.values.min(), output.tim
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/hEoppG.png]]
+[[file:./obipy-resources/NJ5rcB.png]]
 :end:
 
 
 Or we could make a timeseries plot of a variable at a single location or a collection of locations:
 
 #+begin_src ipython
-week_dates = (datetime(2020, 12, 1), datetime(2020, 12, 8))
+week_dates = (datetime(2024, 12, 1), datetime(2024, 12, 8))
 week_data = swath_collection.read(date_range=week_dates, bbox=bounds)
 date_groups = week_data.groupby("time.date")
 #+end_src
@@ -479,19 +463,9 @@ plt.tight_layout()
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/HzmTug.png]]
+[[file:./obipy-resources/ZLLZbC.png]]
 :end:
 
-
-We can make a 5-year climatology for our data in three lines of code, but it will take a while to run, since we'll have to read metadata from thousands of files to compile the xarray dataset. I do not recommend running this cell!
-
-
-#+begin_src ipython :eval no
-# five year climatology
-five_years = [datetime(2015, 1, 1), datetime(2020, 1, 1)]
-five_years_data = swath_collection.read(location_id=gpis, date_range=five_years)#.load()
-climatology = output.groupby("time.dayofyear").mean("obs")
-#+end_src
 
 If you need to do several operations on larger chunks of time, it could be useful to convert the data to a cell file collection and work off of that. (see ~CellGridFiles~ section below)
 
@@ -550,7 +524,7 @@ This will sort the entire dataset first by time and then by ~location_id~, and t
 from datetime import datetime
 from time import time
 
-from ascat.read_native.cell_collection import CellGridFiles
+from ascat.cell import CellGridFiles
 #+end_src
 
 #+RESULTS:
@@ -562,9 +536,8 @@ Our cell files, in this case, all live in a single directory, so that's the path
 The product id, ~"H121_V1.0"~, refers to a specific handler class defined in ~ascat.read_native.product_info~. There are several of these already defined for various products we use, and it is also possible to define your own handler class if you need to process a product we haven't included in this package already.
 
 #+begin_src ipython
-cell_source = "/data-write/RADAR/hsaf/h121_v2.0/time_series/"
-# cell_source = "/data-write/RADAR/charriso/test_stack/"
-cell_collection = CellGridFiles.from_product_id(cell_source, "H121_V2.0")
+cell_source = "/data-write/RADAR/hsaf/h139_ts_cont_v2/"
+cell_collection = CellGridFiles.from_product_id(cell_source, "H139")
 #+end_src
 
 #+RESULTS:
@@ -581,7 +554,7 @@ Let's say we want to read within a bounding box.
 import numpy as np
 bounds = (43, 51, 11, 21) #latmin, latmax, lonmin, lonmax
 #bounds = (49, 51, 20, 21) #latmin, latmax, lonmin, lonmax
-dates = (np.datetime64(datetime(2019, 2, 1)), np.datetime64(datetime(2019, 3, 15)))
+dates = (np.datetime64(datetime(2025, 2, 1)), np.datetime64(datetime(2025, 3, 15)))
 #+end_src
 
 #+RESULTS:
@@ -596,32 +569,30 @@ output_bbox
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.Dataset> Size: 106MB
-  Dimensions:                            (obs: 1607249, locations: 12174)
+  <xarray.Dataset> Size: 60MB
+  Dimensions:                            (obs: 532026, locations: 4378)
   Coordinates:
-      time                               (obs) datetime64[ns] 13MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      lon                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
-      lat                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
-      alt                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
+      time                               (obs) datetime64[ns] 4MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      latitude                           (locations) float64 35kB dask.array<chunksize=(4378,), meta=np.ndarray>
+      longitude                          (locations) float64 35kB dask.array<chunksize=(4378,), meta=np.ndarray>
   Dimensions without coordinates: obs, locations
   Data variables: (12/21)
-      as_des_pass                        (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      swath_indicator                    (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      surface_flag                       (obs) uint8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      surface_soil_moisture              (obs) float32 6MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      surface_soil_moisture_noise        (obs) float32 6MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      backscatter40                      (obs) float32 6MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      as_des_pass                        (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      swath_indicator                    (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      surface_flag                       (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      surface_flag_source                (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      surface_soil_moisture              (obs) float64 4MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      surface_soil_moisture_noise        (obs) float64 4MB dask.array<chunksize=(532026,), meta=np.ndarray>
       ...                                 ...
-      topographic_complexity             (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      subsurface_scattering_probability  (obs) float64 13MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      sat_id                             (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      row_size                           (locations) int32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
-      location_id                        (locations) int64 97kB dask.array<chunksize=(12174,), meta=np.ndarray>
-      location_description               (locations) <U1 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
+      wetland_fraction                   (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      topographic_complexity             (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      subsurface_scattering_probability  (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      sat_id                             (obs) int64 4MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      location_id                        (locations) int32 18kB dask.array<chunksize=(4378,), meta=np.ndarray>
+      row_size                           (locations) int32 18kB dask.array<chunksize=(4378,), meta=np.ndarray>
   Attributes:
-      id:            1394.nc
-      date_created:  2024-10-25 18:38:34
-      featureType:   timeSeries
+      grid_mapping_name:  fibgrid_12.5
+      featureType:        timeSeries
 #+END_EXAMPLE
 :end:
 
@@ -639,32 +610,30 @@ indexed_bbox#.load()
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.Dataset> Size: 119MB
-  Dimensions:                            (obs: 1607249, locations: 12174)
+  <xarray.Dataset> Size: 64MB
+  Dimensions:                            (obs: 532026, locations: 4378)
   Coordinates:
-      time                               (obs) datetime64[ns] 13MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      lon                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
-      lat                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
-      alt                                (locations) float32 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
+      time                               (obs) datetime64[ns] 4MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      latitude                           (locations) float64 35kB dask.array<chunksize=(4378,), meta=np.ndarray>
+      longitude                          (locations) float64 35kB dask.array<chunksize=(4378,), meta=np.ndarray>
   Dimensions without coordinates: obs, locations
   Data variables: (12/21)
-      locationIndex                      (obs) int64 13MB 0 0 0 ... 12173 12173
-      as_des_pass                        (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      swath_indicator                    (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      surface_flag                       (obs) uint8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      surface_soil_moisture              (obs) float32 6MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      surface_soil_moisture_noise        (obs) float32 6MB dask.array<chunksize=(1000000,), meta=np.ndarray>
+      locationIndex                      (obs) int64 4MB 0 0 0 ... 4377 4377 4377
+      as_des_pass                        (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      swath_indicator                    (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      surface_flag                       (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      surface_flag_source                (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      surface_soil_moisture              (obs) float64 4MB dask.array<chunksize=(532026,), meta=np.ndarray>
       ...                                 ...
-      wetland_fraction                   (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      topographic_complexity             (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      subsurface_scattering_probability  (obs) float64 13MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      sat_id                             (obs) int8 2MB dask.array<chunksize=(1000000,), meta=np.ndarray>
-      location_id                        (locations) int64 97kB dask.array<chunksize=(12174,), meta=np.ndarray>
-      location_description               (locations) <U1 49kB dask.array<chunksize=(12174,), meta=np.ndarray>
+      frozen_soil_probability            (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      wetland_fraction                   (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      topographic_complexity             (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      subsurface_scattering_probability  (obs) float32 2MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      sat_id                             (obs) int64 4MB dask.array<chunksize=(532026,), meta=np.ndarray>
+      location_id                        (locations) int32 18kB dask.array<chunksize=(4378,), meta=np.ndarray>
   Attributes:
-      id:            1394.nc
-      date_created:  2024-10-25 18:38:34
-      featureType:   timeSeries
+      grid_mapping_name:  fibgrid_12.5
+      featureType:        timeSeries
 #+END_EXAMPLE
 :end:
 
@@ -689,14 +658,15 @@ avg_sm
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'surface_soil_moisture' (locationIndex: 12174)> Size: 49kB
-  dask.array<groupby_nanmean, shape=(12174,), dtype=float32, chunksize=(12174,), chunktype=numpy.ndarray>
+  <xarray.DataArray 'surface_soil_moisture' (locationIndex: 4378)> Size: 35kB
+  dask.array<groupby_nanmean, shape=(4378,), dtype=float64, chunksize=(4378,), chunktype=numpy.ndarray>
   Coordinates:
-    * locationIndex  (locationIndex) int64 97kB 0 1 2 3 ... 12171 12172 12173
+    * locationIndex  (locationIndex) int64 35kB 0 1 2 3 4 ... 4374 4375 4376 4377
   Attributes:
-      name:       surface_soil_moisture
       long_name:  Surface soil moisture
       units:      % saturation
+      valid_min:  0
+      valid_max:  10000
 #+END_EXAMPLE
 :end:
 
@@ -707,15 +677,16 @@ avg_sm.load()#.chunk(-1)#.load()
 #+RESULTS:
 :results:
 #+BEGIN_EXAMPLE
-  <xarray.DataArray 'surface_soil_moisture' (locationIndex: 12174)> Size: 49kB
-  array([      nan,       nan,       nan, ..., 63.389572,       nan,
-         65.09921 ], dtype=float32)
+  <xarray.DataArray 'surface_soil_moisture' (locationIndex: 4378)> Size: 35kB
+  array([        nan, 73.38137255, 82.61509615, ..., 52.26751938,
+         49.20464   , 50.84031496])
   Coordinates:
-    * locationIndex  (locationIndex) int64 97kB 0 1 2 3 ... 12171 12172 12173
+    * locationIndex  (locationIndex) int64 35kB 0 1 2 3 4 ... 4374 4375 4376 4377
   Attributes:
-      name:       surface_soil_moisture
       long_name:  Surface soil moisture
       units:      % saturation
+      valid_min:  0
+      valid_max:  10000
 #+END_EXAMPLE
 :end:
 
@@ -724,21 +695,22 @@ avg_sm.load()#.chunk(-1)#.load()
 
 import cmcrameri.cm as cmc
 import numpy as np
-lons = output_bbox.lon[avg_sm.locationIndex].values
-lats = output_bbox.lat[avg_sm.locationIndex].values
+lons = output_bbox.longitude[avg_sm.locationIndex].values
+lats = output_bbox.latitude[avg_sm.locationIndex].values
 simple_map(lons, lats, avg_sm, cmc.roma, (output_bbox.time.values.min(), output_bbox.time.values.max()))
 #+end_src
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/MsyVaP.png]]
+[[file:./obipy-resources/IA3Km4.png]]
 :end:
 
 
-When we read data using cell ids, the process is just as easy:
+When we read data using cell ids, the process is just as easy. Keep in mind that when reading data from several cell files, merging operations under the hood can get complicated. It can be useful to load in variables you're interested in as early as possible if you know they'll fit into your memory:
 
 #+begin_src ipython
 output_cells = cell_collection.read(cell=[1431, 1432, 1395, 1396])
+output_cells.surface_soil_moisture.load()
 output_cells = output_cells.cf_geom.to_indexed_ragged().sortby("time")
 #+end_src
 
@@ -746,19 +718,19 @@ output_cells = output_cells.cf_geom.to_indexed_ragged().sortby("time")
 :results:
 :end:
 
+Due to the complicated operations involved in converting to indexed ragged format, the following block would take minutes to run if we hadn't loaded surface soil moisture data in before that conversion:
 #+begin_src ipython
 avg_sm = xarray_reduce(output_cells["surface_soil_moisture"], output_cells["locationIndex"], func="mean")
-lons = output_cells.lon.values[avg_sm.locationIndex.values]
-lats = output_cells.lat.values[avg_sm.locationIndex.values]
+lons = output_cells.longitude.values[avg_sm.locationIndex.values]
+lats = output_cells.latitude.values[avg_sm.locationIndex.values]
 simple_map(lons, lats, avg_sm, cmc.roma, (output_cells.time.values.min(), output_cells.time.values.max()))
 #+end_src
 
 #+RESULTS:
 :results:
-[[file:./obipy-resources/lyz7SP.png]]
+[[file:./obipy-resources/NESSXF.png]]
 :end:
 
-I forgot to filter by time range, but it took flox only a few seconds to calculate the average surface soil moisture over the entire time range of the dataset for these cells!
 
 *** Using geometries
 
@@ -795,55 +767,49 @@ def get_country_geometries(country_names, resolution="10m", ne_product="admin_0_
 :results:
 :end:
 
-If we are interested in the Baltic countries, for example, we can simply pass a list of their names to ~get_country_geometries~, then pass the resulting geometry to the ~geom~ argument of ~cell_collection.read()~.
+To focus on Mozambique and neighboring countries, we can filter the data for Mozambique, Malawi, and Zambia. First, we'll pass a list of their names to `get_country_geometries`, then pass the resulting geometry to the `geom` argument of `cell_collection.read()`.
 
 #+begin_src ipython
-baltics = ["Estonia", "Latvia", "Lithuania"]
-country_data = cell_collection.read(geom=get_country_geometries(baltics))
+cell_source = "/home/charriso/p14/data-write/RADAR/hsaf/h121_v2.0/time_series/metop_abc/"
+cell_collection = CellGridFiles.from_product_id(cell_source, "H121")
+countries = ["Mozambique", "Malawi", "Zambia"]
+country_data = cell_collection.read(geom=get_country_geometries(countries))
+country_data["surface_soil_moisture"].load()
+country_data = country_data.cf_geom.to_indexed_ragged()
 #+end_src
 
 #+RESULTS:
 :results:
 :end:
 
-Groupby operations are easy with flox. Here we calculate the average summer soil moisture for each location in the Baltics across the entire time range of the dataset.
+Groupby operations in flox are straightforward. Here, we calculate the average summer soil moisture for each location in these countries across the entire time range of the dataset.
 
 #+begin_src ipython
 import numpy as np
 from flox.xarray import xarray_reduce
 
-baltic_summer = country_data.sel(obs=(country_data.time.dt.season == "JJA"))
-avg_sm = xarray_reduce(baltic_summer["surface_soil_moisture"], baltic_summer["locationIndex"], func="mean")
-lons = country_data.lon.values[avg_sm.locationIndex.values]
-lats = country_data.lat.values[avg_sm.locationIndex.values]
-label = (
-        f"Average summer soil moisture "
-        f"in the Baltic countries\n"
-        f"({avg_sm.units})\n"
-        f"June, July, and August of 2007 - 2022"
+summer_data = country_data.sel(time=(country_data.time.dt.month.isin([6, 7, 8])))
+countries_summer_soil_moisture = xarray_reduce(summer_data["surface_soil_moisture"], summer_data["locationIndex"], func="mean")
+lons = country_data.lon.values[countries_summer_soil_moisture.locationIndex.values]
+lats = country_data.lat.values[countries_summer_soil_moisture.locationIndex.values]
+title = (
+    f"Average summer soil moisture "
+    f"in Mozambique, Malawi, and Zambia\n"
+    f"({countries_summer_soil_moisture.units})\n"
+    f"June, July, and August of {country_data['time.year'].min()} - {country_data['time.year'].max()}"
 )
-simple_map(lons, lats, avg_sm, cmc.roma, cbar_label=label)
+simple_map(lons, lats, countries_summer_soil_moisture, cmc.roma, cbar_label=title)
 #+end_src
 
-#+RESULTS:
-:results:
-[[file:./obipy-resources/l0OHps.png]]
-:end:
-
-Remember that climatology we were going to make in the swaths section? Let's do that now, it's simple:
+Let's create a 13-year climatology for these countries:
 
 #+begin_src ipython
-# 15-year climatology
+# 13-year climatology
 ssm_climatology = xarray_reduce(country_data["surface_soil_moisture"], country_data["time"].dt.dayofyear, func="mean")
 plt.close()
 plt.plot(ssm_climatology)
 plt.xlabel("Day of year")
 plt.ylabel("Average surface soil moisture\n(% saturation)")
-plt.title("Average surface soil moisture per day of year\n(Estonia, Latvia, and Lithuania; 2010-2019)")
-plt.tight_layout()
+plt.title("Average surface soil moisture per day of year\n(Mozambique, Malawi, and Zambia; 2010-2022)")
+plt.tight_layout
 #+end_src
-
-#+RESULTS:
-:results:
-[[file:./obipy-resources/TGQLXN.png]]
-:end:
