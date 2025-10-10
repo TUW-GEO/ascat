@@ -62,6 +62,7 @@ dtype_to_nan = {
     np.dtype('float64'): float64_nan,
     np.dtype('<U1'): None,
     np.dtype('O'): None,
+    np.dtype('<M8[ns]'): np.datetime64('NaT'),
 }
 
 def mask_dtype_nans(ds):
