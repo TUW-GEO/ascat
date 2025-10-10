@@ -639,6 +639,22 @@ class CellGridFiles():
         else:
             return list(self.root_path.glob("**/" + filename))
 
+    @property
+    def available_cells(self):
+        """
+        Get a list of all available cells in the collection.
+
+        Returns
+        -------
+        available_cells : list of int
+            List of available cells.
+        """
+        available_cells = []
+        for cell in self.grid.arrcell:
+            if len(self.fn_search(cell)) > 0:
+                available_cells.append(cell)
+        return available_cells
+
     def convert_to_contiguous(self, out_dir, print_progress=True, **kwargs):
         """
         Convert all files in the collection to contiguous format and write to disk.
