@@ -300,6 +300,9 @@ class RaggedArrayTs(Filenames):
         if data == []:
             return None
 
+        if len(data) == 1:
+            return data[0]
+
         if data[0].cf_geom.array_type == "indexed":
             return self._merge_indexed(data)
         elif data[0].cf_geom.array_type == "point":
