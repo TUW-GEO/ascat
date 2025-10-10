@@ -51,6 +51,7 @@ class RaggedArrayTs(Filenames):
         lookup_vector=None,
         date_range=None,
         preprocessor=None,
+        data_vars=None,
         **xarray_kwargs
     ):
         """
@@ -69,6 +70,8 @@ class RaggedArrayTs(Filenames):
             Tuple of (start, end) dates.
         preprocessor : callable, optional
             Function to preprocess the dataset.
+        data_vars : list of str, optional
+            List of data variables to read. If None, all variables are read.
         xarray_kwargs : dict
             Additional keyword arguments passed to xarray.open_dataset.
 
@@ -85,7 +88,11 @@ class RaggedArrayTs(Filenames):
 
         if preprocessor:
             ds = preprocessor(ds)
+
         ds = self._ensure_obs(ds)
+
+        if data_vars is not None:
+            ds = ds.cf_geom[data_vars]
 
         if ds.cf_geom.array_type == "contiguous":
             ds = self._trim_to_gpis(ds, gpis=location_id, lookup_vector=lookup_vector)
