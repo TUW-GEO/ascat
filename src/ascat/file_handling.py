@@ -832,7 +832,7 @@ class Filenames:
     This class provides methods for reading from, writing to, and merging data from multiple files.
     """
 
-    def __init__(self, filenames):
+    def __init__(self, filenames, cache_size=0):
         """
         Initialize Filenames.
 
@@ -847,6 +847,8 @@ class Filenames:
             raise ValueError("filenames must be a string or list of strings.")
 
         self.filenames = [Path(f) for f in filenames]
+
+        self.cache_size = cache_size
         self.cache = {}
 
     def _read(self, filename, **kwargs):

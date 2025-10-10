@@ -84,7 +84,10 @@ class RaggedArrayTs(Filenames):
             pass
         else:
             ds = xr.open_dataset(filename, engine = "h5netcdf", **xarray_kwargs)
-            self.cache[filename] = ds
+            if self.cache_size > 0:
+                if len(self.cache) == self.cache_size:
+                    del self.cache[next(iter(self.cache))]
+                self.cache[filename] = ds
 
         if preprocessor:
             ds = preprocessor(ds)
