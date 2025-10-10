@@ -75,10 +75,17 @@ class TestCFDiscreteGeometryAccessor(unittest.TestCase):
         # assert ds.cf_geom._coord_vars == ["lat", "lon", "alt"]
 
         assert ds.cf_geom.array_type == "contiguous"
+        assert all([var in ds.cf_geom[['sm']].variables
+                    for var in ["lat", "lon", "alt", "location_id", "row_size" , "time", "sm"]])
+        assert "row_size" not in ds[['sm']].variables
 
         # to indexed_ragged
         ids = ds.cf_geom.to_indexed_ragged()
         assert ids.cf_geom.array_type == "indexed"
+        assert all([var in ds.cf_geom[['sm']].cf_geom.to_indexed_ragged().variables
+                    for var in ["lat", "lon", "alt", "location_id", "locationIndex", "time", "sm"]])
+        assert all([var in ids.cf_geom[['sm']].variables
+                    for var in ["lat", "lon", "alt", "location_id", "locationIndex", "time", "sm"]])
 
         # to indexed_ragged with different index_var name
         ids2 = ds.copy().cf_geom.to_indexed_ragged(index_var="BIGTEST")
@@ -97,6 +104,8 @@ class TestCFDiscreteGeometryAccessor(unittest.TestCase):
         # original to point array
         pads = ds.cf_geom.to_point_array()
         assert pads.cf_geom.array_type == "point"
+        assert all([var in pads.cf_geom[['sm']].variables
+                    for var in ["lat", "lon", "alt", "location_id", "time", "sm"]])
 
 
 class TestPyGeoGriddedArrayAccessor(unittest.TestCase):

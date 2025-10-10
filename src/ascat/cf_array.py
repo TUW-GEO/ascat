@@ -303,6 +303,18 @@ class CFDiscreteGeom:
     def array_type():
         raise NotImplementedError
 
+    def __getitem__(
+            self,
+            item: str | Sequence[str]
+    ):
+        if isinstance(item, str):
+            return self._data[item]
+        # if we request several vars, try to leave in anything that is necessary for maintaining the discrete geometry
+        item_with_essential_vars = item + self._coord_vars + self._instance_vars + [self.timeseries_id] + [self._index_var, self._count_var]
+        item_with_essential_vars = [v for v in list(set(item_with_essential_vars)) if v in self._data and v is not None]
+        return self._data[item + item_with_essential_vars]
+
+
 
 class PointArray(CFDiscreteGeom):
     pass

@@ -169,6 +169,9 @@ class CFDiscreteGeometryAccessor:
     def timeseries_id(self) -> str:
         return self._obj.timeseries_id
 
+    def __getitem__(self, item):
+        return self._obj[item]
+
     def set_coord_vars(self, coord_vars: Sequence[str]):
         self._coord_vars = coord_vars
         if self._instance_vars is None:
