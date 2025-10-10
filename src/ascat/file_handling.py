@@ -1037,7 +1037,7 @@ class Filenames:
 
         return data
 
-    def iter_read(self, print_progress=False, **kwargs):
+    def iter_read(self, print_progress=False, delay=False, **kwargs):
         """
         Iterate over all files and yield data.
 
@@ -1051,12 +1051,13 @@ class Filenames:
         else:
             filenames = self.filenames
 
-        size = 0
+        if delay:
+            read_ = delayed(self._read)
+        else:
+            read_ = self._read
+
         for filename in filenames:
-            if print_progress:
-                filenames.set_description(f"Opening {Path(filename).name}, total {size} bytes...")
-            data = self._read(filename, **kwargs)
-            size += self._nbytes(data)
+            data = read_(filename, **kwargs)
             yield data
 
     def iter_read_nbytes(self, max_nbytes, print_progress=False, **kwargs):
