@@ -30,6 +30,9 @@ from typing import Union, Sequence
 
 import numpy as np
 import xarray as xr
+from ascat.utils import pad_to_2d
+from ascat.utils import vrange
+from ascat.utils import dtype_to_nan
 
 
 def check_orthomulti_ts(ds):
@@ -246,6 +249,42 @@ def contiguous_to_point(
         )
     ds = ds.assign_attrs({"featureType": "point"})
     return ds
+
+def contiguous_to_orthomulti(
+        ds: xr.Dataset,
+        sample_dim: str,
+        instance_dim: str,
+        count_var: str,
+        timeseries_id: str,
+):
+    """
+    Convert a contiguous ragged array dataset to an (incomplete) orthomulti timeseries array dataset.
+    """
+    row_size = ds[count_var].values
+    element_len = row_size.max()
+    instance_vars = [var for var in ds.variables if instance_dim in ds[var].dims and var != count_var]
+    # ds = ds.rename({sample_dim: "time"})#.set_xindex("time")
+    data_vars = [var for var in ds.variables if sample_dim in ds[var].dims and var != sample_dim]
+    instance_len = ds[instance_dim].size
+
+    # compute matrix coordinates
+    x = np.arange(row_size.size).repeat(row_size)
+    y = vrange(np.zeros_like(row_size), row_size)
+    shape = (instance_len, element_len)
+
+    reshaped_ds = xr.Dataset(
+        {
+            var: ([instance_dim, sample_dim
+                    ], pad_to_2d(ds[var], x, y, shape)
+                    ) for var in data_vars
+        },
+        coords=ds[instance_vars],
+    )
+    for var in data_vars:
+        reshaped_ds[var].encoding["_FillValue"] = dtype_to_nan[
+            reshaped_ds[var].dtype]
+    # reshaped_ds.attrs.pop("featureType")
+    return reshaped_ds
 
 
 class CFDiscreteGeom:
@@ -660,6 +699,23 @@ class RaggedArray(CFDiscreteGeom):
                 self._count_var,
             )
 
+    def to_orthomulti(self):
+        if self.array_type == "contiguous":
+            return self._contiguous_to_orthomulti(
+                self._data,
+                self._sample_dimension,
+                self._instance_dimension,
+                self._count_var,
+                self.timeseries_id,
+            )
+        raise NotImplementedError("Conversion from indexed ragged to orthomulti not implemented yet.")
+        # if self.array_type == "indexed":
+        #     # convert to point array, then to orthomulti
+        #     ds = self.to_point_array()
+        #     return ds.cf_geom.to_orthomulti()
+
+
+
     def sel_instances(
         self,
         instance_vals: Union[Sequence[Union[int, str]], np.ndarray, None] = None,
@@ -822,6 +878,18 @@ class RaggedArray(CFDiscreteGeom):
             Dataset with only the time series variables.
         """
         return contiguous_to_point(ds, sample_dim, instance_dim, count_var)
+
+    @staticmethod
+    def _contiguous_to_orthomulti(
+        ds: xr.Dataset,
+        sample_dim: str,
+        instance_dim: str,
+        count_var: str,
+        timeseries_id: str,
+    ):
+        return contiguous_to_orthomulti(
+            ds, sample_dim, instance_dim, count_var, timeseries_id
+        )
 
 
 class OrthoMultiTimeseriesArray(CFDiscreteGeom):
