@@ -914,3 +914,16 @@ class CellGridFiles():
             warnings.warn(warning_str, UserWarning, 2)
             return out_ds
         return out_ds
+
+    def iter_cells(self, delay=False, **kwargs):
+        filenames = self.spatial_search(cell=self.grid.arrcell)
+        if ((self._active_reader is None)
+            or not
+            all(filename in self._active_reader.cache for filename in filenames)):
+            self._active_reader = self.file_class(filenames)
+        if self._preprocessor is not None:
+            if "preprocessor" in kwargs:
+                kwargs["preprocessor"] = lambda ds: kwargs.pop("preprocessor")(self._preprocessor(ds))
+            else:
+                kwargs["preprocessor"] = self._preprocessor
+        return self._active_reader.iter_read(delay=delay, **kwargs)
