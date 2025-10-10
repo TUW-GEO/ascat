@@ -1113,64 +1113,6 @@ class IndexedRaggedArray:
         self._set_instance_lut()
 
 
-def vrange(starts, stops):
-    """
-    Create concatenated ranges of integers for multiple start/stop values.
-
-    Parameters
-    ----------
-    starts : numpy.ndarray
-        Starts for each range.
-    stops : numpy.ndarray
-        Stops for each range (same shape as starts).
-
-    Returns
-    -------
-    ranges : numpy.ndarray
-        Concatenated ranges.
-
-    Example
-    -------
-        >>> starts = [1, 3, 4, 6]
-        >>> stops  = [1, 5, 7, 6]
-        >>> vrange(starts, stops)
-        array([3, 4, 4, 5, 6])
-    """
-    if starts.shape != stops.shape:
-        raise ValueError("starts and stops must have the same shape")
-
-    stops = np.asarray(stops)
-    l = stops - starts  # lengths of each range
-    return np.repeat(stops - l.cumsum(), l) + np.arange(l.sum())
-
-
-def pad_to_2d(var: xr.DataArray, x: np.array, y: np.array,
-              shape: tuple) -> np.array:
-    """
-    Pad each time series
-
-    Parameters
-    ----------
-    var : xarray.DataArray
-        1d array to be converted into 2d array.
-    x : np.array
-        Row indices.
-    y : np.array
-        Column indices.
-    shape : tuple
-        Array shape.
-
-    Returns
-    -------
-    padded : numpy.array
-        Padded 2d array.
-    """
-    padded = np.full(shape, dtype_to_nan[var.dtype], dtype=var.dtype)
-    padded[x, y] = var.values
-    padded[np.isnan(padded)] = dtype_to_nan[var.dtype]
-
-    return padded
-
 
 def create_contiguous_ragged():
     """Create CF-compliant contiguous ragged array."""
