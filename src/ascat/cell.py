@@ -83,7 +83,8 @@ class RaggedArrayTs(Filenames):
         if ds := self.cache.get(filename):
             pass
         else:
-            ds = xr.open_dataset(filename, engine = "h5netcdf", **xarray_kwargs)
+            engine = xarray_kwargs.pop("engine", "h5netcdf")
+            ds = xr.open_dataset(filename, engine=engine, **xarray_kwargs)
             if self.cache_size > 0:
                 if len(self.cache) == self.cache_size:
                     del self.cache[next(iter(self.cache))]
