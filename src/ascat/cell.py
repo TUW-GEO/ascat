@@ -660,7 +660,7 @@ class CellGridFiles():
             List of available cells.
         """
         available_cells = []
-        for cell in self.grid.arrcell:
+        for cell in self.grid.get_cells():
             if len(self.fn_search(cell)) > 0:
                 available_cells.append(cell)
         return available_cells
