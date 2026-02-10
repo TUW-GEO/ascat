@@ -991,9 +991,9 @@ class Filenames:
                 writers = [write_(d, f, **kwargs) for d, f in zip(data, self.filenames)]
                 if print_progress:
                     with TqdmCallback(desc="Writing cells to disk...", total=len(writers)):
-                        compute(writers, scheduler="processes")
+                        compute(writers)
                 else:
-                    compute(writers, scheduler="processes")
+                    compute(writers)
 
             else:
                 if print_progress:
@@ -1028,7 +1028,7 @@ class Filenames:
             closers = [getattr_(d, closer_attr) for d in data if d is not None]
 
         if parallel:
-            data = compute(data, scheduler="processes")[0]
+            data = compute(data)[0]
             if closer_attr is not None:
                 closers = compute(closers)[0]
 
@@ -1077,13 +1077,11 @@ class Filenames:
                     print(f"Opened {size} bytes, reading and merging data...")
 
                     with TqdmCallback(desc="Reading data..."):
-                        out_data = compute(*[d for d in data_list],
-                                           scheduler="processes")
+                        out_data = compute(*[d for d in data_list])
                     print("Merging data...")
                     out_data = self.merge(out_data)
                 else:
-                    out_data = self.merge(compute(*[d for d in data_list],
-                                                scheduler="processes"))
+                    out_data = self.merge(compute(*[d for d in data_list]))
                 yield out_data
                 size = data_size
                 data_list = [data]
@@ -1092,7 +1090,7 @@ class Filenames:
         if data_list:
             if print_progress:
                 print("All source files opened, reading and merging remaining data...")
-            yield self.merge(compute(*[d for d in data_list], scheduler="processes"))
+            yield self.merge(compute(*[d for d in data_list]))
 
     @staticmethod
     def _nbytes(data):
