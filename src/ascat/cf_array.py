@@ -124,7 +124,7 @@ def point_to_contiguous(
         ds[timeseries_id], return_index=True, return_counts=True
     )
 
-    ds[count_var] = ("locations", row_size, {"sample_dimension": sample_dim})
+    ds[count_var] = (instance_dim, row_size, {"sample_dimension": sample_dim})
 
     for var in instance_vars:
         if var in ds:
