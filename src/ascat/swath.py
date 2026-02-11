@@ -884,21 +884,21 @@ class SwathGridFiles(ChronFiles):
                                                                 shuffle=zarr.codecs.BloscShuffle.shuffle)])
 
         root.create_array("swath_time", data=time_dt, chunks=(1,), dimension_names=("swath_time",),
-                        fill_value=dtype_to_nan[np.dtype("datetime64[ns]")], compressor=None)
+                        fill_value=dtype_to_nan[np.dtype("datetime64[ns]")], compressors=None)
         root.create_array("spacecraft", data=np.arange(1, n_spacecraft + 1, dtype=np.int8), chunks=(1,),
-                        dimension_names=("spacecraft",), fill_value=dtype_to_nan[np.dtype("int8")], compressor=None)
+                        dimension_names=("spacecraft",), fill_value=dtype_to_nan[np.dtype("int8")], compressors=None)
         if has_beam_variants:
             n_beams = 3
             beam_names = np.array([b"fore", b"mid", b"aft"], dtype="S3")
             root.create_array("beam", data=beam_names, chunks=(1,), dimension_names=("beam",),
-                            fill_value=np.nan, compressor=None)
+                            fill_value=np.nan, compressors=None)
 
         root.create_array("gpi", data=np.asarray(self.grid.gpis), chunks=(chunk_size_gpi,),
-                        dimension_names=("gpi",), fill_value=dtype_to_nan[np.dtype("int8")], compressor=None)
+                        dimension_names=("gpi",), fill_value=dtype_to_nan[np.dtype("int8")], compressors=None)
         root.create_array("longitude", data=np.asarray(self.grid.arrlon), chunks=(chunk_size_gpi,),
-                        dimension_names=("gpi",), fill_value=dtype_to_nan[np.dtype("float32")], compressor=None)
+                        dimension_names=("gpi",), fill_value=dtype_to_nan[np.dtype("float32")], compressors=None)
         root.create_array("latitude", data=np.asarray(self.grid.arrlat), chunks=(chunk_size_gpi,),
-                        dimension_names=("gpi",), fill_value=dtype_to_nan[np.dtype("float32")], compressor=None)
+                        dimension_names=("gpi",), fill_value=dtype_to_nan[np.dtype("float32")], compressors=None)
         return root
 
     def _put_swath_in_zarr(self, filename, zarr_root, time_coords):
