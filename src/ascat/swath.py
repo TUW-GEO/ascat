@@ -913,6 +913,7 @@ class SwathGridFiles(ChronFiles):
         time_idx = time_idx[0]
 
         have_beam = "beam" in zarr_root
+        sat_idx_zarr = sat_id - 3
 
         ds = xr.open_dataset(filename, mask_and_scale=False, decode_cf=False, engine="h5netcdf")
         try:
@@ -923,9 +924,6 @@ class SwathGridFiles(ChronFiles):
 
             for var in data_vars:
                 var_data = ds[var].values
-                var_dtype = ds[var].dtype
-                temp = np.full(n_gpi, dtype_to_nan[var_dtype], dtype=var_dtype)
-                sat_idx_zarr = sat_id - 3
 
                 if have_beam:
                     beam_map = {"_for": 0, "_mid": 1, "_aft": 2}
@@ -935,19 +933,13 @@ class SwathGridFiles(ChronFiles):
                             beam_idx = idx
                             break
                     if beam_idx is not None:
-                        temp[:] = dtype_to_nan[var_dtype]
-                        temp[gpi] = var_data
-                        zarr_root[var][time_idx, sat_idx_zarr, beam_idx, :] = temp
+                        zarr_root[var][time_idx, sat_idx_zarr, beam_idx, gpi] = var_data
                     else:
-                        temp[:] = dtype_to_nan[var_dtype]
-                        gpi_slice = slice(0, min(len(gpi), n_gpi))
-                        temp[gpi_slice] = var_data[:len(gpi_slice)]
-                        zarr_root[var][time_idx, sat_idx_zarr, :] = temp
+                        valid_mask = gpi < n_gpi
+                        zarr_root[var][time_idx, sat_idx_zarr, gpi[valid_mask]] = var_data[valid_mask]
                 else:
-                    temp[:] = dtype_to_nan[var_dtype]
-                    valid_gpi = gpi[gpi < n_gpi]
-                    temp[valid_gpi] = var_data[gpi < n_gpi]
-                    zarr_root[var][time_idx, sat_idx_zarr, :] = temp
+                    valid_mask = gpi < n_gpi
+                    zarr_root[var][time_idx, sat_idx_zarr, gpi[valid_mask]] = var_data[valid_mask]
         finally:
             ds.close()
         return True
