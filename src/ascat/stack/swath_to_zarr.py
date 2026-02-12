@@ -115,6 +115,12 @@ def stack_swaths_to_zarr(
     
     if not out_path.exists():
         print(f"Creating Zarr structure at {out_path}")
+
+        filenames = swath_files.search_period(
+            dt_start=dt_start,
+            dt_end=dt_end,
+            date_field_fmt=swath_files.date_field_fmt,
+        )
         
         _create_zarr_structure(
             out_path=out_path,
@@ -124,7 +130,7 @@ def stack_swaths_to_zarr(
             time_resolution=time_resolution,
             chunk_size_gpi=chunk_size_gpi,
             sat_series=swath_files.sat_series,
-            sample_dir=swath_files.root_path,
+            sample_file=filenames[0]
         )
     
     print(f"Populating Zarr with data from {dt_start} to {dt_end}")
@@ -165,7 +171,7 @@ def _create_zarr_structure(
     time_resolution,
     chunk_size_gpi,
     sat_series,
-    sample_dir,
+    sample_file,
 ):
     """Generate empty Zarr array with proper schema and dimensions.
     
@@ -195,7 +201,6 @@ def _create_zarr_structure(
     spacecraft_ids = MISSION_SAT_IDS_MAP.get(sat_series.lower())
     n_spacecraft = len(spacecraft_ids)
     
-    sample_file = _find_sample_file(sample_dir)
     sample_ds = xr.open_dataset(
         sample_file, 
         mask_and_scale=False, 
@@ -515,32 +520,6 @@ def _generate_time_coords(date_start, date_end, time_resolution):
         delta = np.timedelta64(1, time_resolution)
     
     return np.arange(start_dt, end_dt, delta)
-
-
-def _find_sample_file(sample_dir):
-    """Find a sample swath file to determine schema.
-    
-    Parameters
-    ----------
-    sample_dir : Path
-        Directory to search.
-        
-    Returns
-    -------
-    Path
-        Path to sample file.
-        
-    Raises
-    ------
-    FileNotFoundError
-        If no swath files found.
-    """
-    sample_files = list(Path(sample_dir).rglob("*.nc"))
-    if not sample_files:
-        raise FileNotFoundError(
-            f"No swath files found in {sample_dir} to determine schema"
-        )
-    return sample_files[0]
 
 
 def _detect_beam_structure(sample_ds):
