@@ -277,7 +277,7 @@ def _create_zarr_structure(
             compressors=None,
         )
     
-    gpis, lats, lons, _ = grid.get_grid_points()
+    gpis, lons, lats, _ = grid.get_grid_points()
     root.create_array(
         "gpi",
         data=np.asarray(gpis, dtype="int32"),
