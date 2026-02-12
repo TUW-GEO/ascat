@@ -97,8 +97,6 @@ def stack_swaths_to_zarr(
         If True, process files in parallel using Dask. Default is True.
     chunk_size_gpi : int, optional
         Chunk size for the GPI dimension in the Zarr array. Default is 4096.
-    n_spacecraft : int, optional
-        Number of spacecraft in the constellation. Default is 3 (METOP A, B, C).
         
     Examples
     --------

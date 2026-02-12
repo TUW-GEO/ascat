@@ -776,7 +776,6 @@ class SwathGridFiles(ChronFiles):
         time_resolution="h",
         n_workers=1,
         chunk_size_gpi=4096,
-        n_spacecraft=3,
     ):
         """Convert swath files to Zarr time-series format.
         
@@ -797,8 +796,6 @@ class SwathGridFiles(ChronFiles):
             If True, process files in parallel using Dask. Default is True.
         chunk_size_gpi : int, optional
             Chunk size for the GPI dimension in the Zarr array. Default is 4096.
-        n_spacecraft : int, optional
-            Number of spacecraft in the constellation. Default is 3 (METOP A, B, C).
         print_progress : bool, optional
             If True, print progress information. Default is False.
             
