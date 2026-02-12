@@ -755,7 +755,7 @@ class CellGridFiles():
         elif geom is not None:
             matched_cells = self._cells_for_geom(geom)
         else:
-            matched_cells = self.grid.arrcell
+            matched_cells = self.grid.get_cells()
 
         matched_cells = np.unique(matched_cells)
 
@@ -927,7 +927,7 @@ class CellGridFiles():
         return out_ds
 
     def iter_cells(self, delay=False, **kwargs):
-        filenames = self.spatial_search(cell=self.grid.arrcell)
+        filenames = self.spatial_search(cell=self.grid.get_cells())
         if ((self._active_reader is None)
             or not
             all(filename in self._active_reader.cache for filename in filenames)):
