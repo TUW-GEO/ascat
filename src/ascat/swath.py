@@ -774,6 +774,7 @@ class SwathGridFiles(ChronFiles):
         out_path,
         date_range,
         time_resolution="h",
+        sorted_grid=None,
         n_workers=1,
         chunk_size_gpi=4096,
     ):
@@ -792,12 +793,12 @@ class SwathGridFiles(ChronFiles):
         time_resolution : str, optional
             Time resolution for the time dimension: 'h' (hourly), 'D' (daily), or
             a numpy timedelta string. Default is 'h'.
-        parallel : bool, optional
-            If True, process files in parallel using Dask. Default is True.
+        sorted_grid : CellGrid, optional
+            If provided, use this grid to map GPIs instead of the original grid in the files.
+        n_workers : int, optional
+            Number of parallel workers to use for processing. Default is 1 (no parallelism).
         chunk_size_gpi : int, optional
             Chunk size for the GPI dimension in the Zarr array. Default is 4096.
-        print_progress : bool, optional
-            If True, print progress information. Default is False.
             
         Examples
         --------
@@ -820,6 +821,7 @@ class SwathGridFiles(ChronFiles):
             out_path=out_path,
             date_range=date_range,
             time_resolution=time_resolution,
+            sorted_grid=sorted_grid,
             n_workers=n_workers,
             chunk_size_gpi=chunk_size_gpi,
         )

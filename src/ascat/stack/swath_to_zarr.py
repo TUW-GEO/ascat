@@ -73,6 +73,7 @@ def stack_swaths_to_zarr(
     time_resolution="h",
     n_workers=1,
     chunk_size_gpi=4096,
+    sorted_grid=None,
 ):
     """Convert swath files to Zarr time-series format.
     
@@ -117,7 +118,7 @@ def stack_swaths_to_zarr(
         
         _create_zarr_structure(
             out_path=out_path,
-            grid=swath_files.grid,
+            grid=sorted_grid or swath_files.grid,
             date_start=dt_start,
             date_end=dt_end,
             time_resolution=time_resolution,
@@ -138,6 +139,7 @@ def stack_swaths_to_zarr(
         time_resolution=time_resolution,
         date_range=date_range,
         n_workers=n_workers,
+        sorted_grid=sorted_grid,
     )
     
     print("Done!")
@@ -275,9 +277,10 @@ def _create_zarr_structure(
             compressors=None,
         )
     
+    gpis, lats, lons, _ = grid.get_grid_points()
     root.create_array(
         "gpi",
-        data=np.asarray(grid.gpis),
+        data=np.asarray(gpis, dtype="int32"),
         chunks=(chunk_size_gpi,),
         dimension_names=("gpi",),
         fill_value=dtype_to_nan[np.dtype("int32")],
@@ -286,7 +289,7 @@ def _create_zarr_structure(
     
     root.create_array(
         "longitude",
-        data=np.asarray(grid.arrlon),
+        data=np.asarray(lons, dtype="float32"),
         chunks=(chunk_size_gpi,),
         dimension_names=("gpi",),
         fill_value=dtype_to_nan[np.dtype("float32")],
@@ -295,7 +298,7 @@ def _create_zarr_structure(
     
     root.create_array(
         "latitude",
-        data=np.asarray(grid.arrlat),
+        data=np.asarray(lats, dtype="float32"),
         chunks=(chunk_size_gpi,),
         dimension_names=("gpi",),
         fill_value=dtype_to_nan[np.dtype("float32")],
@@ -309,6 +312,7 @@ def _populate_zarr(
     time_coords,
     time_resolution,
     date_range,
+    sorted_grid=None,
     n_workers=1,
 ):
     """Fill Zarr array with data from swath files.
@@ -323,8 +327,12 @@ def _populate_zarr(
         Time coordinates array from Zarr.
     date_range : tuple of datetime
         (start, end) date range.
-    parallel : bool
-        Whether to process files in parallel.
+    time_resolution : str
+        Time resolution string (e.g., 'h', 'D').
+    sorted_grid : CellGrid, optional
+        If provided, use this grid to map GPIs instead of the original grid in the files.
+    n_workers : int, optional
+        Number of worker processes for parallel processing. Default is 1 (no parallelism).
     """
     dt_start, dt_end = date_range
     
@@ -342,6 +350,7 @@ def _populate_zarr(
         zarr_root=zarr_root,
         time_coords=time_coords,
         time_resolution=time_resolution,
+        sorted_grid=sorted_grid,
     )
     
     if n_workers > 1:
@@ -369,7 +378,7 @@ def _populate_zarr(
         # print(f"Successfully inserted {n_success}/{len(filenames)} files")
 
 
-def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resolution):
+def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resolution, sorted_grid=None):
     """Insert data from one swath file into Zarr array.
     
     Parameters
@@ -382,6 +391,10 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
         Opened Zarr group to write to.
     time_coords : np.ndarray
         Time coordinate array for indexing.
+    time_resolution : str
+        Time resolution string (e.g., 'h', 'D').
+    sorted_grid : CellGrid, optional
+        If provided, use this grid to map GPIs instead of the original grid in the files.
         
     Returns
     -------
@@ -430,12 +443,9 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
             gpi = ds["location_id"].values.astype(int)
             n_gpi = zarr_root["gpi"].shape[0]
             
-            valid_mask = gpi < n_gpi
-            if not valid_mask.all():
-                n_invalid = (~valid_mask).sum()
-                warnings.warn(
-                    f"{n_invalid} invalid GPIs in {filename.name} (GPI >= {n_gpi})"
-                )
+            if sorted_grid is not None:
+                lookup = np.argsort(sorted_grid.get_grid_points()[0])
+                gpi = lookup[gpi]
 
             print(f"Setting data vars for satellite {sat_id} at time {dt_np}.",
                   f"time index {time_idx}, should be {time_coords[time_idx]}")
@@ -457,12 +467,12 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
                     if beam_idx is not None:
                         zarr_root[var][time_idx, sat_idx, beam_idx, gpi] = var_data
                     else:
-                        zarr_root[var][time_idx, sat_idx, gpi[valid_mask]] = (
-                            var_data[valid_mask]
+                        zarr_root[var][time_idx, sat_idx, gpi] = (
+                            var_data
                         )
                 else:
-                    zarr_root[var][time_idx, sat_idx, gpi[valid_mask]] = (
-                        var_data[valid_mask]
+                    zarr_root[var][time_idx, sat_idx, gpi] = (
+                        var_data
                     )
             elapsed = time() - start_time
             print(f"Inserted {n_vars} variables from {filename.name} in {elapsed:.2f} seconds, {elapsed / n_vars:.2f} seconds/variable")
