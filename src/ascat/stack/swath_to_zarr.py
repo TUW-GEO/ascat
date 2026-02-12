@@ -48,16 +48,14 @@ from dask.base import compute
 
 from ascat.utils import dtype_to_nan
 
-MISSION_SAT_ID_MAP = {
-    ("ers", "1"): 1,
-    ("ers", "2"): 2,
-    ("metop", "a"): 3,
-    ("metop", "b"): 4,
-    ("metop", "c"): 5,
+MISSION_SAT_IDS_MAP = {
+    "ers": [1, 2],
+    "metop": [3, 4, 5],
 }
-MISSION_N_SPACECRAFT_MAP = {
-    "ers": 2,
-    "metop": 3,
+
+MISSION_SAT_ID_IDX_MAP = {
+    "ers": {"1": 0, "2": 1},
+    "metop": {"a": 0, "b": 1, "c": 2},
 }
 
 BEAM_SUFFIXES = {
@@ -124,7 +122,7 @@ def stack_swaths_to_zarr(
             date_end=dt_end,
             time_resolution=time_resolution,
             chunk_size_gpi=chunk_size_gpi,
-            n_spacecraft=MISSION_N_SPACECRAFT_MAP[swath_files.sat_series],
+            sat_series=swath_files.sat_series,
             sample_dir=swath_files.root_path,
         )
     
@@ -164,7 +162,7 @@ def _create_zarr_structure(
     date_end,
     time_resolution,
     chunk_size_gpi,
-    n_spacecraft,
+    sat_series,
     sample_dir,
 ):
     """Generate empty Zarr array with proper schema and dimensions.
@@ -183,8 +181,8 @@ def _create_zarr_structure(
         Time resolution string (e.g., 'h', 'D').
     chunk_size_gpi : int
         Chunk size for GPI dimension.
-    n_spacecraft : int
-        Number of spacecraft in constellation.
+    sat_series : str
+        Satellite series name (e.g., 'metop', 'ers') to determine number of spacecraft.
     sample_dir : Path
         Directory to search for sample file to determine schema.
     """
@@ -192,6 +190,8 @@ def _create_zarr_structure(
     print(time_coords)
     n_time = len(time_coords)
     n_gpi = grid.n_gpi
+    spacecraft_ids = MISSION_SAT_IDS_MAP.get(sat_series.lower())
+    n_spacecraft = len(spacecraft_ids)
     
     sample_file = _find_sample_file(sample_dir)
     sample_ds = xr.open_dataset(
@@ -257,7 +257,7 @@ def _create_zarr_structure(
     
     root.create_array(
         "spacecraft",
-        data=np.arange(1, n_spacecraft + 1, dtype=np.int8),
+        data=np.array(spacecraft_ids, dtype="int8"),
         chunks=(1,),
         dimension_names=("spacecraft",),
         fill_value=dtype_to_nan[np.dtype("int8")],
@@ -417,7 +417,7 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
             )
             return False
         
-        sat_idx = sat_id - 3
+        sat_idx = MISSION_SAT_ID_IDX_MAP[swath_files.sat_series][str(sat_id)]
         
         has_beams = "beam" in zarr_root
         
@@ -660,10 +660,14 @@ def _extract_sat_id(filename, fn_pattern, sat_series):
         ) from e
     
     sat_series_lower = sat_series.lower()
-    lookup_key = (sat_series_lower, sat_identifier)
+    mission_idxs = MISSION_SAT_ID_IDX_MAP.get(sat_series_lower)
     
-    if lookup_key not in MISSION_SAT_ID_MAP:
-        known_sats = [f"{m}:{s}" for m, s in MISSION_SAT_ID_MAP.keys()]
+    if mission_idxs is None or sat_identifier not in mission_idxs:
+        known_sats = [
+            f"{series.upper()} {id}"
+            for series, ids in MISSION_SAT_ID_IDX_MAP.items()
+            for id in ids
+        ]
         raise ValueError(
             f"Unknown satellite: mission='{sat_series}', identifier='{sat_identifier}' "
             f"(from filename '{filename}'). "
@@ -673,4 +677,4 @@ def _extract_sat_id(filename, fn_pattern, sat_series):
             f"and fn_pattern are configured correctly."
         )
     
-    return MISSION_SAT_ID_MAP[lookup_key]
+    return sat_identifier
