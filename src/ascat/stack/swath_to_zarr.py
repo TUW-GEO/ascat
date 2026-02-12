@@ -73,7 +73,7 @@ def stack_swaths_to_zarr(
     out_path,
     date_range,
     time_resolution="h",
-    parallel=True,
+    n_workers=1,
     chunk_size_gpi=4096,
 ):
     """Convert swath files to Zarr time-series format.
@@ -141,7 +141,7 @@ def stack_swaths_to_zarr(
         time_coords=time_coords,
         time_resolution=time_resolution,
         date_range=date_range,
-        parallel=parallel,
+        n_workers=n_workers,
     )
     
     print("Done!")
@@ -311,7 +311,7 @@ def _populate_zarr(
     time_coords,
     time_resolution,
     date_range,
-    parallel,
+    n_workers=1,
 ):
     """Fill Zarr array with data from swath files.
     
@@ -346,8 +346,8 @@ def _populate_zarr(
         time_resolution=time_resolution,
     )
     
-    if parallel:
-        with ProcessPoolExecutor(max_workers=12) as executor:
+    if n_workers > 1:
+        with ProcessPoolExecutor(max_workers=n_workers) as executor:
             futures = [
                 executor.submit(insert_func, f)
                 for f in filenames

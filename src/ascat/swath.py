@@ -774,7 +774,7 @@ class SwathGridFiles(ChronFiles):
         out_path,
         date_range,
         time_resolution="h",
-        parallel=True,
+        n_workers=1,
         chunk_size_gpi=4096,
         n_spacecraft=3,
     ):
@@ -823,6 +823,6 @@ class SwathGridFiles(ChronFiles):
             out_path=out_path,
             date_range=date_range,
             time_resolution=time_resolution,
-            parallel=parallel,
+            n_workers=n_workers,
             chunk_size_gpi=chunk_size_gpi,
         )
