@@ -224,6 +224,7 @@ class SwathGridFiles(ChronFiles):
         sf_templ,
         grid_name,
         date_field_fmt,
+        sat_series,
         cell_fn_format=None,
         cls_kwargs=None,
         err=True,
@@ -293,6 +294,7 @@ class SwathGridFiles(ChronFiles):
                          cache_size)
 
         self.date_field_fmt = date_field_fmt
+        self.sat_series = sat_series
         self.grid_name = grid_name
         self.grid = registry.get(grid_name)
 
@@ -374,6 +376,7 @@ class SwathGridFiles(ChronFiles):
             grid_name=product_class.grid_name,
             cell_fn_format=product_class.cell_fn_format,
             date_field_fmt=product_class.date_field_fmt,
+            sat_series=product_class.sat_series,
             fn_read_fmt=product_class.fn_read_fmt,
             sf_read_fmt=product_class.sf_read_fmt,
             preprocessor=product_class.preprocess_,
@@ -766,223 +769,60 @@ class SwathGridFiles(ChronFiles):
         if print_progress:
             print("\n")
 
-    def iter_apply(self, func, **search_kwargs):
-        for fname in self.search_period(**search_kwargs, yield_each_file=True):
-            yield func(fname)
-
-    def _parse_filename_metadata(self, filename):
-        filename = Path(filename)
-        name = filename.name
-
-        from ascat.product_info import get_swath_product_id, swath_io_catalog
-        import datetime as dtlib
-        import re
-
-        product_id = get_swath_product_id(name)
-        product_class = swath_io_catalog[product_id]
-        date_field_fmt = product_class.date_field_fmt
-
-        sat_match = re.search(r'-METOP([ABC])-|METOP([ABC])-', name)
-        if sat_match:
-            sat_char = sat_match.group(1) if sat_match.group(1) else sat_match.group(2)
-            sat_spec_map = {'A': 3, 'B': 4, 'C': 5}
-            sat_id = sat_spec_map.get(sat_char, 4)
-        else:
-            sat_id = 4
-
-        parts = name.split('_')
-        parts = [p for p in parts if p]
-        timestamps = [p for p in parts if len(p) == 14 and p.isdigit()]
-        if not timestamps:
-            raise ValueError(f"Could not extract date from filename: {name}")
-        if len(timestamps) >= 2:
-            timestamp_str = timestamps[-2]
-        else:
-            timestamp_str = timestamps[-1]
-
-        dt = dtlib.datetime.strptime(timestamp_str, date_field_fmt)
-        return {"datetime": np.datetime64(dt), "sat_id": sat_id}
-
-    def _generate_empty_zarr(self, out_path, date_start, date_end, time_resolution="h",
-                             zarr_format=3, n_spacecraft=3, sample_file_path=None,
-                             chunk_size_gpi=4096):
-        start_dt = np.datetime64(date_start) if isinstance(date_start, str) else date_start
-        end_dt = np.datetime64(date_end) if isinstance(date_end, str) else date_end
-
-        if time_resolution == "h":
-            time_dt = np.arange(start_dt, end_dt, np.timedelta64(1, "h"))
-        elif time_resolution == "D":
-            time_dt = np.arange(start_dt, end_dt, np.timedelta64(1, "D"))
-        else:
-            time_dt = np.arange(start_dt, end_dt, np.timedelta64(1, time_resolution))
-
-        n_time = len(time_dt)
-        n_gpi = self.grid.n_gpi
-
-        store = zarr.storage.LocalStore(out_path)
-        root = zarr.create_group(store=store, overwrite=True, zarr_format=zarr_format)
-
-        import glob
-        if sample_file_path is None:
-            sample_files = list(glob.glob(str(Path(self.root_path) / "**/*.nc"), recursive=True))
-            if not sample_files:
-                raise FileNotFoundError("No swath files found to determine schema.")
-            sample_file_path = sample_files[0]
-
-        sample_ds = xr.open_dataset(sample_file_path, mask_and_scale=False, decode_cf=False, engine="h5netcdf")
-        sample_ds.close()
-
-        data_vars = set()
-        for var in sample_ds.data_vars:
-            if var not in ["location_id", "latitude", "longitude"]:
-                data_vars.add(var)
-
-        has_beam_variants = any(
-            any(var.endswith(suffix) for suffix in ["_for", "_mid", "_aft"]) for var in data_vars
+    def to_zarr(
+        self,
+        out_path,
+        date_range,
+        time_resolution="h",
+        parallel=True,
+        chunk_size_gpi=4096,
+        n_spacecraft=3,
+    ):
+        """Convert swath files to Zarr time-series format.
+        
+        This is a convenience method that wraps `ascat.swath_to_zarr.stack_swaths_to_zarr`.
+        Creates a Zarr array with dimensions (swath_time, spacecraft, [beam,] gpi) and
+        populates it with data from swath files.
+        
+        Parameters
+        ----------
+        out_path : str or Path
+            Output Zarr directory path.
+        date_range : tuple of datetime
+            (start, end) date range for data to include.
+        time_resolution : str, optional
+            Time resolution for the time dimension: 'h' (hourly), 'D' (daily), or
+            a numpy timedelta string. Default is 'h'.
+        parallel : bool, optional
+            If True, process files in parallel using Dask. Default is True.
+        chunk_size_gpi : int, optional
+            Chunk size for the GPI dimension in the Zarr array. Default is 4096.
+        n_spacecraft : int, optional
+            Number of spacecraft in the constellation. Default is 3 (METOP A, B, C).
+        print_progress : bool, optional
+            If True, print progress information. Default is False.
+            
+        Examples
+        --------
+        >>> swath_files = SwathGridFiles.from_product_id("/data/swaths", "H129")
+        >>> swath_files.to_zarr(
+        ...     "/data/output.zarr",
+        ...     date_range=(datetime(2024, 1, 1), datetime(2024, 1, 31)),
+        ...     time_resolution="h",
+        ...     parallel=True,
+        ... )
+        
+        See Also
+        --------
+        ascat.swath_to_zarr.stack_swaths_to_zarr : The underlying function
+        """
+        from ascat.stack.swath_to_zarr import stack_swaths_to_zarr
+        
+        return stack_swaths_to_zarr(
+            swath_files=self,
+            out_path=out_path,
+            date_range=date_range,
+            time_resolution=time_resolution,
+            parallel=parallel,
+            chunk_size_gpi=chunk_size_gpi,
         )
-
-        if has_beam_variants:
-            base_names = set()
-            for var in data_vars:
-                if var.endswith("_for"):
-                    base_names.add(var[:-4])
-                elif var.endswith("_mid"):
-                    base_names.add(var[:-4])
-                elif var.endswith("_aft"):
-                    base_names.add(var[:-4])
-                else:
-                    base_names.add(var)
-
-            data_vars = set()
-            for base in base_names:
-                if any(f"{base}_{suffix}" in sample_ds.data_vars for suffix in ["_for", "_mid", "_aft"]):
-                    for suffix in ["_for", "_mid", "_aft"]:
-                        if f"{base}_{suffix}" in sample_ds.data_vars:
-                            data_vars.add(f"{base}_{suffix}")
-                else:
-                    if base in sample_ds.data_vars:
-                        data_vars.add(base)
-
-        if has_beam_variants:
-            dims = ("swath_time", "spacecraft", "beam", "gpi")
-            n_beams = 3
-            base_chunks = (1, 1, 1, chunk_size_gpi)
-            base_shape = (n_time, n_spacecraft, n_beams, n_gpi)
-        else:
-            dims = ("swath_time", "spacecraft", "gpi")
-            n_beams = None
-            base_chunks = (1, 1, chunk_size_gpi)
-            base_shape = (n_time, n_spacecraft, n_gpi)
-
-        for var in sorted(data_vars):
-            if var in sample_ds.data_vars:
-                var_dtype = sample_ds[var].dtype
-                fill_val = dtype_to_nan.get(var_dtype, np.nan)
-                root.create_array(name=var, dtype=var_dtype, shape=base_shape,
-                                chunks=base_chunks, dimension_names=dims, fill_value=fill_val,
-                                compressors=[zarr.codecs.BloscCodec(cname="zstd", clevel=3,
-                                                                shuffle=zarr.codecs.BloscShuffle.shuffle)])
-
-        root.create_array("swath_time", data=time_dt, chunks=(1,), dimension_names=("swath_time",),
-                        fill_value=dtype_to_nan[np.dtype("datetime64[ns]")], compressors=None)
-        root.create_array("spacecraft", data=np.arange(1, n_spacecraft + 1, dtype=np.int8), chunks=(1,),
-                        dimension_names=("spacecraft",), fill_value=dtype_to_nan[np.dtype("int8")], compressors=None)
-        if has_beam_variants:
-            n_beams = 3
-            beam_names = np.array([b"fore", b"mid", b"aft"], dtype="S3")
-            root.create_array("beam", data=beam_names, chunks=(1,), dimension_names=("beam",),
-                            fill_value=np.nan, compressors=None)
-
-        root.create_array("gpi", data=np.asarray(self.grid.gpis), chunks=(chunk_size_gpi,),
-                        dimension_names=("gpi",), fill_value=dtype_to_nan[np.dtype("int8")], compressors=None)
-        root.create_array("longitude", data=np.asarray(self.grid.arrlon), chunks=(chunk_size_gpi,),
-                        dimension_names=("gpi",), fill_value=dtype_to_nan[np.dtype("float32")], compressors=None)
-        root.create_array("latitude", data=np.asarray(self.grid.arrlat), chunks=(chunk_size_gpi,),
-                        dimension_names=("gpi",), fill_value=dtype_to_nan[np.dtype("float32")], compressors=None)
-        return root
-
-    def _put_swath_in_zarr(self, filename, zarr_root, time_coords):
-        filename = Path(filename)
-        metadata = self._parse_filename_metadata(filename)
-        dt = metadata["datetime"]
-        sat_id = metadata["sat_id"]
-
-        time_idx = np.where(dt == time_coords)[0]
-        if time_idx.size != 1:
-            return False
-        time_idx = time_idx[0]
-
-        have_beam = "beam" in zarr_root
-        sat_idx_zarr = sat_id - 3
-
-        ds = xr.open_dataset(filename, mask_and_scale=False, decode_cf=False, engine="h5netcdf")
-        try:
-            location_id = ds["location_id"].values.astype(int)
-            gpi = location_id
-            data_vars = [var for var in ds.data_vars if var not in ["location_id", "latitude", "longitude"]]
-            n_gpi = zarr_root["gpi"].shape[0]
-
-            for var in data_vars:
-                var_data = ds[var].values
-
-                if have_beam:
-                    beam_map = {"_for": 0, "_mid": 1, "_aft": 2}
-                    beam_idx = None
-                    for suffix, idx in beam_map.items():
-                        if var.endswith(suffix):
-                            beam_idx = idx
-                            break
-                    if beam_idx is not None:
-                        zarr_root[var][time_idx, sat_idx_zarr, beam_idx, gpi] = var_data
-                    else:
-                        valid_mask = gpi < n_gpi
-                        zarr_root[var][time_idx, sat_idx_zarr, gpi[valid_mask]] = var_data[valid_mask]
-                else:
-                    valid_mask = gpi < n_gpi
-                    zarr_root[var][time_idx, sat_idx_zarr, gpi[valid_mask]] = var_data[valid_mask]
-        finally:
-            ds.close()
-        return True
-
-    def stack_to_zarr(self, out_path, date_range=None, date_start=None, date_end=None,
-                      time_resolution="h", parallel=True):
-        out_path = Path(out_path)
-
-        if date_range is not None:
-            dt_start, dt_end = date_range
-            date_start = date_start or dt_start
-            if time_resolution == "h":
-                from datetime import timedelta
-                date_end = date_end or (dt_end + timedelta(hours=1))
-            elif time_resolution == "D":
-                from datetime import timedelta
-                date_end = date_end or (dt_end + timedelta(days=1))
-            else:
-                date_end = date_end or dt_end
-
-        if date_start is None or date_end is None:
-            raise ValueError("Either date_range or both date_start and date_end must be provided.")
-
-        if not out_path.exists():
-            self._generate_empty_zarr(out_path, date_start, date_end, time_resolution)
-
-        zarr_root = zarr.open(out_path, mode="a")
-        time_coords = zarr_root["swath_time"][:]
-
-        search_kwargs = {}
-        search_kwargs["date_field_fmt"]=self.date_field_fmt
-        if date_range is not None:
-            search_kwargs["dt_start"] = date_range[0]
-            search_kwargs["dt_end"] = date_range[1]
-        else:
-            search_kwargs["dt_start"] = date_start
-            search_kwargs["dt_end"] = date_end
-
-        from functools import partial
-        if parallel:
-            compute(self.iter_apply(delayed(partial(self._put_swath_in_zarr, zarr_root=zarr_root, time_coords=time_coords)),
-                              **search_kwargs))
-        else:
-            for _ in self.iter_apply(partial(self._put_swath_in_zarr, zarr_root=zarr_root, time_coords=time_coords),
-                                    **search_kwargs):
-                pass

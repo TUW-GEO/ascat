@@ -766,13 +766,9 @@ class ChronFiles(MultiFileHandler):
             )
             for f, dt in zip(files, dates):
                 if f not in filenames and dt >= dt_start and dt < dt_end:
-                    if yield_each_file:
-                        yield f
-                    else:
-                        filenames.append(f)
+                    filenames.append(f)
 
-        if not yield_each_file:
-            return filenames
+        return filenames
 
     def read_period(
         self,

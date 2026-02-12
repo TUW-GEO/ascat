@@ -145,6 +145,7 @@ class SwathProduct:
 
 class AscatSwathProduct(SwathProduct):
     grid_name = None
+    sat_series = "metop"
 
     @classmethod
     def preprocess_(cls, ds):
