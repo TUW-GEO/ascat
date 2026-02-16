@@ -163,6 +163,10 @@ def _sanitize_attrs(attrs):
     for key, value in attrs.items():
         if key == "scale_factor" and value==1:
             continue
+        # Fix common typo: calender -> calendar
+        if key == "calender":
+            sanitized["calendar"] = value
+            continue
         if isinstance(value, np.ndarray):
             sanitized[key] = value.tolist()
         elif isinstance(value, np.generic):
@@ -284,7 +288,13 @@ def _create_zarr_structure(
             compressors=None,
         )
     
-    gpis, lons, lats, _ = grid.get_grid_points()
+    # Handle both BasicGrid and CellGrid
+    try:
+        gpis, lons, lats, _ = grid.get_grid_points()
+    except ValueError:
+        # BasicGrid returns only 3 values
+        gpis, lons, lats = grid.get_grid_points()
+    
     root.create_array(
         "gpi",
         data=np.asarray(gpis, dtype="int32"),
