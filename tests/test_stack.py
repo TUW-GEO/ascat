@@ -280,11 +280,13 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         
         test_grid = get_test_grid_data(n_points=100)
         grid = BasicGrid(test_grid["lon"], test_grid["lat"], test_grid["gpi"])
-        
+
         swath_dir = self.tempdir_path / "swaths"
         swath_dir.mkdir()
-        sample_file = swath_dir / "sample.nc"
-        
+        # Create filename matching AscatH139Swath pattern
+        # Pattern: W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H139_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc
+        sample_file = swath_dir / "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_______20210101010000____.nc"
+
         # Create synthetic swath with known values
         ds = generate_synthetic_swath_data(
             location_ids=test_grid["gpi"],
@@ -299,7 +301,7 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         # Save original values for verification
         original_ssm = ds["surface_soil_moisture"].values.copy()
         original_backscatter = ds["backscatter40"].values.copy()
-        
+
         # Create Zarr structure
         zarr_path = self.tempdir_path / "test.zarr"
         _create_zarr_structure(
@@ -312,37 +314,28 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             sat_series="metop",
             sample_file=sample_file
         )
-        
-        # Populate with swath file
+
+        # Create SwathGridFiles object for the swath reader
         from ascat.product_info import AscatH139Swath
-        swath_files = AscatH139Swath.file_class
-        
-        # Extract sat_id from sample_file
-        fn_pattern = AscatH139Swath.fn_pattern
-        sat_id = _extract_sat_id(sample_file, fn_pattern, "metop")
-        sat_index = {"a": 0, "b": 1, "c": 2}[sat_id]
-        
-        from ascat.grids import GridRegistry
-        from ascat.product_info import AscatH139Swath
-        grid_obj = GridRegistry().get(AscatH139Swath.grid_name)
-        swath_reader = swath_files(
-            grid_obj,
-            AscatH139Swath.fn_read_fmt,
-            AscatH139Swath.sf_read_fmt,
-            AscatH139Swath.fn_pattern,
+        swath_files = SwathGridFiles.from_product_class(
+            swath_dir, AscatH139Swath
         )
-        
         zarr_root = zarr.open(zarr_path, mode="r+")
         time_coords = _generate_time_coords(datetime(2021, 1, 1), datetime(2021, 1, 1, 2, 0, 0), "h")
-        _insert_swath_file(sample_file, swath_reader.swath, zarr_root, time_coords, "h")
+        _insert_swath_file(sample_file, swath_files, zarr_root, time_coords, "h")
         zarr_root.store.close()
-        
+
         # Verify data was stored correctly
         zarr_root = zarr.open(zarr_path, mode="r")
-        
+
+        # Extract sat_id from sample_file
+        fn_pattern = AscatH139Swath.fn_pattern
+        sat_id = _extract_sat_id(sample_file.name, fn_pattern, "metop")
+        sat_index = {"a": 0, "b": 1, "c": 2}[sat_id]
+
         # Check that timestamp index matches (should be index 0 for 01:00)
         time_index = 0
-        
+
         # Extract data back
         stored_ssm = zarr_root["surface_soil_moisture"][time_index, sat_index, :]
         stored_backscatter = zarr_root["backscatter40"][time_index, sat_index, :]
@@ -366,8 +359,8 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         
         swath_dir = self.tempdir_path / "swaths"
         swath_dir.mkdir()
-        sample_file = swath_dir / "sample.nc"
-        
+        sample_file = swath_dir / "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_______20210101010000____.nc"
+
         ds = generate_synthetic_swath_data(
             location_ids=test_grid["gpi"],
             lons=test_grid["lon"],
@@ -382,7 +375,7 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         original_backscatter_for = ds["backscatter_for"].values.copy()
         original_backscatter_mid = ds["backscatter_mid"].values.copy()
         original_backscatter_aft = ds["backscatter_aft"].values.copy()
-        
+
         zarr_path = self.tempdir_path / "test.zarr"
         _create_zarr_structure(
             out_path=zarr_path,
@@ -394,19 +387,15 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             sat_series="metop",
             sample_file=sample_file
         )
-        
+
         from ascat.product_info import AscatH139Swath
-        swath_reader = SwathGridFiles.from_product_class(sample_file, AscatH139Swath)
-        
-        from ascat.grids import GridRegistry
-        grid_obj = GridRegistry().get(AscatH139Swath.grid_name)
-        
-        
+        swath_files = SwathGridFiles.from_product_class(swath_dir, AscatH139Swath)
+
         zarr_root = zarr.open(zarr_path, mode="r+")
         time_coords = _generate_time_coords(datetime(2021, 1, 1), datetime(2021, 1, 1, 2, 0, 0), "h")
-        _insert_swath_file(sample_file, swath_reader, zarr_root, time_coords, "h")
+        _insert_swath_file(sample_file, swath_files, zarr_root, time_coords, "h")
         zarr_root.store.close()
-        
+
         zarr_root = zarr.open(zarr_path, mode="r")
         time_index = 0
         sat_index = 0
@@ -437,8 +426,8 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         
         swath_dir = self.tempdir_path / "swaths"
         swath_dir.mkdir()
-        sample_file = swath_dir / "sample.nc"
-        
+        sample_file = swath_dir / "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_______20210101010300____.nc"
+
         # Create swath with 3-minute timestamp (aligned to hour)
         ds = generate_synthetic_swath_data(
             location_ids=test_grid["gpi"],
@@ -450,7 +439,7 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         )
         ds.to_netcdf(sample_file, engine="h5netcdf")
         original_ssm = ds["surface_soil_moisture"].values.copy()
-        
+
         # Create hourly Zarr structure
         zarr_path = self.tempdir_path / "test.zarr"
         _create_zarr_structure(
@@ -463,19 +452,15 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             sat_series="metop",
             sample_file=sample_file
         )
-        
+
         from ascat.product_info import AscatH139Swath
-        swath_reader = SwathGridFiles.from_product_class(sample_file, AscatH139Swath)
-        
-        from ascat.grids import GridRegistry
-        grid_obj = GridRegistry().get(AscatH139Swath.grid_name)
-        
-        
+        swath_files = SwathGridFiles.from_product_class(swath_dir, AscatH139Swath)
+
         zarr_root = zarr.open(zarr_path, mode="r+")
         time_coords = _generate_time_coords(datetime(2021, 1, 1), datetime(2021, 1, 1, 2, 0, 0), "h")
-        _insert_swath_file(sample_file, swath_reader, zarr_root, time_coords, "h")
+        _insert_swath_file(sample_file, swath_files, zarr_root, time_coords, "h")
         zarr_root.store.close()
-        
+
         # Verify data stored - the 3-minute file should be stored at the 01:00 slot
         zarr_root = zarr.open(zarr_path, mode="r")
         stored_ssm = zarr_root["surface_soil_moisture"][0, 0, :]  # index 0 = 01:00
@@ -504,7 +489,10 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         
         original_ssms = []
         for i, ts in enumerate(timestamps):
-            sample_file = swath_dir / f"sample_{i}.nc"
+            # Create proper filename matching pattern with timestamp from data
+            # Pattern: W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc
+            timestamp_str = np.datetime_as_string(ts, unit='s').replace('T', '').replace('-', '')[:14]
+            sample_file = swath_dir / f"W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_______{timestamp_str}____.nc"
             ds = generate_synthetic_swath_data(
                 location_ids=test_grid["gpi"],
                 lons=test_grid["lon"],
@@ -517,6 +505,8 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             original_ssms.append(ds["surface_soil_moisture"].values.copy())
         
         zarr_path = self.tempdir_path / "test.zarr"
+        # Get first file for structure creation
+        first_file = list(swath_dir.glob("*.nc"))[0]
         _create_zarr_structure(
             out_path=zarr_path,
             grid=grid,
@@ -525,21 +515,17 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             time_resolution="h",
             chunk_size_gpi=32,
             sat_series="metop",
-            sample_file=swath_dir / "sample_0.nc"
+            sample_file=first_file
         )
-        
+
         from ascat.product_info import AscatH139Swath
-        swath_reader = SwathGridFiles.from_product_class(sample_file, AscatH139Swath)
-        
-        from ascat.grids import GridRegistry
-        grid_obj = GridRegistry().get(AscatH139Swath.grid_name)
-        
-        
+        swath_files = SwathGridFiles.from_product_class(swath_dir, AscatH139Swath)
+
         zarr_root = zarr.open(zarr_path, mode="r+")
         time_coords = _generate_time_coords(datetime(2021, 1, 1), datetime(2021, 1, 1, 3, 0, 0), "h")
-        
+
         for sample_file in swath_dir.glob("*.nc"):
-            _insert_swath_file(sample_file, swath_reader, zarr_root, time_coords, "h")
+            _insert_swath_file(sample_file, swath_files, zarr_root, time_coords, "h")
         zarr_root.store.close()
         
         # Verify both files stored correctly
@@ -593,10 +579,17 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             sat_series="metop",
             sample_file=sample_file
         )
-        
-        # Open and verify that the time array in Zarr doesn't have calender anymore
-        # (it would have been sanitized when creating the array structure)
-        # The _sanitize_attrs function should have renamed it or skipped it
+
+        # Open and verify that the time coordinate attributes in Zarr
+        # don't have 'calender' anymore (it was renamed to 'calendar')
+        check_ds = xr.open_zarr(zarr_path)
+        time_attrs = check_ds["swath_time"].attrs
+        self.assertNotIn("calender", time_attrs,
+                        "'calender' should not exist in attributes")
+        if "calendar" in time_attrs:
+            self.assertEqual(time_attrs["calendar"], "proleptic_gregorian",
+                           "Should have been renamed from calender to calendar")
+        check_ds.close()
 
 
 class TestSparseZarrToTs(unittest.TestCase):
@@ -615,9 +608,9 @@ class TestSparseZarrToTs(unittest.TestCase):
         zarr_path = self.tempdir_path / "sparse.zarr"
         store = zarr.storage.LocalStore(str(zarr_path))
         root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
-        
+
         root.create_array(
-            "time",
+            "swath_time",
             data=np.array([0, 1, 2], dtype=np.int32),
             chunks=(1,),
             dimension_names=("swath_time",),
@@ -675,7 +668,7 @@ class TestSparseZarrToTs(unittest.TestCase):
             fill_value=b""
         )
         root.create_array(
-            "time",
+            "swath_time",
             data=np.array([0, 1, 2], dtype=np.int32),
             chunks=(1,),
             dimension_names=("swath_time",),
