@@ -41,8 +41,10 @@ from pathlib import Path
 from time import time
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 import zarr
+from xarray.backends.zarr import FillValueCoder, encode_zarr_attr_value
 from dask import delayed
 from dask.base import compute
 
@@ -64,6 +66,12 @@ BEAM_SUFFIXES = {
     '_mid': 1,  
     '_aft': 2,  
 }
+
+
+def _freq_to_timedelta64(time_resolution):
+    # pd.date_range with 2 periods gives us the actual step size
+    rng = pd.date_range("2000-01-01", periods=2, freq=time_resolution)
+    return (rng[1] - rng[0]).to_timedelta64()
 
 
 def stack_swaths_to_zarr(
@@ -90,10 +98,11 @@ def stack_swaths_to_zarr(
     date_range : tuple of datetime
         (start, end) date range for data to include.
     time_resolution : str, optional
-        Time resolution for the time dimension: 'h' (hourly), 'D' (daily), or
-        a numpy timedelta string. Default is 'h'.
-    parallel : bool, optional
-        If True, process files in parallel using Dask. Default is True.
+        Pandas frequency string for the time dimension, e.g. 'h' (hourly),
+        '2h' (2-hourly), '3min' (3-minutely), 'D' (daily).
+        Default is 'h'.
+    n_workers : int, optional
+        Number of worker processes for parallel processing. Default is 1.
     chunk_size_gpi : int, optional
         Chunk size for the GPI dimension in the Zarr array. Default is 4096.
         
@@ -106,8 +115,7 @@ def stack_swaths_to_zarr(
     ...     swath_files,
     ...     "/data/output.zarr",
     ...     date_range=(datetime(2024, 1, 1), datetime(2024, 1, 31)),
-    ...     time_resolution="h",
-    ...     parallel=True,
+    ...     time_resolution="2h",
     ... )
     """
     out_path = Path(out_path)
@@ -186,13 +194,13 @@ def _create_zarr_structure(
     date_end : datetime
         End date for time dimension.
     time_resolution : str
-        Time resolution string (e.g., 'h', 'D').
+        Pandas frequency string (e.g., 'h', '2h', '3min', 'D').
     chunk_size_gpi : int
         Chunk size for GPI dimension.
     sat_series : str
         Satellite series name (e.g., 'metop', 'ers') to determine number of spacecraft.
-    sample_dir : Path
-        Directory to search for sample file to determine schema.
+    sample_file : Path
+        Sample file to determine schema.
     """
     time_coords = _generate_time_coords(date_start, date_end, time_resolution)
     print(time_coords)
@@ -227,14 +235,8 @@ def _create_zarr_structure(
     for var in sorted(data_vars):
         var_dtype = sample_ds[var].dtype
         attrs = _sanitize_attrs(sample_ds[var].attrs)
-        # if "_FillValue" not in attrs:
-        #     attrs["_FillValue"] = dtype_to_nan[np.dtype(var_dtype)]
-        fill_val = attrs.pop("_FillValue", dtype_to_nan[np.dtype(var_dtype)])
-        # scale_factor = sample_ds[var].attrs.pop("scale_factor", 1.0)
-        # attrs = {"scale_factor": scale_factor} if scale_factor != 1.0 else {}
-        # # if fill_val != 0: # the time var was breaking when _FillValue was also 0.0
-        # attrs["_FillValue"] = fill_val
-        # attrs.update({k: v.item() if isinstance(v, ) for k, v in sample_ds[var].attrs.items() if k not in ["_FillValue", "scale_factor"]})
+        fill_val = attrs.get("_FillValue", dtype_to_nan[np.dtype(var_dtype)])
+        attrs["_FillValue"] = FillValueCoder.encode(fill_val, var_dtype)
         
         root.create_array(
             name=var,
@@ -333,7 +335,7 @@ def _populate_zarr(
     date_range : tuple of datetime
         (start, end) date range.
     time_resolution : str
-        Time resolution string (e.g., 'h', 'D').
+        Pandas frequency string (e.g., 'h', '2h', '3min', 'D').
     sorted_grid : CellGrid, optional
         If provided, use this grid to map GPIs instead of the original grid in the files.
     n_workers : int, optional
@@ -366,21 +368,13 @@ def _populate_zarr(
             ]
             for future in futures:
                 future.result()
-        # tasks = [delayed(insert_func)(f) for f in filenames]
-        # results = compute(*tasks)
-        
-        # n_success = sum(1 for r in results if r)
-        # print(f"Successfully inserted {n_success}/{len(filenames)} files")
     else:
-        # n_success = 0
         for i, filename in enumerate(filenames):
             if (i + 1) % 100 == 0:
                 print(f"Processed {i + 1}/{len(filenames)} files")
             
             if insert_func(filename):
                 n_success += 1
-        
-        # print(f"Successfully inserted {n_success}/{len(filenames)} files")
 
 
 def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resolution, sorted_grid=None):
@@ -397,7 +391,7 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
     time_coords : np.ndarray
         Time coordinate array for indexing.
     time_resolution : str
-        Time resolution string (e.g., 'h', 'D').
+        Pandas frequency string (e.g., 'h', '2h', '3min', 'D').
     sorted_grid : CellGrid, optional
         If provided, use this grid to map GPIs instead of the original grid in the files.
         
@@ -422,11 +416,13 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
             sat_series=swath_files.sat_series,
         )
         
+        time_delta = _freq_to_timedelta64(time_resolution)
+        
         time_idx = np.searchsorted(time_coords, dt_np) 
         time_idx_out_of_bounds = (time_idx >= len(time_coords)) 
         if time_idx_out_of_bounds or time_coords[time_idx] != dt_np:
             time_idx -= 1
-        if time_coords[time_idx] + np.timedelta64(1, time_resolution) <= dt_np:
+        if time_coords[time_idx] + time_delta <= dt_np:
             time_idx += 1
         time_idx_out_of_bounds = (time_idx >= len(time_coords)) or (time_idx < 0)
         if time_idx_out_of_bounds:
@@ -502,24 +498,14 @@ def _generate_time_coords(date_start, date_end, time_resolution):
     date_end : datetime
         End date.
     time_resolution : str
-        Resolution string ('h', 'D', etc.).
+        Pandas frequency string (e.g., 'h', '2h', '3min', 'D').
         
     Returns
     -------
     np.ndarray
-        Array of datetime64 values.
+        Array of datetime64[ns] values.
     """
-    start_dt = np.datetime64(date_start)
-    end_dt = np.datetime64(date_end)
-    
-    if time_resolution == "h":
-        delta = np.timedelta64(1, "h")
-    elif time_resolution == "D":
-        delta = np.timedelta64(1, "D")
-    else:
-        delta = np.timedelta64(1, time_resolution)
-    
-    return np.arange(start_dt, end_dt, delta)
+    return pd.date_range(start=date_start, end=date_end, freq=time_resolution, inclusive="left").values
 
 
 def _detect_beam_structure(sample_ds):
