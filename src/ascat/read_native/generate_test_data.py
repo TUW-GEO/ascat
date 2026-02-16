@@ -409,12 +409,14 @@ swath_ds_2 = xr.Dataset(
         "longitude": (
             "obs",
             np.array(
-                [142.937536, 143.302272, 143.038352, 142.774416], dtype=np.float64
+                [142.937536, 143.302272, 143.038352, 142.774416],
+                dtype=np.float64
             ),
         ),
         "latitude": (
             "obs",
-            np.array([42.176548, 42.279804, 42.251248, 42.222704], dtype=np.float64),
+            np.array([42.176548, 42.279804, 42.251248, 42.222704], 
+                    dtype=np.float64),
         ),
         "location_id": (
             "obs",
@@ -440,3 +442,247 @@ swath_ds_2 = xr.Dataset(
     },
     attrs={"featureType": "point"},
 )
+
+
+def generate_synthetic_swath_data(
+    location_ids,
+    lons,
+    lats,
+    timestamp,
+    with_beams=False,
+    seed=None
+):
+    """
+    Generate synthetic swath dataset for testing swath_to_zarr.
+    
+    Parameters
+    ----------
+    location_ids : np.ndarray
+        Grid point indices (GPIs)
+    lons : np.ndarray
+        Longitude values for each GPI
+    lats : np.ndarray
+        Latitude values for each GPI
+    timestamp : np.datetime64
+        Timestamp for the swath
+    with_beams : bool, optional
+        If True, include beam-specific variables
+    seed : int, optional
+        Random seed for reproducibility
+        
+    Returns
+    -------
+    xr.Dataset
+        Synthetic swath dataset
+    """
+    if seed is not None:
+        np.random.seed(seed)
+    
+    n_obs = len(location_ids)
+    
+    data_vars = {
+        "location_id": (
+            "obs", location_ids.astype(np.int32), 
+            {"cf_role": "timeseries_id"}
+        ),
+        "longitude": ("obs", lons.astype(np.float32)),
+        "latitude": ("obs", lats.astype(np.float32)),
+        "time": ("obs", np.full(n_obs, timestamp, dtype="datetime64[ns]")),
+    }
+    
+    # Surface soil moisture (0-100 range typical for H129/H139)
+    data_vars["surface_soil_moisture"] = (
+        "obs", 
+        np.random.uniform(0, 100, n_obs).astype(np.float32),
+        {"_FillValue": -9999.0, "units": "%"}
+    )
+    
+    # Backscatter at 40 degree incidence angle
+    data_vars["backscatter40"] = (
+        "obs",
+        np.random.uniform(-10, 10, n_obs).astype(np.float32),
+        {"_FillValue": -9999.0, "units": "dB"}
+    )
+    
+    # Slope and curvature
+    data_vars["slope40"] = (
+        "obs",
+        np.random.uniform(-5, 5, n_obs).astype(np.float32),
+        {"_FillValue": -9999.0}
+    )
+    data_vars["curvature40"] = (
+        "obs",
+        np.random.uniform(-2, 2, n_obs).astype(np.float32),
+        {"_FillValue": -9999.0}
+    )
+    
+    # Soil moisture sensitivity
+    data_vars["surface_soil_moisture_sensitivity"] = (
+        "obs",
+        np.random.uniform(0.5, 1.0, n_obs).astype(np.float32),
+        {"_FillValue": -9999.0, "units": "1"}
+    )
+    
+    # Flags (uint8)
+    data_vars["snow_cover_probability"] = (
+        "obs",
+        np.random.randint(0, 101, n_obs, dtype=np.uint8),
+        {"_FillValue": 255}
+    )
+    data_vars["frozen_soil_probability"] = (
+        "obs",
+        np.random.randint(0, 101, n_obs, dtype=np.uint8),
+        {"_FillValue": 255}
+    )
+    data_vars["subsurface_scattering_probability"] = (
+        "obs",
+        np.random.randint(0, 101, n_obs, dtype=np.uint8),
+        {"_FillValue": 255}
+    )
+    
+    # Processing and correction flags (int8)
+    data_vars["complexity_flag"] = (
+        "obs",
+        np.random.randint(0, 16, n_obs, dtype=np.int8),
+        {"_FillValue": -128}
+    )
+    data_vars["correction_flag"] = (
+        "obs",
+        np.random.randint(0, 16, n_obs, dtype=np.int8),
+        {"_FillValue": -128}
+    )
+    
+    if with_beams:
+        # Beam-specific backscatter
+        data_vars["backscatter_for"] = (
+            "obs",
+            np.random.uniform(-10, 10, n_obs).astype(np.float32),
+            {"_FillValue": -9999.0, "units": "dB"}
+        )
+        data_vars["backscatter_mid"] = (
+            "obs",
+            np.random.uniform(-10, 10, n_obs).astype(np.float32),
+            {"_FillValue": -9999.0, "units": "dB"}
+        )
+        data_vars["backscatter_aft"] = (
+            "obs",
+            np.random.uniform(-10, 10, n_obs).astype(np.float32),
+            {"_FillValue": -9999.0, "units": "dB"}
+        )
+        
+        # Beam-specific incidence angles
+        data_vars["incidence_angle_for"] = (
+            "obs",
+            np.random.uniform(20, 60, n_obs).astype(np.float32),
+            {"_FillValue": -9999.0, "units": "degrees"}
+        )
+        data_vars["incidence_angle_mid"] = (
+            "obs",
+            np.random.uniform(20, 60, n_obs).astype(np.float32),
+            {"_FillValue": -9999.0, "units": "degrees"}
+        )
+        data_vars["incidence_angle_aft"] = (
+            "obs",
+            np.random.uniform(20, 60, n_obs).astype(np.float32),
+            {"_FillValue": -9999.0, "units": "degrees"}
+        )
+    
+    attrs = {
+        "featureType": "point",
+        "title": "ASCAT surface soil moisture test product",
+        "instrument": "ASCAT",
+        "satellite": "Metop-A",
+        "conventions": "CF-1.10"
+    }
+    
+    # Add the misspelled calendar attribute for testing
+    attrs["calender"] = "proleptic_gregorian"
+    
+    return xr.Dataset(data_vars, attrs=attrs)
+
+
+def create_test_grid(n_points=500):
+    """
+    Create a proper standalone test Fibonacci grid with latband sorting.
+    
+    Uses compute_fib_grid(n) to generate a standalone N-point Fibonacci lattice,
+    then determines latband sorting by clustering points by latitude bands.
+    
+    Parameters
+    ----------
+    n_points : int, optional
+        Desired number of grid points. Default 500.
+        Note: compute_fib_grid(n) generates 2n+1 points, so the actual
+        number of points will be the nearest 2n+1 to n_points.
+        
+    Returns
+    -------
+    dict
+        Dictionary with keys 'gpi', 'lon', 'lat', 'latband_sorting', 'cluster_id'
+    """
+    try:
+        from fibgrid.construction import compute_fib_grid
+    except ImportError as e:
+        raise ImportError(
+            f"fibgrid.construction is required to create test grid: {e}. "
+            "Install with: pip install fibgrid"
+        )
+    
+    # compute_fib_grid(n) generates 2n+1 points
+    # We want approximately n_points total
+    n = (n_points - 1) // 2
+    
+    # Compute standalone Fibonacci lattice
+    points, gpi_indices, lon, lat = compute_fib_grid(n)
+    
+    # Convert to proper types
+    gpi = gpi_indices.astype(np.int32)
+    lon = lon.astype(np.float32)
+    lat = lat.astype(np.float32)
+    
+    actual_n = len(gpi)
+    
+    # Create latband clustering
+    # Divide latitude range into bands and assign each point to a band
+    n_lat_bands = 10  # Number of latitude bands (adjustable)
+    lat_bands = np.linspace(np.min(lat), np.max(lat), n_lat_bands + 1)
+    
+    # Assign each point to a lat band
+    cluster_id = np.zeros(actual_n, dtype=np.int32)
+    for i in range(actual_n):
+        cluster_id[i] = np.searchsorted(lat_bands, lat[i]) - 1
+    
+    # Sort by cluster_id to get latband sorting order
+    # Within each cluster, we also sort by longitude for spatial consistency
+    sort_keys = cluster_id * 1000000 + ((lon + 180) * 100000).astype(np.int32)
+    latband_sorting = np.argsort(sort_keys).astype(np.int32)
+    
+    return {
+        "gpi": gpi,
+        "lon": lon,
+        "lat": lat,
+        "latband_sorting": latband_sorting,
+        "cluster_id": cluster_id
+    }
+
+
+_test_grid_data = None
+
+def get_test_grid_data(n_points=500):
+    """
+    Get cached test grid data.
+    
+    Parameters
+    ----------
+    n_points : int, optional
+        Approximate desired number of grid points
+        
+    Returns
+    -------
+    dict
+        Test grid data with keys 'gpi', 'lon', 'lat', 'latband_sorting', 'cluster_id'
+    """
+    global _test_grid_data
+    if _test_grid_data is None or len(_test_grid_data["gpi"]) < n_points:
+        _test_grid_data = create_test_grid(n_points)
+    return _test_grid_data
