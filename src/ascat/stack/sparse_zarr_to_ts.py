@@ -91,7 +91,7 @@ def sparse_to_dense(
     print("Scanning for populated chunks...")
     scan_start = timer()
     populated_map = _scan_all_populated_chunks(
-        sparse_root, n_swath_time, n_spacecraft, n_gpi, sparse_gpi_chunk_size
+        sparse_path, n_swath_time, n_spacecraft, n_gpi, sparse_gpi_chunk_size
     )
     print(f"Scan complete in {timer() - scan_start:.1f}s, "
           f"found {sum(len(v) for v in populated_map.values())} populated chunk slots")
@@ -190,7 +190,7 @@ def _classify_variables(sparse_root, has_beams):
 # Populated-chunk scanning
 # ---------------------------------------------------------------------------
 
-def _scan_all_populated_chunks(sparse_root, n_swath_time, n_spacecraft, n_gpi, sparse_gpi_chunk_size):
+def _scan_all_populated_chunks(sparse_path, n_swath_time, n_spacecraft, n_gpi, sparse_gpi_chunk_size):
     """Scan the Zarr v3 store for all populated (swath_time, spacecraft, gpi_chunk) slots.
 
     Probes chunk file existence for the 'time' variable without reading data.
@@ -200,7 +200,6 @@ def _scan_all_populated_chunks(sparse_root, n_swath_time, n_spacecraft, n_gpi, s
     dict[int, list[tuple[int, int]]]
         gpi_chunk_index -> list of (swath_time_idx, spacecraft_idx) with data.
     """
-    store = sparse_root.store
     n_gpi_chunks = -(-n_gpi // sparse_gpi_chunk_size)  # ceiling division
 
     populated_map = {}
@@ -210,7 +209,8 @@ def _scan_all_populated_chunks(sparse_root, n_swath_time, n_spacecraft, n_gpi, s
         for t_idx in range(n_swath_time):
             for s_idx in range(n_spacecraft):
                 chunk_key = f"time/c/{t_idx}/{s_idx}/{gc}"
-                if store.exists(chunk_key):
+                chunk_path = sparse_path / chunk_key
+                if chunk_path.exists():
                     slots.append((t_idx, s_idx))
         if slots:
             populated_map[gc] = slots
