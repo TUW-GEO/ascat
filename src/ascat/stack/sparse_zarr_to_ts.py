@@ -53,6 +53,7 @@ def sparse_to_dense(
     chunk_size_gpi=None,
     chunk_size_obs=300,
     n_workers=1,
+    gpi_mask=None,
 ):
     """Convert a sparse swath-time Zarr cube to a dense time-series store.
 
@@ -62,14 +63,16 @@ def sparse_to_dense(
         Path to the sparse Zarr store with dims (swath_time, spacecraft, [beam,] gpi).
     out_path : str or Path
         Path for the output dense Zarr store with dims (gpi, obs, [beam]).
-    obs_dim_size : int, optional
-        Initial size of the obs dimension. Will be expanded if needed. Default 600.
     chunk_size_gpi : int, optional
-        Chunk size along the gpi dimension. Default 32.
+        Chunk size along the gpi dimension. Defaults to sparse store's GPI chunk size.
     chunk_size_obs : int, optional
         Chunk size along the obs dimension. Default 300.
     n_workers : int, optional
         Number of parallel workers for processing GPI chunks. Default 1.
+    gpi_mask : np.ndarray of bool, optional
+        Boolean array of shape (n_gpi,). GPIs where gpi_mask is True will be
+        skipped entirely — no data is read or written for them. Default None
+        (process all GPIs).
     """
     sparse_path = Path(sparse_path)
     out_path = Path(out_path)
@@ -82,6 +85,15 @@ def sparse_to_dense(
     n_swath_time = sparse_root["swath_time"].shape[0]
     sparse_gpi_chunk_size = sparse_root["time"].chunks[-1]
     chunk_size_gpi = chunk_size_gpi or sparse_gpi_chunk_size
+
+    if gpi_mask is not None:
+        gpi_mask = np.asarray(gpi_mask, dtype=bool)
+        if gpi_mask.shape != (n_gpi,):
+            raise ValueError(
+                f"gpi_mask shape {gpi_mask.shape} does not match n_gpi ({n_gpi},)"
+            )
+        n_masked = int(gpi_mask.sum())
+        print(f"GPI mask: skipping {n_masked}/{n_gpi} GPIs")
 
     beam_vars, scalar_vars = _classify_variables(sparse_root, has_beams)
     print(f"Beam variables: {sorted(beam_vars)}")
@@ -142,6 +154,7 @@ def sparse_to_dense(
         populated_map=populated_map,
         sparse_gpi_chunk_size=sparse_gpi_chunk_size,
         chunk_size_obs=chunk_size_obs,
+        gpi_mask=gpi_mask,
     )
 
     start = timer()
@@ -385,6 +398,7 @@ def _process_gpi_chunk(
     populated_map,
     sparse_gpi_chunk_size,
     chunk_size_obs,
+    gpi_mask=None,
 ):
     """Process a single chunk of GPIs: extract, sort, and write/append.
 
@@ -412,9 +426,19 @@ def _process_gpi_chunk(
         GPI chunk size in the sparse store.
     chunk_size_obs : int
         Chunk size along the obs dimension in the output store.
+    gpi_mask : np.ndarray of bool or None
+        If provided, GPIs where mask is True are skipped.
     """
     gpi_start, gpi_end = gpi_range
     n_gpi_chunk = gpi_end - gpi_start
+
+    # Extract local mask for this chunk
+    if gpi_mask is not None:
+        local_mask = gpi_mask[gpi_start:gpi_end]
+        if local_mask.all():
+            return
+    else:
+        local_mask = None
 
     # Find populated slots for this GPI range
     gc_start = gpi_start // sparse_gpi_chunk_size
@@ -445,11 +469,15 @@ def _process_gpi_chunk(
     # --- Per-GPI: find valid observations, sort by time ---
     valid_mask = time_slices != time_fill
 
-    # For each GPI: sorted indices into `populated`, and count
-    gpi_sorted_slots = []  # list of np.array per GPI
+    gpi_sorted_slots = []
     new_counts = np.zeros(n_gpi_chunk, dtype=np.int32)
 
     for g in range(n_gpi_chunk):
+        # Skip masked GPIs
+        if local_mask is not None and local_mask[g]:
+            gpi_sorted_slots.append(np.array([], dtype=int))
+            continue
+
         valid_slots = np.where(valid_mask[:, g])[0]
         if len(valid_slots) == 0:
             gpi_sorted_slots.append(np.array([], dtype=int))
@@ -485,14 +513,10 @@ def _process_gpi_chunk(
 
     # --- Determine write positions ---
     existing_n_obs = out_root["n_obs"][gpi_start:gpi_end].astype(np.int32)
-    write_starts = existing_n_obs.copy()  # per-GPI obs offset to start writing
-    write_ends = write_starts + new_counts  # per-GPI obs end (exclusive)
+    write_starts = existing_n_obs.copy()
+    write_ends = write_starts + new_counts
 
     # --- Group writes by output obs chunk, then do read-modify-write ---
-    # Each GPI's write spans obs indices [write_starts[g], write_ends[g]).
-    # This may span multiple obs chunks. We batch by obs chunk.
-
-    # Find the range of obs chunks touched
     if write_ends.max() == 0:
         return
 
@@ -501,16 +525,13 @@ def _process_gpi_chunk(
     first_obs_chunk = min_obs // chunk_size_obs
     last_obs_chunk = (max_obs - 1) // chunk_size_obs
 
-    n_gpi_store = out_root["gpi"].shape[0]
     gpi_slice = slice(gpi_start, gpi_end)
-    gpi_slice_len = gpi_end - gpi_start
 
     for obs_chunk_idx in range(first_obs_chunk, last_obs_chunk + 1):
         obs_chunk_start = obs_chunk_idx * chunk_size_obs
         obs_chunk_end = min(obs_chunk_start + chunk_size_obs,
                             out_root["obs"].shape[0])
         obs_slice = slice(obs_chunk_start, obs_chunk_end)
-        obs_chunk_len = obs_chunk_end - obs_chunk_start
 
         # Check which GPIs have writes landing in this obs chunk
         has_write = (write_starts < obs_chunk_end) & (write_ends > obs_chunk_start)
@@ -527,16 +548,13 @@ def _process_gpi_chunk(
             ws = int(write_starts[g])
             we = int(write_ends[g])
 
-            # Overlap of this GPI's write range with this obs chunk
             ov_start = max(ws, obs_chunk_start)
             ov_end = min(we, obs_chunk_end)
 
-            # Indices into sorted data for this GPI
             data_ov_start = ov_start - ws
             data_ov_end = ov_end - ws
             relevant_slots = sorted_slots[data_ov_start:data_ov_end]
 
-            # Position within the chunk buffer
             rel_obs_start = ov_start - obs_chunk_start
             rel_obs_end = ov_end - obs_chunk_start
 
@@ -592,7 +610,6 @@ def _process_gpi_chunk(
                     rel_obs_start = ov_start - obs_chunk_start
                     rel_obs_end = ov_end - obs_chunk_start
 
-                    # data_cache[var] is (n_populated, n_beams, n_gpi_chunk)
                     chunk_data[g, rel_obs_start:rel_obs_end, :] = (
                         data_cache[var][relevant_slots, :, g]
                     )
