@@ -128,6 +128,7 @@ def stack_swaths_to_zarr(
             dt_start=dt_start,
             dt_end=dt_end,
             date_field_fmt=swath_files.date_field_fmt,
+            end_inclusive=False
         )
         
         _create_zarr_structure(
@@ -357,6 +358,7 @@ def _populate_zarr(
         dt_start=dt_start,
         dt_end=dt_end,
         date_field_fmt=swath_files.date_field_fmt,
+        end_inclusive=False
     )
     
     print(f"Found {len(filenames)} files to process")
