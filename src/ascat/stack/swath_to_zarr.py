@@ -360,7 +360,7 @@ def _populate_zarr(
     )
     
     print(f"Found {len(filenames)} files to process")
-    
+
     insert_func = partial(
         _insert_swath_file,
         swath_files=swath_files,
@@ -369,20 +369,20 @@ def _populate_zarr(
         time_resolution=time_resolution,
         sorted_grid=sorted_grid,
     )
-    
+
+    n_success = 0
     if n_workers > 1:
         with ProcessPoolExecutor(max_workers=n_workers) as executor:
             futures = [
                 executor.submit(insert_func, f)
                 for f in filenames
             ]
-            for future in futures:
-                future.result()
+            n_success = sum(1 for future in futures if future.result())
     else:
         for i, filename in enumerate(filenames):
             if (i + 1) % 100 == 0:
                 print(f"Processed {i + 1}/{len(filenames)} files")
-            
+
             if insert_func(filename):
                 n_success += 1
 
