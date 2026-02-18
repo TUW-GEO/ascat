@@ -62,10 +62,10 @@ MISSION_SAT_ID_IDX_MAP = {
 }
 
 BEAM_SUFFIXES = {
-    '_for': 0,  
-    '_fore': 0,  
-    '_mid': 1,  
-    '_aft': 2,  
+    '_for': 0,
+    '_fore': 0,
+    '_mid': 1,
+    '_aft': 2,
 }
 
 
@@ -85,11 +85,12 @@ def stack_swaths_to_zarr(
     sorted_grid=None,
 ):
     """Convert swath files to Zarr time-series format.
-    
+
     Creates a Zarr array with dimensions (swath_time, spacecraft, [beam,] gpi) and
     populates it with data from swath files. The Zarr structure is created on first
-    call and subsequent calls append data.
-    
+    call and subsequent calls append data, expanding the swath_time dimension if
+    the requested date_range extends beyond the existing store.
+
     Parameters
     ----------
     swath_files : SwathGridFiles
@@ -106,23 +107,11 @@ def stack_swaths_to_zarr(
         Number of worker processes for parallel processing. Default is 1.
     chunk_size_gpi : int, optional
         Chunk size for the GPI dimension in the Zarr array. Default is 4096.
-        
-    Examples
-    --------
-    >>> from ascat.swath import SwathGridFiles
-    >>> from ascat.swath_to_zarr import stack_swaths_to_zarr
-    >>> swath_files = SwathGridFiles.from_product_id("/data/swaths", "H129")
-    >>> stack_swaths_to_zarr(
-    ...     swath_files,
-    ...     "/data/output.zarr",
-    ...     date_range=(datetime(2024, 1, 1), datetime(2024, 1, 31)),
-    ...     time_resolution="2h",
-    ... )
     """
     out_path = Path(out_path)
     dt_start, dt_end = date_range
-    
-    if not out_path.exists():
+
+    if not (out_path / "zarr.json").exists():
         print(f"Creating Zarr structure at {out_path}")
 
         filenames = swath_files.search_period(
@@ -131,7 +120,7 @@ def stack_swaths_to_zarr(
             date_field_fmt=swath_files.date_field_fmt,
             end_inclusive=False
         )
-        
+
         _create_zarr_structure(
             out_path=out_path,
             grid=sorted_grid or swath_files.grid,
@@ -142,12 +131,15 @@ def stack_swaths_to_zarr(
             sat_series=swath_files.sat_series,
             sample_file=filenames[0]
         )
-    
+    else:
+        # Store exists — expand swath_time if date_range extends past current end.
+        _maybe_expand_swath_time(out_path, dt_end, time_resolution)
+
     print(f"Populating Zarr with data from {dt_start} to {dt_end}")
-    
+
     zarr_root = zarr.open(out_path, mode="a")
     time_coords = zarr_root["swath_time"][:]
-    
+
     _populate_zarr(
         swath_files=swath_files,
         zarr_root=zarr_root,
@@ -157,13 +149,72 @@ def stack_swaths_to_zarr(
         n_workers=n_workers,
         sorted_grid=sorted_grid,
     )
-    
+
     print("Done!")
+
+
+def _maybe_expand_swath_time(out_path, dt_end, time_resolution):
+    """Expand the swath_time dimension and all data arrays if dt_end is beyond
+    the current store's last time coordinate.
+
+    Parameters
+    ----------
+    out_path : Path
+        Path to the existing Zarr store.
+    dt_end : datetime
+        Requested end date.
+    time_resolution : str
+        Pandas frequency string matching the store's time resolution.
+    """
+    root = zarr.open(out_path, mode="a")
+    current_times = root["swath_time"][:]
+    last_time = pd.Timestamp(current_times[-1])
+    dt_end_ts = pd.Timestamp(dt_end)
+
+    if dt_end_ts <= last_time:
+        return
+
+    # Generate only the new time steps beyond the current end
+    new_times = pd.date_range(
+        start=last_time,
+        end=dt_end_ts,
+        freq=time_resolution,
+        inclusive="neither",  # exclude last_time itself
+    ).values
+
+    if len(new_times) == 0:
+        return
+
+    n_new = len(new_times)
+    old_n_time = len(current_times)
+    new_n_time = old_n_time + n_new
+    print(f"Expanding swath_time from {old_n_time} to {new_n_time} steps "
+          f"(adding {n_new} new timesteps up to {dt_end_ts})")
+
+    # Resize all data arrays along axis 0 (swath_time)
+    coord_names = {"swath_time", "spacecraft", "beam", "gpi", "longitude", "latitude"}
+    for name in root:
+        arr = root[name]
+        if not hasattr(arr, "ndim"):
+            continue
+        if name in coord_names:
+            continue
+        new_shape = list(arr.shape)
+        new_shape[0] = new_n_time
+        arr.resize(tuple(new_shape))
+
+    # Resize processed tracking array
+    root["processed"].resize((new_n_time, root["processed"].shape[1]))
+
+    # Append new time coordinates
+    root["swath_time"].resize((new_n_time,))
+    root["swath_time"][old_n_time:] = new_times
+
 
 def _sanitize_attrs(attrs):
     sanitized = {}
     for key, value in attrs.items():
-        if key == "scale_factor" and value==1:
+        if key == "scale_factor" and value == 1:
             continue
         # Fix common typo: calender -> calendar
         if key == "calender":
@@ -177,6 +228,7 @@ def _sanitize_attrs(attrs):
             sanitized[key] = value
     return sanitized
 
+
 def _create_zarr_structure(
     out_path,
     grid,
@@ -188,7 +240,7 @@ def _create_zarr_structure(
     sample_file,
 ):
     """Generate empty Zarr array with proper schema and dimensions.
-    
+
     Parameters
     ----------
     out_path : Path
@@ -213,20 +265,20 @@ def _create_zarr_structure(
     n_gpi = grid.n_gpi
     spacecraft_ids = MISSION_SAT_IDS_MAP.get(sat_series.lower())
     n_spacecraft = len(spacecraft_ids)
-    
+
     sample_ds = xr.open_dataset(
-        sample_file, 
-        mask_and_scale=False, 
-        decode_cf=False, 
+        sample_file,
+        mask_and_scale=False,
+        decode_cf=False,
         engine="h5netcdf"
     )
-    
+
     has_beams, data_vars = _detect_beam_structure(sample_ds)
     sample_ds.close()
-    
+
     store = zarr.storage.LocalStore(str(out_path))
     root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
-    
+
     if has_beams:
         dims = ("swath_time", "spacecraft", "beam", "gpi")
         n_beams = 3
@@ -236,13 +288,13 @@ def _create_zarr_structure(
         dims = ("swath_time", "spacecraft", "gpi")
         base_shape = (n_time, n_spacecraft, n_gpi)
         base_chunks = (1, 1, chunk_size_gpi)
-    
+
     for var in sorted(data_vars):
         var_dtype = sample_ds[var].dtype
         attrs = _sanitize_attrs(sample_ds[var].attrs)
         fill_val = attrs.get("_FillValue", dtype_to_nan[np.dtype(var_dtype)])
         attrs["_FillValue"] = FillValueCoder.encode(fill_val, var_dtype)
-        
+
         root.create_array(
             name=var,
             dtype=var_dtype,
@@ -259,7 +311,7 @@ def _create_zarr_structure(
             ],
             attributes=attrs,
         )
-    
+
     root.create_array(
         "swath_time",
         data=time_coords,
@@ -268,7 +320,7 @@ def _create_zarr_structure(
         fill_value=dtype_to_nan[np.dtype("datetime64[ns]")],
         compressors=None,
     )
-    
+
     root.create_array(
         "spacecraft",
         data=np.array(spacecraft_ids, dtype="int8"),
@@ -277,7 +329,17 @@ def _create_zarr_structure(
         fill_value=dtype_to_nan[np.dtype("int8")],
         compressors=None,
     )
-    
+
+    root.create_array(
+        "processed",
+        shape=(n_time, n_spacecraft),
+        dtype="bool",
+        chunks=(1, n_spacecraft),
+        dimension_names=("swath_time", "spacecraft"),
+        fill_value=False,
+        compressors=None,
+    )
+
     if has_beams:
         beam_names = np.array([b"fore", b"mid", b"aft"], dtype="S4")
         root.create_array(
@@ -288,14 +350,13 @@ def _create_zarr_structure(
             fill_value=b"",
             compressors=None,
         )
-    
+
     # Handle both BasicGrid and CellGrid
     try:
         gpis, lons, lats, _ = grid.get_grid_points()
     except ValueError:
-        # BasicGrid returns only 3 values
         gpis, lons, lats = grid.get_grid_points()
-    
+
     root.create_array(
         "gpi",
         data=np.asarray(gpis, dtype="int32"),
@@ -304,7 +365,7 @@ def _create_zarr_structure(
         fill_value=dtype_to_nan[np.dtype("int32")],
         compressors=None,
     )
-    
+
     root.create_array(
         "longitude",
         data=np.asarray(lons, dtype="float32"),
@@ -313,7 +374,7 @@ def _create_zarr_structure(
         fill_value=dtype_to_nan[np.dtype("float32")],
         compressors=None,
     )
-    
+
     root.create_array(
         "latitude",
         data=np.asarray(lats, dtype="float32"),
@@ -334,7 +395,7 @@ def _populate_zarr(
     n_workers=1,
 ):
     """Fill Zarr array with data from swath files.
-    
+
     Parameters
     ----------
     swath_files : SwathGridFiles
@@ -348,19 +409,19 @@ def _populate_zarr(
     time_resolution : str
         Pandas frequency string (e.g., 'h', '2h', '3min', 'D').
     sorted_grid : CellGrid, optional
-        If provided, use this grid to map GPIs instead of the original grid in the files.
+        If provided, use this grid to map GPIs instead of the original grid.
     n_workers : int, optional
-        Number of worker processes for parallel processing. Default is 1 (no parallelism).
+        Number of worker processes. Default is 1.
     """
     dt_start, dt_end = date_range
-    
+
     filenames = swath_files.search_period(
         dt_start=dt_start,
         dt_end=dt_end,
         date_field_fmt=swath_files.date_field_fmt,
         end_inclusive=False
     )
-    
+
     print(f"Found {len(filenames)} files to process")
 
     insert_func = partial(
@@ -385,14 +446,13 @@ def _populate_zarr(
         for i, filename in enumerate(filenames):
             if (i + 1) % 100 == 0:
                 print(f"Processed {i + 1}/{len(filenames)} files")
-
             if insert_func(filename):
                 n_success += 1
 
 
 def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resolution, sorted_grid=None):
     """Insert data from one swath file into Zarr array.
-    
+
     Parameters
     ----------
     filename : str or Path
@@ -406,8 +466,8 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
     time_resolution : str
         Pandas frequency string (e.g., 'h', '2h', '3min', 'D').
     sorted_grid : CellGrid, optional
-        If provided, use this grid to map GPIs instead of the original grid in the files.
-        
+        If provided, use this grid to map GPIs instead of the original grid.
+
     Returns
     -------
     bool
@@ -415,24 +475,24 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
     """
     try:
         filename = Path(filename)
-        
+
         dt = swath_files._parse_date(
-            filename, 
+            filename,
             date_field="date",
             date_field_fmt=swath_files.date_field_fmt
         )
         dt_np = np.datetime64(dt)
-        
+
         sat_id = _extract_sat_id(
             filename.name,
             fn_pattern=swath_files.ft.fn_templ,
             sat_series=swath_files.sat_series,
         )
-        
+
         time_delta = _freq_to_timedelta64(time_resolution)
-        
-        time_idx = np.searchsorted(time_coords, dt_np) 
-        time_idx_out_of_bounds = (time_idx >= len(time_coords)) 
+
+        time_idx = np.searchsorted(time_coords, dt_np)
+        time_idx_out_of_bounds = (time_idx >= len(time_coords))
         if time_idx_out_of_bounds or time_coords[time_idx] != dt_np:
             time_idx -= 1
         if time_coords[time_idx] + time_delta <= dt_np:
@@ -443,11 +503,11 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
                 f"Timestamp {dt_np} from {filename.name} not in time coordinates, skipping"
             )
             return False
-        
+
         sat_idx = MISSION_SAT_ID_IDX_MAP[swath_files.sat_series][str(sat_id)]
-        
+
         has_beams = "beam" in zarr_root
-        
+
         with xr.open_dataset(
             filename,
             mask_and_scale=False,
@@ -455,41 +515,34 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
             engine="h5netcdf",
         ) as ds:
             gpi = ds["location_id"].values.astype(int)
-            n_gpi = zarr_root["gpi"].shape[0]
-            
+
             if sorted_grid is not None:
                 lookup = np.argsort(sorted_grid.get_grid_points()[0])
                 gpi = lookup[gpi]
 
-            n_vars = len(ds.data_vars)
             start_time = time()
             for var in ds.data_vars:
                 if var in ["location_id", "latitude", "longitude"]:
                     continue
-                
+
                 if var not in zarr_root:
                     warnings.warn(f"Variable {var} not in Zarr schema, skipping")
                     continue
-                
+
                 var_data = ds[var].values
-                
+
                 if has_beams:
                     beam_idx = _get_beam_index(var)
-                    
                     if beam_idx is not None:
                         zarr_root[var][time_idx, sat_idx, beam_idx, gpi] = var_data
                     else:
-                        zarr_root[var][time_idx, sat_idx, gpi] = (
-                            var_data
-                        )
+                        zarr_root[var][time_idx, sat_idx, gpi] = var_data
                 else:
-                    zarr_root[var][time_idx, sat_idx, gpi] = (
-                        var_data
-                    )
-            elapsed = time() - start_time
-        
+                    zarr_root[var][time_idx, sat_idx, gpi] = var_data
+
+        zarr_root["processed"][time_idx, sat_idx] = True
         return True
-        
+
     except ValueError as e:
         warnings.warn(f"Skipping {filename}: {e}")
         return False
@@ -500,7 +553,7 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
 
 def _generate_time_coords(date_start, date_end, time_resolution):
     """Generate time coordinate array.
-    
+
     Parameters
     ----------
     date_start : datetime
@@ -509,23 +562,25 @@ def _generate_time_coords(date_start, date_end, time_resolution):
         End date.
     time_resolution : str
         Pandas frequency string (e.g., 'h', '2h', '3min', 'D').
-        
+
     Returns
     -------
     np.ndarray
         Array of datetime64[ns] values.
     """
-    return pd.date_range(start=date_start, end=date_end, freq=time_resolution, inclusive="left").values
+    return pd.date_range(
+        start=date_start, end=date_end, freq=time_resolution, inclusive="left"
+    ).values
 
 
 def _detect_beam_structure(sample_ds):
     """Detect if dataset has beam variants and extract variable names.
-    
+
     Parameters
     ----------
     sample_ds : xr.Dataset
         Sample dataset to analyze.
-        
+
     Returns
     -------
     has_beams : bool
@@ -537,16 +592,16 @@ def _detect_beam_structure(sample_ds):
         var for var in sample_ds.data_vars
         if var not in ["location_id", "latitude", "longitude", "lon", "lat"]
     }
-    
+
     has_beams = any(
         var.endswith(suffix)
         for var in data_vars
         for suffix in BEAM_SUFFIXES
     )
-    
+
     if not has_beams:
         return False, data_vars
-    
+
     base_names = set()
     for var in data_vars:
         stripped = False
@@ -557,7 +612,7 @@ def _detect_beam_structure(sample_ds):
                 break
         if not stripped:
             base_names.add(var)
-    
+
     result_vars = set()
     for base in base_names:
         beam_variants = [f"{base}{suffix}" for suffix in BEAM_SUFFIXES]
@@ -565,18 +620,18 @@ def _detect_beam_structure(sample_ds):
             result_vars.update(bv for bv in beam_variants if bv in sample_ds.data_vars)
         elif base in sample_ds.data_vars:
             result_vars.add(base)
-    
+
     return True, result_vars
 
 
 def _get_beam_index(var_name):
     """Extract beam index from variable name suffix.
-    
+
     Parameters
     ----------
     var_name : str
         Variable name potentially containing beam suffix.
-        
+
     Returns
     -------
     int or None
@@ -590,11 +645,7 @@ def _get_beam_index(var_name):
 
 def _extract_sat_id(filename, fn_pattern, sat_series):
     """Extract satellite ID from filename using the product's filename pattern.
-    
-    This function finds the {sat} field in the filename pattern and extracts
-    the corresponding value from the actual filename, then looks up the
-    satellite ID based on the satellite series.
-    
+
     Parameters
     ----------
     filename : str
@@ -603,39 +654,29 @@ def _extract_sat_id(filename, fn_pattern, sat_series):
         Filename pattern with {sat} field (e.g., "...-METOP{sat}-...").
     sat_series : str
         Satellite series name (e.g., 'metop', 'ers', 'metop-sg').
-        
+
     Returns
     -------
     int
         Satellite ID.
-        
+
     Raises
     ------
     ValueError
-        If filename doesn't match pattern, satellite identifier can't be extracted,
-        or (sat_series, identifier) combination is not in MISSION_SAT_ID_MAP.
-        
-    Examples
-    --------
-    >>> _extract_sat_id(
-    ...     "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-6.25km-H129_C_LIIB_...",
-    ...     "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H129_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc",
-    ...     sat_series="metop"
-    ... )
-    3
+        If filename doesn't match pattern or satellite can't be identified.
     """
     escaped_pattern = re.escape(fn_pattern)
     pattern_with_sat = re.sub(r'\\{sat\\}', r'(?P<sat>.*?)', escaped_pattern)
     pattern_with_wildcards = re.sub(r'\\{[^}]+\\}', r'.*?', pattern_with_sat)
-    
+
     match = re.match(pattern_with_wildcards, filename)
-    
+
     if not match:
         raise ValueError(
             f"Filename '{filename}' does not match expected pattern '{fn_pattern}'. "
             f"This file may be corrupted or from a different product."
         )
-    
+
     try:
         sat_identifier = match.group('sat').lower()
     except (IndexError, AttributeError) as e:
@@ -643,10 +684,10 @@ def _extract_sat_id(filename, fn_pattern, sat_series):
             f"Could not extract satellite identifier from '{filename}' "
             f"using pattern '{fn_pattern}'. Pattern may not contain {{sat}} field."
         ) from e
-    
+
     sat_series_lower = sat_series.lower()
     mission_idxs = MISSION_SAT_ID_IDX_MAP.get(sat_series_lower)
-    
+
     if mission_idxs is None or sat_identifier not in mission_idxs:
         known_sats = [
             f"{series.upper()} {id}"
@@ -661,5 +702,5 @@ def _extract_sat_id(filename, fn_pattern, sat_series):
             f"to MISSION_SAT_ID_MAP in swath_to_zarr.py, or check that your mission "
             f"and fn_pattern are configured correctly."
         )
-    
+
     return sat_identifier
