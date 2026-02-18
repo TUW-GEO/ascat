@@ -36,6 +36,7 @@ The output follows the Zarr multiscales conventions, with each pyramid level
 stored as a numbered group within a single Zarr store.
 """
 
+import warnings
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from pathlib import Path
@@ -707,7 +708,9 @@ def _gaussian_downsample_2d(data, fill_val, sigma):
     if np.issubdtype(out_dtype, np.floating):
         result = downsampled.astype(out_dtype)
     else:
-        result = np.round(downsampled).astype(out_dtype)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            result = np.round(downsampled).astype(out_dtype)
     result[no_data] = fill_val
 
     return result

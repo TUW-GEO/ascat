@@ -209,7 +209,6 @@ def _create_zarr_structure(
         Sample file to determine schema.
     """
     time_coords = _generate_time_coords(date_start, date_end, time_resolution)
-    print(time_coords)
     n_time = len(time_coords)
     n_gpi = grid.n_gpi
     spacecraft_ids = MISSION_SAT_IDS_MAP.get(sat_series.lower())
@@ -462,8 +461,6 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
                 lookup = np.argsort(sorted_grid.get_grid_points()[0])
                 gpi = lookup[gpi]
 
-            print(f"Setting data vars for satellite {sat_id} at time {dt_np}.",
-                  f"time index {time_idx}, should be {time_coords[time_idx]}")
             n_vars = len(ds.data_vars)
             start_time = time()
             for var in ds.data_vars:
@@ -490,7 +487,6 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
                         var_data
                     )
             elapsed = time() - start_time
-            print(f"Inserted {n_vars} variables from {filename.name} in {elapsed:.2f} seconds, {elapsed / n_vars:.2f} seconds/variable")
         
         return True
         
