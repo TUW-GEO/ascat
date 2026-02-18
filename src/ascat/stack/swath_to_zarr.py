@@ -40,6 +40,7 @@ from functools import partial
 from pathlib import Path
 from time import time
 
+import math
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -82,6 +83,7 @@ def stack_swaths_to_zarr(
     time_resolution="h",
     n_workers=1,
     chunk_size_gpi=4096,
+    gpi_shard_size=None,
     sorted_grid=None,
 ):
     """Convert swath files to Zarr time-series format.
@@ -106,7 +108,12 @@ def stack_swaths_to_zarr(
     n_workers : int, optional
         Number of worker processes for parallel processing. Default is 1.
     chunk_size_gpi : int, optional
-        Chunk size for the GPI dimension in the Zarr array. Default is 4096.
+        Chunk size (inner chunk) for the GPI dimension. Default is 4096.
+    gpi_shard_size : int or None, optional
+        Shard size along the GPI dimension.  Must be a multiple of
+        ``chunk_size_gpi``.  If None (default), a balanced two-shard split is
+        computed automatically as the smallest multiple of ``chunk_size_gpi``
+        that is >= half the total number of GPIs.
     """
     out_path = Path(out_path)
     dt_start, dt_end = date_range
@@ -128,6 +135,7 @@ def stack_swaths_to_zarr(
             date_end=dt_end,
             time_resolution=time_resolution,
             chunk_size_gpi=chunk_size_gpi,
+            gpi_shard_size=gpi_shard_size,
             sat_series=swath_files.sat_series,
             sample_file=filenames[0]
         )
@@ -229,6 +237,16 @@ def _sanitize_attrs(attrs):
     return sanitized
 
 
+def _balanced_shard_size(n_gpi, chunk_size_gpi, n_shards=2):
+    """Compute the smallest multiple of chunk_size_gpi >= ceil(n_gpi / n_shards).
+
+    Produces n_shards shards of roughly equal size rather than one large shard
+    and one tiny remainder shard.
+    """
+    per_shard = math.ceil(n_gpi / n_shards)
+    return math.ceil(per_shard / chunk_size_gpi) * chunk_size_gpi
+
+
 def _create_zarr_structure(
     out_path,
     grid,
@@ -236,6 +254,7 @@ def _create_zarr_structure(
     date_end,
     time_resolution,
     chunk_size_gpi,
+    gpi_shard_size,
     sat_series,
     sample_file,
 ):
@@ -254,7 +273,9 @@ def _create_zarr_structure(
     time_resolution : str
         Pandas frequency string (e.g., 'h', '2h', '3min', 'D').
     chunk_size_gpi : int
-        Chunk size for GPI dimension.
+        Inner chunk size for GPI dimension.
+    gpi_shard_size : int or None
+        Shard size for GPI dimension.  None triggers automatic balanced split.
     sat_series : str
         Satellite series name (e.g., 'metop', 'ers') to determine number of spacecraft.
     sample_file : Path
@@ -265,6 +286,14 @@ def _create_zarr_structure(
     n_gpi = grid.n_gpi
     spacecraft_ids = MISSION_SAT_IDS_MAP.get(sat_series.lower())
     n_spacecraft = len(spacecraft_ids)
+
+    if gpi_shard_size is None:
+        gpi_shard_size = _balanced_shard_size(n_gpi, chunk_size_gpi)
+    elif gpi_shard_size % chunk_size_gpi != 0:
+        raise ValueError(
+            f"gpi_shard_size ({gpi_shard_size}) must be a multiple of "
+            f"chunk_size_gpi ({chunk_size_gpi})"
+        )
 
     sample_ds = xr.open_dataset(
         sample_file,
@@ -283,11 +312,15 @@ def _create_zarr_structure(
         dims = ("swath_time", "spacecraft", "beam", "gpi")
         n_beams = 3
         base_shape = (n_time, n_spacecraft, n_beams, n_gpi)
-        base_chunks = (1, 1, 1, chunk_size_gpi)
+        inner_chunks = (1, 1, 1, chunk_size_gpi)
+        # Shard shape: (t, s, beam) dims are size 1 so each shard file belongs
+        # to exactly one (t, s, beam) slot — no concurrent write contention.
+        base_shards = (1, 1, 1, gpi_shard_size)
     else:
         dims = ("swath_time", "spacecraft", "gpi")
         base_shape = (n_time, n_spacecraft, n_gpi)
-        base_chunks = (1, 1, chunk_size_gpi)
+        inner_chunks = (1, 1, chunk_size_gpi)
+        base_shards = (1, 1, gpi_shard_size)
 
     for var in sorted(data_vars):
         var_dtype = sample_ds[var].dtype
@@ -299,16 +332,15 @@ def _create_zarr_structure(
             name=var,
             dtype=var_dtype,
             shape=base_shape,
-            chunks=base_chunks,
+            chunks=inner_chunks,
+            shards=base_shards,
             dimension_names=dims,
             fill_value=fill_val,
-            compressors=[
-                zarr.codecs.BloscCodec(
-                    cname="zstd",
-                    clevel=3,
-                    shuffle=zarr.codecs.BloscShuffle.shuffle
-                )
-            ],
+            compressors=zarr.codecs.BloscCodec(
+                cname="zstd",
+                clevel=3,
+                shuffle=zarr.codecs.BloscShuffle.shuffle
+            ),
             attributes=attrs,
         )
 

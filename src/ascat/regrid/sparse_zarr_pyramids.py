@@ -558,16 +558,9 @@ def _regrid_slice(
     level0 = out_root["0"]
 
     # Quick check: does this slice have any data in the sparse store?
-    store_path = Path(sparse_root.store.root)
-    n_gpi_chunks = -(-sparse_root["gpi"].shape[0] // sparse_root["time"].chunks[-1])
-    has_any_data = False
-    for gc in range(n_gpi_chunks):
-        chunk_path = store_path / "time" / "c" / str(t_idx) / str(s_idx) / str(gc)
-        if chunk_path.exists():
-            has_any_data = True
-            break
-
-    if not has_any_data:
+    # Use the processed array rather than probing chunk files directly,
+    # which avoids needing to know whether the store is sharded or not.
+    if not sparse_root["processed"][t_idx, s_idx]:
         return
 
     flat_gpi_idx = nn_gpi_indices[nn_valid_mask]
