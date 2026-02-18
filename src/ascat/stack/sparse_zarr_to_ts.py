@@ -34,19 +34,71 @@ one with dimensions (gpi, obs, [beam]), where observations are packed densely
 per GPI and sorted by measurement time.
 
 Supports appending new data to an existing dense store.
+
+Optionally supports sharded arrays (Zarr v3 sharding_indexed codec) along
+the gpi and/or obs dimensions.  When sharding is enabled the unit of
+parallelism is automatically promoted to the shard boundary so that no two
+workers ever write to the same shard file concurrently.
 """
 
 from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from time import time as timer
+from typing import Optional
 
 import numpy as np
 import zarr
 from tqdm import tqdm
+from zarr.codecs import (
+    BloscCodec,
+    BloscShuffle,
+)
 
 from ascat.utils import dtype_to_nan
 
+
+# ---------------------------------------------------------------------------
+# Sharding configuration (internal helper, not part of the public API)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _ShardingConfig:
+    """Resolved sharding parameters, built inside ``sparse_to_dense``."""
+
+    shard_size_gpi: int
+    inner_chunk_gpi: int
+    shard_size_obs: Optional[int]
+    inner_chunk_obs: int
+
+    def __post_init__(self):
+        if self.shard_size_gpi % self.inner_chunk_gpi != 0:
+            raise ValueError(
+                f"shard_size_gpi ({self.shard_size_gpi}) must be a multiple of "
+                f"chunk_size_gpi ({self.inner_chunk_gpi})"
+            )
+        if self.shard_size_obs is not None:
+            if self.shard_size_obs % self.inner_chunk_obs != 0:
+                raise ValueError(
+                    f"shard_size_obs ({self.shard_size_obs}) must be a multiple of "
+                    f"chunk_size_obs ({self.inner_chunk_obs})"
+                )
+
+    @property
+    def obs_alignment(self) -> int:
+        """Unit to which the obs dimension is padded/aligned."""
+        return self.shard_size_obs if self.shard_size_obs is not None else self.inner_chunk_obs
+
+    @property
+    def gpi_alignment(self) -> int:
+        """Worker granularity: one full shard per worker."""
+        return self.shard_size_gpi
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
 def sparse_to_dense(
     sparse_path,
@@ -55,6 +107,8 @@ def sparse_to_dense(
     chunk_size_obs=300,
     n_workers=1,
     gpi_mask=None,
+    shard_size_gpi=None,
+    shard_size_obs=None,
 ):
     """Convert a sparse swath-time Zarr cube to a dense time-series store.
 
@@ -65,15 +119,30 @@ def sparse_to_dense(
     out_path : str or Path
         Path for the output dense Zarr store with dims (gpi, obs, [beam]).
     chunk_size_gpi : int, optional
-        Chunk size along the gpi dimension. Defaults to sparse store's GPI chunk size.
+        Chunk size along the gpi dimension.  When ``shard_size_gpi`` is also
+        given this becomes the *inner* (compressed) chunk size within each
+        shard.  Defaults to the sparse store's GPI chunk size.
     chunk_size_obs : int, optional
-        Chunk size along the obs dimension. Default 300.
+        Chunk size along the obs dimension.  When ``shard_size_obs`` is also
+        given this becomes the *inner* (compressed) chunk size within each
+        shard.  Default 300.
     n_workers : int, optional
         Number of parallel workers for processing GPI chunks. Default 1.
+        When ``shard_size_gpi`` is set each worker is assigned a full shard's
+        worth of GPIs so that no two workers write to the same shard file.
     gpi_mask : np.ndarray of bool, optional
         Boolean array of shape (n_gpi,). GPIs where gpi_mask is True will be
         skipped entirely — no data is read or written for them. Default None
         (process all GPIs).
+    shard_size_gpi : int, optional
+        Number of GPIs per shard.  Must be a multiple of ``chunk_size_gpi``.
+        When provided, output arrays use the sharding_indexed codec along the
+        gpi dimension and parallelism is aligned to shard boundaries.
+        Default None (no gpi sharding).
+    shard_size_obs : int, optional
+        Number of obs per shard.  Must be a multiple of ``chunk_size_obs``.
+        When provided, output arrays use the sharding_indexed codec along the
+        obs dimension.  Default None (no obs sharding).
     """
     sparse_path = Path(sparse_path)
     out_path = Path(out_path)
@@ -86,6 +155,22 @@ def sparse_to_dense(
     n_swath_time = sparse_root["swath_time"].shape[0]
     sparse_gpi_chunk_size = sparse_root["time"].chunks[-1]
     chunk_size_gpi = chunk_size_gpi or sparse_gpi_chunk_size
+
+    # Build internal sharding config if shard sizes were requested.
+    # chunk_size_gpi/obs become the inner chunk sizes within each shard.
+    if shard_size_gpi is not None:
+        sharding = _ShardingConfig(
+            shard_size_gpi=shard_size_gpi,
+            inner_chunk_gpi=chunk_size_gpi,
+            shard_size_obs=shard_size_obs,
+            inner_chunk_obs=chunk_size_obs,
+        )
+    else:
+        sharding = None
+
+    # Resolve alignment and worker granularity.
+    obs_alignment = sharding.obs_alignment if sharding else chunk_size_obs
+    worker_gpi_size = sharding.gpi_alignment if sharding else chunk_size_gpi
 
     if gpi_mask is not None:
         gpi_mask = np.asarray(gpi_mask, dtype=bool)
@@ -109,15 +194,11 @@ def sparse_to_dense(
     print(f"Scan complete in {timer() - scan_start:.1f}s, "
           f"found {sum(len(v) for v in populated_map.values())} populated chunk slots")
 
-    # Estimate max new obs per GPI: each populated slot can contribute at most
-    # one observation per GPI, and we merge all spacecraft.
     max_new_obs = max((len(slots) for slots in populated_map.values()), default=0)
 
     # --- Create or open output store, pre-expanding if needed ---
-    if not out_path.exists():
-        # Round up to chunk-aligned size
-        needed = max_new_obs
-        obs_dim_size = _round_up_to_chunk(needed, chunk_size_obs)
+    if not (out_path / "zarr.json").exists():
+        obs_dim_size = _round_up_to_chunk(max_new_obs, obs_alignment)
         print(f"Creating dense Zarr structure at {out_path} "
               f"with obs_dim_size={obs_dim_size}")
         _create_dense_structure(
@@ -129,6 +210,7 @@ def sparse_to_dense(
             obs_dim_size=obs_dim_size,
             chunk_size_gpi=chunk_size_gpi,
             chunk_size_obs=chunk_size_obs,
+            sharding=sharding,
         )
     else:
         out_root_check = zarr.open(out_path, mode="a")
@@ -137,12 +219,12 @@ def sparse_to_dense(
         worst_case = existing_max_nobs + max_new_obs
         if worst_case > current_obs_size:
             _expand_obs_dimension(
-                out_root_check, worst_case, chunk_size_obs,
+                out_root_check, worst_case, obs_alignment,
                 beam_vars, scalar_vars, has_beams,
             )
 
     # --- Process GPI chunks in parallel ---
-    gpi_chunks = _build_gpi_chunk_ranges(n_gpi, chunk_size_gpi)
+    gpi_chunks = _build_gpi_chunk_ranges(n_gpi, worker_gpi_size)
     print(f"Processing {len(gpi_chunks)} GPI chunks with {n_workers} workers")
 
     process_func = partial(
@@ -154,7 +236,9 @@ def sparse_to_dense(
         has_beams=has_beams,
         populated_map=populated_map,
         sparse_gpi_chunk_size=sparse_gpi_chunk_size,
+        inner_chunk_gpi=chunk_size_gpi,
         chunk_size_obs=chunk_size_obs,
+        obs_alignment=obs_alignment,
         gpi_mask=gpi_mask,
     )
 
@@ -238,6 +322,29 @@ def _round_up_to_chunk(n, chunk_size):
     return -(-n // chunk_size) * chunk_size
 
 
+def _make_array_kwargs(inner_chunk_shape, sharding: Optional[_ShardingConfig]):
+    """Return kwargs for ``create_array`` covering chunks, shards, and compression.
+
+    Uses the zarr 3.1.x API: ``chunks=`` for the inner chunk shape,
+    ``shards=`` for the shard shape (when sharding is active), and
+    ``compressors=`` for inner compression in both cases.
+    The beam axis (axis 2, if present) is never sharded.
+    """
+    kwargs = {
+        "chunks": inner_chunk_shape,
+        "compressors": BloscCodec(cname="zstd", clevel=3, shuffle=BloscShuffle.shuffle),
+    }
+
+    if sharding is not None:
+        shard_shape = list(inner_chunk_shape)
+        shard_shape[0] = sharding.shard_size_gpi
+        if len(shard_shape) > 1 and sharding.shard_size_obs is not None:
+            shard_shape[1] = sharding.shard_size_obs
+        kwargs["shards"] = tuple(shard_shape)
+
+    return kwargs
+
+
 def _create_dense_structure(
     out_path,
     sparse_root,
@@ -247,6 +354,7 @@ def _create_dense_structure(
     obs_dim_size,
     chunk_size_gpi,
     chunk_size_obs,
+    sharding: Optional[_ShardingConfig] = None,
 ):
     """Create the empty dense Zarr store."""
     n_gpi = sparse_root["gpi"].shape[0]
@@ -254,48 +362,44 @@ def _create_dense_structure(
     store = zarr.storage.LocalStore(str(out_path))
     root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
 
-    compressors = [
-        zarr.codecs.BloscCodec(
-            cname="zstd", clevel=3, shuffle=zarr.codecs.BloscShuffle.shuffle
-        )
-    ]
-
     if has_beams:
         n_beams = sparse_root["beam"].shape[0]
         for var in sorted(beam_vars):
             src = sparse_root[var]
+            arr_kwargs = _make_array_kwargs((chunk_size_gpi, chunk_size_obs, 1), sharding)
             root.create_array(
                 name=var,
                 dtype=src.dtype,
                 shape=(n_gpi, obs_dim_size, n_beams),
-                chunks=(chunk_size_gpi, chunk_size_obs, 1),
                 dimension_names=("gpi", "obs", "beam"),
                 fill_value=src.metadata.fill_value,
-                compressors=compressors,
                 attributes=dict(src.attrs),
+                **arr_kwargs,
             )
 
     for var in sorted(scalar_vars):
         src = sparse_root[var]
+        arr_kwargs = _make_array_kwargs((chunk_size_gpi, chunk_size_obs), sharding)
         root.create_array(
             name=var,
             dtype=src.dtype,
             shape=(n_gpi, obs_dim_size),
-            chunks=(chunk_size_gpi, chunk_size_obs),
             dimension_names=("gpi", "obs"),
             fill_value=src.metadata.fill_value,
-            compressors=compressors,
             attributes=dict(src.attrs),
+            **arr_kwargs,
         )
 
     root.create_array(
         name="n_obs",
         dtype="uint32",
         shape=(n_gpi,),
-        chunks=(chunk_size_gpi,),
+        chunks=(sharding.shard_size_gpi if sharding else chunk_size_gpi,),
         dimension_names=("gpi",),
         fill_value=0,
-        compressors=compressors,
+        compressors=[
+            BloscCodec(cname="zstd", clevel=3, shuffle=BloscShuffle.shuffle)
+        ],
     )
 
     root.create_array(
@@ -345,10 +449,15 @@ def _create_dense_structure(
         )
 
 
-def _expand_obs_dimension(out_root, needed_size, chunk_size_obs, beam_vars, scalar_vars, has_beams):
-    """Expand the obs dimension in chunk-aligned increments."""
+def _expand_obs_dimension(out_root, needed_size, obs_alignment, beam_vars, scalar_vars, has_beams):
+    """Expand the obs dimension in alignment-sized increments.
+
+    ``obs_alignment`` is the shard obs size when sharding is active, or the
+    plain chunk obs size otherwise, ensuring expansions always land on a
+    shard/chunk boundary.
+    """
     current_size = out_root["obs"].shape[0]
-    new_size = _round_up_to_chunk(needed_size, chunk_size_obs)
+    new_size = _round_up_to_chunk(needed_size, obs_alignment)
 
     if new_size <= current_size:
         return
@@ -395,42 +504,31 @@ def _process_gpi_chunk(
     has_beams,
     populated_map,
     sparse_gpi_chunk_size,
+    inner_chunk_gpi,
     chunk_size_obs,
+    obs_alignment,
     gpi_mask=None,
 ):
-    """Process a single chunk of GPIs: extract, sort, and write/append.
+    """Process a range of GPIs: extract, sort, and write/append to the dense store.
 
-    Uses a chunk-batched read-modify-write strategy: for each output
-    (gpi_chunk, obs_chunk) that needs updating, read the full chunk from
-    the output store, apply all GPI updates in-memory, write it back once.
+    When sharding is active ``gpi_range`` spans a full shard (e.g. 1024 GPIs)
+    so this worker has exclusive ownership of those shard files.  Internally
+    we iterate in ``inner_chunk_gpi``-sized sub-chunks (e.g. 32 GPIs) to keep
+    memory usage proportional to the inner chunk rather than the full shard.
+    Without sharding ``inner_chunk_gpi`` equals the worker range size so the
+    inner loop runs exactly once, preserving the original behaviour.
 
     Parameters
     ----------
     gpi_range : tuple of (int, int)
-        (start, end) GPI indices for this chunk.
-    sparse_path : str
-        Path to sparse Zarr store.
-    out_path : str
-        Path to output dense Zarr store.
-    beam_vars : set of str
-        Beam-dimensioned variable names.
-    scalar_vars : set of str
-        Scalar variable names.
-    has_beams : bool
-        Whether beam dimension exists.
-    populated_map : dict[int, list[tuple[int, int]]]
-        Pre-scanned map of gpi_chunk_index -> populated (t_idx, s_idx) slots.
-    sparse_gpi_chunk_size : int
-        GPI chunk size in the sparse store.
-    chunk_size_obs : int
-        Chunk size along the obs dimension in the output store.
-    gpi_mask : np.ndarray of bool or None
-        If provided, GPIs where mask is True are skipped.
+        (start, end) GPI indices owned by this worker.
+    inner_chunk_gpi : int
+        Sub-chunk size for the inner read-modify-write loop.
+    obs_alignment : int
+        Shard obs size (sharding) or plain chunk obs size (no sharding).
     """
     gpi_start, gpi_end = gpi_range
-    n_gpi_chunk = gpi_end - gpi_start
 
-    # Extract local mask for this chunk
     if gpi_mask is not None:
         local_mask = gpi_mask[gpi_start:gpi_end]
         if local_mask.all():
@@ -438,10 +536,9 @@ def _process_gpi_chunk(
     else:
         local_mask = None
 
-    # Find populated slots for this GPI range
+    # Collect all populated slots that overlap this worker's GPI range.
     gc_start = gpi_start // sparse_gpi_chunk_size
     gc_end = (gpi_end - 1) // sparse_gpi_chunk_size
-
     populated_set = set()
     for gc in range(gc_start, gc_end + 1):
         populated_set.update(populated_map.get(gc, []))
@@ -450,6 +547,58 @@ def _process_gpi_chunk(
         return
 
     populated = sorted(populated_set)
+
+    for sub_start in range(gpi_start, gpi_end, inner_chunk_gpi):
+        sub_end = min(sub_start + inner_chunk_gpi, gpi_end)
+
+        if local_mask is not None:
+            sub_offset = sub_start - gpi_start
+            sub_mask = local_mask[sub_offset: sub_offset + (sub_end - sub_start)]
+            if sub_mask.all():
+                continue
+        else:
+            sub_mask = None
+
+        _process_inner_gpi_chunk(
+            gpi_start=sub_start,
+            gpi_end=sub_end,
+            sparse_path=sparse_path,
+            out_path=out_path,
+            beam_vars=beam_vars,
+            scalar_vars=scalar_vars,
+            has_beams=has_beams,
+            populated=populated,
+            sparse_gpi_chunk_size=sparse_gpi_chunk_size,
+            chunk_size_obs=chunk_size_obs,
+            obs_alignment=obs_alignment,
+            local_mask=sub_mask,
+        )
+
+
+def _process_inner_gpi_chunk(
+    gpi_start,
+    gpi_end,
+    sparse_path,
+    out_path,
+    beam_vars,
+    scalar_vars,
+    has_beams,
+    populated,
+    sparse_gpi_chunk_size,
+    chunk_size_obs,
+    obs_alignment,
+    local_mask=None,
+):
+    """Core read-extract-sort-write logic for a single inner GPI sub-chunk.
+
+    Uses a chunk-batched read-modify-write strategy: for each output
+    (gpi_chunk, obs_chunk) that needs updating, read the full chunk from
+    the output store, apply all GPI updates in-memory, write it back once.
+
+    The obs-dimension loop iterates in ``obs_alignment``-sized steps so that
+    each read-modify-write cycle aligns to shard (or plain chunk) boundaries.
+    """
+    n_gpi_chunk = gpi_end - gpi_start
 
     sparse_root = zarr.open(sparse_path, mode="r")
     out_root = zarr.open(out_path, mode="a")
@@ -471,7 +620,6 @@ def _process_gpi_chunk(
     new_counts = np.zeros(n_gpi_chunk, dtype=np.int32)
 
     for g in range(n_gpi_chunk):
-        # Skip masked GPIs
         if local_mask is not None and local_mask[g]:
             gpi_sorted_slots.append(np.array([], dtype=int))
             continue
@@ -514,24 +662,24 @@ def _process_gpi_chunk(
     write_starts = existing_n_obs.copy()
     write_ends = write_starts + new_counts
 
-    # --- Group writes by output obs chunk, then do read-modify-write ---
     if write_ends.max() == 0:
         return
 
     min_obs = int(write_starts[write_starts < write_ends].min())
     max_obs = int(write_ends.max())
-    first_obs_chunk = min_obs // chunk_size_obs
-    last_obs_chunk = (max_obs - 1) // chunk_size_obs
+
+    # Loop over obs_alignment-sized windows (shard or plain chunk boundary).
+    first_obs_chunk = min_obs // obs_alignment
+    last_obs_chunk = (max_obs - 1) // obs_alignment
 
     gpi_slice = slice(gpi_start, gpi_end)
 
     for obs_chunk_idx in range(first_obs_chunk, last_obs_chunk + 1):
-        obs_chunk_start = obs_chunk_idx * chunk_size_obs
-        obs_chunk_end = min(obs_chunk_start + chunk_size_obs,
+        obs_chunk_start = obs_chunk_idx * obs_alignment
+        obs_chunk_end = min(obs_chunk_start + obs_alignment,
                             out_root["obs"].shape[0])
         obs_slice = slice(obs_chunk_start, obs_chunk_end)
 
-        # Check which GPIs have writes landing in this obs chunk
         has_write = (write_starts < obs_chunk_end) & (write_ends > obs_chunk_start)
         if not np.any(has_write):
             continue
@@ -543,22 +691,13 @@ def _process_gpi_chunk(
 
         for g in np.where(has_write)[0]:
             sorted_slots = gpi_sorted_slots[g]
-            ws = int(write_starts[g])
-            we = int(write_ends[g])
-
+            ws, we = int(write_starts[g]), int(write_ends[g])
             ov_start = max(ws, obs_chunk_start)
             ov_end = min(we, obs_chunk_end)
-
-            data_ov_start = ov_start - ws
-            data_ov_end = ov_end - ws
-            relevant_slots = sorted_slots[data_ov_start:data_ov_end]
-
+            rel_slots = sorted_slots[ov_start - ws: ov_end - ws]
             rel_obs_start = ov_start - obs_chunk_start
             rel_obs_end = ov_end - obs_chunk_start
-
-            chunk_data_time[g, rel_obs_start:rel_obs_end] = (
-                time_slices[relevant_slots, g]
-            )
+            chunk_data_time[g, rel_obs_start:rel_obs_end] = time_slices[rel_slots, g]
 
         out_root[time_var][gpi_slice, obs_slice] = chunk_data_time
 
@@ -571,20 +710,14 @@ def _process_gpi_chunk(
 
             for g in np.where(has_write)[0]:
                 sorted_slots = gpi_sorted_slots[g]
-                ws = int(write_starts[g])
-                we = int(write_ends[g])
-
+                ws, we = int(write_starts[g]), int(write_ends[g])
                 ov_start = max(ws, obs_chunk_start)
                 ov_end = min(we, obs_chunk_end)
-                data_ov_start = ov_start - ws
-                data_ov_end = ov_end - ws
-                relevant_slots = sorted_slots[data_ov_start:data_ov_end]
-
+                rel_slots = sorted_slots[ov_start - ws: ov_end - ws]
                 rel_obs_start = ov_start - obs_chunk_start
                 rel_obs_end = ov_end - obs_chunk_start
-
                 chunk_data[g, rel_obs_start:rel_obs_end] = (
-                    data_cache[var][relevant_slots, g]
+                    data_cache[var][rel_slots, g]
                 )
 
             out_root[var][gpi_slice, obs_slice] = chunk_data
@@ -596,20 +729,14 @@ def _process_gpi_chunk(
 
                 for g in np.where(has_write)[0]:
                     sorted_slots = gpi_sorted_slots[g]
-                    ws = int(write_starts[g])
-                    we = int(write_ends[g])
-
+                    ws, we = int(write_starts[g]), int(write_ends[g])
                     ov_start = max(ws, obs_chunk_start)
                     ov_end = min(we, obs_chunk_end)
-                    data_ov_start = ov_start - ws
-                    data_ov_end = ov_end - ws
-                    relevant_slots = sorted_slots[data_ov_start:data_ov_end]
-
+                    rel_slots = sorted_slots[ov_start - ws: ov_end - ws]
                     rel_obs_start = ov_start - obs_chunk_start
                     rel_obs_end = ov_end - obs_chunk_start
-
                     chunk_data[g, rel_obs_start:rel_obs_end, :] = (
-                        data_cache[var][relevant_slots, :, g]
+                        data_cache[var][rel_slots, :, g]
                     )
 
                 out_root[var][gpi_slice, obs_slice, :] = chunk_data
