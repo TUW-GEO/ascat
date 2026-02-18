@@ -127,7 +127,7 @@ def stack_swaths_to_zarr(
 
         filenames = swath_files.search_period(
             dt_start=dt_start,
-            dt_end=dt_end,
+            dt_end=dt_start + timedelta(days=7),
             date_field_fmt=swath_files.date_field_fmt,
             end_inclusive=False
         )
