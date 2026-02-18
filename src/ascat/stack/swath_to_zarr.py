@@ -47,6 +47,7 @@ import zarr
 from xarray.backends.zarr import FillValueCoder, encode_zarr_attr_value
 from dask import delayed
 from dask.base import compute
+from tqdm import tqdm
 
 from ascat.utils import dtype_to_nan
 
@@ -379,6 +380,7 @@ def _populate_zarr(
                 executor.submit(insert_func, f)
                 for f in filenames
             ]
+            futures = tqdm(futures, total=len(filenames), desc="Processing files")
             n_success = sum(1 for future in futures if future.result())
     else:
         for i, filename in enumerate(filenames):

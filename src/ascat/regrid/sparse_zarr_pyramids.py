@@ -44,6 +44,7 @@ from time import time as timer
 import numpy as np
 import zarr
 from scipy.ndimage import gaussian_filter
+from tqdm import tqdm
 
 from ascat.utils import dtype_to_nan
 
@@ -152,15 +153,11 @@ def regrid_to_latlon(
     if n_workers > 1:
         with ProcessPoolExecutor(max_workers=n_workers) as executor:
             futures = [executor.submit(regrid_func, s) for s in slices]
-            for i, future in enumerate(futures):
+            for future in tqdm(futures, total=len(futures), desc="Regridding level 0"):
                 future.result()
-                if (i + 1) % 20 == 0:
-                    print(f"Regridded {i + 1}/{len(slices)} slices")
     else:
-        for i, sl in enumerate(slices):
+        for sl in tqdm(slices, total=len(slices), desc="Regridding level 0"):
             regrid_func(sl)
-            if (i + 1) % 20 == 0:
-                print(f"Regridded {i + 1}/{len(slices)} slices")
 
     print(f"Level 0 done in {timer() - start:.1f}s")
 

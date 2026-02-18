@@ -43,6 +43,7 @@ from time import time as timer
 
 import numpy as np
 import zarr
+from tqdm import tqdm
 
 from ascat.utils import dtype_to_nan
 
@@ -161,15 +162,12 @@ def sparse_to_dense(
     if n_workers > 1:
         with ProcessPoolExecutor(max_workers=n_workers) as executor:
             futures = [executor.submit(process_func, chunk) for chunk in gpi_chunks]
-            for i, future in enumerate(futures):
-                future.result()
-                if (i + 1) % 10 == 0:
-                    print(f"Completed {i + 1}/{len(gpi_chunks)} GPI chunks")
+            futures = tqdm(futures, total=len(gpi_chunks), desc="GPI chunks")
+            sum(1 for future in futures if future.result())
     else:
-        for i, chunk in enumerate(gpi_chunks):
+        gpi_chunks = tqdm(gpi_chunks, total=len(gpi_chunks), desc="GPI chunks")
+        for chunk in enumerate(gpi_chunks):
             process_func(chunk)
-            if (i + 1) % 10 == 0:
-                print(f"Completed {i + 1}/{len(gpi_chunks)} GPI chunks")
 
     elapsed = timer() - start
     print(f"Done in {elapsed:.1f}s")
