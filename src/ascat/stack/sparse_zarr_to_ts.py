@@ -250,7 +250,7 @@ def sparse_to_dense(
             sum(1 for future in futures if future.result())
     else:
         gpi_chunks = tqdm(gpi_chunks, total=len(gpi_chunks), desc="GPI chunks")
-        for chunk in enumerate(gpi_chunks):
+        for chunk in gpi_chunks:
             process_func(chunk)
 
     elapsed = timer() - start
