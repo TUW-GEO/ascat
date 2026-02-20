@@ -553,36 +553,46 @@ class TestStackSwathsToZarrIntegration:
         assert new_shape == old_shape
 
     def test_multiprocessing_does_not_fail_with_sorted_grid(
-        self, tmp_path, synthetic_grid, swath_file_factory
+        self, tmp_path, swath_file_factory
     ):
-        """n_workers > 1 must succeed when sorted_grid is provided.
+        """n_workers > 1 must succeed when sorted_grid is a real FibGrid.
 
-        Regression test for the pykdtree KDTree pickle failure: sorted_grid
-        must be converted to a plain numpy gpi_lookup array before being sent
-        to worker processes.
+        Regression test for pykdtree KDTree pickle failure: _populate_zarr must
+        pre-compute gpi_lookup (a plain numpy array) from sorted_grid and pass
+        only that to workers, never the FibGrid object itself.
+
+        If this test fails with:
+            TypeError: no default __reduce__ due to non-trivial __cinit__
+        it means sorted_grid is being sent directly to worker processes.
         """
-        out_path = tmp_path / "mp_test.zarr"
+        from fibgrid.realization import FibGrid
+        from ascat.stack.swath_to_zarr import stack_swaths_to_zarr
+
+        real_grid = FibGrid(25.0)
+
+        out_path = tmp_path / "mp_fibgrid_test.zarr"
+
+        gpis, lons, lats, _ = real_grid.get_grid_points()
+        sample_gpis = gpis[:5]
 
         files = [
-            swath_file_factory(i, "a", np.arange(5),
-                            {"surface_soil_moisture": np.ones(5, "f4")})
+            swath_file_factory(
+                i, "a",
+                gpi_indices=sample_gpis,
+                obs_values={"surface_soil_moisture": np.ones(5, dtype="f4")},
+            )
             for i in range(3)
         ]
 
-        mock_swath_files = _build_swath_files_mock(synthetic_grid)
+        fn_templ = (
+            "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H139_C_LIIB_"
+            "{placeholder}_{date}____.nc"
+        )
+        mock_swath_files = _MinimalSwathFiles(
+            SAT_SERIES, "%Y%m%d%H%M%S", fn_templ, real_grid
+        )
+        mock_swath_files.set_files(files)
 
-        def _search_period(dt_start, dt_end, date_field_fmt, end_inclusive=False):
-            result = []
-            for f in files:
-                dt = mock_swath_files._parse_date(f, "date", date_field_fmt)
-                if dt_start <= dt < dt_end:
-                    result.append(f)
-            return result
-
-        mock_swath_files.search_period = _search_period
-
-        # Should not raise — specifically must not raise
-        # "TypeError: no default __reduce__ due to non-trivial __cinit__"
         stack_swaths_to_zarr(
             swath_files=mock_swath_files,
             out_path=out_path,
@@ -591,8 +601,9 @@ class TestStackSwathsToZarrIntegration:
             n_workers=2,
             chunk_size_gpi=CHUNK_SIZE_GPI,
             gpi_shard_size=SHARD_SIZE_GPI,
-            sorted_grid=synthetic_grid,
+            sorted_grid=real_grid,
         )
+
         root = zarr.open(out_path, mode="r")
         assert bool(root["processed"][:].any())
 
@@ -600,20 +611,20 @@ class TestStackSwathsToZarrIntegration:
 # Helpers
 # ===========================================================================
 
-def _build_swath_files_mock(grid):
-    """Build a minimal SwathGridFiles mock compatible with _insert_swath_file."""
-    from ascat.stack.swath_to_zarr import MISSION_SAT_ID_IDX_MAP
+class _MinimalFilenames:
+    def __init__(self, fn_templ):
+        self.fn_templ = fn_templ
 
-    mock = MagicMock()
-    mock.sat_series = SAT_SERIES
-    mock.date_field_fmt = "%Y%m%d%H%M%S"
-    mock.ft.fn_templ = (
-        "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H139_C_LIIB_"
-        "{placeholder}_{date}____.nc"
-    )
-    mock.grid = grid
 
-    def _parse_date(path, date_field, date_field_fmt):
+class _MinimalSwathFiles:
+    def __init__(self, sat_series, date_field_fmt, fn_templ, grid):
+        self.sat_series = sat_series
+        self.date_field_fmt = date_field_fmt
+        self.ft = _MinimalFilenames(fn_templ)
+        self.grid = grid
+        self._files = []
+
+    def _parse_date(self, path, date_field, date_field_fmt):
         # Extract date from filename: last segment before ____.nc
         import re as _re
         m = _re.search(r"_(\d{14})____\.nc$", str(path))
@@ -621,6 +632,23 @@ def _build_swath_files_mock(grid):
             raise ValueError(f"Cannot parse date from {path}")
         return datetime.strptime(m.group(1), date_field_fmt)
 
-    mock._parse_date.side_effect = _parse_date
-    return mock
+    def set_files(self, files):
+        self._files = files
+
+    def search_period(self, dt_start, dt_end, date_field_fmt, end_inclusive=False):
+        result = []
+        for f in self._files:
+            dt = self._parse_date(f, "date", date_field_fmt)
+            if dt_start <= dt < dt_end:
+                result.append(f)
+        return result
+
+
+def _build_swath_files_mock(grid):
+    """Build a minimal SwathGridFiles mock compatible with _insert_swath_file."""
+    fn_templ = (
+        "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-6.25km-H139_C_LIIB_"
+        "{placeholder}_{date}____.nc"
+    )
+    return _MinimalSwathFiles(SAT_SERIES, "%Y%m%d%H%M%S", fn_templ, grid)
 

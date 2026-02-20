@@ -35,32 +35,32 @@ SHARD_SIZE_GPI = 100   # 2 shards of 50 chunks each
 # Synthetic grid fixture
 # ---------------------------------------------------------------------------
 
+class _MinimalGrid:
+    def __init__(self, n_gpi):
+        self.n_gpi = n_gpi
+        self.lats = np.linspace(-45.0, 45.0, n_gpi, dtype="float32")
+        self.lons = np.linspace(-90.0, 90.0, n_gpi, dtype="float32")
+        self.gpis = np.arange(n_gpi, dtype="int32")
+
+    def get_grid_points(self):
+        return (self.gpis, self.lons, self.lats, np.zeros(self.n_gpi, dtype="int32"))
+
+    def find_nearest_gpi(self, query_lons, query_lats):
+        idx = np.clip(
+            np.round((np.asarray(query_lons) + 90.0) / 180.0 * (self.n_gpi - 1)).astype(int),
+            0, self.n_gpi - 1,
+        )
+        dist = np.abs(query_lons - self.lons[idx]) * 111_000.0
+        return self.gpis[idx], dist.astype("float32")
+
+
 @pytest.fixture
 def synthetic_grid():
     """A minimal mock grid with N_GPI points arranged on a regular lat/lon
     grid.  Exposes the interface expected by stack_swaths_to_zarr and
     regrid_to_latlon (n_gpi, get_grid_points, find_nearest_gpi).
     """
-    lats = np.linspace(-45.0, 45.0, N_GPI, dtype="float32")
-    lons = np.linspace(-90.0, 90.0, N_GPI, dtype="float32")
-    gpis = np.arange(N_GPI, dtype="int32")
-
-    grid = MagicMock()
-    grid.n_gpi = N_GPI
-    grid.get_grid_points.return_value = (gpis, lons, lats, np.zeros(N_GPI, dtype="int32"))
-
-    # find_nearest_gpi: returns (gpi_values, distances) for queried lon/lat arrays.
-    # For testing, just map each query point to the nearest index by longitude.
-    def _find_nearest(query_lons, query_lats):
-        idx = np.clip(
-            np.round((np.asarray(query_lons) + 90.0) / 180.0 * (N_GPI - 1)).astype(int),
-            0, N_GPI - 1,
-        )
-        dist = np.abs(query_lons - lons[idx]) * 111_000.0
-        return gpis[idx], dist.astype("float32")
-
-    grid.find_nearest_gpi.side_effect = _find_nearest
-    return grid
+    return _MinimalGrid(N_GPI)
 
 
 # ---------------------------------------------------------------------------
