@@ -259,6 +259,10 @@ class TestScanAllPopulatedChunks:
         result = _scan_all_populated_chunks(path, N_SWATH_TIME, N_SPACECRAFT, N_GPI, CHUNK_SIZE_GPI)
         assert (0, 0) in result[0]
         assert (1, 1) in result[0]
+        reported_slots = set(result[0])
+        expected_slots = {(0, 0), (1, 1)}
+        unexpected = reported_slots - expected_slots
+        assert not unexpected, f"Unexpected populated slots reported: {unexpected}"
 
 
 # ===========================================================================
@@ -269,7 +273,7 @@ class TestCreateDenseStructure:
 
     @pytest.fixture
     def dense_store(self, tmp_path):
-        sparse_path = _make_sparse_store(tmp_path)
+        sparse_path = _make_sparse_store(tmp_path / "sp")
         sparse_root = zarr.open(str(sparse_path), mode="r")
         out_path = tmp_path / "dense.zarr"
         _create_dense_structure(
@@ -335,7 +339,7 @@ class TestCreateDenseStructure:
 class TestExpandObsDimension:
 
     def test_expansion_resizes_all_data_arrays(self, tmp_path):
-        sparse_path = _make_sparse_store(tmp_path)
+        sparse_path = _make_sparse_store(tmp_path / "sp")
         sparse_root = zarr.open(str(sparse_path), mode="r")
         out_path = tmp_path / "dense.zarr"
         _create_dense_structure(
@@ -353,7 +357,7 @@ class TestExpandObsDimension:
         assert out_root["surface_soil_moisture"].shape[1] == 50
 
     def test_expansion_aligns_to_chunk(self, tmp_path):
-        sparse_path = _make_sparse_store(tmp_path)
+        sparse_path = _make_sparse_store(tmp_path / "sp")
         sparse_root = zarr.open(str(sparse_path), mode="r")
         out_path = tmp_path / "dense.zarr"
         _create_dense_structure(
@@ -372,7 +376,7 @@ class TestExpandObsDimension:
         assert out_root["surface_soil_moisture"].shape[1] >= 41
 
     def test_no_op_when_already_large_enough(self, tmp_path):
-        sparse_path = _make_sparse_store(tmp_path)
+        sparse_path = _make_sparse_store(tmp_path / "sp")
         sparse_root = zarr.open(str(sparse_path), mode="r")
         out_path = tmp_path / "dense.zarr"
         _create_dense_structure(
@@ -506,3 +510,29 @@ class TestSparseToDense:
                         chunk_size_obs=10, n_workers=1)
         root = zarr.open(str(out_path), mode="r")
         assert root["n_obs"][:].sum() == 0
+
+
+class TestClassifyVariables:
+
+    def test_scalar_vars_classified_correctly(self, tmp_path):
+        """3D arrays (swath_time, spacecraft, gpi) go into scalar_vars."""
+        sparse_path = _make_sparse_store(tmp_path)
+        root = zarr.open(str(sparse_path), mode="r")
+        beam_vars, scalar_vars = _classify_variables(root, has_beams=False)
+        assert "surface_soil_moisture" in scalar_vars
+        assert "time" in scalar_vars
+        assert len(beam_vars) == 0
+
+    def test_coord_arrays_excluded(self, tmp_path):
+        """Coordinate arrays (gpi, latitude, etc.) must not appear in either set."""
+        sparse_path = _make_sparse_store(tmp_path)
+        root = zarr.open(str(sparse_path), mode="r")
+        beam_vars, scalar_vars = _classify_variables(root, has_beams=False)
+        coord_names = {"swath_time", "spacecraft", "beam", "gpi", "latitude", "longitude"}
+        assert not (beam_vars | scalar_vars) & coord_names
+
+    def test_has_beams_false_produces_no_beam_vars(self, tmp_path):
+        sparse_path = _make_sparse_store(tmp_path)
+        root = zarr.open(str(sparse_path), mode="r")
+        beam_vars, scalar_vars = _classify_variables(root, has_beams=False)
+        assert len(beam_vars) == 0

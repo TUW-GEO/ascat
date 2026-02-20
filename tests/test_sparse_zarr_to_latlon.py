@@ -465,7 +465,7 @@ class TestRegridToLatlon:
             n_pyramid_levels=1, lat_chunk=TEST_LAT_CHUNK, lon_chunk=TEST_LON_CHUNK,
         )
         root = zarr.open(str(out_path), mode="r")
-        assert root["0"]["processed"][0, 0] == True   # noqa: E712
+        assert bool(root["0"]["processed"][0, 0])
 
     def test_unprocessed_slots_skipped_on_rerun(self, tmp_path):
         """Re-running on a complete store should process 0 pending slices."""
@@ -514,4 +514,65 @@ class TestRegridToLatlon:
             n_pyramid_levels=1, lat_chunk=TEST_LAT_CHUNK, lon_chunk=TEST_LON_CHUNK,
         )
         out_root = zarr.open(str(out_path), mode="r")
-        assert out_root["0"]["processed"][1, 0] == True   # noqa: E712
+        assert bool(out_root["0"]["processed"][1, 0])
+
+
+class TestClassifyVariables:
+
+    def test_scalar_vars_classified_correctly(self, tmp_path):
+        """3D arrays (swath_time, spacecraft, gpi) go into scalar_vars."""
+        sparse_path = _make_sparse_store_for_pyramid(tmp_path / "sp")
+        root = zarr.open(str(sparse_path), mode="r")
+        beam_vars, scalar_vars = _classify_variables(root, has_beams=False)
+        assert "surface_soil_moisture" in scalar_vars
+        assert "time" in scalar_vars
+        assert len(beam_vars) == 0
+
+    def test_coord_arrays_excluded(self, tmp_path):
+        """Coordinate arrays (gpi, latitude, etc.) must not appear in either set."""
+        sparse_path = _make_sparse_store_for_pyramid(tmp_path / "sp")
+        root = zarr.open(str(sparse_path), mode="r")
+        beam_vars, scalar_vars = _classify_variables(root, has_beams=False)
+        coord_names = {"swath_time", "spacecraft", "beam", "gpi", "latitude", "longitude"}
+        assert not (beam_vars | scalar_vars) & coord_names
+
+    def test_has_beams_false_produces_no_beam_vars(self, tmp_path):
+        sparse_path = _make_sparse_store_for_pyramid(tmp_path / "sp")
+        root = zarr.open(str(sparse_path), mode="r")
+        beam_vars, scalar_vars = _classify_variables(root, has_beams=False)
+        assert len(beam_vars) == 0
+
+
+class TestRegridToLatlon_UnprocessedSlots:
+
+    def test_unprocessed_sparse_slots_produce_no_output(self, tmp_path):
+        """Slots where sparse processed=False must produce fill values in pyramid,
+        even if the array position contains data (e.g. from a previous partial run).
+        """
+        # Write data but deliberately leave processed=False
+        sparse_path = _make_sparse_store_for_pyramid(tmp_path / "sp")
+        sparse_root = zarr.open(str(sparse_path), mode="a")
+        sparse_root["surface_soil_moisture"][0, 0, :10] = np.ones(10, dtype="f4")
+        # processed[0, 0] stays False
+
+        grid = _make_grid_mock()
+        out_path = tmp_path / "pyramid.zarr"
+        regrid_to_latlon(
+            sparse_path, out_path, grid=grid,
+            resolution_deg=TEST_RESOLUTION, max_dist_m=TEST_MAX_DIST,
+            n_pyramid_levels=1, lat_chunk=TEST_LAT_CHUNK, lon_chunk=TEST_LON_CHUNK,
+        )
+
+        root = zarr.open(str(out_path), mode="r")
+        data = root["0"]["surface_soil_moisture"][0, 0, :, :]
+        fill_val = root["0"]["surface_soil_moisture"].metadata.fill_value
+
+        # Every cell should be fill value — the slot was not processed
+        assert (data == fill_val).all(), (
+            "Slot with processed=False should produce all fill values in pyramid"
+        )
+        # And the pyramid processed array should also be False
+        assert not bool(root["0"]["processed"][0, 0])
+        root = zarr.open(str(sparse_path), mode="r")
+        beam_vars, scalar_vars = _classify_variables(root, has_beams=False)
+        assert len(beam_vars) == 0

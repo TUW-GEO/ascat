@@ -284,7 +284,7 @@ class TestInsertSwathFile:
                                         {"surface_soil_moisture": np.ones(5, "f4")})
         swath_mock = _build_swath_files_mock(synthetic_grid)
         _insert_swath_file(swath_file, swath_mock, root, time_coords, TIME_RESOLUTION)
-        assert root["processed"][0, 0] is True or bool(root["processed"][0, 0])
+        assert bool(root["processed"][0, 0])
 
     def test_other_slots_remain_unprocessed(self, store_and_coords, swath_file_factory, synthetic_grid):
         out_path, root, time_coords = store_and_coords
@@ -294,8 +294,8 @@ class TestInsertSwathFile:
         _insert_swath_file(swath_file, swath_mock, root, time_coords, TIME_RESOLUTION)
         # All slots except (0,0) should still be False
         processed = root["processed"][:]
-        assert processed[0, 0] == True   # noqa: E712
-        assert processed[0, 1] == False  # noqa: E712
+        assert bool(processed[0, 0])
+        assert not bool(processed[0, 1])
         assert not processed[1:, :].any()
 
     def test_out_of_range_timestamp_warns_and_returns_false(
@@ -423,8 +423,8 @@ class TestStackSwathsToZarrIntegration:
         root = zarr.open(out_path, mode="r")
         assert root["swath_time"].shape[0] == 4
         # Slots 0 and 1 (metop-a, spacecraft idx 0) should be processed
-        assert root["processed"][0, 0] == True   # noqa: E712
-        assert root["processed"][1, 0] == True   # noqa: E712
+        assert bool(root["processed"][0, 0])
+        assert bool(root["processed"][1, 0])
 
     def test_expands_store_on_second_call(self, tmp_path, synthetic_grid, swath_file_factory):
         """Second call with later date_range expands swath_time without corrupting first batch."""
@@ -494,11 +494,10 @@ class TestStackSwathsToZarrIntegration:
         root = zarr.open(out_path, mode="r")
         assert root["swath_time"].shape[0] == 6
         # First batch should still be marked processed
-        assert root["processed"][0, 0] == True   # noqa: E712
-        assert root["processed"][1, 0] == True   # noqa: E712
-        # New slots should also be processed
-        assert root["processed"][4, 0] == True   # noqa: E712
-        assert root["processed"][5, 0] == True   # noqa: E712
+        assert bool(root["processed"][0, 0])
+        assert bool(root["processed"][1, 0])
+        assert bool(root["processed"][4, 0])
+        assert bool(root["processed"][5, 0])
 
     def test_no_expansion_when_date_within_existing_range(
         self, tmp_path, synthetic_grid, swath_file_factory
@@ -553,6 +552,49 @@ class TestStackSwathsToZarrIntegration:
         new_shape = root["swath_time"].shape[0]
         assert new_shape == old_shape
 
+    def test_multiprocessing_does_not_fail_with_sorted_grid(
+        self, tmp_path, synthetic_grid, swath_file_factory
+    ):
+        """n_workers > 1 must succeed when sorted_grid is provided.
+
+        Regression test for the pykdtree KDTree pickle failure: sorted_grid
+        must be converted to a plain numpy gpi_lookup array before being sent
+        to worker processes.
+        """
+        out_path = tmp_path / "mp_test.zarr"
+
+        files = [
+            swath_file_factory(i, "a", np.arange(5),
+                            {"surface_soil_moisture": np.ones(5, "f4")})
+            for i in range(3)
+        ]
+
+        mock_swath_files = _build_swath_files_mock(synthetic_grid)
+
+        def _search_period(dt_start, dt_end, date_field_fmt, end_inclusive=False):
+            result = []
+            for f in files:
+                dt = mock_swath_files._parse_date(f, "date", date_field_fmt)
+                if dt_start <= dt < dt_end:
+                    result.append(f)
+            return result
+
+        mock_swath_files.search_period = _search_period
+
+        # Should not raise — specifically must not raise
+        # "TypeError: no default __reduce__ due to non-trivial __cinit__"
+        stack_swaths_to_zarr(
+            swath_files=mock_swath_files,
+            out_path=out_path,
+            date_range=(datetime(2024, 12, 1), datetime(2024, 12, 1, 4)),
+            time_resolution=TIME_RESOLUTION,
+            n_workers=2,
+            chunk_size_gpi=CHUNK_SIZE_GPI,
+            gpi_shard_size=SHARD_SIZE_GPI,
+            sorted_grid=synthetic_grid,
+        )
+        root = zarr.open(out_path, mode="r")
+        assert bool(root["processed"][:].any())
 
 # ===========================================================================
 # Helpers

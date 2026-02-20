@@ -35,7 +35,7 @@ a structured Zarr array indexed by time, spacecraft, and grid point index (GPI).
 from concurrent.futures import ProcessPoolExecutor
 import re
 import warnings
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import partial
 from pathlib import Path
 from time import time
@@ -456,13 +456,17 @@ def _populate_zarr(
 
     print(f"Found {len(filenames)} files to process")
 
+    gpi_lookup = None
+    if sorted_grid is not None:
+        gpis = sorted_grid.get_grid_points()[0]
+        gpi_lookup = np.argsort(gpis)
+
     insert_func = partial(
         _insert_swath_file,
         swath_files=swath_files,
         zarr_root=zarr_root,
         time_coords=time_coords,
         time_resolution=time_resolution,
-        sorted_grid=sorted_grid,
     )
 
     n_success = 0
@@ -482,7 +486,7 @@ def _populate_zarr(
                 n_success += 1
 
 
-def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resolution, sorted_grid=None):
+def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resolution, gpi_lookup=None):
     """Insert data from one swath file into Zarr array.
 
     Parameters
@@ -497,8 +501,9 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
         Time coordinate array for indexing.
     time_resolution : str
         Pandas frequency string (e.g., 'h', '2h', '3min', 'D').
-    sorted_grid : CellGrid, optional
-        If provided, use this grid to map GPIs instead of the original grid.
+    gpi_lookup : np.ndarray, optional
+        If provided, use this lookup array to map GPIs instead of the original grid.
+        Pre-computed from sorted_grid.get_grid_points()[0] via np.argsort.
 
     Returns
     -------
@@ -548,9 +553,8 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
         ) as ds:
             gpi = ds["location_id"].values.astype(int)
 
-            if sorted_grid is not None:
-                lookup = np.argsort(sorted_grid.get_grid_points()[0])
-                gpi = lookup[gpi]
+            if gpi_lookup is not None:
+                gpi = gpi_lookup[gpi]
 
             start_time = time()
             for var in ds.data_vars:
