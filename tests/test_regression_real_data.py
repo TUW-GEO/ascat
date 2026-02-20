@@ -229,7 +229,9 @@ def test_sparse_to_dense_runs_and_produces_correct_structure(shared_tmp: Path):
         sparse_to_dense(
             sparse_path,
             out_path,
-            n_workers=4, # 1 would be ideal but would take literally ages
+            n_workers=1,
+            chunk_size_gpi=1024,
+            chunk_size_obs=30,
         )
     _TIMINGS["sparse_to_dense"] = t.seconds
 
@@ -323,7 +325,10 @@ def test_regrid_to_latlon_runs_and_produces_correct_structure(shared_tmp: Path, 
     data = ssm0[0, 0, :, :]
     # Find values that are not the fill value (-9999.0)
     valid = np.abs(data) < 9000.0
-    assert np.any(valid), "Level 0 should have some non-fill values"
+    valid_fraction = valid.sum() / valid.size
+    assert valid_fraction > 0.01, (
+        f"Level 0 should have at least 1% valid cells, got {valid_fraction:.1%}"
+    )
 
     # Check level 1
     assert "1" in root, "Level 1 group should exist"
