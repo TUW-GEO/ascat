@@ -570,19 +570,11 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
                 if has_beams:
                     beam_idx = _get_beam_index(var)
                     if beam_idx is not None:
-                        for i, gpi_val in enumerate(gpi):
-                            zarr_root[var][time_idx, sat_idx, beam_idx, gpi_val] = var_data[i]
-                    elif "beams" in ds[var].dims and var_data.ndim == 2 and var_data.shape[1] == 3:
-                        for b in range(3):
-                            for i, gpi_val in enumerate(gpi):
-                                zarr_root[var][time_idx, sat_idx, b, gpi_val] = var_data[i, b]
+                        zarr_root[var][time_idx, sat_idx, beam_idx, gpi] = var_data
                     else:
-                        for b in range(3):
-                            for i, gpi_val in enumerate(gpi):
-                                zarr_root[var][time_idx, sat_idx, b, gpi_val] = var_data[i]
+                        zarr_root[var][time_idx, sat_idx, gpi] = var_data
                 else:
-                    for i, gpi_val in enumerate(gpi):
-                        zarr_root[var][time_idx, sat_idx, gpi_val] = var_data[i]
+                    zarr_root[var][time_idx, sat_idx, gpi] = var_data
 
         zarr_root["processed"][time_idx, sat_idx] = True
         return True
@@ -591,8 +583,7 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
         warnings.warn(f"Skipping {filename}: {e}")
         return False
     except Exception as e:
-        import traceback
-        warnings.warn(f"Failed to insert {filename}: {e}\n{traceback.format_exc()}")
+        warnings.warn(f"Failed to insert {filename}: {e}")
         return False
 
 
@@ -642,9 +633,6 @@ def _detect_beam_structure(sample_ds):
         var.endswith(suffix)
         for var in data_vars
         for suffix in BEAM_SUFFIXES
-    ) or any(
-        "beams" in sample_ds[var].dims
-        for var in data_vars
     )
 
     if not has_beams:
