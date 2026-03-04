@@ -302,34 +302,35 @@ def _create_zarr_structure(
         engine="h5netcdf"
     )
 
-    has_beams, data_vars = _detect_beam_structure(sample_ds)
+    has_beams, base_names_to_vars_map = _detect_beam_structure(sample_ds)
     sample_ds.close()
 
     store = zarr.storage.LocalStore(str(out_path))
     root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
 
-    if has_beams:
-        dims = ("swath_time", "spacecraft", "beam", "gpi")
-        n_beams = 3
-        base_shape = (n_time, n_spacecraft, n_beams, n_gpi)
-        inner_chunks = (1, 1, 1, chunk_size_gpi)
-        # Shard shape: (t, s, beam) dims are size 1 so each shard file belongs
-        # to exactly one (t, s, beam) slot — no concurrent write contention.
-        base_shards = (1, 1, 1, gpi_shard_size)
-    else:
-        dims = ("swath_time", "spacecraft", "gpi")
-        base_shape = (n_time, n_spacecraft, n_gpi)
-        inner_chunks = (1, 1, chunk_size_gpi)
-        base_shards = (1, 1, gpi_shard_size)
+    for base_name in sorted(base_names_to_vars_map.keys()):
+        var_names = base_names_to_vars_map[base_name]
+        if len(var_names) > 1:
+            dims = ("swath_time", "spacecraft", "beam", "gpi")
+            n_beams = 3
+            base_shape = (n_time, n_spacecraft, n_beams, n_gpi)
+            inner_chunks = (1, 1, 1, chunk_size_gpi)
+            # Shard shape: (t, s, beam) dims are size 1 so each shard file belongs
+            # to exactly one (t, s, beam) slot — no concurrent write contention.
+            base_shards = (1, 1, 1, gpi_shard_size)
+        else:
+            dims = ("swath_time", "spacecraft", "gpi")
+            base_shape = (n_time, n_spacecraft, n_gpi)
+            inner_chunks = (1, 1, chunk_size_gpi)
+            base_shards = (1, 1, gpi_shard_size)
 
-    for var in sorted(data_vars):
-        var_dtype = sample_ds[var].dtype
-        attrs = _sanitize_attrs(sample_ds[var].attrs)
+        var_dtype = sample_ds[var_names[0]].dtype
+        attrs = _sanitize_attrs(sample_ds[var_names[0]].attrs)
         fill_val = attrs.get("_FillValue", dtype_to_nan[np.dtype(var_dtype)])
         attrs["_FillValue"] = FillValueCoder.encode(fill_val, var_dtype)
 
         root.create_array(
-            name=var,
+            name=base_name,
             dtype=var_dtype,
             shape=base_shape,
             chunks=inner_chunks,
@@ -561,18 +562,16 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
                 if var in ["location_id", "latitude", "longitude"]:
                     continue
 
-                if var not in zarr_root:
+                beam_idx, base_name = _get_var_beam_index_and_base_name(var)
+
+                if (base_name or var) not in zarr_root:
                     warnings.warn(f"Variable {var} not in Zarr schema, skipping")
                     continue
 
                 var_data = ds[var].values
 
-                if has_beams:
-                    beam_idx = _get_beam_index(var)
-                    if beam_idx is not None:
-                        zarr_root[var][time_idx, sat_idx, beam_idx, gpi] = var_data
-                    else:
-                        zarr_root[var][time_idx, sat_idx, gpi] = var_data
+                if beam_idx is not None:
+                    zarr_root[base_name][time_idx, sat_idx, beam_idx, gpi] = var_data
                 else:
                     zarr_root[var][time_idx, sat_idx, gpi] = var_data
 
@@ -636,31 +635,24 @@ def _detect_beam_structure(sample_ds):
     )
 
     if not has_beams:
-        return False, data_vars
+        return False, {var: [var] for var in data_vars}
 
-    base_names = set()
+    base_names_to_vars_map = {}
     for var in data_vars:
-        stripped = False
+        beam = False
         for suffix in BEAM_SUFFIXES:
             if var.endswith(suffix):
-                base_names.add(var[:-len(suffix)])
-                stripped = True
-                break
-        if not stripped:
-            base_names.add(var)
+                beam = True
+                base_name = var[:-len(suffix)]
+                if base_name not in base_names_to_vars_map:
+                    base_names_to_vars_map[base_name] = []
+                base_names_to_vars_map[base_name].append(var)
+        if not beam:
+            base_names_to_vars_map[var] = [var]
+    base_names_to_vars_map
+    return True, base_names_to_vars_map
 
-    result_vars = set()
-    for base in base_names:
-        beam_variants = [f"{base}{suffix}" for suffix in BEAM_SUFFIXES]
-        if any(bv in sample_ds.data_vars for bv in beam_variants):
-            result_vars.update(bv for bv in beam_variants if bv in sample_ds.data_vars)
-        elif base in sample_ds.data_vars:
-            result_vars.add(base)
-
-    return True, result_vars
-
-
-def _get_beam_index(var_name):
+def _get_var_beam_index_and_base_name(var_name):
     """Extract beam index from variable name suffix.
 
     Parameters
@@ -675,8 +667,8 @@ def _get_beam_index(var_name):
     """
     for suffix, idx in BEAM_SUFFIXES.items():
         if var_name.endswith(suffix):
-            return idx
-    return None
+            return idx, var_name[:-len(suffix)]
+    return None, None
 
 
 def _extract_sat_id(filename, fn_pattern, sat_series):

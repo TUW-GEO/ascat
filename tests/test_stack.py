@@ -20,7 +20,7 @@ from ascat.stack import swath_to_zarr
 from ascat.stack import sparse_zarr_to_ts
 from ascat.stack.swath_to_zarr import (
     _detect_beam_structure,
-    _get_beam_index,
+    _get_var_beam_index_and_base_name,
     _extract_sat_id,
     _generate_time_coords,
 )
@@ -112,19 +112,21 @@ class TestSwathToZarr(unittest.TestCase):
             with_beams=True
         )
         
-        has_beams, data_vars = _detect_beam_structure(ds)
+        has_beams, base_names_to_vars_map = _detect_beam_structure(ds)
         self.assertTrue(has_beams)
-        self.assertIn("backscatter_for", data_vars)
-        self.assertIn("backscatter_mid", data_vars)
-        self.assertIn("backscatter_aft", data_vars)
+        self.assertIn("backscatter", base_names_to_vars_map)
+        self.assertNotIn("backscatter_for", base_names_to_vars_map)  # Should be renamed to backscatter with beams
+        self.assertNotIn("backscatter_mid", base_names_to_vars_map)
+        self.assertNotIn("backscatter_aft", base_names_to_vars_map)
 
     def test_get_beam_index(self):
         """Test beam index extraction."""
-        self.assertEqual(_get_beam_index("backscatter_for"), 0)
-        self.assertEqual(_get_beam_index("backscatter_mid"), 1)
-        self.assertEqual(_get_beam_index("backscatter_aft"), 2)
-        self.assertEqual(_get_beam_index("backscatter_fore"), 0)
-        self.assertIsNone(_get_beam_index("backscatter40"))
+        self.assertEqual(_get_var_beam_index_and_base_name("backscatter_for"), (0, "backscatter"))
+        self.assertEqual(_get_var_beam_index_and_base_name("backscatter_mid"), (1, "backscatter"))
+        self.assertEqual(_get_var_beam_index_and_base_name("backscatter_aft"), (2, "backscatter"))
+        self.assertEqual(_get_var_beam_index_and_base_name("backscatter_fore"), (0, "backscatter"))
+        self.assertIsNone(_get_var_beam_index_and_base_name("backscatter40")[0])
+        self.assertIsNone(_get_var_beam_index_and_base_name("backscatter40")[1])
 
     def test_extract_sat_id(self):
         """Test satellite ID extraction from filename."""
@@ -259,8 +261,8 @@ class TestSwathToZarr(unittest.TestCase):
         self.assertEqual(zarr_root["beam"].shape[0], 3)
         
         # Verify beam variable shapes
-        self.assertEqual(zarr_root["backscatter_for"].ndim, 4)
-        self.assertEqual(zarr_root["backscatter_for"].shape, (2, 3, 3, grid.n_gpi))
+        self.assertEqual(zarr_root["backscatter"].ndim, 4)
+        self.assertEqual(zarr_root["backscatter"].shape, (2, 3, 3, grid.n_gpi))
 
 
 class TestSwathToZarrIntegration(unittest.TestCase):
@@ -410,9 +412,9 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         np.testing.assert_array_equal(original_ssm[mask], stored_ssm[mask])
         
         # Verify all beams stored correctly
-        stored_for = zarr_root["backscatter_for"][time_index, sat_index, 0, :]
-        stored_mid = zarr_root["backscatter_mid"][time_index, sat_index, 1, :]
-        stored_aft = zarr_root["backscatter_aft"][time_index, sat_index, 2, :]
+        stored_for = zarr_root["backscatter"][time_index, sat_index, 0, :]
+        stored_mid = zarr_root["backscatter"][time_index, sat_index, 1, :]
+        stored_aft = zarr_root["backscatter"][time_index, sat_index, 2, :]
         
         np.testing.assert_array_equal(original_backscatter_for[mask], stored_for[mask])
         np.testing.assert_array_equal(original_backscatter_mid[mask], stored_mid[mask])
@@ -539,7 +541,7 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         zarr_root = zarr.open(zarr_path, mode="r")
         
         for i, original_ssm in enumerate(original_ssms):
-            stored_ssm = zarr_root["surface_soil_moisture"][i, 0, :]
+            stored_ssm = zarr_root["surface_soil_moisture"][i+1, 0, :]
             mask = (stored_ssm != -9999.0)
             np.testing.assert_array_equal(original_ssm[mask], stored_ssm[mask])
 
