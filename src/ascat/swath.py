@@ -777,6 +777,7 @@ class SwathGridFiles(ChronFiles):
         sorted_grid=None,
         n_workers=1,
         chunk_size_gpi=4096,
+        shard_size_gpi=None,
     ):
         """Convert swath files to Zarr time-series format.
         
@@ -824,4 +825,5 @@ class SwathGridFiles(ChronFiles):
             sorted_grid=sorted_grid,
             n_workers=n_workers,
             chunk_size_gpi=chunk_size_gpi,
+            shard_size_gpi=shard_size_gpi,
         )

@@ -415,7 +415,7 @@ class TestStackSwathsToZarrIntegration:
             time_resolution=TIME_RESOLUTION,
             n_workers=1,
             chunk_size_gpi=CHUNK_SIZE_GPI,
-            gpi_shard_size=SHARD_SIZE_GPI,
+            shard_size_gpi=SHARD_SIZE_GPI,
         )
 
         # Assert store was created
@@ -456,7 +456,7 @@ class TestStackSwathsToZarrIntegration:
             time_resolution=TIME_RESOLUTION,
             n_workers=1,
             chunk_size_gpi=CHUNK_SIZE_GPI,
-            gpi_shard_size=SHARD_SIZE_GPI,
+            shard_size_gpi=SHARD_SIZE_GPI,
         )
 
         # Verify first batch
@@ -487,7 +487,7 @@ class TestStackSwathsToZarrIntegration:
             time_resolution=TIME_RESOLUTION,
             n_workers=1,
             chunk_size_gpi=CHUNK_SIZE_GPI,
-            gpi_shard_size=SHARD_SIZE_GPI,
+            shard_size_gpi=SHARD_SIZE_GPI,
         )
 
         # Verify expansion without corruption
@@ -530,7 +530,7 @@ class TestStackSwathsToZarrIntegration:
             time_resolution=TIME_RESOLUTION,
             n_workers=1,
             chunk_size_gpi=CHUNK_SIZE_GPI,
-            gpi_shard_size=SHARD_SIZE_GPI,
+            shard_size_gpi=SHARD_SIZE_GPI,
         )
 
         root = zarr.open(out_path, mode="r")
@@ -545,7 +545,7 @@ class TestStackSwathsToZarrIntegration:
             time_resolution=TIME_RESOLUTION,
             n_workers=1,
             chunk_size_gpi=CHUNK_SIZE_GPI,
-            gpi_shard_size=SHARD_SIZE_GPI,
+            shard_size_gpi=SHARD_SIZE_GPI,
         )
 
         root = zarr.open(out_path, mode="r")
@@ -600,7 +600,7 @@ class TestStackSwathsToZarrIntegration:
             time_resolution=TIME_RESOLUTION,
             n_workers=2,
             chunk_size_gpi=CHUNK_SIZE_GPI,
-            gpi_shard_size=SHARD_SIZE_GPI,
+            shard_size_gpi=SHARD_SIZE_GPI,
             sorted_grid=real_grid,
         )
 

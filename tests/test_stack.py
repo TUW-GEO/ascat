@@ -191,6 +191,7 @@ class TestSwathToZarr(unittest.TestCase):
             date_end=datetime(2021, 1, 1, 2, 0, 0),
             time_resolution="h",
             chunk_size_gpi=32,
+            gpi_shard_size=None,
             sat_series="metop",
             sample_file=sample_file
         )
@@ -248,6 +249,7 @@ class TestSwathToZarr(unittest.TestCase):
             date_end=datetime(2021, 1, 1, 2, 0, 0),
             time_resolution="h",
             chunk_size_gpi=32,
+            gpi_shard_size=None,
             sat_series="metop",
             sample_file=sample_file
         )
@@ -285,14 +287,14 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         swath_dir.mkdir()
         # Create filename matching AscatH139Swath pattern
         # Pattern: W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOP{sat}-12.5km-H139_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc
-        sample_file = swath_dir / "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_______20210101010000____.nc"
+        sample_file = swath_dir / "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_20250101000000_20210101000000_20210101005959____.nc"
 
         # Create synthetic swath with known values
         ds = generate_synthetic_swath_data(
             location_ids=test_grid["gpi"],
             lons=test_grid["lon"],
             lats=test_grid["lat"],
-            timestamp=np.datetime64("2021-01-01T01:00:00"),
+            timestamp=np.datetime64("2021-01-01T00:00:00"),
             with_beams=False,
             seed=42
         )
@@ -311,6 +313,7 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             date_end=datetime(2021, 1, 1, 2, 0, 0),
             time_resolution="h",
             chunk_size_gpi=32,
+            gpi_shard_size=None,
             sat_series="metop",
             sample_file=sample_file
         )
@@ -359,13 +362,13 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         
         swath_dir = self.tempdir_path / "swaths"
         swath_dir.mkdir()
-        sample_file = swath_dir / "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_______20210101010000____.nc"
+        sample_file = swath_dir / "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_20250101000000_20210101000000_20210101005959____.nc"
 
         ds = generate_synthetic_swath_data(
             location_ids=test_grid["gpi"],
             lons=test_grid["lon"],
             lats=test_grid["lat"],
-            timestamp=np.datetime64("2021-01-01T01:00:00"),
+            timestamp=np.datetime64("2021-01-01T00:00:00"),
             with_beams=True,
             seed=123
         )
@@ -384,6 +387,7 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             date_end=datetime(2021, 1, 1, 2, 0, 0),
             time_resolution="h",
             chunk_size_gpi=32,
+            gpi_shard_size=None,
             sat_series="metop",
             sample_file=sample_file
         )
@@ -426,14 +430,14 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         
         swath_dir = self.tempdir_path / "swaths"
         swath_dir.mkdir()
-        sample_file = swath_dir / "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_______20210101010300____.nc"
+        sample_file = swath_dir / "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_20250101000000_20210101000000_20210101000259____.nc"
 
         # Create swath with 3-minute timestamp (aligned to hour)
         ds = generate_synthetic_swath_data(
             location_ids=test_grid["gpi"],
             lons=test_grid["lon"],
             lats=test_grid["lat"],
-            timestamp=np.datetime64("2021-01-01T01:03:00"),
+            timestamp=np.datetime64("2021-01-01T01:00:00"),
             with_beams=False,
             seed=42
         )
@@ -449,6 +453,7 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             date_end=datetime(2021, 1, 1, 2, 0, 0),
             time_resolution="h",  # hourly
             chunk_size_gpi=32,
+            gpi_shard_size=None,
             sat_series="metop",
             sample_file=sample_file
         )
@@ -491,8 +496,9 @@ class TestSwathToZarrIntegration(unittest.TestCase):
         for i, ts in enumerate(timestamps):
             # Create proper filename matching pattern with timestamp from data
             # Pattern: W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_{placeholder}_{placeholder1}_{date}____.nc
-            timestamp_str = np.datetime_as_string(ts, unit='s').replace('T', '').replace('-', '')[:14]
-            sample_file = swath_dir / f"W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_______{timestamp_str}____.nc"
+            timestamp1_str = np.datetime_as_string(ts, unit='s').replace('T', '').replace('-', '').replace(':', '')[:14]
+            timestamp2_str = np.datetime_as_string(ts + np.timedelta64(59, 'm'), unit='s').replace('T', '').replace('-', '').replace(':', '')[:14]
+            sample_file = swath_dir / f"W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_20250101000000_{timestamp1_str}_{timestamp2_str}____.nc"
             ds = generate_synthetic_swath_data(
                 location_ids=test_grid["gpi"],
                 lons=test_grid["lon"],
@@ -514,6 +520,7 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             date_end=datetime(2021, 1, 1, 3, 0, 0),
             time_resolution="h",
             chunk_size_gpi=32,
+            gpi_shard_size=None,
             sat_series="metop",
             sample_file=first_file
         )
@@ -576,6 +583,7 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             date_end=datetime(2021, 1, 1, 2, 0, 0),
             time_resolution="h",
             chunk_size_gpi=32,
+            gpi_shard_size=None,
             sat_series="metop",
             sample_file=sample_file
         )

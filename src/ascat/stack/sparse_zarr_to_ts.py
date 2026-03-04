@@ -608,6 +608,20 @@ def _process_gpi_chunk(
 
     populated = sorted(populated_set)
 
+    # Pre-read sparse data for the entire worker range to eliminate chunk amplification.
+    # This function computes which sparse chunks overlap [gpi_start, gpi_end),
+    # reads all data for those chunks once per variable, and returns a cache dict.
+    preread_cache = _preread_sparse_chunks_for_range(
+        sparse_path=sparse_path,
+        gpi_start=gpi_start,
+        gpi_end=gpi_end,
+        populated=populated,
+        sparse_gpi_chunk_size=sparse_gpi_chunk_size,
+        beam_vars=beam_vars,
+        scalar_vars=scalar_vars,
+        has_beams=has_beams,
+    )
+
     for sub_start in range(gpi_start, gpi_end, inner_chunk_gpi):
         sub_end = min(sub_start + inner_chunk_gpi, gpi_end)
 
@@ -632,7 +646,122 @@ def _process_gpi_chunk(
             chunk_size_obs=chunk_size_obs,
             obs_alignment=obs_alignment,
             local_mask=sub_mask,
+            preread_cache=preread_cache,
         )
+
+
+def _preread_sparse_chunks_for_range(
+    sparse_path,
+    gpi_start,
+    gpi_end,
+    populated,
+    sparse_gpi_chunk_size,
+    beam_vars,
+    scalar_vars,
+    has_beams,
+):
+    """Pre-read all sparse chunks that overlap [gpi_start, gpi_end).
+
+    Eliminates read amplification by reading each sparse chunk once regardless
+    of how many inner sub-chunks reference it.
+
+    Generic design: works for any relationship between worker size and
+    sparse chunk size. Examples:
+    - sparse=4096, shard=1024: reads 2 sparse chunks (overlap by 1024)
+    - sparse=4096, shard=4096: reads 1 sparse chunk (no overlap)
+    - sparse=4096, shard=8192: reads 2 sparse chunks (split across shard boundary)
+
+    Parameters
+    ----------
+    sparse_path : Path
+        Path to sparse zarr store.
+    gpi_start, gpi_end : int
+        GPI range for this worker (exclusive end).
+    populated : list of tuple
+        List of (swath_time_idx, spacecraft_idx) with data in this range.
+    sparse_gpi_chunk_size : int
+        The GPI chunk size in the sparse store (typically 4096).
+    beam_vars, scalar_vars : set
+        Variable names for beam and scalar data.
+    has_beams : bool
+        Whether beam variables exist.
+
+    Returns
+    -------
+    dict
+        Nested cache: {(chunk_idx, var_name): np.ndarray}
+        chunk_idx is the sparse chunk index, var_name is the variable name.
+        Each array has shape (n_spacecraft, sparse_gpi_chunk_size) for scalar vars
+        or (n_spacecraft, n_beams, sparse_gpi_chunk_size) for beam vars.
+    """
+    sparse_root = zarr.open(sparse_path, mode="r")
+
+    gc_start = gpi_start // sparse_gpi_chunk_size
+    gc_end = (gpi_end - 1) // sparse_gpi_chunk_size
+
+    cache = {}
+
+    for gc in range(gc_start, gc_end + 1):
+        snap_start = gc * sparse_gpi_chunk_size
+        snap_end = snap_start + sparse_gpi_chunk_size
+
+        for t_idx, s_idx in populated:
+            for var in sorted(scalar_vars):
+                key = (gc, var, t_idx, s_idx)
+                cache[key] = sparse_root[var][t_idx, s_idx, snap_start:snap_end].copy()
+
+            if has_beams:
+                for var in sorted(beam_vars):
+                    key = (gc, var, t_idx, s_idx)
+                    cache[key] = sparse_root[var][t_idx, s_idx, :, snap_start:snap_end].copy()
+
+    return cache
+
+
+def _slice_from_preread(preread_cache, gpi_start, gpi_end, sparse_gpi_chunk_size, var, t_idx, s_idx):
+    """Extract slice from pre-read cache for a specific GPI range.
+
+    Since the pre-read cache stores full sparse chunks, we need to compute
+    which chunk(s) the requested range falls in and slice appropriately.
+    Handles cases where the range spans multiple sparse chunks.
+
+    Works for both 2D arrays (gpi,) and 3D arrays (n_beams, gpi).
+    """
+    gc_start = gpi_start // sparse_gpi_chunk_size
+    gc_end = (gpi_end - 1) // sparse_gpi_chunk_size
+
+    if gc_start == gc_end:
+        gc = gc_start
+        chunk_start = gc * sparse_gpi_chunk_size
+        chunk_end = chunk_start + sparse_gpi_chunk_size
+
+        local_start = gpi_start - chunk_start
+        local_end = gpi_end - chunk_start
+
+        key = (gc, var, t_idx, s_idx)
+        full_chunk = preread_cache[key]
+
+        return full_chunk[..., local_start:local_end]
+    else:
+        gc = gc_start
+        chunk_start = gc * sparse_gpi_chunk_size
+        chunk_end = chunk_start + sparse_gpi_chunk_size
+
+        local_start = gpi_start - chunk_start
+
+        # Slice from first chunk (gc_start)
+        key = (gc, var, t_idx, s_idx)
+        first_slice = preread_cache[key][..., local_start:]
+
+        # Slice from second chunk (gc_end)
+        gc = gc_end
+        chunk_start = gc * sparse_gpi_chunk_size
+        local_end = gpi_end - chunk_start
+        key = (gc, var, t_idx, s_idx)
+        second_slice = preread_cache[key][..., :local_end]
+
+        # Concatenate along last axis (GPI dimension)
+        return np.concatenate([first_slice, second_slice], axis=-1)
 
 
 def _process_inner_gpi_chunk(
@@ -648,6 +777,7 @@ def _process_inner_gpi_chunk(
     chunk_size_obs,
     obs_alignment,
     local_mask=None,
+    preread_cache=None,
 ):
     """Core read-extract-sort-write logic for a single inner GPI sub-chunk.
 
@@ -657,6 +787,12 @@ def _process_inner_gpi_chunk(
 
     The obs-dimension loop iterates in ``obs_alignment``-sized steps so that
     each read-modify-write cycle aligns to shard (or plain chunk) boundaries.
+
+    Parameters
+    ----------
+    preread_cache : dict or None
+        Pre-read sparse data cache from _preread_sparse_chunks_for_range.
+        If None, falls back to direct zarr reads (original behavior).
     """
     n_gpi_chunk = gpi_end - gpi_start
 
@@ -671,7 +807,12 @@ def _process_inner_gpi_chunk(
         (len(populated), n_gpi_chunk), dtype=sparse_root[time_var].dtype
     )
     for i, (t_idx, s_idx) in enumerate(populated):
-        time_slices[i, :] = sparse_root[time_var][t_idx, s_idx, gpi_start:gpi_end]
+        if preread_cache is not None:
+            time_slices[i, :] = _slice_from_preread(
+                preread_cache, gpi_start, gpi_end, sparse_gpi_chunk_size, time_var, t_idx, s_idx
+            )
+        else:
+            time_slices[i, :] = sparse_root[time_var][t_idx, s_idx, gpi_start:gpi_end]
 
     # --- Per-GPI: find valid observations, sort by time ---
     valid_mask = time_slices != time_fill
@@ -704,7 +845,12 @@ def _process_inner_gpi_chunk(
             continue
         buf = np.empty((len(populated), n_gpi_chunk), dtype=sparse_root[var].dtype)
         for i, (t_idx, s_idx) in enumerate(populated):
-            buf[i, :] = sparse_root[var][t_idx, s_idx, gpi_start:gpi_end]
+            if preread_cache is not None:
+                buf[i, :] = _slice_from_preread(
+                    preread_cache, gpi_start, gpi_end, sparse_gpi_chunk_size, var, t_idx, s_idx
+                )
+            else:
+                buf[i, :] = sparse_root[var][t_idx, s_idx, gpi_start:gpi_end]
         data_cache[var] = buf
 
     if has_beams:
@@ -714,7 +860,12 @@ def _process_inner_gpi_chunk(
                 (len(populated), n_beams, n_gpi_chunk), dtype=sparse_root[var].dtype
             )
             for i, (t_idx, s_idx) in enumerate(populated):
-                buf[i, :, :] = sparse_root[var][t_idx, s_idx, :, gpi_start:gpi_end]
+                if preread_cache is not None:
+                    buf[i, :, :] = _slice_from_preread(
+                        preread_cache, gpi_start, gpi_end, sparse_gpi_chunk_size, var, t_idx, s_idx
+                    )
+                else:
+                    buf[i, :, :] = sparse_root[var][t_idx, s_idx, :, gpi_start:gpi_end]
             data_cache[var] = buf
 
     # --- Determine write positions ---

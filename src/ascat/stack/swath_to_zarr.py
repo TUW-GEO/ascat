@@ -83,7 +83,7 @@ def stack_swaths_to_zarr(
     time_resolution="h",
     n_workers=1,
     chunk_size_gpi=4096,
-    gpi_shard_size=None,
+    shard_size_gpi=None,
     sorted_grid=None,
 ):
     """Convert swath files to Zarr time-series format.
@@ -135,7 +135,7 @@ def stack_swaths_to_zarr(
             date_end=dt_end,
             time_resolution=time_resolution,
             chunk_size_gpi=chunk_size_gpi,
-            gpi_shard_size=gpi_shard_size,
+            gpi_shard_size=shard_size_gpi,
             sat_series=swath_files.sat_series,
             sample_file=filenames[0]
         )
