@@ -804,7 +804,14 @@ def _process_inner_gpi_chunk(
     valid_mask = time_slices != time_fill
 
     gpi_sorted_slots = []
-    new_counts = np.zeros(n_gpi_chunk, dtype=np.int32)
+
+    from .numba_kernels import _sort_slots_kernel, _scatter_scalar_kernel, _scatter_beam_kernel
+
+    mask_arr = local_mask.astype(np.bool_) if local_mask is not None else np.zeros(0, dtype=np.bool_)
+    offsets, flat_indices, new_counts = _sort_slots_kernel(time_slices, time_fill, mask_arr)
+
+    if new_counts.sum() == 0:
+        return
 
     for g in range(n_gpi_chunk):
         if local_mask is not None and local_mask[g]:
@@ -885,17 +892,8 @@ def _process_inner_gpi_chunk(
 
         # Time (scalar)
         chunk_data_time = out_root[time_var][gpi_slice, obs_slice]
-
-        for g in np.where(has_write)[0]:
-            sorted_slots = gpi_sorted_slots[g]
-            ws, we = int(write_starts[g]), int(write_ends[g])
-            ov_start = max(ws, obs_chunk_start)
-            ov_end = min(we, obs_chunk_end)
-            rel_slots = sorted_slots[ov_start - ws: ov_end - ws]
-            rel_obs_start = ov_start - obs_chunk_start
-            rel_obs_end = ov_end - obs_chunk_start
-            chunk_data_time[g, rel_obs_start:rel_obs_end] = time_slices[rel_slots, g]
-
+        _scatter_scalar_kernel(chunk_data_time, time_slices, offsets, flat_indices,
+                            write_starts, obs_chunk_start, obs_chunk_end)
         out_root[time_var][gpi_slice, obs_slice] = chunk_data_time
 
         # Scalar variables
@@ -904,38 +902,16 @@ def _process_inner_gpi_chunk(
                 continue
 
             chunk_data = out_root[var][gpi_slice, obs_slice]
-
-            for g in np.where(has_write)[0]:
-                sorted_slots = gpi_sorted_slots[g]
-                ws, we = int(write_starts[g]), int(write_ends[g])
-                ov_start = max(ws, obs_chunk_start)
-                ov_end = min(we, obs_chunk_end)
-                rel_slots = sorted_slots[ov_start - ws: ov_end - ws]
-                rel_obs_start = ov_start - obs_chunk_start
-                rel_obs_end = ov_end - obs_chunk_start
-                chunk_data[g, rel_obs_start:rel_obs_end] = (
-                    data_cache[var][rel_slots, g]
-                )
-
+            _scatter_scalar_kernel(chunk_data, data_cache[var], offsets, flat_indices,
+                                write_starts, obs_chunk_start, obs_chunk_end)
             out_root[var][gpi_slice, obs_slice] = chunk_data
 
         # Beam variables
         if has_beams:
             for var in sorted(beam_vars):
                 chunk_data = out_root[var][gpi_slice, obs_slice, :]
-
-                for g in np.where(has_write)[0]:
-                    sorted_slots = gpi_sorted_slots[g]
-                    ws, we = int(write_starts[g]), int(write_ends[g])
-                    ov_start = max(ws, obs_chunk_start)
-                    ov_end = min(we, obs_chunk_end)
-                    rel_slots = sorted_slots[ov_start - ws: ov_end - ws]
-                    rel_obs_start = ov_start - obs_chunk_start
-                    rel_obs_end = ov_end - obs_chunk_start
-                    chunk_data[g, rel_obs_start:rel_obs_end, :] = (
-                        data_cache[var][rel_slots, :, g]
-                    )
-
+                _scatter_beam_kernel(chunk_data, data_cache[var], offsets, flat_indices,
+                                    write_starts, obs_chunk_start, obs_chunk_end)
                 out_root[var][gpi_slice, obs_slice, :] = chunk_data
 
     # --- Update n_obs ---
