@@ -723,7 +723,7 @@ def _slice_from_preread(preread_cache, gpi_start, gpi_end, sparse_gpi_chunk_size
 
     Since the pre-read cache stores full sparse chunks, we need to compute
     which chunk(s) the requested range falls in and slice appropriately.
-    Handles cases where the range spans multiple sparse chunks.
+    Handles ranges spanning any number of sparse chunks.
 
     Works for both 2D arrays (gpi,) and 3D arrays (n_beams, gpi).
     """
@@ -731,37 +731,23 @@ def _slice_from_preread(preread_cache, gpi_start, gpi_end, sparse_gpi_chunk_size
     gc_end = (gpi_end - 1) // sparse_gpi_chunk_size
 
     if gc_start == gc_end:
-        gc = gc_start
-        chunk_start = gc * sparse_gpi_chunk_size
-        chunk_end = chunk_start + sparse_gpi_chunk_size
-
+        chunk_start = gc_start * sparse_gpi_chunk_size
         local_start = gpi_start - chunk_start
         local_end = gpi_end - chunk_start
+        return preread_cache[(gc_start, var, t_idx, s_idx)][..., local_start:local_end]
 
-        key = (gc, var, t_idx, s_idx)
-        full_chunk = preread_cache[key]
-
-        return full_chunk[..., local_start:local_end]
-    else:
-        gc = gc_start
+    slices = []
+    for gc in range(gc_start, gc_end + 1):
         chunk_start = gc * sparse_gpi_chunk_size
-        chunk_end = chunk_start + sparse_gpi_chunk_size
 
-        local_start = gpi_start - chunk_start
+        local_start = max(gpi_start - chunk_start, 0)
+        local_end = min(gpi_end - chunk_start, sparse_gpi_chunk_size)
 
-        # Slice from first chunk (gc_start)
-        key = (gc, var, t_idx, s_idx)
-        first_slice = preread_cache[key][..., local_start:]
+        slices.append(
+            preread_cache[(gc, var, t_idx, s_idx)][..., local_start:local_end]
+        )
 
-        # Slice from second chunk (gc_end)
-        gc = gc_end
-        chunk_start = gc * sparse_gpi_chunk_size
-        local_end = gpi_end - chunk_start
-        key = (gc, var, t_idx, s_idx)
-        second_slice = preread_cache[key][..., :local_end]
-
-        # Concatenate along last axis (GPI dimension)
-        return np.concatenate([first_slice, second_slice], axis=-1)
+    return np.concatenate(slices, axis=-1)
 
 
 def _process_inner_gpi_chunk(
