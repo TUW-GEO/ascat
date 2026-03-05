@@ -318,40 +318,29 @@ def _scan_all_populated_chunks(sparse_path, n_swath_time, n_spacecraft, n_gpi, s
     # Each shard file is at time/c/{t}/{s}/{shard_idx}.
     # We need to map from gpi_chunk_idx (inner chunk) back to shard_idx.
     if is_sharded:
-        # Read shard shape from the ShardingCodec's chunk_shape (outer chunks)
-        # Shard shape is on chunk_grid, not on the ShardingCodec itself
-        # (ShardingCodec.chunk_shape is the *inner* chunk shape).
-        shard_size_gpi = time_meta.chunk_grid.chunk_shape[-1]
-        n_gpi_shards = -(-n_gpi // shard_size_gpi)
+            shard_size_gpi = time_meta.chunk_grid.chunk_shape[-1]
+            n_gpi_shards = -(-n_gpi // shard_size_gpi)
 
-        # Find which (t, s) slots have at least one populated shard
-        populated_ts = set()
-        for t_idx in range(n_swath_time):
-            for s_idx in range(n_spacecraft):
-                for shard_idx in range(n_gpi_shards):
-                    shard_path = (
-                        sparse_path / "time" / "c"
-                        / str(t_idx) / str(s_idx) / str(shard_idx)
-                    )
-                    if shard_path.exists():
-                        populated_ts.add((t_idx, s_idx))
-                        break  # one shard present is enough
+            # Single pass: record which (t, s) have each shard_idx populated.
+            # shard_ts_map[shard_idx] = [(t_idx, s_idx), ...]
+            shard_ts_map = {}
+            for t_idx in range(n_swath_time):
+                for s_idx in range(n_spacecraft):
+                    for shard_idx in range(n_gpi_shards):
+                        shard_path = (
+                            sparse_path / "time" / "c"
+                            / str(t_idx) / str(s_idx) / str(shard_idx)
+                        )
+                        if shard_path.exists():
+                            shard_ts_map.setdefault(shard_idx, []).append(
+                                (t_idx, s_idx)
+                            )
 
-        # Map every inner gpi_chunk_idx to the (t, s) slots that have its shard
-        populated_map = {}
-        if populated_ts:
-            populated_slots = sorted(populated_ts)
+            # Map inner gpi_chunk_idx → populated (t, s) slots via shard lookup.
+            populated_map = {}
             for gc in range(n_gpi_chunks):
                 shard_idx = (gc * sparse_gpi_chunk_size) // shard_size_gpi
-                # Find which (t, s) have this specific shard populated
-                slots = []
-                for t_idx, s_idx in populated_slots:
-                    shard_path = (
-                        sparse_path / "time" / "c"
-                        / str(t_idx) / str(s_idx) / str(shard_idx)
-                    )
-                    if shard_path.exists():
-                        slots.append((t_idx, s_idx))
+                slots = shard_ts_map.get(shard_idx)
                 if slots:
                     populated_map[gc] = slots
     else:
