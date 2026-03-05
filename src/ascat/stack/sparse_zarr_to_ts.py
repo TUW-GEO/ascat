@@ -191,7 +191,7 @@ def sparse_to_dense(
     populated_map = _scan_all_populated_chunks(
         sparse_path, n_swath_time, n_spacecraft, n_gpi, sparse_gpi_chunk_size
     )
-    print(f"Scan complete in {timer() - scan_start:.6f}s, "
+    print(f"Scan complete in {timer() - scan_start:.1f}s, "
           f"found {sum(len(v) for v in populated_map.values())} populated chunk slots")
 
     max_new_obs = max((len(slots) for slots in populated_map.values()), default=0)
@@ -288,24 +288,24 @@ def _classify_variables(sparse_root, has_beams):
 def _scan_all_populated_chunks(sparse_path, n_swath_time, n_spacecraft, n_gpi, sparse_gpi_chunk_size):
     """Scan the Zarr v3 store for all populated (swath_time, spacecraft, gpi_chunk) slots.
 
-    Uses ``os.scandir`` to enumerate existing chunk/shard files instead of
-    probing individual paths, reducing the number of syscalls from
-    O(n_swath_time * n_spacecraft * n_gpi_chunks) to O(number of existing files).
+    Probes chunk/shard file existence for the 'time' variable without reading data.
 
     Supports both sharded and unsharded sparse stores:
-    - Sharded: enumerates ``time/c/{t}/{s}/`` to find shard files, then maps
-      each shard index back to the inner gpi_chunk indices it covers.
-    - Unsharded: enumerates ``time/c/{t}/{s}/`` to find chunk files directly.
+    - Sharded (one shard per (t, s) covering all GPIs): probes ``time/c/{t}/{s}/0``
+      and maps that single populated shard to all gpi_chunk indices within it.
+    - Unsharded (one file per inner chunk): probes ``time/c/{t}/{s}/{gc}`` for
+      each gpi_chunk index individually.
 
     Returns
     -------
     dict[int, list[tuple[int, int]]]
         gpi_chunk_index -> list of (swath_time_idx, spacecraft_idx) with data.
     """
-    import os
+    n_gpi_chunks = -(-n_gpi // sparse_gpi_chunk_size)  # ceiling division
 
-    n_gpi_chunks = -(-n_gpi // sparse_gpi_chunk_size)
-
+    # Detect sharding by inspecting the array metadata rather than probing
+    # file paths — the file layout differs between sharded and unsharded stores
+    # and is unreliable as a detection mechanism.
     sparse_root = zarr.open(str(sparse_path), mode="r")
     time_meta = sparse_root["time"].metadata
     is_sharded = any(
@@ -314,64 +314,50 @@ def _scan_all_populated_chunks(sparse_path, n_swath_time, n_spacecraft, n_gpi, s
         for c in (time_meta.codecs or [])
     )
 
-    time_c = str(sparse_path / "time" / "c")
-
-    if not os.path.isdir(time_c):
-        return {}
-
+    # For sharded stores, n_gpi_shards = ceil(n_gpi / shard_size_gpi).
+    # Each shard file is at time/c/{t}/{s}/{shard_idx}.
+    # We need to map from gpi_chunk_idx (inner chunk) back to shard_idx.
     if is_sharded:
-        shard_size_gpi = time_meta.chunk_grid.chunk_shape[-1]
-        chunks_per_shard = shard_size_gpi // sparse_gpi_chunk_size
+            shard_size_gpi = time_meta.chunk_grid.chunk_shape[-1]
+            n_gpi_shards = -(-n_gpi // shard_size_gpi)
 
-        # Single pass: scandir the tree to find all existing shard files.
-        # shard_ts_map[shard_idx] = [(t_idx, s_idx), ...]
-        shard_ts_map = {}
+            # Single pass: record which (t, s) have each shard_idx populated.
+            # shard_ts_map[shard_idx] = [(t_idx, s_idx), ...]
+            shard_ts_map = {}
+            for t_idx in range(n_swath_time):
+                for s_idx in range(n_spacecraft):
+                    for shard_idx in range(n_gpi_shards):
+                        shard_path = (
+                            sparse_path / "time" / "c"
+                            / str(t_idx) / str(s_idx) / str(shard_idx)
+                        )
+                        if shard_path.exists():
+                            shard_ts_map.setdefault(shard_idx, []).append(
+                                (t_idx, s_idx)
+                            )
 
-        for t_entry in os.scandir(time_c):
-            if not t_entry.is_dir():
-                continue
-            t_idx = int(t_entry.name)
-            for s_entry in os.scandir(t_entry.path):
-                if not s_entry.is_dir():
-                    continue
-                s_idx = int(s_entry.name)
-                for shard_entry in os.scandir(s_entry.path):
-                    shard_idx = int(shard_entry.name)
-                    shard_ts_map.setdefault(shard_idx, []).append(
-                        (t_idx, s_idx)
-                    )
-
-        # Map inner gpi_chunk_idx -> populated (t, s) slots via shard lookup.
+            # Map inner gpi_chunk_idx → populated (t, s) slots via shard lookup.
+            populated_map = {}
+            for gc in range(n_gpi_chunks):
+                shard_idx = (gc * sparse_gpi_chunk_size) // shard_size_gpi
+                slots = shard_ts_map.get(shard_idx)
+                if slots:
+                    populated_map[gc] = slots
+    else:
+        # Unsharded: probe each (t, s, gc) combination individually.
         populated_map = {}
         for gc in range(n_gpi_chunks):
-            shard_idx = (gc * sparse_gpi_chunk_size) // shard_size_gpi
-            slots = shard_ts_map.get(shard_idx)
-            if slots:
-                populated_map[gc] = sorted(slots)
-
-    else:
-        # Unsharded: each file in time/c/{t}/{s}/ is a gpi chunk directly.
-        # chunk_ts_map[gc] = [(t_idx, s_idx), ...]
-        chunk_ts_map = {}
-
-        for t_entry in os.scandir(time_c):
-            if not t_entry.is_dir():
-                continue
-            t_idx = int(t_entry.name)
-            for s_entry in os.scandir(t_entry.path):
-                if not s_entry.is_dir():
-                    continue
-                s_idx = int(s_entry.name)
-                for chunk_entry in os.scandir(s_entry.path):
-                    gc = int(chunk_entry.name)
-                    chunk_ts_map.setdefault(gc, []).append(
-                        (t_idx, s_idx)
+            slots = []
+            for t_idx in range(n_swath_time):
+                for s_idx in range(n_spacecraft):
+                    chunk_path = (
+                        sparse_path / "time" / "c"
+                        / str(t_idx) / str(s_idx) / str(gc)
                     )
-
-        populated_map = {
-            gc: sorted(slots)
-            for gc, slots in chunk_ts_map.items()
-        }
+                    if chunk_path.exists():
+                        slots.append((t_idx, s_idx))
+            if slots:
+                populated_map[gc] = slots
 
     return populated_map
 
