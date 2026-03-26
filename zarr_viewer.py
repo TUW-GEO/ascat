@@ -65,7 +65,6 @@ def _decode_cf_time(data_float, attrs):
     """
     units_str = attrs.get("units", "days since 1970-01-01")
 
-    # Parse "X since YYYY-MM-DD [HH:MM:SS]"
     parts = units_str.split(" since ")
     if len(parts) != 2:
         return data_float
@@ -78,7 +77,6 @@ def _decode_cf_time(data_float, attrs):
     except ValueError:
         return data_float
 
-    # Convert to timedelta
     valid = np.isfinite(data_float)
     result = np.full(data_float.shape, np.datetime64("NaT"), dtype="datetime64[ns]")
 
@@ -111,8 +109,6 @@ class ZarrViewer(param.Parameterized):
     swath_time_idx = param.Integer(default=0, bounds=(0, 0))
     spacecraft_idx = param.Integer(default=0, bounds=(0, 0))
     beam_idx = param.Integer(default=0, bounds=(0, 0))
-
-    auto_pyramid = param.Boolean(default=True)
     pyramid_level = param.Integer(default=0, bounds=(0, 0))
 
     clicked_lat = param.Number(default=None, allow_None=True)
@@ -188,12 +184,6 @@ class ZarrViewer(param.Parameterized):
         z = np.sin(lat_rad)
         self.kdtree = cKDTree(np.column_stack([x, y, z]))
 
-        # Viewport tracking
-        self._viewport_x_range = None
-        self._viewport_y_range = None
-        self._viewport_width = 800  # default guess
-        self._current_level = self.n_levels - 1  # start coarsest
-
     def _find_nearest_gpi(self, lon, lat):
         lat_r = np.deg2rad(lat)
         lon_r = np.deg2rad(lon)
@@ -202,25 +192,6 @@ class ZarrViewer(param.Parameterized):
         qz = np.sin(lat_r)
         _, idx = self.kdtree.query([qx, qy, qz])
         return int(idx)
-
-    def _pick_pyramid_level(self):
-        """Choose the best pyramid level for the current viewport."""
-        if not self.auto_pyramid:
-            return self.pyramid_level
-
-        if self._viewport_x_range is None or self._viewport_width <= 0:
-            return self._current_level
-
-        lon_extent = abs(self._viewport_x_range[1] - self._viewport_x_range[0])
-        screen_res = lon_extent / self._viewport_width
-
-        # Pick the coarsest level whose resolution is still <= screen resolution
-        best_level = 0
-        for i, res in enumerate(self.level_resolutions):
-            if res is not None and res <= screen_res:
-                best_level = i
-
-        return best_level
 
     def _on_map_tap(self, event):
         if event.x is not None and event.y is not None:
@@ -233,21 +204,44 @@ class ZarrViewer(param.Parameterized):
             self.clicked_lat = clicked_lat
             self.clicked_gpi = self._find_nearest_gpi(clicked_lon, clicked_lat)
 
-    def _attach_tap_hook(self, plot, element):
-        from bokeh.events import Tap
-        plot.state.on_event(Tap, self._on_map_tap)
+    def _make_hook(self, clabel, is_time_var):
+        """Create a Bokeh finalize hook for tap events and colorbar formatting."""
+        viewer = self
+
+        def hook(plot, element):
+            from bokeh.events import Tap
+            plot.state.on_event(Tap, viewer._on_map_tap)
+
+            # Force-update colorbar title and optionally apply datetime formatter
+            fig = plot.state
+            for obj in fig.right + fig.left + fig.below + fig.above:
+                if hasattr(obj, "color_mapper"):
+                    obj.title = clabel
+                    if is_time_var:
+                        from bokeh.models import CustomJSTickFormatter
+                        obj.formatter = CustomJSTickFormatter(code="""
+                            var ms = tick * 86400000;
+                            var d = new Date(ms);
+                            var y = d.getUTCFullYear();
+                            var m = String(d.getUTCMonth() + 1).padStart(2, '0');
+                            var day = String(d.getUTCDate()).padStart(2, '0');
+                            var h = String(d.getUTCHours()).padStart(2, '0');
+                            var min = String(d.getUTCMinutes()).padStart(2, '0');
+                            return `${y}-${m}-${day} ${h}:${min}`;
+                        """)
+                    break
+
+        return hook
 
     @param.depends("variable", "swath_time_idx", "spacecraft_idx",
-                    "beam_idx", "pyramid_level", "auto_pyramid")
+                    "beam_idx", "pyramid_level")
     def map_view(self):
-        """Render the current data slice at the appropriate pyramid level."""
+        """Render the current data slice at the selected pyramid level."""
         var = self.variable
         if var is None:
             return gv.Points([])
 
-        level = self._pick_pyramid_level()
-        self._current_level = level
-
+        level = self.pyramid_level
         level_group = self.ms_root[str(level)]
         arr = level_group[var]
         attrs = dict(arr.attrs)
@@ -267,25 +261,17 @@ class ZarrViewer(param.Parameterized):
         data_float[data_2d == fill_val] = np.nan
         data_float = _apply_scaling(data_float, attrs)
 
-        # Decode CF time variables to datetime for display
+        # Decode CF time variables for display
         is_time_var = _is_cf_time_var(attrs)
         if is_time_var:
             data_decoded = _decode_cf_time(data_float, attrs)
-            # For map display, convert to float64 hours-of-day or similar
-            # so the colorbar is meaningful
             valid = ~np.isnat(data_decoded)
-            # Show as fractional day-of-year for spatial context
             if np.any(valid):
                 epoch = np.datetime64("1970-01-01", "ns")
                 data_float = np.full(data_decoded.shape, np.nan, dtype=np.float64)
                 data_float[valid] = (
                     (data_decoded[valid] - epoch).astype("float64") / 86400e9
                 )
-                clabel_override = f"{var} [days since epoch]"
-            else:
-                clabel_override = var
-        else:
-            clabel_override = None
 
         da = xr.DataArray(
             data_float,
@@ -300,12 +286,16 @@ class ZarrViewer(param.Parameterized):
             time_val = str(self.swath_times[t])
 
         units = attrs.get("units", "")
-        clabel = clabel_override if clabel_override else (
-            f"{var} [{units}]" if units else var
-        )
+        if is_time_var:
+            clabel = f"{var} [UTC]"
+        elif units:
+            clabel = f"{var} [{units}]"
+        else:
+            clabel = var
+
         level_res = self.level_resolutions[level] if level < len(self.level_resolutions) else "?"
 
-        basemap = gts.OpenTopoMap()
+        basemap = gts.EsriTerrain()
 
         img = gv.Image(
             da, kdims=["longitude", "latitude"], vdims=[var],
@@ -320,7 +310,7 @@ class ZarrViewer(param.Parameterized):
                 f"{var} | {time_val} | SC {self.spacecraft_ids[s]} "
                 f"| L{level} ({level_res}\u00b0)"
             ),
-            hooks=[self._attach_tap_hook],
+            hooks=[self._make_hook(clabel, is_time_var)],
             responsive=True,
             aspect=2,
             active_tools=["wheel_zoom"],
@@ -402,6 +392,7 @@ class ZarrViewer(param.Parameterized):
         else:
             data_decoded = None
             valid = np.isfinite(data_float)
+
         if not np.any(valid):
             return hv.Scatter([]).opts(
                 title=f"GPI {self.ts_gpis[gpi_idx]}: all fill values for {var}",
@@ -414,12 +405,15 @@ class ZarrViewer(param.Parameterized):
         lon_val = self.ts_lons[gpi_idx]
 
         units = attrs.get("units", "")
-        ylabel = f"{var} [{units}]" if units else var
+        if is_time_var:
+            ylabel = f"{var} [UTC]"
+        elif units:
+            ylabel = f"{var} [{units}]"
+        else:
+            ylabel = var
 
-        # Use decoded datetimes for y-axis if this is a time variable
         if data_decoded is not None:
             y_data = data_decoded[valid]
-            ylabel = var
         else:
             y_data = data_float[valid]
 
@@ -460,17 +454,12 @@ class ZarrViewer(param.Parameterized):
             self.param.variable,
             name="Variable",
         )
-
-        auto_pyr_toggle = pn.widgets.Toggle.from_param(
-            self.param.auto_pyramid,
-            name="Auto Pyramid",
-        )
         level_slider = pn.widgets.IntSlider.from_param(
             self.param.pyramid_level,
-            name="Pyramid Level (manual)",
+            name="Pyramid Level",
         )
 
-        controls = [var_select, time_player, sc_slider, auto_pyr_toggle, level_slider]
+        controls = [var_select, time_player, sc_slider, level_slider]
 
         if self.has_beams:
             beam_slider = pn.widgets.IntSlider.from_param(
@@ -480,7 +469,6 @@ class ZarrViewer(param.Parameterized):
             controls.append(beam_slider)
 
         click_info = pn.pane.Str(object="Click on the map to select a point")
-        level_info = pn.pane.Str(object="")
 
         def _update_click_info(*events):
             if self.clicked_lat is not None:
@@ -498,44 +486,15 @@ class ZarrViewer(param.Parameterized):
             "## Controls",
             *controls,
             pn.layout.Divider(),
-            level_info,
             click_info,
             width=280,
         )
 
-        # Build DynamicMaps
         map_dmap = hv.DynamicMap(self.map_view)
         marker_dmap = hv.DynamicMap(self.marker_view)
         combined_map = map_dmap * marker_dmap
 
         map_pane = pn.pane.HoloViews(combined_map, linked_axes=False)
-
-        # Wire up RangeXY and PlotSize streams on the map DynamicMap
-        # to detect zoom/pan and pick the right pyramid level.
-        def _on_range_change(x_range, y_range):
-            if x_range is None:
-                return
-            self._viewport_x_range = x_range
-            self._viewport_y_range = y_range
-            old_level = self._current_level
-            new_level = self._pick_pyramid_level()
-            if new_level != old_level:
-                self._current_level = new_level
-                res = self.level_resolutions[new_level] if new_level < len(self.level_resolutions) else "?"
-                level_info.object = f"Active pyramid: L{new_level} ({res}\u00b0)"
-                # Trigger re-render
-                self.param.trigger("auto_pyramid")
-
-        def _on_size_change(width, height):
-            if width and width > 0:
-                self._viewport_width = width
-
-        range_stream = streams.RangeXY(source=map_dmap)
-        range_stream.add_subscriber(_on_range_change)
-
-        size_stream = streams.PlotSize(source=map_dmap)
-        size_stream.add_subscriber(_on_size_change)
-
         ts_pane = pn.panel(self.timeseries_view, linked_axes=False)
 
         main = pn.Column(map_pane, pn.layout.Divider(), ts_pane)
