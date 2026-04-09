@@ -329,7 +329,7 @@ class TestSwathGridFiles(unittest.TestCase):
         )
 
         # assert that they are not empty
-        for cell, cell_file in zip(cells_to_test, out_dir.rglob("*.nc")):
+        for cell, cell_file in zip(cells_to_test, sorted(out_dir.rglob("*.nc"))):
             ds = xr.open_dataset(cell_file, decode_cf=True, mask_and_scale=False)
             assert len(ds.obs) > 0
             # assert that they contain all the data that the swaths did (for these cells)
@@ -369,7 +369,7 @@ class TestSwathGridFiles(unittest.TestCase):
         )
 
         # assert that the data is the same as the original
-        for cell, cell_file in zip(cells_to_test, out_dir.rglob("*.nc")):
+        for cell, cell_file in zip(cells_to_test, sorted(out_dir.rglob("*.nc"))):
             idx_ds = xr.open_dataset(cell_file, decode_cf=True, mask_and_scale=False).cf_geom.to_indexed_ragged()
             ctg_ds = xr.open_dataset(contig_out_dir / f"{cell}.nc", decode_cf=True, mask_and_scale=False,)
             round_trip_ds = ctg_ds.cf_geom.to_indexed_ragged()
