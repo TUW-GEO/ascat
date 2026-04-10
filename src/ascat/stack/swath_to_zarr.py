@@ -310,7 +310,11 @@ def _create_zarr_structure(
 
     for base_name in sorted(base_names_to_vars_map.keys()):
         var_names = base_names_to_vars_map[base_name]
-        if len(var_names) > 1:
+        var = var_names[0]
+        # Check if variable has multiple beam variants (e.g., sig_for, sig_mid, sig_aft)
+        # or if it has an existing beam dimension
+        has_beam_dim = len(var_names) > 1 or "beam" in sample_ds[var].dims or "beams" in sample_ds[var].dims
+        if has_beam_dim:
             dims = ("swath_time", "spacecraft", "beam", "gpi")
             n_beams = 3
             base_shape = (n_time, n_spacecraft, n_beams, n_gpi)
@@ -573,10 +577,19 @@ def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resol
                     continue
 
                 var_data = ds[var].values
+                # Check if variable has a beam dimension in the source data
+                var_dims = ds[var].dims
+                has_beam_dim = "beam" in var_dims or "beams" in var_dims
 
                 if beam_idx is not None:
+                    # Variable has beam suffix (backscatter_for, incidence_angle_mid, etc.)
                     zarr_root[base_name][time_idx, sat_idx, beam_idx, gpi] = var_data
+                elif has_beam_dim and var_data.ndim == 2 and var_data.shape[1] == 3:
+                    # Variable already has beam dimension - write each beam
+                    for b in range(3):
+                        zarr_root[var][time_idx, sat_idx, b, gpi] = var_data[:, b]
                 else:
+                    # Scalar variable (no beam dimension)
                     zarr_root[var][time_idx, sat_idx, gpi] = var_data
 
         zarr_root["processed"][time_idx, sat_idx] = True
@@ -638,6 +651,15 @@ def _detect_beam_structure(sample_ds):
         for suffix in BEAM_SUFFIXES
     )
 
+    # Check for variables that already have a beam/beams dimension
+    has_existing_beam_dim = any(
+        "beam" in sample_ds[var].dims or "beams" in sample_ds[var].dims
+        for var in data_vars
+    )
+
+    if has_existing_beam_dim:
+        has_beams = True
+
     if not has_beams:
         return False, {var: [var] for var in data_vars}
 
@@ -652,7 +674,12 @@ def _detect_beam_structure(sample_ds):
                     base_names_to_vars_map[base_name] = []
                 base_names_to_vars_map[base_name].append(var)
         if not beam:
-            base_names_to_vars_map[var] = [var]
+            # Check if this variable already has a beam dimension
+            if "beam" in sample_ds[var].dims or "beams" in sample_ds[var].dims:
+                # Treat it as a beam variable without renaming
+                base_names_to_vars_map[var] = [var]
+            else:
+                base_names_to_vars_map[var] = [var]
     base_names_to_vars_map
     return True, base_names_to_vars_map
 

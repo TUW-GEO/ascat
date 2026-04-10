@@ -119,6 +119,26 @@ class TestSwathToZarr(unittest.TestCase):
         self.assertNotIn("backscatter_mid", base_names_to_vars_map)
         self.assertNotIn("backscatter_aft", base_names_to_vars_map)
 
+    def test_detect_beam_structure_with_existing_beam_dim(self):
+        """Test beam detection with variables that have existing beam dimension."""
+        test_grid = get_test_grid_data(n_points=50)
+        ds = generate_synthetic_swath_data(
+            location_ids=test_grid["gpi"],
+            lons=test_grid["lon"],
+            lats=test_grid["lat"],
+            timestamp=np.datetime64("2021-01-01T01:00:00"),
+            with_existing_beam_dim=True
+        )
+        
+        has_beams, base_names_to_vars_map = _detect_beam_structure(ds)
+        self.assertTrue(has_beams)
+        # Variables with beam dimension should be preserved as-is
+        self.assertIn("sig", base_names_to_vars_map)
+        self.assertIn("azi", base_names_to_vars_map)
+        self.assertIn("inc", base_names_to_vars_map)
+        # Check that sig variable has beam dimension
+        self.assertEqual(ds["sig"].dims, ("obs", "beam"))
+
     def test_get_beam_index(self):
         """Test beam index extraction."""
         self.assertEqual(_get_var_beam_index_and_base_name("backscatter_for"), (0, "backscatter"))
@@ -546,7 +566,7 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             np.testing.assert_array_equal(original_ssm[mask], stored_ssm[mask])
 
     def test_sanitizes_calender_to_calendar(self):
-        """Test that 'calender' attribute is renamed to 'calendar'."""
+        """Test that \'calender\' attribute is renamed to \'calendar\'."""
         # Create a dataset with the misspelled attribute
         test_grid = get_test_grid_data(n_points=50)
         ds = generate_synthetic_swath_data(
@@ -589,17 +609,100 @@ class TestSwathToZarrIntegration(unittest.TestCase):
             sat_series="metop",
             sample_file=sample_file
         )
-
+        
         # Open and verify that the time coordinate attributes in Zarr
-        # don't have 'calender' anymore (it was renamed to 'calendar')
+        # don\'t have \'calender\' anymore (it was renamed to \'calendar\')
         check_ds = xr.open_zarr(zarr_path)
         time_attrs = check_ds["swath_time"].attrs
         self.assertNotIn("calender", time_attrs,
-                        "'calender' should not exist in attributes")
+                        "\'calender\' should not exist in attributes")
         if "calendar" in time_attrs:
             self.assertEqual(time_attrs["calendar"], "proleptic_gregorian",
                            "Should have been renamed from calender to calendar")
         check_ds.close()
+
+    def test_populate_zarr_with_existing_beam_dim(self):
+        """Test populating Zarr with data that has existing beam dimension."""
+        from ascat.stack.swath_to_zarr import (
+            _create_zarr_structure, _insert_swath_file, _generate_time_coords
+        )
+        from pygeogrids.grids import BasicGrid
+        
+        test_grid = get_test_grid_data(n_points=50)
+        grid = BasicGrid(test_grid["lon"], test_grid["lat"], test_grid["gpi"])
+        
+        swath_dir = self.tempdir_path / "swaths"
+        swath_dir.mkdir()
+        sample_file = swath_dir / "W_IT-HSAF-ROME,SAT,SSM-ASCAT-METOPA-12.5km-H139_C_LIIB_20250101000000_20210101000000_20210101005959____.nc"
+        
+        ds = generate_synthetic_swath_data(
+            location_ids=test_grid["gpi"],
+            lons=test_grid["lon"],
+            lats=test_grid["lat"],
+            timestamp=np.datetime64("2021-01-01T00:00:00"),
+            with_existing_beam_dim=True,
+            seed=123
+        )
+        ds.to_netcdf(sample_file, engine="h5netcdf")
+        
+        # Save original values for verification
+        original_sig = ds["sig"].values.copy()
+        original_azi = ds["azi"].values.copy()
+        original_inc = ds["inc"].values.copy()
+        
+        zarr_path = self.tempdir_path / "test.zarr"
+        _create_zarr_structure(
+            out_path=zarr_path,
+            grid=grid,
+            date_start=datetime(2021, 1, 1),
+            date_end=datetime(2021, 1, 1, 2, 0, 0),
+            time_resolution="h",
+            chunk_size_gpi=32,
+            gpi_shard_size=None,
+            sat_series="metop",
+            sample_file=sample_file
+        )
+        
+        from ascat.product_info import AscatH139Swath
+        swath_files = SwathGridFiles.from_product_class(swath_dir, AscatH139Swath)
+        
+        zarr_root = zarr.open(zarr_path, mode="r+")
+        time_coords = _generate_time_coords(datetime(2021, 1, 1), datetime(2021, 1, 1, 2, 0, 0), "h")
+        _insert_swath_file(sample_file, swath_files, zarr_root, time_coords, "h")
+        zarr_root.store.close()
+        
+        zarr_root = zarr.open(zarr_path, mode="r")
+        time_index = 0
+        sat_index = 0
+        
+        # Verify beam variables stored correctly - each beam should be populated
+        stored_sig_0 = zarr_root["sig"][time_index, sat_index, 0, :]
+        stored_sig_1 = zarr_root["sig"][time_index, sat_index, 1, :]
+        stored_sig_2 = zarr_root["sig"][time_index, sat_index, 2, :]
+        
+        stored_azi_0 = zarr_root["azi"][time_index, sat_index, 0, :]
+        stored_azi_1 = zarr_root["azi"][time_index, sat_index, 1, :]
+        stored_azi_2 = zarr_root["azi"][time_index, sat_index, 2, :]
+        
+        stored_inc_0 = zarr_root["inc"][time_index, sat_index, 0, :]
+        stored_inc_1 = zarr_root["inc"][time_index, sat_index, 1, :]
+        stored_inc_2 = zarr_root["inc"][time_index, sat_index, 2, :]
+        
+        # Verify each beam matches corresponding source
+        mask = (stored_sig_0 != -9999.0)
+        np.testing.assert_array_equal(original_sig[mask, 0], stored_sig_0[mask])
+        
+        mask = (stored_sig_1 != -9999.0)
+        np.testing.assert_array_equal(original_sig[mask, 1], stored_sig_1[mask])
+        
+        mask = (stored_sig_2 != -9999.0)
+        np.testing.assert_array_equal(original_sig[mask, 2], stored_sig_2[mask])
+        
+        mask = (stored_azi_0 != -9999.0)
+        np.testing.assert_array_equal(original_azi[mask, 0], stored_azi_0[mask])
+        
+        mask = (stored_inc_0 != -9999.0)
+        np.testing.assert_array_equal(original_inc[mask, 0], stored_inc_0[mask])
 
 
 class TestSparseZarrToTs(unittest.TestCase):

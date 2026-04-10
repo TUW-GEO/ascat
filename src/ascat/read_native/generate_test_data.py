@@ -450,6 +450,7 @@ def generate_synthetic_swath_data(
     lats,
     timestamp,
     with_beams=False,
+    with_existing_beam_dim=False,
     seed=None
 ):
     """
@@ -466,7 +467,9 @@ def generate_synthetic_swath_data(
     timestamp : np.datetime64
         Timestamp for the swath
     with_beams : bool, optional
-        If True, include beam-specific variables
+        If True, include beam-specific variables (with suffixes _for, _mid, _aft)
+    with_existing_beam_dim : bool, optional
+        If True, include variables with an existing beam dimension
     seed : int, optional
         Random seed for reproducibility
         
@@ -552,8 +555,30 @@ def generate_synthetic_swath_data(
         {"_FillValue": -128}
     )
     
-    if with_beams:
-        # Beam-specific backscatter
+    if with_existing_beam_dim:
+        # Variables with existing beam dimension
+        data_vars["sig"] = (
+            ("obs", "beam"),
+            np.random.uniform(-15, -5, (n_obs, 3)).astype(np.float32),
+            {"_FillValue": -9999.0, "units": "dB"}
+        )
+        data_vars["azi"] = (
+            ("obs", "beam"),
+            np.random.uniform(0, 360, (n_obs, 3)).astype(np.float32),
+            {"_FillValue": -9999.0, "units": "degrees"}
+        )
+        data_vars["inc"] = (
+            ("obs", "beam"),
+            np.random.uniform(20, 60, (n_obs, 3)).astype(np.float32),
+            {"_FillValue": -9999.0, "units": "degrees"}
+        )
+        data_vars["kp"] = (
+            ("obs", "beam"),
+            np.random.uniform(0, 1, (n_obs, 3)).astype(np.float32),
+            {"_FillValue": -9999.0}
+        )
+    elif with_beams:
+        # Beam-specific backscatter (with suffixes)
         data_vars["backscatter_for"] = (
             "obs",
             np.random.uniform(-10, 10, n_obs).astype(np.float32),
@@ -570,7 +595,7 @@ def generate_synthetic_swath_data(
             {"_FillValue": -9999.0, "units": "dB"}
         )
         
-        # Beam-specific incidence angles
+        # Beam-specific incidence angles (with suffixes)
         data_vars["incidence_angle_for"] = (
             "obs",
             np.random.uniform(20, 60, n_obs).astype(np.float32),
