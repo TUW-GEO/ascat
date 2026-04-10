@@ -348,16 +348,17 @@ def _create_zarr_structure(
     root.create_array(
         "swath_time",
         data=time_coords,
-        chunks=(1,),
+        chunks=time_coords.shape,
         dimension_names=("swath_time",),
         fill_value=dtype_to_nan[np.dtype("datetime64[ns]")],
         compressors=None,
     )
 
+    spacecraft_data = np.array(spacecraft_ids, dtype="int8")
     root.create_array(
         "spacecraft",
-        data=np.array(spacecraft_ids, dtype="int8"),
-        chunks=(1,),
+        data=spacecraft_data,
+        chunks=spacecraft_data.shape,
         dimension_names=("spacecraft",),
         fill_value=dtype_to_nan[np.dtype("int8")],
         compressors=None,
@@ -378,7 +379,7 @@ def _create_zarr_structure(
         root.create_array(
             "beam",
             data=beam_names,
-            chunks=(1,),
+            chunks=beam_names.shape,
             dimension_names=("beam",),
             fill_value=b"",
             compressors=None,
@@ -390,28 +391,31 @@ def _create_zarr_structure(
     except ValueError:
         gpis, lons, lats = grid.get_grid_points()
 
+    gpis_data = np.asarray(gpis, dtype="int32")
     root.create_array(
         "gpi",
-        data=np.asarray(gpis, dtype="int32"),
-        chunks=(chunk_size_gpi,),
+        data=gpis_data,
+        chunks=gpis_data.shape,
         dimension_names=("gpi",),
         fill_value=dtype_to_nan[np.dtype("int32")],
         compressors=None,
     )
 
+    lons_data = np.asarray(lons, dtype="float32")
     root.create_array(
         "longitude",
-        data=np.asarray(lons, dtype="float32"),
-        chunks=(chunk_size_gpi,),
+        data=lons_data,
+        chunks=lons_data.shape,
         dimension_names=("gpi",),
         fill_value=dtype_to_nan[np.dtype("float32")],
         compressors=None,
     )
-
+     
+    lats_data = np.asarray(lats, dtype="float32")
     root.create_array(
         "latitude",
-        data=np.asarray(lats, dtype="float32"),
-        chunks=(chunk_size_gpi,),
+        data=lats_data,
+        chunks=lats_data.shape,
         dimension_names=("gpi",),
         fill_value=dtype_to_nan[np.dtype("float32")],
         compressors=None,
