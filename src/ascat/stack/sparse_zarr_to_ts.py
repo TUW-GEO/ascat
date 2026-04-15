@@ -1,4 +1,3 @@
-
 # Copyright (c) 2025, TU Wien
 # All rights reserved.
 #
@@ -40,12 +39,22 @@ spatial-chunk.  Each read delivers the full observation history for a
 small group of GPIs.  Drop fill values, sort by time, write to the
 final dense time-series store.
 
+Pass 2 supports both *creation* (fresh dense store) and *append*
+(add new observations to an existing dense store).  In append mode,
+each GPI's new observations are placed at position ``n_obs[gpi]`` and
+``n_obs`` is updated accordingly.  The new data is expected to be
+temporally after the existing data — a check runs before the append
+and raises if any GPI would have new data earlier than its existing
+last observation.
+
 The two-pass approach reduces total Zarr read operations from hundreds
 of millions (original method) to a few million, at the cost of
 temporary disk space for the intermediate store.
 """
 
+import warnings
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from dataclasses import dataclass
 from functools import partial
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
@@ -57,8 +66,6 @@ import numpy as np
 import zarr
 from tqdm import tqdm
 from zarr.codecs import BloscCodec, BloscShuffle
-
-from dataclasses import dataclass
 
 from ascat.utils import dtype_to_nan
 
@@ -123,14 +130,7 @@ SHARD_INDEX_EMPTY = 0xFFFFFFFFFFFFFFFF
 
 
 def _read_shard_index(shard_path, n_inner_chunks):
-    """Read the sharding_indexed codec footer and return populated inner chunk indices.
-
-    The shard index is stored at the end of the file as *n_inner_chunks*
-    pairs of (offset, nbytes) encoded as little-endian uint64, followed
-    by a 4-byte crc32c checksum (the default index_codecs configuration).
-
-    An inner chunk is empty when both offset and nbytes equal 2^64 - 1.
-    """
+    """Read the sharding_indexed codec footer and return populated inner chunk indices."""
     index_entry_bytes = n_inner_chunks * 16
     total_index_bytes = index_entry_bytes + 4  # + crc32c
 
@@ -147,7 +147,7 @@ def _read_shard_index(shard_path, n_inner_chunks):
 
 
 # ---------------------------------------------------------------------------
-# Variable classification (shared with original module)
+# Variable classification
 # ---------------------------------------------------------------------------
 
 def _classify_variables(root, has_beams):
@@ -194,21 +194,12 @@ def _classify_intermediate_variables(root, has_beams):
 
 
 # ---------------------------------------------------------------------------
-# Populated-chunk scanning (with shard index support)
+# Populated-chunk scanning
 # ---------------------------------------------------------------------------
 
 def _scan_all_populated_slots(sparse_path, n_swath_time, n_spacecraft,
                               n_gpi, sparse_gpi_chunk_size):
-    """Scan the sparse store and return all populated (swath_time, spacecraft) slots.
-
-    Uses shard index reading when the store is sharded, falling back to
-    chunk file existence probing otherwise.
-
-    Returns
-    -------
-    list of tuple[int, int]
-        Sorted list of (swath_time_idx, spacecraft_idx) pairs that have data.
-    """
+    """Scan the sparse store and return all populated (swath_time, spacecraft) slots."""
     sparse_root = zarr.open(str(sparse_path), mode="r")
     time_meta = sparse_root["time"].metadata
     is_sharded = any(
@@ -258,7 +249,7 @@ def _scan_all_populated_slots(sparse_path, n_swath_time, n_spacecraft,
                     )
                     if chunk_path.exists():
                         all_slots.add((t_idx, s_idx))
-                        break  # one hit is enough to know this slot exists
+                        break
 
     return sorted(all_slots)
 
@@ -277,15 +268,7 @@ def _round_up(n, multiple):
 # ---------------------------------------------------------------------------
 
 def _reset_codec_pipeline_worker():
-    """Initializer for shm read worker processes.
-
-    When the parent process has configured zarrs-python as the codec
-    pipeline (for fast writes), forked worker processes inherit that
-    config.  But inside workers we want plain zarr-python — each worker
-    is already a full process with its own GIL providing parallelism,
-    and having each one also try to spin up Rust thread pools would
-    cause oversubscription.
-    """
+    """Reset codec pipeline to default zarr-python in worker processes."""
     try:
         import zarr
         zarr.config.set({"codec_pipeline.path": "zarr.core.codec_pipeline.BatchedCodecPipeline"})
@@ -294,19 +277,12 @@ def _reset_codec_pipeline_worker():
 
 
 def _shm_read_worker(args):
-    """Read one (t_idx, s_idx) slab for ALL variables into shared memory.
-
-    Runs in a worker process — opens its own zarr store handle, reads
-    every variable for one time slot, writes results directly into
-    pre-allocated shared memory buffers.  No data crosses the process
-    boundary via pickling.
-    """
+    """Read one (t_idx, s_idx) slab for ALL variables into shared memory."""
     (sparse_path, t_idx, s_idx, row_idx, batch_actual, n_gpi,
      scalar_shm_info, beam_shm_info) = args
 
     root = zarr.open(sparse_path, mode="r")
 
-    # scalar_shm_info: list of (var, shm_name, dtype_str)
     for var, shm_name, dtype_str in scalar_shm_info:
         shm = SharedMemory(name=shm_name)
         dtype = np.dtype(dtype_str)
@@ -316,7 +292,6 @@ def _shm_read_worker(args):
         finally:
             shm.close()
 
-    # beam_shm_info: list of (var, shm_name, dtype_str, n_beams)
     for var, shm_name, dtype_str, n_beams in beam_shm_info:
         shm = SharedMemory(name=shm_name)
         dtype = np.dtype(dtype_str)
@@ -339,47 +314,7 @@ def rechunk_sparse(
     batch_size=500,
     n_read_threads=16,
 ):
-    """Rechunk a sparse swath-time Zarr store into an intermediate obs-major store.
-
-    Reads the sparse store time-slot by time-slot in batches, writing to
-    an intermediate store with dimensions (obs, gpi) for scalar variables
-    and (obs, beam, gpi) for beam variables.  The obs axis is a compacted
-    enumeration of all populated (swath_time, spacecraft) slots.
-
-    This function uses a hybrid strategy:
-
-    - **Reads**: ProcessPoolExecutor with shared memory buffers.  Each
-      worker process truly parallelizes decompression (no GIL contention),
-      reading one slab per variable directly into the shared buffer.
-    - **Writes**: ThreadPoolExecutor in the main process.  For best
-      performance, configure zarrs-python as the codec pipeline before
-      calling this function, so writes go through Rust:
-
-          import zarr
-          zarr.config.set({
-              "codec_pipeline.path": "zarrs.ZarrsCodecPipeline",
-              "threading.max_workers": 64,
-          })
-
-      The worker processes automatically reset to the default zarr-python
-      codec pipeline via an initializer, so the subprocess reads don't
-      try to spawn Rust thread pools (which would oversubscribe the CPU).
-
-    Parameters
-    ----------
-    sparse_path : str or Path
-        Path to the sparse Zarr store (swath_time, spacecraft, [beam,] gpi).
-    intermediate_path : str or Path
-        Path for the intermediate rechunked Zarr store.
-    target_gpi_chunk : int
-        Spatial chunk size in the intermediate store.  Default 64.
-    batch_size : int
-        Number of time slots to read into memory at once.  Controls memory
-        usage and chunk alignment along the obs axis.  Default 500.
-    n_read_threads : int
-        Number of worker processes for reading and also the number of
-        threads used for the parallel write phase.  Default 16.
-    """
+    """Rechunk a sparse swath-time Zarr store into an intermediate obs-major store."""
     sparse_path = Path(sparse_path)
     intermediate_path = Path(intermediate_path)
     sparse_root = zarr.open(sparse_path, mode="r")
@@ -396,7 +331,6 @@ def rechunk_sparse(
     print(f"Scalar variables: {all_vars_scalar}")
     print(f"Beam variables: {all_vars_beam}")
 
-    # --- Scan for populated slots ---
     print("Scanning for populated slots...")
     scan_start = timer()
     all_slots = _scan_all_populated_slots(
@@ -408,15 +342,12 @@ def rechunk_sparse(
 
     padded_n_obs = _round_up(n_obs, batch_size)
 
-    # --- Create intermediate store ---
     print(f"Creating intermediate store at {intermediate_path}")
     print(f"  obs={padded_n_obs}, gpi={n_gpi}, "
           f"chunks=({batch_size}, {target_gpi_chunk})")
 
     store = zarr.storage.LocalStore(str(intermediate_path))
     int_root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
-
-    # Copy group-level attributes
     int_root.attrs.update(dict(sparse_root.attrs))
 
     compressor = BloscCodec(cname="zstd", clevel=3, shuffle=BloscShuffle.shuffle)
@@ -447,14 +378,12 @@ def rechunk_sparse(
                 compressors=compressor,
             )
 
-    # Slot index: maps obs position -> (swath_time_idx, spacecraft_idx)
     slot_arr = np.array(all_slots, dtype="int32")
     int_root.create_array("_slot_index", data=slot_arr)
 
-    # Copy spatial coordinates with attributes
     for coord in ["gpi", "longitude", "latitude"]:
         if coord in sparse_root:
-            arr = int_root.create_array(
+            int_root.create_array(
                 coord, data=sparse_root[coord][:],
                 attributes=dict(sparse_root[coord].attrs),
             )
@@ -464,12 +393,10 @@ def rechunk_sparse(
             attributes=dict(sparse_root["beam"].attrs),
         )
 
-    # --- Process in batches ---
     n_batches = -(-n_obs // batch_size)
     print(f"Processing {n_obs} slots in {n_batches} batches of {batch_size}")
     total_start = timer()
 
-    # Collect dtype and fill_value info (avoid pickling zarr objects)
     var_info_scalar = [
         (var, str(sparse_root[var].dtype), sparse_root[var].metadata.fill_value)
         for var in all_vars_scalar
@@ -480,12 +407,8 @@ def rechunk_sparse(
         for var in all_vars_beam
     ] if has_beams else []
 
-    # --- Allocate shared memory buffers ONCE, reuse across all batches ---
-    # Buffers are sized for the full batch_size.  The last batch may be
-    # smaller (n_obs not divisible by batch_size) — in that case we just
-    # write a partial slice.
     print(f"Allocating shared memory buffers for batch_size={batch_size}")
-    scalar_shms = []  # (var, shm, buf, dtype_str)
+    scalar_shms = []
     for var, dtype_str, fill_val in var_info_scalar:
         dtype = np.dtype(dtype_str)
         buf_size = batch_size * n_gpi * dtype.itemsize
@@ -493,7 +416,7 @@ def rechunk_sparse(
         buf = np.ndarray((batch_size, n_gpi), dtype=dtype, buffer=shm.buf)
         scalar_shms.append((var, shm, buf, dtype_str, fill_val))
 
-    beam_shms = []  # (var, shm, buf, dtype_str, n_beams, fill_val)
+    beam_shms = []
     for var, dtype_str, fill_val, n_beams in var_info_beam:
         dtype = np.dtype(dtype_str)
         buf_size = batch_size * n_beams * n_gpi * dtype.itemsize
@@ -502,7 +425,6 @@ def rechunk_sparse(
             (batch_size, n_beams, n_gpi), dtype=dtype, buffer=shm.buf)
         beam_shms.append((var, shm, buf, dtype_str, n_beams, fill_val))
 
-    # Pre-build the shm_info lists (constant across batches)
     scalar_shm_info = [
         (var, shm.name, dtype_str)
         for var, shm, buf, dtype_str, fill_val in scalar_shms
@@ -525,11 +447,6 @@ def rechunk_sparse(
 
                 batch_timer = timer()
 
-                # --- Reset buffers to fill values ---
-                # Only needs to touch the rows we'll actually write to.
-                # The last batch may be smaller than batch_size — any rows
-                # beyond `actual` are left from the previous batch but we
-                # only write [:actual] to the intermediate.
                 for var, shm, buf, dtype_str, fill_val in scalar_shms:
                     buf[:actual] = fill_val
                 for var, shm, buf, dtype_str, n_beams, fill_val in beam_shms:
@@ -537,7 +454,6 @@ def rechunk_sparse(
 
                 fill_elapsed = timer() - batch_timer
 
-                # --- Build task list: one task per slot, reads ALL variables ---
                 tasks = [
                     (str(sparse_path), t_idx, s_idx, i, batch_size, n_gpi,
                      scalar_shm_info, beam_shm_info)
@@ -548,7 +464,6 @@ def rechunk_sparse(
                 list(pool.map(_shm_read_worker, tasks))
                 read_elapsed = timer() - read_timer
 
-                # --- Write all buffers to intermediate store in parallel ---
                 write_timer = timer()
                 obs_start = batch_start_idx
                 obs_end = batch_start_idx + actual
@@ -575,7 +490,6 @@ def rechunk_sparse(
         total_elapsed = timer() - total_start
         print(f"Rechunking complete in {total_elapsed:.1f}s")
     finally:
-        # Clean up shared memory
         for var, shm, buf, dtype_str, fill_val in scalar_shms:
             shm.close()
             shm.unlink()
@@ -585,232 +499,7 @@ def rechunk_sparse(
 
 
 # ---------------------------------------------------------------------------
-# Pass 1 (alternative): Rechunk using zarrs-python codec pipeline
-# ---------------------------------------------------------------------------
-
-def rechunk_sparse_zarrs(
-    sparse_path,
-    intermediate_path,
-    target_gpi_chunk=64,
-    batch_size=500,
-    n_threads=64,
-):
-    """Rechunk using the zarrs-python (Rust) codec pipeline.
-
-    Same logic as ``rechunk_sparse`` but relies on zarrs-python for
-    parallel chunk decompression.  Because zarrs-python releases the
-    GIL during reads/writes, plain ``ThreadPoolExecutor`` parallelism
-    works — no need for shared memory or process pools.
-
-    You must install zarrs-python and configure it before calling:
-
-        import zarr
-        zarr.config.set({
-            "codec_pipeline.path": "zarrs.ZarrsCodecPipeline",
-            "threading.max_workers": 64,
-        })
-
-    Parameters
-    ----------
-    sparse_path : str or Path
-    intermediate_path : str or Path
-    target_gpi_chunk : int
-        Spatial chunk size in the intermediate store.  Default 64.
-    batch_size : int
-        Number of time slots per memory batch.  Default 500.
-    n_threads : int
-        Number of Python-side threads used to dispatch reads and writes.
-        zarrs-python will manage its own internal thread pool below this.
-        Default 64.
-    """
-    sparse_path = Path(sparse_path)
-    intermediate_path = Path(intermediate_path)
-    sparse_root = zarr.open(sparse_path, mode="r")
-
-    has_beams = "beam" in sparse_root
-    n_gpi = sparse_root["gpi"].shape[0]
-    n_spacecraft = sparse_root["spacecraft"].shape[0]
-    n_swath_time = sparse_root["swath_time"].shape[0]
-    sparse_gpi_chunk_size = sparse_root["time"].chunks[-1]
-
-    beam_vars, scalar_vars = _classify_variables(sparse_root, has_beams)
-    all_vars_scalar = sorted(scalar_vars)
-    all_vars_beam = sorted(beam_vars) if has_beams else []
-    print(f"Scalar variables: {all_vars_scalar}")
-    print(f"Beam variables: {all_vars_beam}")
-
-    # --- Scan for populated slots ---
-    print("Scanning for populated slots...")
-    scan_start = timer()
-    all_slots = _scan_all_populated_slots(
-        sparse_path, n_swath_time, n_spacecraft, n_gpi, sparse_gpi_chunk_size,
-    )
-    n_obs = len(all_slots)
-    print(f"Scan complete in {timer() - scan_start:.1f}s, "
-          f"found {n_obs} populated slots")
-
-    padded_n_obs = _round_up(n_obs, batch_size)
-
-    # --- Create intermediate store ---
-    print(f"Creating intermediate store at {intermediate_path}")
-    print(f"  obs={padded_n_obs}, gpi={n_gpi}, "
-          f"chunks=({batch_size}, {target_gpi_chunk})")
-
-    store = zarr.storage.LocalStore(str(intermediate_path))
-    int_root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
-    int_root.attrs.update(dict(sparse_root.attrs))
-
-    compressor = BloscCodec(cname="zstd", clevel=3, shuffle=BloscShuffle.shuffle)
-
-    for var in all_vars_scalar:
-        src = sparse_root[var]
-        int_root.create_array(
-            name=var,
-            dtype=src.dtype,
-            shape=(padded_n_obs, n_gpi),
-            chunks=(batch_size, target_gpi_chunk),
-            fill_value=src.metadata.fill_value,
-            attributes=dict(src.attrs),
-            compressors=compressor,
-        )
-
-    if has_beams:
-        n_beams = sparse_root["beam"].shape[0]
-        for var in all_vars_beam:
-            src = sparse_root[var]
-            int_root.create_array(
-                name=var,
-                dtype=src.dtype,
-                shape=(padded_n_obs, n_beams, n_gpi),
-                chunks=(batch_size, 1, target_gpi_chunk),
-                fill_value=src.metadata.fill_value,
-                attributes=dict(src.attrs),
-                compressors=compressor,
-            )
-
-    slot_arr = np.array(all_slots, dtype="int32")
-    int_root.create_array("_slot_index", data=slot_arr)
-
-    for coord in ["gpi", "longitude", "latitude"]:
-        if coord in sparse_root:
-            int_root.create_array(
-                coord, data=sparse_root[coord][:],
-                attributes=dict(sparse_root[coord].attrs),
-            )
-    if has_beams and "beam" in sparse_root:
-        int_root.create_array(
-            "beam", data=sparse_root["beam"][:],
-            attributes=dict(sparse_root["beam"].attrs),
-        )
-
-    # --- Allocate plain numpy buffers ONCE, reuse across all batches ---
-    # No shared memory needed — zarrs-python releases the GIL.
-    print(f"Allocating numpy buffers for batch_size={batch_size}")
-    scalar_bufs = {}  # var -> (buf, fill_val)
-    for var in all_vars_scalar:
-        dtype = sparse_root[var].dtype
-        fill_val = sparse_root[var].metadata.fill_value
-        buf = np.empty((batch_size, n_gpi), dtype=dtype)
-        scalar_bufs[var] = (buf, fill_val)
-
-    beam_bufs = {}  # var -> (buf, fill_val, n_beams)
-    if has_beams:
-        for var in all_vars_beam:
-            dtype = sparse_root[var].dtype
-            fill_val = sparse_root[var].metadata.fill_value
-            buf = np.empty((batch_size, n_beams, n_gpi), dtype=dtype)
-            beam_bufs[var] = (buf, fill_val, n_beams)
-
-    # Prefault the buffers so the first batch doesn't pay the cost of
-    # OS page-faulting hundreds of GB of fresh anonymous memory.
-    # np.empty() only reserves virtual memory; first write triggers faults.
-    print("Prefaulting buffers...")
-    prefault_start = timer()
-    for var, (buf, fill_val) in scalar_bufs.items():
-        buf[:] = fill_val
-    for var, (buf, fill_val, n_beams) in beam_bufs.items():
-        buf[:] = fill_val
-    print(f"Prefault done in {timer() - prefault_start:.1f}s")
-
-    # --- Process in batches ---
-    n_batches = -(-n_obs // batch_size)
-    print(f"Processing {n_obs} slots in {n_batches} batches of {batch_size}")
-    total_start = timer()
-
-    def _read_slot(args):
-        """Read all variables for one (t_idx, s_idx) slot into row i."""
-        i, t_idx, s_idx = args
-        for var in all_vars_scalar:
-            buf, _ = scalar_bufs[var]
-            buf[i, :] = sparse_root[var][t_idx, s_idx, :]
-        for var in all_vars_beam:
-            buf, _, _ = beam_bufs[var]
-            buf[i, :, :] = sparse_root[var][t_idx, s_idx, :, :]
-
-    def _write_scalar(item):
-        var, (buf, fill_val), obs_start, obs_end, actual = item
-        int_root[var][obs_start:obs_end, :] = buf[:actual]
-
-    def _write_beam(item):
-        var, (buf, fill_val, n_beams), obs_start, obs_end, actual = item
-        int_root[var][obs_start:obs_end, :, :] = buf[:actual]
-
-    for batch_idx in range(n_batches):
-        batch_start_idx = batch_idx * batch_size
-        batch_end_idx = min(batch_start_idx + batch_size, n_obs)
-        batch = all_slots[batch_start_idx:batch_end_idx]
-        actual = len(batch)
-
-        batch_timer = timer()
-
-        # Reset only the rows we'll actually use to fill values
-        for var, (buf, fill_val) in scalar_bufs.items():
-            buf[:actual] = fill_val
-        for var, (buf, fill_val, n_beams) in beam_bufs.items():
-            buf[:actual] = fill_val
-
-        fill_elapsed = timer() - batch_timer
-
-        # --- Reads: one task per slot, each reads all variables ---
-        read_timer = timer()
-        read_tasks = [(i, t_idx, s_idx) for i, (t_idx, s_idx) in enumerate(batch)]
-
-        with ThreadPoolExecutor(max_workers=n_threads) as pool:
-            list(pool.map(_read_slot, read_tasks))
-
-        read_elapsed = timer() - read_timer
-
-        # --- Writes: one task per variable, in threads ---
-        write_timer = timer()
-        obs_start = batch_start_idx
-        obs_end = batch_start_idx + actual
-
-        scalar_write_items = [
-            (var, scalar_bufs[var], obs_start, obs_end, actual)
-            for var in all_vars_scalar
-        ]
-        beam_write_items = [
-            (var, beam_bufs[var], obs_start, obs_end, actual)
-            for var in all_vars_beam
-        ]
-
-        with ThreadPoolExecutor(max_workers=n_threads) as pool:
-            list(pool.map(_write_scalar, scalar_write_items))
-            if beam_write_items:
-                list(pool.map(_write_beam, beam_write_items))
-
-        write_elapsed = timer() - write_timer
-
-        print(f"  Batch {batch_idx + 1}/{n_batches}: {actual} slots, "
-              f"fill {fill_elapsed:.1f}s, "
-              f"read {read_elapsed:.1f}s, write {write_elapsed:.1f}s")
-
-    total_elapsed = timer() - total_start
-    print(f"Rechunking complete in {total_elapsed:.1f}s")
-
-
-# ---------------------------------------------------------------------------
-# Pass 2: Dense conversion from intermediate
+# Pass 2: Dense conversion from intermediate (create + append modes)
 # ---------------------------------------------------------------------------
 
 def _create_dense_structure_from_intermediate(
@@ -829,7 +518,6 @@ def _create_dense_structure_from_intermediate(
     store = zarr.storage.LocalStore(str(out_path))
     root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
 
-    # Copy group-level attributes from intermediate
     root.attrs.update(dict(int_root.attrs))
 
     if has_beams:
@@ -919,7 +607,127 @@ def _create_dense_structure_from_intermediate(
         )
 
 
-def _process_spatial_chunk_from_intermediate(
+def _expand_obs_dimension(out_root, needed_size, obs_alignment,
+                          beam_vars, scalar_vars, has_beams):
+    """Expand the obs dimension in alignment-sized increments.
+
+    ``obs_alignment`` is the shard obs size when sharding is active, or
+    the plain chunk obs size otherwise, ensuring expansions always land
+    on a shard/chunk boundary.
+    """
+    current_size = out_root["obs"].shape[0]
+    new_size = _round_up(needed_size, obs_alignment)
+
+    if new_size <= current_size:
+        return
+
+    print(f"Expanding obs dimension from {current_size} to {new_size}")
+
+    for var in sorted(scalar_vars):
+        arr = out_root[var]
+        new_shape = list(arr.shape)
+        new_shape[1] = new_size
+        arr.resize(tuple(new_shape))
+
+    if has_beams:
+        for var in sorted(beam_vars):
+            arr = out_root[var]
+            new_shape = list(arr.shape)
+            new_shape[1] = new_size
+            arr.resize(tuple(new_shape))
+
+    out_root["obs"].resize((new_size,))
+    out_root["obs"][current_size:new_size] = np.arange(
+        current_size, new_size, dtype="int32"
+    )
+
+
+def _sort_and_compact_slab(time_data, time_fill, scalar_data, beam_data,
+                            scalar_vars, beam_vars, has_beams, chunk_width):
+    """Sort per-GPI valid observations by time and pack into compact arrays.
+
+    Returns
+    -------
+    n_valid_per_gpi : (chunk_width,) int32
+    new_time : (chunk_width, max_new) sorted time values
+    new_scalars : dict var -> (chunk_width, max_new) sorted scalar values
+    new_beams : dict var -> (chunk_width, max_new, n_beams) sorted beam values
+    """
+    valid_mask = time_data != time_fill
+    n_valid_per_gpi = valid_mask.sum(axis=0).astype(np.int32)
+    max_new = int(n_valid_per_gpi.max()) if n_valid_per_gpi.size else 0
+
+    if max_new == 0:
+        return n_valid_per_gpi, None, {}, {}
+
+    new_time = np.full((chunk_width, max_new), time_fill, dtype=time_data.dtype)
+    new_scalars = {}
+    for var in sorted(scalar_vars):
+        if var == "time":
+            continue
+        src = scalar_data[var]
+        new_scalars[var] = np.full((chunk_width, max_new),
+                                   scalar_data[var + "__fill"],
+                                   dtype=src.dtype)
+
+    new_beams = {}
+    if has_beams:
+        n_beams = None
+        for var in sorted(beam_vars):
+            src = beam_data[var]
+            if n_beams is None:
+                n_beams = src.shape[1]
+            new_beams[var] = np.full((chunk_width, max_new, n_beams),
+                                     beam_data[var + "__fill"],
+                                     dtype=src.dtype)
+
+    for g in range(chunk_width):
+        n_v = int(n_valid_per_gpi[g])
+        if n_v == 0:
+            continue
+        valid = valid_mask[:, g]
+        times_g = time_data[valid, g]
+        order = np.argsort(times_g)
+
+        new_time[g, :n_v] = times_g[order]
+        for var in sorted(scalar_vars):
+            if var == "time":
+                continue
+            new_scalars[var][g, :n_v] = scalar_data[var][valid, g][order]
+        if has_beams:
+            for var in sorted(beam_vars):
+                new_beams[var][g, :n_v, :] = beam_data[var][valid, :, g][order, :]
+
+    return n_valid_per_gpi, new_time, new_scalars, new_beams
+
+
+def _read_intermediate_slab(int_root, gpi_start, gpi_end,
+                            scalar_vars, beam_vars, has_beams):
+    """Read the full (obs, gpi-range) slab for this spatial chunk.
+
+    Returns dictionaries including fill values, so the sort/compact
+    helper can construct output arrays without re-reading metadata.
+    """
+    time_data = int_root["time"][:, gpi_start:gpi_end]
+    time_fill = int_root["time"].metadata.fill_value
+
+    scalar_data = {"time": time_data, "time__fill": time_fill}
+    for var in sorted(scalar_vars):
+        if var == "time":
+            continue
+        scalar_data[var] = int_root[var][:, gpi_start:gpi_end]
+        scalar_data[var + "__fill"] = int_root[var].metadata.fill_value
+
+    beam_data = {}
+    if has_beams:
+        for var in sorted(beam_vars):
+            beam_data[var] = int_root[var][:, :, gpi_start:gpi_end]
+            beam_data[var + "__fill"] = int_root[var].metadata.fill_value
+
+    return time_data, time_fill, scalar_data, beam_data
+
+
+def _process_spatial_chunk_create_mode(
     gpi_range,
     intermediate_path,
     out_path,
@@ -927,12 +735,58 @@ def _process_spatial_chunk_from_intermediate(
     scalar_vars,
     has_beams,
 ):
-    """Process one spatial chunk: read from intermediate, sort, write to dense.
+    """Fresh-store variant: write starting at obs=0 for every GPI."""
+    gpi_start, gpi_end = gpi_range
+    chunk_width = gpi_end - gpi_start
 
-    Each spatial chunk in the intermediate contains the full observation
-    history for a small group of GPIs.  We read it all at once (one
-    contiguous read per variable), drop fill values, sort by time per
-    GPI, and write to the dense output.
+    int_root = zarr.open(intermediate_path, mode="r")
+    out_root = zarr.open(out_path, mode="a")
+
+    time_data, time_fill, scalar_data, beam_data = _read_intermediate_slab(
+        int_root, gpi_start, gpi_end, scalar_vars, beam_vars, has_beams,
+    )
+
+    n_valid_per_gpi, new_time, new_scalars, new_beams = _sort_and_compact_slab(
+        time_data, time_fill, scalar_data, beam_data,
+        scalar_vars, beam_vars, has_beams, chunk_width,
+    )
+
+    max_valid = int(n_valid_per_gpi.max()) if n_valid_per_gpi.size else 0
+    if max_valid == 0:
+        return
+
+    obs_end = max_valid
+    out_root["time"][gpi_start:gpi_end, :obs_end] = new_time
+    for var in sorted(scalar_vars):
+        if var == "time":
+            continue
+        out_root[var][gpi_start:gpi_end, :obs_end] = new_scalars[var]
+    if has_beams:
+        for var in sorted(beam_vars):
+            out_root[var][gpi_start:gpi_end, :obs_end, :] = new_beams[var]
+
+    out_root["n_obs"][gpi_start:gpi_end] = n_valid_per_gpi.astype("uint32")
+
+
+def _process_spatial_chunk_append_mode(
+    gpi_range,
+    intermediate_path,
+    out_path,
+    beam_vars,
+    scalar_vars,
+    has_beams,
+    obs_alignment,
+):
+    """Append-mode variant: each GPI starts writing at existing n_obs[gpi].
+
+    Uses obs-chunk-aligned read-modify-write loops so that each cycle
+    affects exactly one (gpi_range × obs_chunk) block of storage.
+
+    Parameters
+    ----------
+    obs_alignment : int
+        Shard obs size (if sharding) or plain chunk obs size.  The RMW
+        loop walks the obs axis in steps of this size.
     """
     gpi_start, gpi_end = gpi_range
     chunk_width = gpi_end - gpi_start
@@ -940,86 +794,207 @@ def _process_spatial_chunk_from_intermediate(
     int_root = zarr.open(intermediate_path, mode="r")
     out_root = zarr.open(out_path, mode="a")
 
-    # --- Read all data for this spatial chunk ---
-    # One read per variable: (n_obs_total, chunk_width)
-    time_data = int_root["time"][:, gpi_start:gpi_end]
-    time_fill = int_root["time"].metadata.fill_value
+    time_data, time_fill, scalar_data, beam_data = _read_intermediate_slab(
+        int_root, gpi_start, gpi_end, scalar_vars, beam_vars, has_beams,
+    )
 
-    scalar_data = {}
-    for var in sorted(scalar_vars):
-        if var == "time":
-            continue
-        scalar_data[var] = int_root[var][:, gpi_start:gpi_end]
+    n_valid_per_gpi, new_time, new_scalars, new_beams = _sort_and_compact_slab(
+        time_data, time_fill, scalar_data, beam_data,
+        scalar_vars, beam_vars, has_beams, chunk_width,
+    )
 
-    beam_data = {}
-    if has_beams:
-        n_beams = int_root["beam"].shape[0]
-        for var in sorted(beam_vars):
-            beam_data[var] = int_root[var][:, :, gpi_start:gpi_end]
-
-    # --- Per-GPI: find valid observations, sort by time ---
-    valid_mask = time_data != time_fill
-    n_valid_per_gpi = valid_mask.sum(axis=0)
-    max_valid = int(n_valid_per_gpi.max())
-
-    if max_valid == 0:
+    if n_valid_per_gpi.sum() == 0:
         return
 
-    # Build sorted output arrays
-    out_time = np.full((chunk_width, max_valid), time_fill,
-                       dtype=time_data.dtype)
-    out_scalars = {}
-    for var in sorted(scalar_vars):
-        if var == "time":
+    # --- Determine write positions from existing n_obs ---
+    existing_n_obs = out_root["n_obs"][gpi_start:gpi_end].astype(np.int32)
+    write_starts = existing_n_obs.copy()
+    new_counts = n_valid_per_gpi
+    write_ends = write_starts + new_counts
+
+    active = new_counts > 0
+    if not active.any():
+        return
+
+    min_obs = int(write_starts[active].min())
+    max_obs = int(write_ends.max())
+
+    first_obs_chunk = min_obs // obs_alignment
+    last_obs_chunk = (max_obs - 1) // obs_alignment
+
+    gpi_slice = slice(gpi_start, gpi_end)
+    out_obs_size = out_root["obs"].shape[0]
+
+    # --- RMW loop over obs chunks ---
+    for obs_chunk_idx in range(first_obs_chunk, last_obs_chunk + 1):
+        obs_chunk_start = obs_chunk_idx * obs_alignment
+        obs_chunk_end = min(obs_chunk_start + obs_alignment, out_obs_size)
+        obs_slice = slice(obs_chunk_start, obs_chunk_end)
+
+        gpi_needs_write = (write_starts < obs_chunk_end) & (write_ends > obs_chunk_start) & active
+        if not gpi_needs_write.any():
             continue
-        fill = int_root[var].metadata.fill_value
-        out_scalars[var] = np.full((chunk_width, max_valid), fill,
-                                   dtype=scalar_data[var].dtype)
 
-    out_beams = {}
-    if has_beams:
-        for var in sorted(beam_vars):
-            fill = int_root[var].metadata.fill_value
-            out_beams[var] = np.full((chunk_width, max_valid, n_beams), fill,
-                                     dtype=beam_data[var].dtype)
+        # Time variable
+        chunk_time = out_root["time"][gpi_slice, obs_slice]
+        _scatter_into_chunk(chunk_time, new_time, write_starts, new_counts,
+                            gpi_needs_write, obs_chunk_start, obs_chunk_end)
+        out_root["time"][gpi_slice, obs_slice] = chunk_time
 
-    n_obs_arr = np.zeros(chunk_width, dtype="uint32")
-
-    for g in range(chunk_width):
-        valid = valid_mask[:, g]
-        n_v = int(n_valid_per_gpi[g])
-        if n_v == 0:
-            continue
-
-        times_g = time_data[valid, g]
-        order = np.argsort(times_g)
-        n_obs_arr[g] = n_v
-
-        out_time[g, :n_v] = times_g[order]
-
+        # Other scalar variables
         for var in sorted(scalar_vars):
             if var == "time":
                 continue
-            out_scalars[var][g, :n_v] = scalar_data[var][valid, g][order]
+            chunk_data = out_root[var][gpi_slice, obs_slice]
+            _scatter_into_chunk(chunk_data, new_scalars[var],
+                                write_starts, new_counts,
+                                gpi_needs_write, obs_chunk_start, obs_chunk_end)
+            out_root[var][gpi_slice, obs_slice] = chunk_data
 
+        # Beam variables
         if has_beams:
             for var in sorted(beam_vars):
-                # beam_data[var] is (n_obs_total, n_beams, chunk_width)
-                out_beams[var][g, :n_v, :] = beam_data[var][valid, :, g][order, :]
+                chunk_data = out_root[var][gpi_slice, obs_slice, :]
+                _scatter_beam_into_chunk(chunk_data, new_beams[var],
+                                         write_starts, new_counts,
+                                         gpi_needs_write,
+                                         obs_chunk_start, obs_chunk_end)
+                out_root[var][gpi_slice, obs_slice, :] = chunk_data
 
-    # --- Write to dense output ---
-    obs_end = max_valid
-    out_root["time"][gpi_start:gpi_end, :obs_end] = out_time
-    for var in sorted(scalar_vars):
-        if var == "time":
+    # --- Update n_obs ---
+    out_root["n_obs"][gpi_start:gpi_end] = write_ends.astype("uint32")
+
+
+def _scatter_into_chunk(chunk_data, new_data, write_starts, new_counts,
+                        gpi_needs_write, obs_chunk_start, obs_chunk_end):
+    """Scatter per-GPI new data into a single (gpi, obs) output chunk slice.
+
+    chunk_data : (chunk_width, obs_chunk_size) — modified in place
+    new_data : (chunk_width, max_new) — compacted source
+    write_starts : (chunk_width,) — global obs offset where each GPI writes
+    new_counts : (chunk_width,) — number of new obs per GPI
+    gpi_needs_write : (chunk_width,) bool — GPIs with overlap in this chunk
+    """
+    chunk_width = chunk_data.shape[0]
+    for g in range(chunk_width):
+        if not gpi_needs_write[g]:
             continue
-        out_root[var][gpi_start:gpi_end, :obs_end] = out_scalars[var]
+        ws = int(write_starts[g])
+        nc = int(new_counts[g])
 
-    if has_beams:
-        for var in sorted(beam_vars):
-            out_root[var][gpi_start:gpi_end, :obs_end, :] = out_beams[var]
+        # Intersection with this obs chunk window
+        src_lo = max(0, obs_chunk_start - ws)
+        src_hi = min(nc, obs_chunk_end - ws)
+        if src_hi <= src_lo:
+            continue
+        dst_lo = ws + src_lo - obs_chunk_start
+        dst_hi = dst_lo + (src_hi - src_lo)
 
-    out_root["n_obs"][gpi_start:gpi_end] = n_obs_arr
+        chunk_data[g, dst_lo:dst_hi] = new_data[g, src_lo:src_hi]
+
+
+def _scatter_beam_into_chunk(chunk_data, new_data, write_starts, new_counts,
+                             gpi_needs_write, obs_chunk_start, obs_chunk_end):
+    """Beam variant of _scatter_into_chunk.
+
+    chunk_data : (chunk_width, obs_chunk_size, n_beams)
+    new_data : (chunk_width, max_new, n_beams)
+    """
+    chunk_width = chunk_data.shape[0]
+    for g in range(chunk_width):
+        if not gpi_needs_write[g]:
+            continue
+        ws = int(write_starts[g])
+        nc = int(new_counts[g])
+
+        src_lo = max(0, obs_chunk_start - ws)
+        src_hi = min(nc, obs_chunk_end - ws)
+        if src_hi <= src_lo:
+            continue
+        dst_lo = ws + src_lo - obs_chunk_start
+        dst_hi = dst_lo + (src_hi - src_lo)
+
+        chunk_data[g, dst_lo:dst_hi, :] = new_data[g, src_lo:src_hi, :]
+
+
+def _check_time_continuity(intermediate_path, out_path,
+                           gap_warn_seconds=86400 * 7):
+    """Check that new data starts after existing data for all populated GPIs.
+
+    Raises ValueError if any GPI's first new timestamp is earlier than
+    its last existing timestamp.  Emits a warning if the largest
+    forward gap exceeds ``gap_warn_seconds`` (default 1 week).
+    """
+    int_root = zarr.open(intermediate_path, mode="r")
+    out_root = zarr.open(out_path, mode="r")
+
+    existing_n_obs = out_root["n_obs"][:]
+    if not (existing_n_obs > 0).any():
+        print("Continuity check: dense store is empty, nothing to check.")
+        return
+
+    n_gpi = existing_n_obs.shape[0]
+    int_time = int_root["time"]
+    int_time_fill = int_time.metadata.fill_value
+    int_chunk = int_time.chunks[-1]
+
+    violations = 0
+    worst_gap_forward = 0
+    max_gap_backward = 0
+
+    print("Checking time continuity between existing and new data...")
+    for gpi_start in tqdm(range(0, n_gpi, int_chunk), desc="Continuity check"):
+        gpi_end = min(gpi_start + int_chunk, n_gpi)
+
+        new_times_slab = int_time[:, gpi_start:gpi_end]
+        valid = new_times_slab != int_time_fill
+
+        local_existing_n_obs = existing_n_obs[gpi_start:gpi_end]
+
+        # Batch-read the last-existing-time for populated GPIs in this range.
+        # We need one value per GPI: time[gpi, n_obs[gpi]-1].
+        for g_local in range(gpi_end - gpi_start):
+            n_existing = int(local_existing_n_obs[g_local])
+            if n_existing == 0:
+                continue
+            g_new_valid = valid[:, g_local]
+            if not g_new_valid.any():
+                continue
+
+            min_new_time = int(new_times_slab[g_new_valid, g_local].min())
+            last_existing_time = int(
+                out_root["time"][gpi_start + g_local, n_existing - 1]
+            )
+
+            if min_new_time < last_existing_time:
+                violations += 1
+                gap_back = last_existing_time - min_new_time
+                if gap_back > max_gap_backward:
+                    max_gap_backward = gap_back
+            else:
+                gap = min_new_time - last_existing_time
+                if gap > worst_gap_forward:
+                    worst_gap_forward = gap
+
+    if violations > 0:
+        raise ValueError(
+            f"Continuity check failed: {violations} GPIs have new data "
+            f"earlier than their last existing observation (max backwards "
+            f"gap: {max_gap_backward} time units). "
+            f"Appending would produce out-of-order data."
+        )
+
+    if worst_gap_forward > gap_warn_seconds:
+        warnings.warn(
+            f"Largest forward gap between existing and new data is "
+            f"{worst_gap_forward} seconds "
+            f"({worst_gap_forward / 86400:.1f} days). "
+            f"This may indicate missing data between the two runs.",
+            stacklevel=2,
+        )
+    else:
+        print(f"Continuity check OK "
+              f"(max forward gap: {worst_gap_forward} seconds).")
 
 
 def densify_from_intermediate(
@@ -1030,12 +1005,17 @@ def densify_from_intermediate(
     n_workers=16,
     shard_size_gpi=None,
     shard_size_obs=None,
+    skip_continuity_check=False,
 ):
     """Convert the intermediate rechunked store to a dense time-series store.
 
-    Reads the intermediate store spatial-chunk by spatial-chunk.  Each
-    chunk delivers the full observation history for a group of GPIs,
-    making the sort-and-compact step trivial.
+    If the output store already exists, this function runs in *append
+    mode*: new observations from the intermediate are appended to the
+    existing per-GPI time series at position ``n_obs[gpi]``, and
+    ``n_obs`` is updated.  The existing chunking/sharding is detected
+    and reused automatically.
+
+    If the output store does not exist, it is created fresh.
 
     Parameters
     ----------
@@ -1044,19 +1024,19 @@ def densify_from_intermediate(
     out_path : str or Path
         Path for the output dense Zarr store (gpi, obs, [beam]).
     chunk_size_gpi : int
-        Chunk size along the gpi dimension in the output.  Default 64.
+        Chunk size along the gpi dimension.  Ignored in append mode
+        (the existing store's chunking is used).  Default 64.
     chunk_size_obs : int
-        Chunk size along the obs dimension in the output.  Default 300.
+        Chunk size along the obs dimension.  Ignored in append mode.
+        Default 300.
     n_workers : int
         Number of parallel workers.  Default 16.
     shard_size_gpi : int, optional
-        Number of GPIs per shard in the output.  Must be a multiple of
-        ``chunk_size_gpi``.  When provided, output arrays use the
-        sharding_indexed codec along the gpi dimension and parallelism
-        is aligned to shard boundaries.  Default None (no gpi sharding).
+        GPIs per shard.  Ignored in append mode.  Default None.
     shard_size_obs : int, optional
-        Number of obs per shard in the output.  Must be a multiple of
-        ``chunk_size_obs``.  Default None (no obs sharding).
+        Obs per shard.  Ignored in append mode.  Default None.
+    skip_continuity_check : bool
+        Skip the time-continuity check in append mode.  Default False.
     """
     intermediate_path = Path(intermediate_path)
     out_path = Path(out_path)
@@ -1069,7 +1049,54 @@ def densify_from_intermediate(
     print(f"Scalar variables: {sorted(scalar_vars)}")
     print(f"Beam variables: {sorted(beam_vars)}")
 
-    # Build sharding config if requested
+    append_mode = (out_path / "zarr.json").exists()
+
+    if append_mode:
+        print(f"Output store exists at {out_path} — running in APPEND mode")
+        _densify_append(
+            intermediate_path=intermediate_path,
+            out_path=out_path,
+            int_root=int_root,
+            beam_vars=beam_vars,
+            scalar_vars=scalar_vars,
+            has_beams=has_beams,
+            n_gpi=n_gpi,
+            n_workers=n_workers,
+            skip_continuity_check=skip_continuity_check,
+        )
+    else:
+        print(f"Creating new dense store at {out_path}")
+        _densify_create(
+            intermediate_path=intermediate_path,
+            out_path=out_path,
+            int_root=int_root,
+            beam_vars=beam_vars,
+            scalar_vars=scalar_vars,
+            has_beams=has_beams,
+            n_gpi=n_gpi,
+            chunk_size_gpi=chunk_size_gpi,
+            chunk_size_obs=chunk_size_obs,
+            n_workers=n_workers,
+            shard_size_gpi=shard_size_gpi,
+            shard_size_obs=shard_size_obs,
+        )
+
+
+def _densify_create(
+    intermediate_path,
+    out_path,
+    int_root,
+    beam_vars,
+    scalar_vars,
+    has_beams,
+    n_gpi,
+    chunk_size_gpi,
+    chunk_size_obs,
+    n_workers,
+    shard_size_gpi,
+    shard_size_obs,
+):
+    """Create a new dense store from the intermediate."""
     if shard_size_gpi is not None:
         sharding = _ShardingConfig(
             shard_size_gpi=shard_size_gpi,
@@ -1083,11 +1110,9 @@ def densify_from_intermediate(
     obs_alignment = sharding.obs_alignment if sharding else chunk_size_obs
     worker_gpi_size = sharding.gpi_alignment if sharding else chunk_size_gpi
 
-    # Determine obs dimension size from the data.
     n_obs_total = int_root["time"].shape[0]
     obs_dim_size = _round_up(n_obs_total, obs_alignment)
 
-    print(f"Creating dense store at {out_path}")
     print(f"  n_gpi={n_gpi}, obs_dim_size={obs_dim_size}")
     print(f"  chunks=({chunk_size_gpi}, {chunk_size_obs})")
     if sharding:
@@ -1106,11 +1131,6 @@ def densify_from_intermediate(
         sharding=sharding,
     )
 
-    # Build spatial chunk ranges.
-    # With sharding, align workers to shard boundaries so no two workers
-    # write to the same shard file.  The intermediate's gpi chunk size
-    # should divide evenly into the worker size.
-    int_gpi_chunk = int_root["time"].chunks[-1]
     gpi_chunks = [
         (i, min(i + worker_gpi_size, n_gpi))
         for i in range(0, n_gpi, worker_gpi_size)
@@ -1119,7 +1139,7 @@ def densify_from_intermediate(
           f" (worker size: {worker_gpi_size})")
 
     process_func = partial(
-        _process_spatial_chunk_from_intermediate,
+        _process_spatial_chunk_create_mode,
         intermediate_path=str(intermediate_path),
         out_path=str(out_path),
         beam_vars=beam_vars,
@@ -1130,17 +1150,124 @@ def densify_from_intermediate(
     start = timer()
     if n_workers > 1:
         with ProcessPoolExecutor(max_workers=n_workers) as executor:
-            futures = [executor.submit(process_func, chunk)
-                       for chunk in gpi_chunks]
-            for f in tqdm(futures, total=len(gpi_chunks),
-                          desc="Spatial chunks"):
+            futures = [executor.submit(process_func, chunk) for chunk in gpi_chunks]
+            for f in tqdm(futures, total=len(gpi_chunks), desc="Spatial chunks"):
                 f.result()
     else:
         for chunk in tqdm(gpi_chunks, desc="Spatial chunks"):
             process_func(chunk)
 
-    elapsed = timer() - start
-    print(f"Dense conversion complete in {elapsed:.1f}s")
+    print(f"Dense conversion complete in {timer() - start:.1f}s")
+
+
+def _densify_append(
+    intermediate_path,
+    out_path,
+    int_root,
+    beam_vars,
+    scalar_vars,
+    has_beams,
+    n_gpi,
+    n_workers,
+    skip_continuity_check,
+):
+    """Append the intermediate into an existing dense store."""
+    out_root = zarr.open(out_path, mode="a")
+
+    if out_root["gpi"].shape[0] != n_gpi:
+        raise ValueError(
+            f"GPI count mismatch: intermediate has {n_gpi}, "
+            f"dense store has {out_root['gpi'].shape[0]}"
+        )
+
+    # Detect existing chunking and sharding from the "time" array.
+    time_arr = out_root["time"]
+
+    shard_shape = None
+    for c in (time_arr.metadata.codecs or []):
+        if (getattr(c, "name", None) == "sharding_indexed"
+                or type(c).__name__ == "ShardingCodec"):
+            # When the sharding codec is active, the array's chunk_grid
+            # chunk_shape is the shard shape, and the codec's chunk_shape
+            # attribute is the inner chunk shape.
+            shard_shape = time_arr.metadata.chunk_grid.chunk_shape
+            break
+
+    if shard_shape is not None:
+        shard_size_gpi = shard_shape[0]
+        shard_size_obs = shard_shape[1]
+        obs_alignment = shard_size_obs
+        worker_gpi_size = shard_size_gpi
+        print(f"  Detected sharding: shards=({shard_size_gpi}, {shard_size_obs})")
+    else:
+        obs_alignment = time_arr.chunks[1]
+        worker_gpi_size = time_arr.chunks[0]
+        print(f"  No sharding, chunks=({worker_gpi_size}, {obs_alignment})")
+
+    if not skip_continuity_check:
+        _check_time_continuity(intermediate_path, out_path)
+    else:
+        print("Skipping continuity check (skip_continuity_check=True)")
+
+    # --- Figure out how much we need to expand the obs dimension ---
+    print("Computing required obs dimension size...")
+    existing_n_obs_all = out_root["n_obs"][:]
+
+    int_time = int_root["time"]
+    int_time_fill = int_time.metadata.fill_value
+    int_chunk_gpi = int_time.chunks[-1]
+
+    max_new_per_gpi = np.zeros(n_gpi, dtype=np.int64)
+    for gs in tqdm(range(0, n_gpi, int_chunk_gpi), desc="Counting new obs"):
+        ge = min(gs + int_chunk_gpi, n_gpi)
+        slab = int_time[:, gs:ge]
+        max_new_per_gpi[gs:ge] = (slab != int_time_fill).sum(axis=0)
+
+    worst_case_needed = int((existing_n_obs_all.astype(np.int64)
+                              + max_new_per_gpi).max())
+    current_obs_size = out_root["obs"].shape[0]
+
+    if worst_case_needed > current_obs_size:
+        _expand_obs_dimension(
+            out_root,
+            needed_size=worst_case_needed,
+            obs_alignment=obs_alignment,
+            beam_vars=beam_vars,
+            scalar_vars=scalar_vars,
+            has_beams=has_beams,
+        )
+    else:
+        print(f"  obs dimension already sufficient "
+              f"(current={current_obs_size}, needed={worst_case_needed})")
+
+    gpi_chunks = [
+        (i, min(i + worker_gpi_size, n_gpi))
+        for i in range(0, n_gpi, worker_gpi_size)
+    ]
+    print(f"Appending {len(gpi_chunks)} GPI chunks with {n_workers} workers"
+          f" (worker size: {worker_gpi_size})")
+
+    process_func = partial(
+        _process_spatial_chunk_append_mode,
+        intermediate_path=str(intermediate_path),
+        out_path=str(out_path),
+        beam_vars=beam_vars,
+        scalar_vars=scalar_vars,
+        has_beams=has_beams,
+        obs_alignment=obs_alignment,
+    )
+
+    start = timer()
+    if n_workers > 1:
+        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            futures = [executor.submit(process_func, chunk) for chunk in gpi_chunks]
+            for f in tqdm(futures, total=len(gpi_chunks), desc="Append chunks"):
+                f.result()
+    else:
+        for chunk in tqdm(gpi_chunks, desc="Append chunks"):
+            process_func(chunk)
+
+    print(f"Append complete in {timer() - start:.1f}s")
 
 
 # ---------------------------------------------------------------------------
@@ -1160,41 +1287,13 @@ def sparse_to_dense_rechunked(
     shard_size_gpi=None,
     shard_size_obs=None,
     keep_intermediate=False,
+    skip_continuity_check=False,
 ):
     """Convert sparse swath-time Zarr to dense time-series via rechunking.
 
-    This is the combined entry point that runs both passes.
-
-    Parameters
-    ----------
-    sparse_path : str or Path
-        Path to the sparse Zarr store.
-    out_path : str or Path
-        Path for the output dense Zarr store.
-    intermediate_path : str or Path, optional
-        Path for the intermediate rechunked store.  Defaults to
-        ``out_path`` with ``_intermediate`` suffix.
-    target_gpi_chunk : int
-        Spatial chunk size in the intermediate store.  Default 64.
-    batch_size : int
-        Number of time slots per memory batch in pass 1.  Default 500.
-    n_read_threads : int
-        Threads for sparse reads in pass 1.  Default 16.
-    chunk_size_gpi : int
-        GPI chunk size in the dense output.  Default 64.
-    chunk_size_obs : int
-        Obs chunk size in the dense output.  Default 300.
-    n_workers : int
-        Parallel workers for pass 2.  Default 16.
-    shard_size_gpi : int, optional
-        Number of GPIs per shard in the dense output.  Must be a multiple
-        of ``chunk_size_gpi``.  Default None (no gpi sharding).
-    shard_size_obs : int, optional
-        Number of obs per shard in the dense output.  Must be a multiple
-        of ``chunk_size_obs``.  Default None (no obs sharding).
-    keep_intermediate : bool
-        If False, delete the intermediate store after conversion.
-        Default False.
+    Creates the dense store if it doesn't exist, or appends to it if
+    it does.  The creation-time chunking and sharding parameters are
+    ignored when appending (the existing layout is preserved).
     """
     sparse_path = Path(sparse_path)
     out_path = Path(out_path)
@@ -1225,6 +1324,7 @@ def sparse_to_dense_rechunked(
         n_workers=n_workers,
         shard_size_gpi=shard_size_gpi,
         shard_size_obs=shard_size_obs,
+        skip_continuity_check=skip_continuity_check,
     )
 
     if not keep_intermediate:
