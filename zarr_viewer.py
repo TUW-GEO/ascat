@@ -367,11 +367,18 @@ class ZarrViewer(param.Parameterized):
             time_vals = time_raw
 
         ts_arr = self.ts_root[var]
+        sat_id_arr = self.ts_root["sat_id"]
         attrs = dict(ts_arr.attrs)
         if ts_arr.ndim == 3:
             data = ts_arr[gpi_idx, :n_obs, self.beam_idx]
         else:
             data = ts_arr[gpi_idx, :n_obs]
+
+        sat_id_data = sat_id_arr[gpi_idx, :n_obs]
+        sat_id_fill_val = sat_id_arr.metadata.fill_value
+        sat_id_data_float = sat_id_data.astype(np.float64)
+        sat_id_data_float[sat_id_data==sat_id_fill_val] = np.nan
+        sat_id_data_float = _apply_scaling(sat_id_data_float, dict(sat_id_arr.attrs))
 
         fill_val = ts_arr.metadata.fill_value
         data_float = data.astype(np.float64)
@@ -418,9 +425,9 @@ class ZarrViewer(param.Parameterized):
             y_data = data_float[valid]
 
         scatter = hv.Scatter(
-            (time_vals[valid], y_data),
+            (time_vals[valid], y_data, sat_id_data_float[valid]),
             kdims=["Time"],
-            vdims=[var],
+            vdims=[var, "sat_id"],
         ).opts(
             title=f"GPI {gpi_val} ({lat_val:.2f}, {lon_val:.2f}) \u2014 {n_obs} obs",
             ylabel=ylabel,
