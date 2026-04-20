@@ -212,14 +212,31 @@ def _classify_intermediate_variables(root, has_beams):
 
 
 def _scan_all_populated_slots(
-    sparse_path, n_swath_time, n_spacecraft, n_gpi, sparse_gpi_chunk_size
+    sparse_input, n_swath_time, n_spacecraft, n_gpi, sparse_gpi_chunk_size
 ):
-    """Scan the sparse store and return all populated (swath_time, spacecraft) slots."""
+    """Scan the sparse store and return all populated (swath_time, spacecraft) slots.
+
+    Parameters
+    ----------
+    sparse_input : Path or zarr.Group
+        Either a filesystem path to the sparse store, or an already-open zarr.Group.
+        If a zarr.Group is provided, scanning is done by checking array contents
+        rather than filesystem paths.
+    """
+    # Check if we got a zarr group directly
+    if hasattr(sparse_input, "group_keys") and hasattr(sparse_input, "metadata"):
+        # It's a zarr group - scan by checking array contents
+        sparse_root = sparse_input
+        return _scan_populated_slots_zarr_group(
+            sparse_root, n_swath_time, n_spacecraft, n_gpi, sparse_gpi_chunk_size
+        )
+
+    # Otherwise use the original filesystem-based approach
+    sparse_path = sparse_input
     sparse_root = zarr.open(str(sparse_path), mode="r")
     time_meta = sparse_root["time"].metadata
     is_sharded = any(
-        getattr(c, "name", None) == "sharding_indexed"
-        or type(c).__name__ == "ShardingCodec"
+        getattr(c, "name", None) == "sharding_indexed" or type(c).__name__ == "ShardingCodec"
         for c in (time_meta.codecs or [])
     )
 
@@ -230,9 +247,7 @@ def _scan_all_populated_slots(
         n_gpi_shards = -(-n_gpi // shard_size_gpi)
 
         def _scan_one(t_idx, s_idx, shard_idx):
-            shard_path = (
-                sparse_path / "time" / "c" / str(t_idx) / str(s_idx) / str(shard_idx)
-            )
+            shard_path = sparse_path / "time" / "c" / str(t_idx) / str(s_idx) / str(shard_idx)
             if not shard_path.exists():
                 return None
             return (t_idx, s_idx)
@@ -257,12 +272,77 @@ def _scan_all_populated_slots(
         for t_idx in range(n_swath_time):
             for s_idx in range(n_spacecraft):
                 for gc in range(n_gpi_chunks):
-                    chunk_path = (
-                        sparse_path / "time" / "c" / str(t_idx) / str(s_idx) / str(gc)
-                    )
+                    chunk_path = sparse_path / "time" / "c" / str(t_idx) / str(s_idx) / str(gc)
                     if chunk_path.exists():
                         all_slots.add((t_idx, s_idx))
                         break
+
+    return sorted(all_slots)
+
+
+def _scan_populated_slots_zarr_group(
+    sparse_root, n_swath_time, n_spacecraft, n_gpi, sparse_gpi_chunk_size
+):
+    """Scan a zarr group for populated slots by checking array contents.
+
+    This is used when the sparse store is accessed through icechunk or another
+    virtual store that doesn't have a filesystem path.
+    """
+    time_meta = sparse_root["time"].metadata
+    is_sharded = any(
+        getattr(c, "name", None) == "sharding_indexed" or type(c).__name__ == "ShardingCodec"
+        for c in (time_meta.codecs or [])
+    )
+
+    all_slots = set()
+
+    if is_sharded:
+        # For sharded arrays, we need to check each shard
+        # Since we can't check file existence, we try to read and catch errors
+        shard_size_gpi = time_meta.chunk_grid.chunk_shape[-1]
+        n_gpi_shards = -(-n_gpi // shard_size_gpi)
+
+        for t_idx in tqdm(range(n_swath_time), desc="Scanning swath times"):
+            for s_idx in range(n_spacecraft):
+                for shard_idx in range(n_gpi_shards):
+                    try:
+                        # Try to read a small piece of the shard to see if it exists
+                        time_arr = sparse_root["time"]
+                        # Access the chunk - if it's empty/fill, it will raise or return fill
+                        chunk_selection = (
+                            t_idx,
+                            s_idx,
+                            slice(shard_idx * shard_size_gpi, (shard_idx + 1) * shard_size_gpi),
+                        )
+                        chunk_data = time_arr[chunk_selection]
+                        # Check if this is all fill value
+                        if not np.all(chunk_data == time_arr.metadata.fill_value):
+                            all_slots.add((t_idx, s_idx))
+                            break  # Found data in this (t_idx, s_idx) slot
+                    except (KeyError, IndexError, ValueError):
+                        # Chunk doesn't exist or is empty
+                        continue
+    else:
+        # Non-sharded: scan by reading chunks
+        n_gpi_chunks = -(-n_gpi // sparse_gpi_chunk_size)
+        time_arr = sparse_root["time"]
+        fill_value = time_arr.metadata.fill_value
+
+        for t_idx in tqdm(range(n_swath_time), desc="Scanning swath times"):
+            for s_idx in range(n_spacecraft):
+                for gc in range(n_gpi_chunks):
+                    try:
+                        chunk_selection = (
+                            t_idx,
+                            s_idx,
+                            slice(gc * sparse_gpi_chunk_size, (gc + 1) * sparse_gpi_chunk_size),
+                        )
+                        chunk_data = time_arr[chunk_selection]
+                        if not np.all(chunk_data == fill_value):
+                            all_slots.add((t_idx, s_idx))
+                            break  # Found data in this slot
+                    except (KeyError, IndexError, ValueError):
+                        continue
 
     return sorted(all_slots)
 
@@ -305,11 +385,21 @@ def _reset_codec_pipeline_worker():
     try:
         import zarr
 
-        zarr.config.set(
-            {"codec_pipeline.path": "zarr.core.codec_pipeline.BatchedCodecPipeline"}
-        )
+        zarr.config.set({"codec_pipeline.path": "zarr.core.codec_pipeline.BatchedCodecPipeline"})
     except Exception:
         pass
+
+
+class _NullPool:
+    """No-op pool used when rechunk_sparse reads must stay in-process
+    (e.g. icechunk-backed zarr Group inputs that can't be shipped to
+    subprocesses)."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
 
 
 def _shm_read_worker(args):
@@ -340,9 +430,7 @@ def _shm_read_worker(args):
         shm = SharedMemory(name=shm_name)
         dtype = np.dtype(dtype_str)
         try:
-            buf = np.ndarray(
-                (batch_actual, n_beams, n_gpi), dtype=dtype, buffer=shm.buf
-            )
+            buf = np.ndarray((batch_actual, n_beams, n_gpi), dtype=dtype, buffer=shm.buf)
             buf[row_idx, :, :] = root[var][t_idx, s_idx, :, :]
         finally:
             shm.close()
@@ -365,8 +453,8 @@ def rechunk_sparse(
 
     Parameters
     ----------
-    sparse_path : str or Path
-        Path to the sparse Zarr store.
+    sparse_path : str, Path, or zarr.Group
+        Path to the sparse Zarr store, or an already-open zarr Group object.
     intermediate_path : str or Path
         Path for the intermediate rechunked Zarr store.
     target_gpi_chunk : int
@@ -382,9 +470,17 @@ def rechunk_sparse(
         Useful for incremental appends where the sparse store still
         contains older data.  Default None (all populated slots).
     """
-    sparse_path = Path(sparse_path)
+    # Check if sparse_path is already a zarr group
+    if hasattr(sparse_path, "group_keys") and hasattr(sparse_path, "metadata"):
+        # It's already a zarr group - use it directly
+        sparse_root = sparse_path
+        sparse_path_for_scan = None  # Signal to _scan_all_populated_slots to use sparse_root
+    else:
+        sparse_path = Path(sparse_path)
+        sparse_path_for_scan = sparse_path
+        sparse_root = zarr.open(sparse_path, mode="r")
+
     intermediate_path = Path(intermediate_path)
-    sparse_root = zarr.open(sparse_path, mode="r")
 
     has_beams = "beam" in sparse_root
     n_gpi = sparse_root["gpi"].shape[0]
@@ -401,7 +497,7 @@ def rechunk_sparse(
     print("Scanning for populated slots...")
     scan_start = timer()
     all_slots = _scan_all_populated_slots(
-        sparse_path,
+        sparse_path_for_scan if sparse_path_for_scan is not None else sparse_root,
         n_swath_time,
         n_spacecraft,
         n_gpi,
@@ -409,8 +505,7 @@ def rechunk_sparse(
     )
     n_obs_total_scanned = len(all_slots)
     print(
-        f"Scan complete in {timer() - scan_start:.1f}s, "
-        f"found {n_obs_total_scanned} populated slots"
+        f"Scan complete in {timer() - scan_start:.1f}s, found {n_obs_total_scanned} populated slots"
     )
 
     # --- Optional date filtering ---
@@ -425,9 +520,7 @@ def rechunk_sparse(
         end64 = np.datetime64(end_dt, "ns")
 
         in_range_mask = (swath_time_arr >= start64) & (swath_time_arr < end64)
-        all_slots = [
-            (t_idx, s_idx) for (t_idx, s_idx) in all_slots if in_range_mask[t_idx]
-        ]
+        all_slots = [(t_idx, s_idx) for (t_idx, s_idx) in all_slots if in_range_mask[t_idx]]
         print(
             f"After date filter [{start_dt}, {end_dt}): "
             f"{len(all_slots)}/{n_obs_total_scanned} slots remain"
@@ -436,16 +529,12 @@ def rechunk_sparse(
     n_obs = len(all_slots)
 
     if n_obs == 0:
-        raise ValueError(
-            "No populated slots remain after filtering — nothing to rechunk."
-        )
+        raise ValueError("No populated slots remain after filtering — nothing to rechunk.")
 
     padded_n_obs = _round_up(n_obs, batch_size)
 
     print(f"Creating intermediate store at {intermediate_path}")
-    print(
-        f"  obs={padded_n_obs}, gpi={n_gpi}, chunks=({batch_size}, {target_gpi_chunk})"
-    )
+    print(f"  obs={padded_n_obs}, gpi={n_gpi}, chunks=({batch_size}, {target_gpi_chunk})")
 
     store = zarr.storage.LocalStore(str(intermediate_path))
     int_root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
@@ -558,11 +647,21 @@ def rechunk_sparse(
         for var, shm, buf, dtype_str, n_beams, fill_val in beam_shms
     ]
 
+    # In-process reads when a zarr Group was passed in (e.g. an icechunk-backed
+    # group). The multi-process path below can't ship a live Group through
+    # pickle, and re-opening the repo per subprocess is out of scope here.
+    reads_in_process = sparse_path_for_scan is None
+
     try:
-        with ProcessPoolExecutor(
-            max_workers=n_read_threads,
-            initializer=_reset_codec_pipeline_worker,
-        ) as pool:
+        pool_cm = (
+            _NullPool()
+            if reads_in_process
+            else ProcessPoolExecutor(
+                max_workers=n_read_threads,
+                initializer=_reset_codec_pipeline_worker,
+            )
+        )
+        with pool_cm as pool:
             for batch_idx in range(n_batches):
                 batch_start_idx = batch_idx * batch_size
                 batch_end_idx = min(batch_start_idx + batch_size, n_obs)
@@ -578,22 +677,28 @@ def rechunk_sparse(
 
                 fill_elapsed = timer() - batch_timer
 
-                tasks = [
-                    (
-                        str(sparse_path),
-                        t_idx,
-                        s_idx,
-                        i,
-                        batch_size,
-                        n_gpi,
-                        scalar_shm_info,
-                        beam_shm_info,
-                    )
-                    for i, (t_idx, s_idx) in enumerate(batch)
-                ]
-
                 read_timer = timer()
-                list(pool.map(_shm_read_worker, tasks))
+                if reads_in_process:
+                    for i, (t_idx, s_idx) in enumerate(batch):
+                        for var, shm, buf, dtype_str, fill_val in scalar_shms:
+                            buf[i, :] = sparse_root[var][t_idx, s_idx, :]
+                        for var, shm, buf, dtype_str, n_beams, fill_val in beam_shms:
+                            buf[i, :, :] = sparse_root[var][t_idx, s_idx, :, :]
+                else:
+                    tasks = [
+                        (
+                            str(sparse_path),
+                            t_idx,
+                            s_idx,
+                            i,
+                            batch_size,
+                            n_gpi,
+                            scalar_shm_info,
+                            beam_shm_info,
+                        )
+                        for i, (t_idx, s_idx) in enumerate(batch)
+                    ]
+                    list(pool.map(_shm_read_worker, tasks))
                 read_elapsed = timer() - read_timer
 
                 write_timer = timer()
@@ -659,9 +764,7 @@ def _create_dense_structure_from_intermediate(
         n_beams = int_root["beam"].shape[0]
         for var in sorted(beam_vars):
             src = int_root[var]
-            arr_kwargs = _make_array_kwargs(
-                (chunk_size_gpi, chunk_size_obs, 1), sharding
-            )
+            arr_kwargs = _make_array_kwargs((chunk_size_gpi, chunk_size_obs, 1), sharding)
             root.create_array(
                 name=var,
                 dtype=src.dtype,
@@ -740,9 +843,7 @@ def _create_dense_structure_from_intermediate(
         )
 
 
-def _expand_obs_dimension(
-    out_root, needed_size, obs_alignment, beam_vars, scalar_vars, has_beams
-):
+def _expand_obs_dimension(out_root, needed_size, obs_alignment, beam_vars, scalar_vars, has_beams):
     """Expand the obs dimension in alignment-sized increments.
 
     ``obs_alignment`` is the shard obs size when sharding is active, or
@@ -771,9 +872,7 @@ def _expand_obs_dimension(
             arr.resize(tuple(new_shape))
 
     out_root["obs"].resize((new_size,))
-    out_root["obs"][current_size:new_size] = np.arange(
-        current_size, new_size, dtype="int32"
-    )
+    out_root["obs"][current_size:new_size] = np.arange(current_size, new_size, dtype="int32")
 
 
 def _sort_and_compact_slab(
@@ -848,9 +947,7 @@ def _sort_and_compact_slab(
     return n_valid_per_gpi, new_time, new_scalars, new_beams
 
 
-def _read_intermediate_slab(
-    int_root, gpi_start, gpi_end, scalar_vars, beam_vars, has_beams
-):
+def _read_intermediate_slab(int_root, gpi_start, gpi_end, scalar_vars, beam_vars, has_beams):
     """Read the full (obs, gpi-range) slab for this spatial chunk.
 
     Returns dictionaries including fill values, so the sort/compact
@@ -1054,9 +1151,7 @@ def _process_spatial_chunk_append_mode(
         obs_chunk_end = min(obs_chunk_start + obs_alignment, out_obs_size)
         obs_slice = slice(obs_chunk_start, obs_chunk_end)
 
-        gpi_needs_write = (
-            (write_starts < obs_chunk_end) & (write_ends > obs_chunk_start) & active
-        )
+        gpi_needs_write = (write_starts < obs_chunk_end) & (write_ends > obs_chunk_start) & active
         if not gpi_needs_write.any():
             continue
 
@@ -1317,9 +1412,7 @@ def _densify_create(
         sharding=sharding,
     )
 
-    gpi_chunks = [
-        (i, min(i + worker_gpi_size, n_gpi)) for i in range(0, n_gpi, worker_gpi_size)
-    ]
+    gpi_chunks = [(i, min(i + worker_gpi_size, n_gpi)) for i in range(0, n_gpi, worker_gpi_size)]
     print(
         f"Processing {len(gpi_chunks)} GPI chunks with {n_workers} workers"
         f" (worker size: {worker_gpi_size})"
@@ -1379,10 +1472,7 @@ def _densify_append(
 
     shard_shape = None
     for c in time_arr.metadata.codecs or []:
-        if (
-            getattr(c, "name", None) == "sharding_indexed"
-            or type(c).__name__ == "ShardingCodec"
-        ):
+        if getattr(c, "name", None) == "sharding_indexed" or type(c).__name__ == "ShardingCodec":
             # When the sharding codec is active, the array's chunk_grid
             # chunk_shape is the shard shape, and the codec's chunk_shape
             # attribute is the inner chunk shape.
@@ -1414,9 +1504,7 @@ def _densify_append(
         slab = int_time[:, gs:ge]
         max_new_per_gpi[gs:ge] = (slab != int_time_fill).sum(axis=0)
 
-    worst_case_needed = int(
-        (existing_n_obs_all.astype(np.int64) + max_new_per_gpi).max()
-    )
+    worst_case_needed = int((existing_n_obs_all.astype(np.int64) + max_new_per_gpi).max())
     current_obs_size = out_root["obs"].shape[0]
 
     if worst_case_needed > current_obs_size:
@@ -1434,9 +1522,7 @@ def _densify_append(
             f"(current={current_obs_size}, needed={worst_case_needed})"
         )
 
-    gpi_chunks = [
-        (i, min(i + worker_gpi_size, n_gpi)) for i in range(0, n_gpi, worker_gpi_size)
-    ]
+    gpi_chunks = [(i, min(i + worker_gpi_size, n_gpi)) for i in range(0, n_gpi, worker_gpi_size)]
     print(
         f"Appending {len(gpi_chunks)} GPI chunks with {n_workers} workers"
         f" (worker size: {worker_gpi_size})"

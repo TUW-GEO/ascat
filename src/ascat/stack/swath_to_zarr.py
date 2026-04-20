@@ -33,6 +33,7 @@ a structured Zarr array indexed by time, spacecraft, and grid point index (GPI).
 """
 
 from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
 import re
 import warnings
 from datetime import datetime, timedelta
@@ -78,13 +79,15 @@ def _freq_to_timedelta64(time_resolution):
 
 def stack_swaths_to_zarr(
     swath_files,
-    out_path,
-    date_range,
+    out_path=None,
+    date_range=None,
     time_resolution="h",
     n_workers=1,
     chunk_size_gpi=4096,
     shard_size_gpi=None,
     sorted_grid=None,
+    zarr_group=None,
+    setup_parallel=None,
 ):
     """Convert swath files to Zarr time-series format.
 
@@ -97,8 +100,8 @@ def stack_swaths_to_zarr(
     ----------
     swath_files : SwathGridFiles
         Swath file collection to convert.
-    out_path : str or Path
-        Output Zarr directory path.
+    out_path : str or Path, optional
+        Output Zarr directory path. Mutually exclusive with ``zarr_group``.
     date_range : tuple of datetime
         (start, end) date range for data to include.
     time_resolution : str, optional
@@ -114,18 +117,43 @@ def stack_swaths_to_zarr(
         ``chunk_size_gpi``.  If None (default), a balanced two-shard split is
         computed automatically as the smallest multiple of ``chunk_size_gpi``
         that is >= half the total number of GPIs.
+    zarr_group : zarr.Group, optional
+        An already-open zarr Group to write into (e.g. an icechunk-backed
+        group). Mutually exclusive with ``out_path``. When provided, the
+        group's store is used directly — no filesystem paths are touched.
+    setup_parallel : callable, optional
+        Factory invoked when ``n_workers > 1`` to prepare parallel workers.
+        Signature: ``setup_parallel(n_workers) -> (handles, open_group, finalize)``.
+        - ``handles``: list of ``n_workers`` picklable objects, one per worker.
+        - ``open_group(handle) -> zarr.Group``: picklable; invoked in each worker
+          to obtain the group to write into.
+        - ``finalize(returned_handles)``: invoked in the coordinator after all
+          workers finish, with whatever each worker returned (typically the
+          handle, possibly mutated — e.g. an icechunk ``ForkSession``).
+        When ``None`` and ``n_workers > 1``, falls back to submitting
+        ``zarr_root`` directly to each worker (works only for stores whose
+        group pickles cleanly, e.g. ``LocalStore``).
     """
-    out_path = Path(out_path)
+    if (out_path is None) == (zarr_group is None):
+        raise ValueError("Exactly one of `out_path` or `zarr_group` must be provided")
+
     dt_start, dt_end = date_range
 
-    if not (out_path / "zarr.json").exists():
-        print(f"Creating Zarr structure at {out_path}")
+    if zarr_group is not None:
+        store_exists = "swath_time" in zarr_group
+    else:
+        out_path = Path(out_path)
+        store_exists = (out_path / "zarr.json").exists()
+
+    if not store_exists:
+        target = zarr_group if zarr_group is not None else out_path
+        print(f"Creating Zarr structure at {target}")
 
         filenames = swath_files.search_period(
             dt_start=dt_start,
             dt_end=dt_start + timedelta(days=7),
             date_field_fmt=swath_files.date_field_fmt,
-            end_inclusive=False
+            end_inclusive=False,
         )
 
         _create_zarr_structure(
@@ -137,15 +165,16 @@ def stack_swaths_to_zarr(
             chunk_size_gpi=chunk_size_gpi,
             gpi_shard_size=shard_size_gpi,
             sat_series=swath_files.sat_series,
-            sample_file=filenames[0]
+            sample_file=filenames[0],
+            zarr_group=zarr_group,
         )
     else:
         # Store exists — expand swath_time if date_range extends past current end.
-        _maybe_expand_swath_time(out_path, dt_end, time_resolution)
+        _maybe_expand_swath_time(out_path, dt_end, time_resolution, zarr_group=zarr_group)
 
     print(f"Populating Zarr with data from {dt_start} to {dt_end}")
 
-    zarr_root = zarr.open(out_path, mode="a")
+    zarr_root = zarr_group if zarr_group is not None else zarr.open(out_path, mode="a")
     time_coords = zarr_root["swath_time"][:]
 
     _populate_zarr(
@@ -156,25 +185,28 @@ def stack_swaths_to_zarr(
         date_range=date_range,
         n_workers=n_workers,
         sorted_grid=sorted_grid,
+        setup_parallel=setup_parallel,
     )
 
     print("Done!")
 
 
-def _maybe_expand_swath_time(out_path, dt_end, time_resolution):
+def _maybe_expand_swath_time(out_path, dt_end, time_resolution, zarr_group=None):
     """Expand the swath_time dimension and all data arrays if dt_end is beyond
     the current store's last time coordinate.
 
     Parameters
     ----------
-    out_path : Path
-        Path to the existing Zarr store.
+    out_path : Path or None
+        Path to the existing Zarr store. Ignored when ``zarr_group`` is given.
     dt_end : datetime
         Requested end date.
     time_resolution : str
         Pandas frequency string matching the store's time resolution.
+    zarr_group : zarr.Group, optional
+        Already-open group; used in place of opening by path.
     """
-    root = zarr.open(out_path, mode="a")
+    root = zarr_group if zarr_group is not None else zarr.open(out_path, mode="a")
     current_times = root["swath_time"][:]
     last_time = pd.Timestamp(current_times[-1])
     dt_end_ts = pd.Timestamp(dt_end)
@@ -196,8 +228,10 @@ def _maybe_expand_swath_time(out_path, dt_end, time_resolution):
     n_new = len(new_times)
     old_n_time = len(current_times)
     new_n_time = old_n_time + n_new
-    print(f"Expanding swath_time from {old_n_time} to {new_n_time} steps "
-          f"(adding {n_new} new timesteps up to {dt_end_ts})")
+    print(
+        f"Expanding swath_time from {old_n_time} to {new_n_time} steps "
+        f"(adding {n_new} new timesteps up to {dt_end_ts})"
+    )
 
     # Resize all data arrays along axis 0 (swath_time)
     coord_names = {"swath_time", "spacecraft", "beam", "gpi", "longitude", "latitude"}
@@ -257,6 +291,7 @@ def _create_zarr_structure(
     gpi_shard_size,
     sat_series,
     sample_file,
+    zarr_group=None,
 ):
     """Generate empty Zarr array with proper schema and dimensions.
 
@@ -305,15 +340,20 @@ def _create_zarr_structure(
     has_beams, base_names_to_vars_map = _detect_beam_structure(sample_ds)
     sample_ds.close()
 
-    store = zarr.storage.LocalStore(str(out_path))
-    root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
+    if zarr_group is not None:
+        root = zarr_group
+    else:
+        store = zarr.storage.LocalStore(str(out_path))
+        root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
 
     for base_name in sorted(base_names_to_vars_map.keys()):
         var_names = base_names_to_vars_map[base_name]
         var = var_names[0]
         # Check if variable has multiple beam variants (e.g., sig_for, sig_mid, sig_aft)
         # or if it has an existing beam dimension
-        has_beam_dim = len(var_names) > 1 or "beam" in sample_ds[var].dims or "beams" in sample_ds[var].dims
+        has_beam_dim = (
+            len(var_names) > 1 or "beam" in sample_ds[var].dims or "beams" in sample_ds[var].dims
+        )
         if has_beam_dim:
             dims = ("swath_time", "spacecraft", "beam", "gpi")
             n_beams = 3
@@ -434,6 +474,7 @@ def _populate_zarr(
     date_range,
     sorted_grid=None,
     n_workers=1,
+    setup_parallel=None,
 ):
     """Fill Zarr array with data from swath files.
 
@@ -442,7 +483,7 @@ def _populate_zarr(
     swath_files : SwathGridFiles
         Swath file collection.
     zarr_root : zarr.Group
-        Opened Zarr group to write to.
+        Opened Zarr group to write to (sequential path).
     time_coords : np.ndarray
         Time coordinates array from Zarr.
     date_range : tuple of datetime
@@ -453,6 +494,9 @@ def _populate_zarr(
         If provided, use this grid to map GPIs instead of the original grid.
     n_workers : int, optional
         Number of worker processes. Default is 1.
+    setup_parallel : callable, optional
+        See :func:`stack_swaths_to_zarr`. Required for stores whose group does
+        not pickle cleanly (e.g. icechunk). Ignored when ``n_workers <= 1``.
     """
     dt_start, dt_end = date_range
 
@@ -460,7 +504,7 @@ def _populate_zarr(
         dt_start=dt_start,
         dt_end=dt_end,
         date_field_fmt=swath_files.date_field_fmt,
-        end_inclusive=False
+        end_inclusive=False,
     )
 
     print(f"Found {len(filenames)} files to process")
@@ -470,32 +514,94 @@ def _populate_zarr(
         gpis = sorted_grid.get_grid_points()[0]
         gpi_lookup = np.argsort(gpis)
 
-    insert_func = partial(
-        _insert_swath_file,
-        swath_files=swath_files,
-        zarr_root=zarr_root,
-        time_coords=time_coords,
-        time_resolution=time_resolution,
-    )
-
-    n_success = 0
-    if n_workers > 1:
-        with ProcessPoolExecutor(max_workers=n_workers) as executor:
-            futures = [
-                executor.submit(insert_func, f)
-                for f in filenames
-            ]
-            futures = tqdm(futures, total=len(filenames), desc="Processing files")
-            n_success = sum(1 for future in futures if future.result())
-    else:
+    if n_workers <= 1 or not filenames:
+        insert_func = partial(
+            _insert_swath_file,
+            swath_files=swath_files,
+            zarr_root=zarr_root,
+            time_coords=time_coords,
+            time_resolution=time_resolution,
+            gpi_lookup=gpi_lookup,
+        )
         for i, filename in enumerate(filenames):
             if (i + 1) % 100 == 0:
                 print(f"Processed {i + 1}/{len(filenames)} files")
-            if insert_func(filename):
-                n_success += 1
+            insert_func(filename)
+        return
+
+    if setup_parallel is None:
+        # Legacy parallel path: assume the group pickles (LocalStore etc).
+        insert_func = partial(
+            _insert_swath_file,
+            swath_files=swath_files,
+            zarr_root=zarr_root,
+            time_coords=time_coords,
+            time_resolution=time_resolution,
+            gpi_lookup=gpi_lookup,
+        )
+        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            futures = [executor.submit(insert_func, f) for f in filenames]
+            for _ in tqdm(futures, total=len(filenames), desc="Processing files"):
+                _.result()
+        return
+
+    # Don't spawn more workers than files.
+    n_workers = min(n_workers, len(filenames))
+
+    handles, open_group, finalize = setup_parallel(n_workers)
+    if len(handles) != n_workers:
+        raise ValueError(
+            f"setup_parallel returned {len(handles)} handles, expected {n_workers}"
+        )
+
+    # Round-robin partition: with chunksize 1 on swath_time, any two files
+    # land in different chunks so workers never contend on the same chunk.
+    batches = [filenames[i::n_workers] for i in range(n_workers)]
+
+    # `spawn` avoids deadlocks when the parent process has live tokio runtimes
+    # (e.g. an icechunk session): fork() copies runtime state but not threads,
+    # so the first async call in a forked child hangs.
+    mp_ctx = multiprocessing.get_context("spawn")
+
+    with ProcessPoolExecutor(max_workers=n_workers, mp_context=mp_ctx) as executor:
+        futures = [
+            executor.submit(
+                _write_swath_batch,
+                batch,
+                handle,
+                open_group,
+                swath_files,
+                time_coords,
+                time_resolution,
+                gpi_lookup,
+            )
+            for batch, handle in zip(batches, handles)
+        ]
+        returned = [f.result() for f in tqdm(futures, desc="Worker batches")]
+
+    finalize(returned)
 
 
-def _insert_swath_file(filename, swath_files, zarr_root, time_coords, time_resolution, gpi_lookup=None):
+def _write_swath_batch(
+    filenames, handle, open_group, swath_files, time_coords, time_resolution, gpi_lookup
+):
+    """Worker entrypoint: open a group from ``handle`` and insert each file."""
+    group = open_group(handle)
+    for filename in filenames:
+        _insert_swath_file(
+            filename=filename,
+            swath_files=swath_files,
+            zarr_root=group,
+            time_coords=time_coords,
+            time_resolution=time_resolution,
+            gpi_lookup=gpi_lookup,
+        )
+    return handle
+
+
+def _insert_swath_file(
+    filename, swath_files, zarr_root, time_coords, time_resolution, gpi_lookup=None
+):
     """Insert data from one swath file into Zarr array.
 
     Parameters

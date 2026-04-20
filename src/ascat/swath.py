@@ -771,13 +771,15 @@ class SwathGridFiles(ChronFiles):
 
     def to_zarr(
         self,
-        out_path,
-        date_range,
+        out_path=None,
+        date_range=None,
         time_resolution="h",
         sorted_grid=None,
         n_workers=1,
         chunk_size_gpi=4096,
         shard_size_gpi=None,
+        zarr_group=None,
+        setup_parallel=None,
     ):
         """Convert swath files to Zarr time-series format.
         
@@ -826,4 +828,6 @@ class SwathGridFiles(ChronFiles):
             n_workers=n_workers,
             chunk_size_gpi=chunk_size_gpi,
             shard_size_gpi=shard_size_gpi,
+            zarr_group=zarr_group,
+            setup_parallel=setup_parallel,
         )
