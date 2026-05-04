@@ -419,13 +419,13 @@ def _create_zarr_structure(
     )
 
     if has_beams:
-        beam_names = np.array([b"fore", b"mid", b"aft"], dtype="S4")
+        beam_names = np.array(["fore", "mid", "aft"], dtype="<U4")
         root.create_array(
             "beam",
             data=beam_names,
             chunks=beam_names.shape,
             dimension_names=("beam",),
-            fill_value=b"",
+            fill_value="",
             compressors=None,
         )
 

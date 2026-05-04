@@ -685,8 +685,8 @@ def _make_sparse_store_with_beams(
         chunks=(1,), dimension_names=("spacecraft",), compressors=None,
     )
     root.create_array(
-        "beam", data=np.array([b"fore", b"mid", b"aft"], dtype="S4")[:n_beams],
-        chunks=(1,), dimension_names=("beam",), fill_value=b"", compressors=None,
+        "beam", data=np.array(["fore", "mid", "aft"], dtype="<U4")[:n_beams],
+        chunks=(1,), dimension_names=("beam",), fill_value="", compressors=None,
     )
     root.create_array(
         "processed",

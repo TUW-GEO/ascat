@@ -775,10 +775,10 @@ class TestSparseZarrToTs(unittest.TestCase):
         
         root.create_array(
             "beam",
-            data=np.array([b"fore", b"mid", b"aft"], dtype="S4"),
+            data=np.array(["fore", "mid", "aft"], dtype="<U4"),
             chunks=(1,),
             dimension_names=("beam",),
-            fill_value=b""
+            fill_value=""
         )
         root.create_array(
             "swath_time",
