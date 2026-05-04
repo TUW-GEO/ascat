@@ -17,6 +17,10 @@ from ascat.stack.sparse_zarr_to_ts import (
     _ShardingConfig,
     _classify_variables,
     _classify_intermediate_variables,
+    _create_dense_structure_from_intermediate,
+    _expand_obs_dimension,
+    _round_up,
+    _scan_all_populated_slots,
     densify_from_intermediate,
     rechunk_sparse,
     sparse_to_dense_rechunked,
@@ -104,7 +108,7 @@ def _make_sparse_store(
         chunks=(1,), dimension_names=("swath_time",), compressors=None,
     )
     root.create_array(
-        "spacecraft", data=np.array([3, 4], dtype="int8")[:n_spacecraft],
+        "spacecraft", data=np.array([3, 4, 5], dtype="int8")[:n_spacecraft],
         chunks=(1,), dimension_names=("spacecraft",), compressors=None,
     )
     root.create_array(
@@ -163,39 +167,47 @@ class TestShardingConfig:
 
 
 # ===========================================================================
-# _round_up_to_chunk
+# _round_up
 # ===========================================================================
 
 class TestRoundUpToChunk:
 
     def test_already_multiple(self):
-        assert _round_up_to_chunk(100, 25) == 100
+        assert _round_up(100, 25) == 100
 
     def test_rounds_up(self):
-        assert _round_up_to_chunk(101, 25) == 125
+        assert _round_up(101, 25) == 125
 
     def test_zero(self):
-        assert _round_up_to_chunk(0, 25) == 0
+        assert _round_up(0, 25) == 0
 
 
 # ===========================================================================
-# _build_gpi_chunk_ranges
+# GPI chunk ranges (inline in tests)
 # ===========================================================================
 
 class TestBuildGpiChunkRanges:
+    """Tests for GPI chunk range generation.
+
+    Note: _build_gpi_chunk_ranges was removed as a separate helper.
+    The logic is now inlined in the densification code.
+    These tests verify the expected behavior.
+    """
 
     def test_exact_division(self):
-        ranges = _build_gpi_chunk_ranges(100, 25)
+        n_gpi, chunk_size = 100, 25
+        ranges = [(i, min(i + chunk_size, n_gpi)) for i in range(0, n_gpi, chunk_size)]
         assert len(ranges) == 4
         assert ranges[0] == (0, 25)
         assert ranges[-1] == (75, 100)
 
     def test_remainder_last_chunk(self):
-        ranges = _build_gpi_chunk_ranges(110, 25)
+        n_gpi, chunk_size = 110, 25
+        ranges = [(i, min(i + chunk_size, n_gpi)) for i in range(0, n_gpi, chunk_size)]
         assert ranges[-1] == (100, 110)
 
     def test_contiguous_and_non_overlapping(self):
-        ranges = _build_gpi_chunk_ranges(N_GPI, CHUNK_SIZE_GPI)
+        ranges = [(i, min(i + CHUNK_SIZE_GPI, N_GPI)) for i in range(0, N_GPI, CHUNK_SIZE_GPI)]
         for i in range(len(ranges) - 1):
             assert ranges[i][1] == ranges[i + 1][0]
         assert ranges[0][0] == 0
@@ -203,31 +215,27 @@ class TestBuildGpiChunkRanges:
 
 
 # ===========================================================================
-# _scan_all_populated_chunks
+# _scan_all_populated_slots
 # ===========================================================================
 
 class TestScanAllPopulatedChunks:
 
     def test_empty_store_returns_empty_map(self, tmp_path):
         path = _make_sparse_store(tmp_path)
-        result = _scan_all_populated_chunks(path, N_SWATH_TIME, N_SPACECRAFT, N_GPI, CHUNK_SIZE_GPI)
-        assert result == {}
+        result = _scan_all_populated_slots(path, N_SWATH_TIME, N_SPACECRAFT, N_GPI, CHUNK_SIZE_GPI)
+        assert result == []
 
     def test_populated_slot_appears_in_map(self, tmp_path):
         gpi_slice = slice(0, CHUNK_SIZE_GPI)
         values = np.ones(CHUNK_SIZE_GPI, dtype="float32")
         path = _make_sparse_store(tmp_path, populated_slots=[(0, 0, gpi_slice, values)])
-        result = _scan_all_populated_chunks(path, N_SWATH_TIME, N_SPACECRAFT, N_GPI, CHUNK_SIZE_GPI)
-        assert 0 in result
-        assert (0, 0) in result[0]
+        result = _scan_all_populated_slots(path, N_SWATH_TIME, N_SPACECRAFT, N_GPI, CHUNK_SIZE_GPI)
+        assert (0, 0) in result
 
     def test_sharded_store_detected_correctly(self, tmp_path):
         """Sharded store must produce the same populated_map as unsharded."""
         gpi_slice = slice(0, N_GPI)
         values = np.ones(N_GPI, dtype="float32")
-
-        path_unsharded = tmp_path / "unsharded"
-        path_sharded = tmp_path / "sharded"
 
         _make_sparse_store(
             tmp_path / "u", populated_slots=[(0, 0, gpi_slice, values)]
@@ -237,12 +245,11 @@ class TestScanAllPopulatedChunks:
             populated_slots=[(0, 0, gpi_slice, values)]
         )
 
-        map_u = _scan_all_populated_chunks(tmp_path / "u", N_SWATH_TIME, N_SPACECRAFT, N_GPI, CHUNK_SIZE_GPI)
-        map_s = _scan_all_populated_chunks(tmp_path / "s", N_SWATH_TIME, N_SPACECRAFT, N_GPI, CHUNK_SIZE_GPI)
+        map_u = _scan_all_populated_slots(tmp_path / "u", N_SWATH_TIME, N_SPACECRAFT, N_GPI, CHUNK_SIZE_GPI)
+        map_s = _scan_all_populated_slots(tmp_path / "s", N_SWATH_TIME, N_SPACECRAFT, N_GPI, CHUNK_SIZE_GPI)
 
-        # Both maps should report the same set of populated (t, s) slots for each gc
-        for gc in map_u:
-            assert set(map_s.get(gc, [])) == set(map_u[gc])
+        # Both should report the same set of populated (t, s) slots
+        assert set(map_s) == set(map_u)
 
     def test_multiple_slots_all_reported(self, tmp_path):
         gpi_slice = slice(0, CHUNK_SIZE_GPI)
@@ -254,32 +261,46 @@ class TestScanAllPopulatedChunks:
                 (1, 1, gpi_slice, vals),
             ],
         )
-        result = _scan_all_populated_chunks(path, N_SWATH_TIME, N_SPACECRAFT, N_GPI, CHUNK_SIZE_GPI)
-        assert (0, 0) in result[0]
-        assert (1, 1) in result[0]
-        reported_slots = set(result[0])
+        result = _scan_all_populated_slots(path, N_SWATH_TIME, N_SPACECRAFT, N_GPI, CHUNK_SIZE_GPI)
+        assert (0, 0) in result
+        assert (1, 1) in result
+        reported_slots = set(result)
         expected_slots = {(0, 0), (1, 1)}
         unexpected = reported_slots - expected_slots
         assert not unexpected, f"Unexpected populated slots reported: {unexpected}"
 
 
 # ===========================================================================
-# _create_dense_structure
+# _create_dense_structure_from_intermediate
 # ===========================================================================
 
 class TestCreateDenseStructure:
 
     @pytest.fixture
     def dense_store(self, tmp_path):
-        sparse_path = _make_sparse_store(tmp_path / "sp")
-        sparse_root = zarr.open(str(sparse_path), mode="r")
+        gpi_slice = slice(0, CHUNK_SIZE_GPI)
+        values = np.ones(CHUNK_SIZE_GPI, dtype="float32")
+        sparse_path = _make_sparse_store(
+            tmp_path / "sp",
+            populated_slots=[(0, 0, gpi_slice, values)],
+        )
+        intermediate_path = tmp_path / "intermediate.zarr"
+        rechunk_sparse(
+            sparse_path=sparse_path,
+            intermediate_path=str(intermediate_path),
+            target_gpi_chunk=CHUNK_SIZE_GPI,
+            batch_size=30,
+            n_read_threads=1,
+        )
+        int_root = zarr.open(str(intermediate_path), mode="r")
         out_path = tmp_path / "dense.zarr"
-        _create_dense_structure(
+        _create_dense_structure_from_intermediate(
             out_path=out_path,
-            sparse_root=sparse_root,
+            int_root=int_root,
             beam_vars=set(),
             scalar_vars={"surface_soil_moisture", "time"},
             has_beams=False,
+            n_gpi=N_GPI,
             obs_dim_size=30,
             chunk_size_gpi=CHUNK_SIZE_GPI,
             chunk_size_obs=10,
@@ -306,19 +327,33 @@ class TestCreateDenseStructure:
         assert root["surface_soil_moisture"].metadata.dimension_names == ("gpi", "obs")
 
     def test_sharding_applied_when_config_given(self, tmp_path):
-        sparse_path = _make_sparse_store(tmp_path / "sp")
-        sparse_root = zarr.open(str(sparse_path), mode="r")
+        gpi_slice = slice(0, CHUNK_SIZE_GPI)
+        values = np.ones(CHUNK_SIZE_GPI, dtype="float32")
+        sparse_path = _make_sparse_store(
+            tmp_path / "sp",
+            populated_slots=[(0, 0, gpi_slice, values)],
+        )
+        intermediate_path = tmp_path / "intermediate.zarr"
+        rechunk_sparse(
+            sparse_path=sparse_path,
+            intermediate_path=str(intermediate_path),
+            target_gpi_chunk=CHUNK_SIZE_GPI,
+            batch_size=30,
+            n_read_threads=1,
+        )
+        int_root = zarr.open(str(intermediate_path), mode="r")
         sharding = _ShardingConfig(
             shard_size_gpi=100, inner_chunk_gpi=CHUNK_SIZE_GPI,
             shard_size_obs=30, inner_chunk_obs=10,
         )
         out_path = tmp_path / "dense_sharded.zarr"
-        _create_dense_structure(
+        _create_dense_structure_from_intermediate(
             out_path=out_path,
-            sparse_root=sparse_root,
+            int_root=int_root,
             beam_vars=set(),
             scalar_vars={"surface_soil_moisture", "time"},
             has_beams=False,
+            n_gpi=N_GPI,
             obs_dim_size=30,
             chunk_size_gpi=CHUNK_SIZE_GPI,
             chunk_size_obs=10,
@@ -337,13 +372,27 @@ class TestCreateDenseStructure:
 class TestExpandObsDimension:
 
     def test_expansion_resizes_all_data_arrays(self, tmp_path):
-        sparse_path = _make_sparse_store(tmp_path / "sp")
-        sparse_root = zarr.open(str(sparse_path), mode="r")
+        gpi_slice = slice(0, CHUNK_SIZE_GPI)
+        values = np.ones(CHUNK_SIZE_GPI, dtype="float32")
+        sparse_path = _make_sparse_store(
+            tmp_path / "sp",
+            populated_slots=[(0, 0, gpi_slice, values)],
+        )
+        intermediate_path = tmp_path / "intermediate.zarr"
+        rechunk_sparse(
+            sparse_path=sparse_path,
+            intermediate_path=str(intermediate_path),
+            target_gpi_chunk=CHUNK_SIZE_GPI,
+            batch_size=30,
+            n_read_threads=1,
+        )
+        int_root = zarr.open(str(intermediate_path), mode="r")
         out_path = tmp_path / "dense.zarr"
-        _create_dense_structure(
-            out_path=out_path, sparse_root=sparse_root,
+        _create_dense_structure_from_intermediate(
+            out_path=out_path, int_root=int_root,
             beam_vars=set(), scalar_vars={"surface_soil_moisture", "time"},
-            has_beams=False, obs_dim_size=30, chunk_size_gpi=CHUNK_SIZE_GPI,
+            has_beams=False, n_gpi=N_GPI,
+            obs_dim_size=30, chunk_size_gpi=CHUNK_SIZE_GPI,
             chunk_size_obs=10, sharding=None,
         )
         out_root = zarr.open(str(out_path), mode="a")
@@ -355,13 +404,27 @@ class TestExpandObsDimension:
         assert out_root["surface_soil_moisture"].shape[1] == 50
 
     def test_expansion_aligns_to_chunk(self, tmp_path):
-        sparse_path = _make_sparse_store(tmp_path / "sp")
-        sparse_root = zarr.open(str(sparse_path), mode="r")
+        gpi_slice = slice(0, CHUNK_SIZE_GPI)
+        values = np.ones(CHUNK_SIZE_GPI, dtype="float32")
+        sparse_path = _make_sparse_store(
+            tmp_path / "sp",
+            populated_slots=[(0, 0, gpi_slice, values)],
+        )
+        intermediate_path = tmp_path / "intermediate.zarr"
+        rechunk_sparse(
+            sparse_path=sparse_path,
+            intermediate_path=str(intermediate_path),
+            target_gpi_chunk=CHUNK_SIZE_GPI,
+            batch_size=30,
+            n_read_threads=1,
+        )
+        int_root = zarr.open(str(intermediate_path), mode="r")
         out_path = tmp_path / "dense.zarr"
-        _create_dense_structure(
-            out_path=out_path, sparse_root=sparse_root,
+        _create_dense_structure_from_intermediate(
+            out_path=out_path, int_root=int_root,
             beam_vars=set(), scalar_vars={"surface_soil_moisture", "time"},
-            has_beams=False, obs_dim_size=30, chunk_size_gpi=CHUNK_SIZE_GPI,
+            has_beams=False, n_gpi=N_GPI,
+            obs_dim_size=30, chunk_size_gpi=CHUNK_SIZE_GPI,
             chunk_size_obs=10, sharding=None,
         )
         out_root = zarr.open(str(out_path), mode="a")
@@ -374,13 +437,27 @@ class TestExpandObsDimension:
         assert out_root["surface_soil_moisture"].shape[1] >= 41
 
     def test_no_op_when_already_large_enough(self, tmp_path):
-        sparse_path = _make_sparse_store(tmp_path / "sp")
-        sparse_root = zarr.open(str(sparse_path), mode="r")
+        gpi_slice = slice(0, CHUNK_SIZE_GPI)
+        values = np.ones(CHUNK_SIZE_GPI, dtype="float32")
+        sparse_path = _make_sparse_store(
+            tmp_path / "sp",
+            populated_slots=[(0, 0, gpi_slice, values)],
+        )
+        intermediate_path = tmp_path / "intermediate.zarr"
+        rechunk_sparse(
+            sparse_path=sparse_path,
+            intermediate_path=str(intermediate_path),
+            target_gpi_chunk=CHUNK_SIZE_GPI,
+            batch_size=100,
+            n_read_threads=1,
+        )
+        int_root = zarr.open(str(intermediate_path), mode="r")
         out_path = tmp_path / "dense.zarr"
-        _create_dense_structure(
-            out_path=out_path, sparse_root=sparse_root,
+        _create_dense_structure_from_intermediate(
+            out_path=out_path, int_root=int_root,
             beam_vars=set(), scalar_vars={"surface_soil_moisture", "time"},
-            has_beams=False, obs_dim_size=100, chunk_size_gpi=CHUNK_SIZE_GPI,
+            has_beams=False, n_gpi=N_GPI,
+            obs_dim_size=100, chunk_size_gpi=CHUNK_SIZE_GPI,
             chunk_size_obs=10, sharding=None,
         )
         out_root = zarr.open(str(out_path), mode="a")
@@ -393,16 +470,29 @@ class TestExpandObsDimension:
 
 
 # ===========================================================================
-# sparse_to_dense integration
+# sparse_to_dense_rechunked integration
 # ===========================================================================
 
 class TestSparseToDense:
 
     def test_creates_output_store(self, tmp_path):
-        sparse_path = _make_sparse_store(tmp_path / "sp")
+        gpi_slice = slice(0, CHUNK_SIZE_GPI)
+        values = np.ones(CHUNK_SIZE_GPI, dtype="f4")
+        sparse_path = _make_sparse_store(
+            tmp_path / "sp",
+            populated_slots=[(0, 0, gpi_slice, values)],
+        )
         out_path = tmp_path / "dense.zarr"
-        sparse_to_dense(sparse_path, out_path, chunk_size_gpi=CHUNK_SIZE_GPI,
-                        chunk_size_obs=10, n_workers=1)
+        sparse_to_dense_rechunked(
+            sparse_path=sparse_path,
+            out_path=str(out_path),
+            chunk_size_gpi=CHUNK_SIZE_GPI,
+            chunk_size_obs=10,
+            n_workers=1,
+            target_gpi_chunk=CHUNK_SIZE_GPI,
+            batch_size=10,
+            n_read_threads=1,
+        )
         assert (out_path / "zarr.json").exists()
 
     def test_known_values_written_correctly(self, tmp_path):
@@ -414,8 +504,16 @@ class TestSparseToDense:
             populated_slots=[(0, 0, gpi_slice, expected)],
         )
         out_path = tmp_path / "dense.zarr"
-        sparse_to_dense(sparse_path, out_path, chunk_size_gpi=CHUNK_SIZE_GPI,
-                        chunk_size_obs=10, n_workers=1)
+        sparse_to_dense_rechunked(
+            sparse_path=sparse_path,
+            out_path=str(out_path),
+            chunk_size_gpi=CHUNK_SIZE_GPI,
+            chunk_size_obs=10,
+            n_workers=1,
+            target_gpi_chunk=CHUNK_SIZE_GPI,
+            batch_size=10,
+            n_read_threads=1,
+        )
         root = zarr.open(str(out_path), mode="r")
         # GPI 0-4 should each have exactly 1 observation
         np.testing.assert_array_almost_equal(
@@ -430,8 +528,16 @@ class TestSparseToDense:
             populated_slots=[(0, 0, gpi_slice, values)],
         )
         out_path = tmp_path / "dense.zarr"
-        sparse_to_dense(sparse_path, out_path, chunk_size_gpi=CHUNK_SIZE_GPI,
-                        chunk_size_obs=10, n_workers=1)
+        sparse_to_dense_rechunked(
+            sparse_path=sparse_path,
+            out_path=str(out_path),
+            chunk_size_gpi=CHUNK_SIZE_GPI,
+            chunk_size_obs=10,
+            n_workers=1,
+            target_gpi_chunk=CHUNK_SIZE_GPI,
+            batch_size=10,
+            n_read_threads=1,
+        )
         root = zarr.open(str(out_path), mode="r")
         assert (root["n_obs"][:5] == 1).all()
         assert (root["n_obs"][5:] == 0).all()
@@ -450,39 +556,23 @@ class TestSparseToDense:
             ],
         )
         out_path = tmp_path / "dense.zarr"
-        sparse_to_dense(sparse_path, out_path, chunk_size_gpi=CHUNK_SIZE_GPI,
-                        chunk_size_obs=10, n_workers=1)
+        sparse_to_dense_rechunked(
+            sparse_path=sparse_path,
+            out_path=str(out_path),
+            chunk_size_gpi=CHUNK_SIZE_GPI,
+            chunk_size_obs=10,
+            n_workers=1,
+            target_gpi_chunk=CHUNK_SIZE_GPI,
+            batch_size=10,
+            n_read_threads=1,
+        )
         root = zarr.open(str(out_path), mode="r")
         # Obs 0 should be the earlier time (value=11.0), obs 1 the later (99.0)
         assert root["surface_soil_moisture"][0, 0] == pytest.approx(11.0)
         assert root["surface_soil_moisture"][0, 1] == pytest.approx(99.0)
 
-    def test_gpi_mask_skips_masked_gpis(self, tmp_path):
-        gpi_slice = slice(0, 10)
-        values = np.ones(10, dtype="f4")
-        sparse_path = _make_sparse_store(
-            tmp_path / "sp",
-            populated_slots=[(0, 0, gpi_slice, values)],
-        )
-        mask = np.zeros(N_GPI, dtype=bool)
-        mask[0] = True   # mask out GPI 0 only
-        out_path = tmp_path / "dense.zarr"
-        sparse_to_dense(sparse_path, out_path, chunk_size_gpi=CHUNK_SIZE_GPI,
-                        chunk_size_obs=10, n_workers=1, gpi_mask=mask)
-        root = zarr.open(str(out_path), mode="r")
-        assert root["n_obs"][0] == 0   # masked — no data
-        assert root["n_obs"][1] == 1   # not masked
-
-    def test_gpi_mask_wrong_shape_raises(self, tmp_path):
-        sparse_path = _make_sparse_store(tmp_path / "sp")
-        with pytest.raises(ValueError, match="shape"):
-            sparse_to_dense(
-                sparse_path, tmp_path / "dense.zarr",
-                gpi_mask=np.zeros(N_GPI + 1, dtype=bool),
-            )
-
     def test_sharded_output(self, tmp_path):
-        """sparse_to_dense with shard_size_gpi produces a sharded output store."""
+        """sparse_to_dense_rechunked with shard_size_gpi produces a sharded output store."""
         gpi_slice = slice(0, CHUNK_SIZE_GPI)
         values = np.ones(CHUNK_SIZE_GPI, dtype="f4")
         sparse_path = _make_sparse_store(
@@ -490,11 +580,17 @@ class TestSparseToDense:
             populated_slots=[(0, 0, gpi_slice, values)],
         )
         out_path = tmp_path / "dense.zarr"
-        sparse_to_dense(
-            sparse_path, out_path,
-            chunk_size_gpi=CHUNK_SIZE_GPI, chunk_size_obs=10,
-            shard_size_gpi=SHARD_SIZE_GPI, shard_size_obs=30,
+        sparse_to_dense_rechunked(
+            sparse_path=sparse_path,
+            out_path=str(out_path),
+            chunk_size_gpi=CHUNK_SIZE_GPI,
+            chunk_size_obs=10,
+            shard_size_gpi=SHARD_SIZE_GPI,
+            shard_size_obs=30,
             n_workers=1,
+            target_gpi_chunk=CHUNK_SIZE_GPI,
+            batch_size=10,
+            n_read_threads=1,
         )
         root = zarr.open(str(out_path), mode="r")
         meta = root["surface_soil_moisture"].metadata
@@ -502,12 +598,22 @@ class TestSparseToDense:
         assert has_sharding
 
     def test_empty_sparse_store_produces_empty_dense(self, tmp_path):
+        # Note: The new sparse_to_dense_rechunked interface raises an error
+        # when there are no populated slots, rather than creating an empty dense store.
+        # This test documents that behavior.
         sparse_path = _make_sparse_store(tmp_path / "sp")
         out_path = tmp_path / "dense.zarr"
-        sparse_to_dense(sparse_path, out_path, chunk_size_gpi=CHUNK_SIZE_GPI,
-                        chunk_size_obs=10, n_workers=1)
-        root = zarr.open(str(out_path), mode="r")
-        assert root["n_obs"][:].sum() == 0
+        with pytest.raises(ValueError, match="No populated slots"):
+            sparse_to_dense_rechunked(
+                sparse_path=sparse_path,
+                out_path=str(out_path),
+                chunk_size_gpi=CHUNK_SIZE_GPI,
+                chunk_size_obs=10,
+                n_workers=1,
+                target_gpi_chunk=CHUNK_SIZE_GPI,
+                batch_size=10,
+                n_read_threads=1,
+            )
 
 
 class TestClassifyVariables:

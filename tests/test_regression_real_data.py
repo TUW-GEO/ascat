@@ -220,18 +220,21 @@ def test_sparse_to_dense_runs_and_produces_correct_structure(shared_tmp: Path):
     - Time is monotonically non-decreasing for each GPI
     - Records timing for regression tracking.
     """
-    from ascat.stack.sparse_zarr_to_ts import sparse_to_dense
+    from ascat.stack.sparse_zarr_to_ts import sparse_to_dense_rechunked
 
     sparse_path = shared_tmp / "sparse.zarr"
     out_path = shared_tmp / "dense.zarr"
 
     with record_timing() as t:
-        sparse_to_dense(
-            sparse_path,
-            out_path,
+        sparse_to_dense_rechunked(
+            sparse_path=sparse_path,
+            out_path=str(out_path),
             n_workers=1,
             chunk_size_gpi=1024,
             chunk_size_obs=30,
+            target_gpi_chunk=1024,
+            batch_size=100,
+            n_read_threads=1,
         )
     _TIMINGS["sparse_to_dense"] = t.seconds
 

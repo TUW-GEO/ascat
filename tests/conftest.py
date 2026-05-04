@@ -246,16 +246,19 @@ def sparse_zarr(tmp_path, synthetic_grid):
 
 @pytest.fixture
 def dense_zarr(tmp_path, sparse_zarr):
-    """Dense timeseries store built from sparse_zarr by calling sparse_to_dense."""
-    from ascat.stack.sparse_zarr_to_ts import sparse_to_dense
+    """Dense timeseries store built from sparse_zarr by calling sparse_to_dense_rechunked."""
+    from ascat.stack.sparse_zarr_to_ts import sparse_to_dense_rechunked
 
     out_path = tmp_path / "dense.zarr"
-    sparse_to_dense(
-        sparse_zarr,
-        out_path,
+    sparse_to_dense_rechunked(
+        sparse_path=sparse_zarr,
+        out_path=str(out_path),
         chunk_size_gpi=CHUNK_SIZE_GPI,
         chunk_size_obs=10,
         n_workers=1,
+        target_gpi_chunk=CHUNK_SIZE_GPI,
+        batch_size=10,
+        n_read_threads=1,
     )
     return out_path
 
