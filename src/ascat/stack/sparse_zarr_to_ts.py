@@ -563,7 +563,7 @@ def rechunk_sparse(
                 name=var,
                 dtype=src.dtype,
                 shape=(padded_n_obs, n_beams, n_gpi),
-                chunks=(batch_size, 1, target_gpi_chunk),
+                chunks=(batch_size, n_beams, target_gpi_chunk),
                 fill_value=src.metadata.fill_value,
                 attributes=dict(src.attrs),
                 dimension_names=["obs", "beam", "gpi"],
@@ -764,7 +764,7 @@ def _create_dense_structure_from_intermediate(
         n_beams = int_root["beam"].shape[0]
         for var in sorted(beam_vars):
             src = int_root[var]
-            arr_kwargs = _make_array_kwargs((chunk_size_gpi, chunk_size_obs, 1), sharding)
+            arr_kwargs = _make_array_kwargs((chunk_size_gpi, chunk_size_obs, n_beams), sharding)
             root.create_array(
                 name=var,
                 dtype=src.dtype,
