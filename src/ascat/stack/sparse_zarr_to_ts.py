@@ -56,7 +56,6 @@ import warnings
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import partial
-from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from time import time as timer
 from typing import Optional
@@ -380,60 +379,37 @@ def _valid_time_mask(time_data, time_fill):
 # ---------------------------------------------------------------------------
 
 
-def _reset_codec_pipeline_worker():
-    """Reset codec pipeline to default zarr-python in worker processes."""
+def _log_codec_pipeline(label):
+    """Print the active zarr codec pipeline so a regression to the slow
+    BatchedCodecPipeline cannot hide silently.
+    """
+    pipeline = zarr.config.get("codec_pipeline.path", default="<default>")
+    threads = zarr.config.get("threading.max_workers", default="<default>")
     try:
-        import zarr
+        import zarrs
 
-        zarr.config.set({"codec_pipeline.path": "zarr.core.codec_pipeline.BatchedCodecPipeline"})
-    except Exception:
-        pass
-
-
-class _NullPool:
-    """No-op pool used when rechunk_sparse reads must stay in-process
-    (e.g. icechunk-backed zarr Group inputs that can't be shipped to
-    subprocesses)."""
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
+        zarrs_version = getattr(zarrs, "__version__", "?")
+    except ImportError:
+        zarrs_version = "not installed"
+    print(
+        f"[{label}] codec_pipeline.path={pipeline} | "
+        f"threading.max_workers={threads} | zarrs={zarrs_version}"
+    )
 
 
-def _shm_read_worker(args):
-    """Read one (t_idx, s_idx) slab for ALL variables into shared memory."""
-    (
-        sparse_path,
-        t_idx,
-        s_idx,
-        row_idx,
-        batch_actual,
-        n_gpi,
-        scalar_shm_info,
-        beam_shm_info,
-    ) = args
+def _thread_read_worker(args):
+    """Read one (t_idx, s_idx) slab for ALL variables into shared buffers.
 
-    root = zarr.open(sparse_path, mode="r")
-
-    for var, shm_name, dtype_str in scalar_shm_info:
-        shm = SharedMemory(name=shm_name)
-        dtype = np.dtype(dtype_str)
-        try:
-            buf = np.ndarray((batch_actual, n_gpi), dtype=dtype, buffer=shm.buf)
-            buf[row_idx, :] = root[var][t_idx, s_idx, :]
-        finally:
-            shm.close()
-
-    for var, shm_name, dtype_str, n_beams in beam_shm_info:
-        shm = SharedMemory(name=shm_name)
-        dtype = np.dtype(dtype_str)
-        try:
-            buf = np.ndarray((batch_actual, n_beams, n_gpi), dtype=dtype, buffer=shm.buf)
-            buf[row_idx, :, :] = root[var][t_idx, s_idx, :, :]
-        finally:
-            shm.close()
+    Runs in the parent process under a ThreadPoolExecutor so the active
+    zarr codec pipeline (e.g. zarrs.ZarrsCodecPipeline) is honored.  The
+    previous ProcessPoolExecutor path forced workers back onto
+    BatchedCodecPipeline via initializer, defeating zarrs entirely.
+    """
+    sparse_root, t_idx, s_idx, row_idx, scalar_buffers, beam_buffers = args
+    for var, buf in scalar_buffers:
+        buf[row_idx, :] = sparse_root[var][t_idx, s_idx, :]
+    for var, buf in beam_buffers:
+        buf[row_idx, :, :] = sparse_root[var][t_idx, s_idx, :, :]
 
 
 # ---------------------------------------------------------------------------
@@ -604,137 +580,84 @@ def rechunk_sparse(
     print(f"Processing {n_obs} slots in {n_batches} batches of {batch_size}")
     total_start = timer()
 
-    var_info_scalar = [
-        (var, str(sparse_root[var].dtype), sparse_root[var].metadata.fill_value)
+    scalar_var_info = [
+        (var, sparse_root[var].dtype, sparse_root[var].metadata.fill_value)
         for var in all_vars_scalar
     ]
-    var_info_beam = (
-        [
-            (
-                var,
-                str(sparse_root[var].dtype),
-                sparse_root[var].metadata.fill_value,
-                sparse_root["beam"].shape[0],
-            )
+    if has_beams:
+        n_beams = sparse_root["beam"].shape[0]
+        beam_var_info = [
+            (var, sparse_root[var].dtype, sparse_root[var].metadata.fill_value, n_beams)
             for var in all_vars_beam
         ]
-        if has_beams
-        else []
-    )
+    else:
+        beam_var_info = []
 
-    print(f"Allocating shared memory buffers for batch_size={batch_size}")
-    scalar_shms = []
-    for var, dtype_str, fill_val in var_info_scalar:
-        dtype = np.dtype(dtype_str)
-        buf_size = batch_size * n_gpi * dtype.itemsize
-        shm = SharedMemory(create=True, size=buf_size)
-        buf = np.ndarray((batch_size, n_gpi), dtype=dtype, buffer=shm.buf)
-        scalar_shms.append((var, shm, buf, dtype_str, fill_val))
-
-    beam_shms = []
-    for var, dtype_str, fill_val, n_beams in var_info_beam:
-        dtype = np.dtype(dtype_str)
-        buf_size = batch_size * n_beams * n_gpi * dtype.itemsize
-        shm = SharedMemory(create=True, size=buf_size)
-        buf = np.ndarray((batch_size, n_beams, n_gpi), dtype=dtype, buffer=shm.buf)
-        beam_shms.append((var, shm, buf, dtype_str, n_beams, fill_val))
-
-    scalar_shm_info = [
-        (var, shm.name, dtype_str) for var, shm, buf, dtype_str, fill_val in scalar_shms
+    print(f"Allocating read buffers for batch_size={batch_size}")
+    scalar_buffers = [
+        (var, np.empty((batch_size, n_gpi), dtype=dtype))
+        for var, dtype, _ in scalar_var_info
     ]
-    beam_shm_info = [
-        (var, shm.name, dtype_str, n_beams)
-        for var, shm, buf, dtype_str, n_beams, fill_val in beam_shms
+    beam_buffers = [
+        (var, np.empty((batch_size, n_beams_, n_gpi), dtype=dtype))
+        for var, dtype, _, n_beams_ in beam_var_info
     ]
+    scalar_fills = [fill_val for _, _, fill_val in scalar_var_info]
+    beam_fills = [fill_val for _, _, fill_val, _ in beam_var_info]
 
-    # In-process reads when a zarr Group was passed in (e.g. an icechunk-backed
-    # group). The multi-process path below can't ship a live Group through
-    # pickle, and re-opening the repo per subprocess is out of scope here.
-    reads_in_process = sparse_path_for_scan is None
+    _log_codec_pipeline("rechunk_sparse: read pool")
 
-    try:
-        pool_cm = (
-            _NullPool()
-            if reads_in_process
-            else ProcessPoolExecutor(
-                max_workers=n_read_threads,
-                initializer=_reset_codec_pipeline_worker,
+    with ThreadPoolExecutor(max_workers=n_read_threads) as pool:
+        for batch_idx in range(n_batches):
+            batch_start_idx = batch_idx * batch_size
+            batch_end_idx = min(batch_start_idx + batch_size, n_obs)
+            batch = all_slots[batch_start_idx:batch_end_idx]
+            actual = len(batch)
+
+            batch_timer = timer()
+
+            for (_, buf), fill_val in zip(scalar_buffers, scalar_fills):
+                buf[:actual] = fill_val
+            for (_, buf), fill_val in zip(beam_buffers, beam_fills):
+                buf[:actual] = fill_val
+
+            fill_elapsed = timer() - batch_timer
+
+            read_timer = timer()
+            tasks = [
+                (sparse_root, t_idx, s_idx, i, scalar_buffers, beam_buffers)
+                for i, (t_idx, s_idx) in enumerate(batch)
+            ]
+            list(pool.map(_thread_read_worker, tasks))
+            read_elapsed = timer() - read_timer
+
+            write_timer = timer()
+            obs_start = batch_start_idx
+            obs_end = batch_start_idx + actual
+
+            def _write_scalar(item):
+                var, buf = item
+                int_root[var][obs_start:obs_end, :] = buf[:actual]
+
+            def _write_beam(item):
+                var, buf = item
+                int_root[var][obs_start:obs_end, :, :] = buf[:actual]
+
+            with ThreadPoolExecutor(max_workers=n_read_threads) as write_pool:
+                list(write_pool.map(_write_scalar, scalar_buffers))
+                if beam_buffers:
+                    list(write_pool.map(_write_beam, beam_buffers))
+
+            write_elapsed = timer() - write_timer
+
+            print(
+                f"  Batch {batch_idx + 1}/{n_batches}: {actual} slots, "
+                f"fill {fill_elapsed:.1f}s, "
+                f"read {read_elapsed:.1f}s, write {write_elapsed:.1f}s"
             )
-        )
-        with pool_cm as pool:
-            for batch_idx in range(n_batches):
-                batch_start_idx = batch_idx * batch_size
-                batch_end_idx = min(batch_start_idx + batch_size, n_obs)
-                batch = all_slots[batch_start_idx:batch_end_idx]
-                actual = len(batch)
 
-                batch_timer = timer()
-
-                for var, shm, buf, dtype_str, fill_val in scalar_shms:
-                    buf[:actual] = fill_val
-                for var, shm, buf, dtype_str, n_beams, fill_val in beam_shms:
-                    buf[:actual] = fill_val
-
-                fill_elapsed = timer() - batch_timer
-
-                read_timer = timer()
-                if reads_in_process:
-                    for i, (t_idx, s_idx) in enumerate(batch):
-                        for var, shm, buf, dtype_str, fill_val in scalar_shms:
-                            buf[i, :] = sparse_root[var][t_idx, s_idx, :]
-                        for var, shm, buf, dtype_str, n_beams, fill_val in beam_shms:
-                            buf[i, :, :] = sparse_root[var][t_idx, s_idx, :, :]
-                else:
-                    tasks = [
-                        (
-                            str(sparse_path),
-                            t_idx,
-                            s_idx,
-                            i,
-                            batch_size,
-                            n_gpi,
-                            scalar_shm_info,
-                            beam_shm_info,
-                        )
-                        for i, (t_idx, s_idx) in enumerate(batch)
-                    ]
-                    list(pool.map(_shm_read_worker, tasks))
-                read_elapsed = timer() - read_timer
-
-                write_timer = timer()
-                obs_start = batch_start_idx
-                obs_end = batch_start_idx + actual
-
-                def _write_scalar(item):
-                    var, shm, buf, dtype_str, fill_val = item
-                    int_root[var][obs_start:obs_end, :] = buf[:actual]
-
-                def _write_beam(item):
-                    var, shm, buf, dtype_str, n_beams, fill_val = item
-                    int_root[var][obs_start:obs_end, :, :] = buf[:actual]
-
-                with ThreadPoolExecutor(max_workers=n_read_threads) as write_pool:
-                    list(write_pool.map(_write_scalar, scalar_shms))
-                    if beam_shms:
-                        list(write_pool.map(_write_beam, beam_shms))
-
-                write_elapsed = timer() - write_timer
-
-                print(
-                    f"  Batch {batch_idx + 1}/{n_batches}: {actual} slots, "
-                    f"fill {fill_elapsed:.1f}s, "
-                    f"read {read_elapsed:.1f}s, write {write_elapsed:.1f}s"
-                )
-
-        total_elapsed = timer() - total_start
-        print(f"Rechunking complete in {total_elapsed:.1f}s")
-    finally:
-        for var, shm, buf, dtype_str, fill_val in scalar_shms:
-            shm.close()
-            shm.unlink()
-        for var, shm, buf, dtype_str, n_beams, fill_val in beam_shms:
-            shm.close()
-            shm.unlink()
+    total_elapsed = timer() - total_start
+    print(f"Rechunking complete in {total_elapsed:.1f}s")
 
 
 # ---------------------------------------------------------------------------
