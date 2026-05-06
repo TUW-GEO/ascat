@@ -397,15 +397,14 @@ def _log_codec_pipeline(label):
     )
 
 
-def _thread_read_worker(args):
+def _read_one_slot(sparse_root, t_idx, s_idx, row_idx, scalar_buffers, beam_buffers):
     """Read one (t_idx, s_idx) slab for ALL variables into shared buffers.
 
-    Runs in the parent process under a ThreadPoolExecutor so the active
-    zarr codec pipeline (e.g. zarrs.ZarrsCodecPipeline) is honored.  The
-    previous ProcessPoolExecutor path forced workers back onto
-    BatchedCodecPipeline via initializer, defeating zarrs entirely.
+    Called sequentially from the main thread so a single ZarrsCodecPipeline
+    instance is responsible for all in-flight decompression — its internal
+    Rust thread pool (``zarr.config["threading.max_workers"]``) provides
+    the parallelism without Python-side oversubscription.
     """
-    sparse_root, t_idx, s_idx, row_idx, scalar_buffers, beam_buffers = args
     for var, buf in scalar_buffers:
         buf[row_idx, :] = sparse_root[var][t_idx, s_idx, :]
     for var, buf in beam_buffers:
@@ -605,56 +604,52 @@ def rechunk_sparse(
     scalar_fills = [fill_val for _, _, fill_val in scalar_var_info]
     beam_fills = [fill_val for _, _, fill_val, _ in beam_var_info]
 
-    _log_codec_pipeline("rechunk_sparse: read pool")
+    _log_codec_pipeline("rechunk_sparse: read")
 
-    with ThreadPoolExecutor(max_workers=n_read_threads) as pool:
-        for batch_idx in range(n_batches):
-            batch_start_idx = batch_idx * batch_size
-            batch_end_idx = min(batch_start_idx + batch_size, n_obs)
-            batch = all_slots[batch_start_idx:batch_end_idx]
-            actual = len(batch)
+    for batch_idx in range(n_batches):
+        batch_start_idx = batch_idx * batch_size
+        batch_end_idx = min(batch_start_idx + batch_size, n_obs)
+        batch = all_slots[batch_start_idx:batch_end_idx]
+        actual = len(batch)
 
-            batch_timer = timer()
+        batch_timer = timer()
 
-            for (_, buf), fill_val in zip(scalar_buffers, scalar_fills):
-                buf[:actual] = fill_val
-            for (_, buf), fill_val in zip(beam_buffers, beam_fills):
-                buf[:actual] = fill_val
+        for (_, buf), fill_val in zip(scalar_buffers, scalar_fills):
+            buf[:actual] = fill_val
+        for (_, buf), fill_val in zip(beam_buffers, beam_fills):
+            buf[:actual] = fill_val
 
-            fill_elapsed = timer() - batch_timer
+        fill_elapsed = timer() - batch_timer
 
-            read_timer = timer()
-            tasks = [
-                (sparse_root, t_idx, s_idx, i, scalar_buffers, beam_buffers)
-                for i, (t_idx, s_idx) in enumerate(batch)
-            ]
-            list(pool.map(_thread_read_worker, tasks))
-            read_elapsed = timer() - read_timer
+        read_timer = timer()
+        for i, (t_idx, s_idx) in enumerate(batch):
+            _read_one_slot(sparse_root, t_idx, s_idx, i, scalar_buffers, beam_buffers)
+        read_elapsed = timer() - read_timer
 
-            write_timer = timer()
-            obs_start = batch_start_idx
-            obs_end = batch_start_idx + actual
+        write_timer = timer()
+        obs_start = batch_start_idx
+        obs_end = batch_start_idx + actual
 
-            def _write_scalar(item):
-                var, buf = item
-                int_root[var][obs_start:obs_end, :] = buf[:actual]
+        def _write_scalar(item):
+            var, buf = item
+            int_root[var][obs_start:obs_end, :] = buf[:actual]
 
-            def _write_beam(item):
-                var, buf = item
-                int_root[var][obs_start:obs_end, :, :] = buf[:actual]
+        def _write_beam(item):
+            var, buf = item
+            int_root[var][obs_start:obs_end, :, :] = buf[:actual]
 
-            with ThreadPoolExecutor(max_workers=n_read_threads) as write_pool:
-                list(write_pool.map(_write_scalar, scalar_buffers))
-                if beam_buffers:
-                    list(write_pool.map(_write_beam, beam_buffers))
+        with ThreadPoolExecutor(max_workers=n_read_threads) as write_pool:
+            list(write_pool.map(_write_scalar, scalar_buffers))
+            if beam_buffers:
+                list(write_pool.map(_write_beam, beam_buffers))
 
-            write_elapsed = timer() - write_timer
+        write_elapsed = timer() - write_timer
 
-            print(
-                f"  Batch {batch_idx + 1}/{n_batches}: {actual} slots, "
-                f"fill {fill_elapsed:.1f}s, "
-                f"read {read_elapsed:.1f}s, write {write_elapsed:.1f}s"
-            )
+        print(
+            f"  Batch {batch_idx + 1}/{n_batches}: {actual} slots, "
+            f"fill {fill_elapsed:.1f}s, "
+            f"read {read_elapsed:.1f}s, write {write_elapsed:.1f}s"
+        )
 
     total_elapsed = timer() - total_start
     print(f"Rechunking complete in {total_elapsed:.1f}s")
