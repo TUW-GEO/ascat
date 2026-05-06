@@ -98,11 +98,7 @@ class _ShardingConfig:
 
     @property
     def obs_alignment(self) -> int:
-        return (
-            self.shard_size_obs
-            if self.shard_size_obs is not None
-            else self.inner_chunk_obs
-        )
+        return self.shard_size_obs if self.shard_size_obs is not None else self.inner_chunk_obs
 
     @property
     def gpi_alignment(self) -> int:
@@ -594,8 +590,7 @@ def rechunk_sparse(
 
     print(f"Allocating read buffers for batch_size={batch_size}")
     scalar_buffers = [
-        (var, np.empty((batch_size, n_gpi), dtype=dtype))
-        for var, dtype, _ in scalar_var_info
+        (var, np.empty((batch_size, n_gpi), dtype=dtype)) for var, dtype, _ in scalar_var_info
     ]
     beam_buffers = [
         (var, np.empty((batch_size, n_beams_, n_gpi), dtype=dtype))
@@ -898,7 +893,15 @@ def _process_spatial_chunk_create_mode(
     scalar_vars,
     has_beams,
 ):
-    """Fresh-store variant: write starting at obs=0 for every GPI."""
+    """Fresh-store variant: write starting at obs=0 for every GPI.
+
+    Returns
+    -------
+    dict with keys:
+        gpi_start : int — start GPI index
+        gpi_end : int — end GPI index
+        n_obs_update : ndarray — n_obs values for this GPI range
+    """
     gpi_start, gpi_end = gpi_range
     chunk_width = gpi_end - gpi_start
 
@@ -927,7 +930,7 @@ def _process_spatial_chunk_create_mode(
 
     max_valid = int(n_valid_per_gpi.max()) if n_valid_per_gpi.size else 0
     if max_valid == 0:
-        return
+        return {"gpi_start": gpi_start, "gpi_end": gpi_end, "n_obs_update": None}
 
     obs_end = max_valid
     out_root["time"][gpi_start:gpi_end, :obs_end] = new_time
@@ -939,7 +942,11 @@ def _process_spatial_chunk_create_mode(
         for var in sorted(beam_vars):
             out_root[var][gpi_start:gpi_end, :obs_end, :] = new_beams[var]
 
-    out_root["n_obs"][gpi_start:gpi_end] = n_valid_per_gpi.astype("uint32")
+    return {
+        "gpi_start": gpi_start,
+        "gpi_end": gpi_end,
+        "n_obs_update": n_valid_per_gpi.astype("uint32"),
+    }
 
 
 def _process_spatial_chunk_append_mode(
@@ -1002,7 +1009,7 @@ def _process_spatial_chunk_append_mode(
     )
 
     if n_valid_per_gpi.sum() == 0:
-        return {"max_fwd_gap": 0}
+        return {"max_fwd_gap": 0, "gpi_start": gpi_start, "gpi_end": gpi_end, "n_obs_update": None}
 
     # --- Determine write positions from existing n_obs ---
     existing_n_obs = out_root["n_obs"][gpi_start:gpi_end].astype(np.int32)
@@ -1012,7 +1019,7 @@ def _process_spatial_chunk_append_mode(
 
     active = new_counts > 0
     if not active.any():
-        return {"max_fwd_gap": 0}
+        return {"max_fwd_gap": 0, "gpi_start": gpi_start, "gpi_end": gpi_end, "n_obs_update": None}
 
     # --- Continuity check for this GPI range ---
     # Done before any writes so a violation aborts cleanly.
@@ -1117,10 +1124,13 @@ def _process_spatial_chunk_append_mode(
                 )
                 out_root[var][gpi_slice, obs_slice, :] = chunk_data
 
-    # --- Update n_obs ---
-    out_root["n_obs"][gpi_start:gpi_end] = write_ends.astype("uint32")
-
-    return {"max_fwd_gap": max_fwd_gap}
+    # --- Return n_obs update for later application ---
+    return {
+        "max_fwd_gap": max_fwd_gap,
+        "gpi_start": gpi_start,
+        "gpi_end": gpi_end,
+        "n_obs_update": write_ends.astype("uint32"),
+    }
 
 
 def _scatter_into_chunk(
@@ -1346,14 +1356,31 @@ def _densify_create(
     )
 
     start = timer()
+    n_obs_updates = []
+
     if n_workers > 1:
         with ProcessPoolExecutor(max_workers=n_workers) as executor:
             futures = [executor.submit(process_func, chunk) for chunk in gpi_chunks]
             for f in tqdm(futures, total=len(gpi_chunks), desc="Spatial chunks"):
-                f.result()
+                result = f.result()
+                if result and result.get("n_obs_update") is not None:
+                    n_obs_updates.append(result)
     else:
         for chunk in tqdm(gpi_chunks, desc="Spatial chunks"):
-            process_func(chunk)
+            result = process_func(chunk)
+            if result and result.get("n_obs_update") is not None:
+                n_obs_updates.append(result)
+
+    # --- Write n_obs updates sequentially to avoid race conditions ---
+    if n_obs_updates:
+        print(f"Writing n_obs updates for {len(n_obs_updates)} GPI chunks...")
+        out_root = zarr.open(out_path, mode="a")
+        for update in n_obs_updates:
+            gpi_start = update["gpi_start"]
+            gpi_end = update["gpi_end"]
+            n_obs_data = update["n_obs_update"]
+            if n_obs_data is not None:
+                out_root["n_obs"][gpi_start:gpi_end] = n_obs_data
 
     print(f"Dense conversion complete in {timer() - start:.1f}s")
 
@@ -1463,19 +1490,37 @@ def _densify_append(
 
     start = timer()
     max_fwd_gap_seen = 0
+    n_obs_updates = []
 
     if n_workers > 1:
         with ProcessPoolExecutor(max_workers=n_workers) as executor:
             futures = [executor.submit(process_func, chunk) for chunk in gpi_chunks]
             for f in tqdm(futures, total=len(gpi_chunks), desc="Append chunks"):
                 result = f.result()
-                if result and result.get("max_fwd_gap", 0) > max_fwd_gap_seen:
-                    max_fwd_gap_seen = result["max_fwd_gap"]
+                if result:
+                    if result.get("max_fwd_gap", 0) > max_fwd_gap_seen:
+                        max_fwd_gap_seen = result["max_fwd_gap"]
+                    if result.get("n_obs_update") is not None:
+                        n_obs_updates.append(result)
     else:
         for chunk in tqdm(gpi_chunks, desc="Append chunks"):
             result = process_func(chunk)
-            if result and result.get("max_fwd_gap", 0) > max_fwd_gap_seen:
-                max_fwd_gap_seen = result["max_fwd_gap"]
+            if result:
+                if result.get("max_fwd_gap", 0) > max_fwd_gap_seen:
+                    max_fwd_gap_seen = result["max_fwd_gap"]
+                if result.get("n_obs_update") is not None:
+                    n_obs_updates.append(result)
+
+    # --- Write n_obs updates sequentially to avoid race conditions ---
+    if n_obs_updates:
+        print(f"Writing n_obs updates for {len(n_obs_updates)} GPI chunks...")
+        out_root = zarr.open(out_path, mode="a")
+        for update in n_obs_updates:
+            gpi_start = update["gpi_start"]
+            gpi_end = update["gpi_end"]
+            n_obs_data = update["n_obs_update"]
+            if n_obs_data is not None:
+                out_root["n_obs"][gpi_start:gpi_end] = n_obs_data
 
     print(f"Append complete in {timer() - start:.1f}s")
 
