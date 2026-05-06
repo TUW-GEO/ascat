@@ -412,7 +412,7 @@ def _create_zarr_structure(
         "processed",
         shape=(n_time, n_spacecraft),
         dtype="bool",
-        chunks=(1, n_spacecraft),
+        chunks=(1, 1),
         dimension_names=("swath_time", "spacecraft"),
         fill_value=False,
         compressors=None,
