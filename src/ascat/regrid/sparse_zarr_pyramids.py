@@ -1029,10 +1029,25 @@ def regrid_gpi_first_zarr_to_latlon(
     )
 
     # --- Regrid level 0 ---
-    # Time-varying: iterate (t, *slot_idxs)
-    # Slot-static: iterate (*slot_idxs,)  — gets written at every time? No:
-    #              stored with shape (*slots, lat, lon), one write per slot tuple.
-    # Fully-static: single write per var.
+    # Iteration shape: chunk-aligned lat-bands. Each worker reads its
+    # band's gpi range from source ONCE per variable (covering all time +
+    # slots in a single contiguous slab), then scatters into a single
+    # output band buffer that gets bulk-written back to zarr. This is
+    # O(n_gpi × n_vars) source I/O instead of O(n_gpi × n_vars × n_time
+    # × n_slots) — the per-slice approach we replaced was reading every
+    # gpi-shard once per (time, slot) tuple.
+    #
+    # Lat-bands rather than spatial tiles: fibgrid uses sort_order="latband"
+    # so a contiguous output lat range maps to a roughly contiguous gpi index
+    # range, which lets us read source in one block per band. NN regridding
+    # has no inter-cell coupling, so band boundaries are seamless.
+    #
+    # Pyramid downsampling (levels ≥1) keeps the per-slice scheme: it reads
+    # from the dense output store, so the I/O amplification problem doesn't
+    # apply there, and Gaussian smoothing across band boundaries WOULD need
+    # haloing which we'd rather avoid.
+    lat_bands = _gf_compute_lat_bands(n_lat, lat_chunk, n_workers)
+    # Slices kept around only for pyramid-build iteration shape.
     time_varying_slices = list(
         itertools.product(range(n_time) if n_time else (None,),
                           *[range(sz) for sz in slot_sizes])
@@ -1041,48 +1056,49 @@ def regrid_gpi_first_zarr_to_latlon(
         itertools.product(*[range(sz) for sz in slot_sizes])
     ) if slot_static else []
 
-    print(f"Regridding {len(time_varying_slices)} time-varying slices, "
-          f"{len(slot_static_slices)} slot-static slices, "
-          f"{len(fully_static)} fully-static vars (level 0)")
+    print(f"Regridding level 0 in {len(lat_bands)} lat-band(s) "
+          f"({len(time_varying)} time-varying, {len(slot_static)} slot-static, "
+          f"{len(fully_static)} fully-static vars)")
 
     start = timer()
     if time_varying:
         regrid_tv = partial(
-            _gf_regrid_time_varying_slice,
+            _gf_regrid_time_varying_lat_band,
             sparse_opener=sparse_opener,
             out_path=str(out_path),
             time_varying=time_varying,
             nn_gpi_indices=nn_gpi_indices,
             nn_valid_mask=nn_valid_mask,
-            n_lat=n_lat,
-            n_lon=n_lon,
-            has_time=time_dim is not None,
-            n_slot_dims=len(slot_dims),
         )
-        if n_workers > 1:
+        if n_workers > 1 and len(lat_bands) > 1:
             with ProcessPoolExecutor(max_workers=n_workers) as executor:
-                futures = [executor.submit(regrid_tv, s) for s in time_varying_slices]
+                futures = [executor.submit(regrid_tv, b) for b in lat_bands]
                 for f in tqdm(futures, total=len(futures), desc="Regridding time-varying"):
                     f.result()
         else:
-            for s in tqdm(time_varying_slices, desc="Regridding time-varying"):
-                regrid_tv(s)
+            for b in tqdm(lat_bands, desc="Regridding time-varying"):
+                regrid_tv(b)
 
     if slot_static:
         regrid_ss = partial(
-            _gf_regrid_slot_static_slice,
+            _gf_regrid_slot_static_lat_band,
             sparse_opener=sparse_opener,
             out_path=str(out_path),
             slot_static=slot_static,
             nn_gpi_indices=nn_gpi_indices,
             nn_valid_mask=nn_valid_mask,
-            n_lat=n_lat,
-            n_lon=n_lon,
         )
-        for s in tqdm(slot_static_slices, desc="Regridding slot-static"):
-            regrid_ss(s)
+        if n_workers > 1 and len(lat_bands) > 1:
+            with ProcessPoolExecutor(max_workers=n_workers) as executor:
+                futures = [executor.submit(regrid_ss, b) for b in lat_bands]
+                for f in tqdm(futures, total=len(futures), desc="Regridding slot-static"):
+                    f.result()
+        else:
+            for b in tqdm(lat_bands, desc="Regridding slot-static"):
+                regrid_ss(b)
 
     if fully_static:
+        # One read per var of the whole gpi axis. Single-process; cheap.
         _gf_regrid_fully_static(
             sparse_opener=sparse_opener,
             out_path=str(out_path),
@@ -1278,73 +1294,146 @@ def _gf_create_pyramid_store(
 # gpi-first: level-0 regridding
 # ---------------------------------------------------------------------------
 
-def _gf_regrid_time_varying_slice(
-    idx_tuple,
+def _gf_compute_lat_bands(n_lat, lat_chunk, n_workers):
+    """Partition the output latitude axis into chunk-aligned bands for
+    parallel regridding.
+
+    Each band is a multiple of ``lat_chunk`` rows (except possibly the
+    last) so workers never share an output zarr chunk on the lat axis.
+    Number of bands = ``min(n_workers, ceil(n_lat / lat_chunk))`` — no
+    point creating more bands than there are gpi-shards' worth of rows
+    to read.
+    """
+    if n_workers <= 1 or lat_chunk <= 0:
+        return [(0, n_lat)]
+    n_chunks = (n_lat + lat_chunk - 1) // lat_chunk
+    n_bands = max(1, min(n_workers, n_chunks))
+    chunks_per_band = (n_chunks + n_bands - 1) // n_bands
+    rows_per_band = chunks_per_band * lat_chunk
+    bands = []
+    for i in range(n_bands):
+        lo = i * rows_per_band
+        hi = min(lo + rows_per_band, n_lat)
+        if lo < n_lat:
+            bands.append((lo, hi))
+    return bands
+
+
+def _gf_regrid_time_varying_lat_band(
+    lat_band,
     sparse_opener,
     out_path,
     time_varying,
     nn_gpi_indices,
     nn_valid_mask,
-    n_lat,
-    n_lon,
-    has_time,
-    n_slot_dims,
 ):
-    """Regrid one (time, *slots) slice for every time-varying variable.
+    """Regrid one chunk-aligned lat-band of cells for every time-varying var.
 
-    Source vars have dims ``(gpi, [time_dim,] *slot_dims)`` — we index the
-    trailing dims to extract a 1D gpi vector, then scatter into a 2D
-    (lat, lon) array via the precomputed NN lookup.
+    The key win vs per-slice iteration is that each variable's source is
+    read **once** for the band — a single contiguous ``src[gpi_lo:gpi_hi, ...]``
+    slab that covers all time and slot indices. We then gather the rows we
+    actually need and scatter into a single output band buffer, which gets
+    written back to zarr in one bulk slab.
+
+    Source I/O scales O(n_gpi × n_vars), not O(n_gpi × n_vars × n_time × n_ctime).
+    For SWI ICDR chunking (gpi inner=64, outer=1024, no time/ctime chunking)
+    this is ~n_time × n_ctime fewer shard reads — roughly two orders of
+    magnitude under typical configs.
+
+    No edge effects: NN-regrid is per-cell; cells in different lat-bands
+    do not interact. Output writes are also chunk-aligned on the lat axis
+    so workers cannot collide on a zarr chunk.
     """
+    lat_lo, lat_hi = lat_band
+    band_h = lat_hi - lat_lo
+    n_lon = nn_gpi_indices.shape[1]
+
+    band_nn = nn_gpi_indices[lat_lo:lat_hi]
+    band_valid = nn_valid_mask[lat_lo:lat_hi]
+    if not band_valid.any():
+        return
+
+    valid_gpi_idx = band_nn[band_valid]
+    gpi_lo = int(valid_gpi_idx.min())
+    gpi_hi = int(valid_gpi_idx.max()) + 1
+    block_idx = valid_gpi_idx - gpi_lo
+    ys, xs = np.where(band_valid)
+
     sparse_root = sparse_opener()
     out_root = zarr.open(out_path, mode="a")
     level0 = out_root["0"]
 
-    flat_gpi_idx = nn_gpi_indices[nn_valid_mask]
-
-    if has_time:
-        src_idx = idx_tuple              # (t, *slots)
-        out_idx = idx_tuple              # (t, *slots, :, :)
-    else:
-        src_idx = idx_tuple[1:]          # drop the None placeholder
-        out_idx = idx_tuple[1:]
-
     for var in time_varying:
         src_arr = sparse_root[var]
         fill_val = src_arr.metadata.fill_value
-        gpi_data = src_arr[(slice(None),) + src_idx]
-        grid_2d = np.full((n_lat, n_lon), fill_val, dtype=src_arr.dtype)
-        grid_2d[nn_valid_mask] = gpi_data[flat_gpi_idx]
-        level0[var][out_idx + (slice(None), slice(None))] = grid_2d
+        # One contiguous source read for the entire band: covers all time + slots.
+        block = src_arr[gpi_lo:gpi_hi]                # (block_size, n_time, *slots)
+        gathered = block[block_idx]                   # (n_valid, n_time, *slots)
+
+        # Output shape mirrors the var minus gpi, plus (band_h, n_lon).
+        # For SWI: (n_time, n_ctime, band_h, n_lon).
+        outer_shape = gathered.shape[1:]              # (n_time, *slots)
+        out_band = np.full(
+            outer_shape + (band_h, n_lon),
+            fill_val,
+            dtype=src_arr.dtype,
+        )
+        # Scatter: out_band[..., ys[k], xs[k]] = gathered[k, ...]
+        # Move n_valid axis to the end so advanced indexing on (lat, lon)
+        # lines up with the leading shape of out_band.
+        perm = tuple(range(1, gathered.ndim)) + (0,)
+        out_band[..., ys, xs] = gathered.transpose(perm)
+
+        level0[var][..., lat_lo:lat_hi, :] = out_band
 
 
-def _gf_regrid_slot_static_slice(
-    slot_idx_tuple,
+def _gf_regrid_slot_static_lat_band(
+    lat_band,
     sparse_opener,
     out_path,
     slot_static,
     nn_gpi_indices,
     nn_valid_mask,
-    n_lat,
-    n_lon,
 ):
-    """Regrid one (*slots,) slice for every slot-static variable.
+    """Same lat-band scheme as time-varying, but for vars with no time dim.
 
-    Source vars have dims ``(gpi, *slot_dims)`` — no time axis. Output
-    shape per slice is (lat, lon), placed at the matching slot indices.
+    Source vars have dims ``(gpi, *slot_dims)``. One source read per var
+    covers all slot indices for the band.
     """
+    lat_lo, lat_hi = lat_band
+    band_h = lat_hi - lat_lo
+    n_lon = nn_gpi_indices.shape[1]
+
+    band_nn = nn_gpi_indices[lat_lo:lat_hi]
+    band_valid = nn_valid_mask[lat_lo:lat_hi]
+    if not band_valid.any():
+        return
+
+    valid_gpi_idx = band_nn[band_valid]
+    gpi_lo = int(valid_gpi_idx.min())
+    gpi_hi = int(valid_gpi_idx.max()) + 1
+    block_idx = valid_gpi_idx - gpi_lo
+    ys, xs = np.where(band_valid)
+
     sparse_root = sparse_opener()
     out_root = zarr.open(out_path, mode="a")
     level0 = out_root["0"]
-    flat_gpi_idx = nn_gpi_indices[nn_valid_mask]
 
     for var in slot_static:
         src_arr = sparse_root[var]
         fill_val = src_arr.metadata.fill_value
-        gpi_data = src_arr[(slice(None),) + slot_idx_tuple]
-        grid_2d = np.full((n_lat, n_lon), fill_val, dtype=src_arr.dtype)
-        grid_2d[nn_valid_mask] = gpi_data[flat_gpi_idx]
-        level0[var][slot_idx_tuple + (slice(None), slice(None))] = grid_2d
+        block = src_arr[gpi_lo:gpi_hi]             # (block_size, *slots)
+        gathered = block[block_idx]                # (n_valid, *slots)
+        outer_shape = gathered.shape[1:]           # (*slots,) — possibly empty
+        out_band = np.full(
+            outer_shape + (band_h, n_lon),
+            fill_val,
+            dtype=src_arr.dtype,
+        )
+        perm = tuple(range(1, gathered.ndim)) + (0,)
+        out_band[..., ys, xs] = gathered.transpose(perm)
+
+        level0[var][..., lat_lo:lat_hi, :] = out_band
 
 
 def _gf_regrid_fully_static(
