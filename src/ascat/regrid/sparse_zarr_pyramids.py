@@ -40,6 +40,8 @@ swath_time slots that have not yet been regridded are processed.  Delete
 the output store entirely to force a full rerun.
 """
 
+import itertools
+import shutil
 import warnings
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
@@ -50,8 +52,6 @@ import numpy as np
 import zarr
 from scipy.ndimage import gaussian_filter
 from tqdm import tqdm
-
-from ascat.utils import dtype_to_nan
 
 
 def _zarr_path_opener(sparse_path):
@@ -822,3 +822,676 @@ def _maybe_expand_pyramid_swath_time(out_path, sparse_root):
         # Update swath_time coordinate
         level_group["swath_time"].resize((n_sparse_time,))
         level_group["swath_time"][current_n_time:] = sparse_times[current_n_time:]
+
+
+# =============================================================================
+# Generic gpi-first regridder
+# =============================================================================
+#
+# ``regrid_to_latlon`` above is shaped around the swath icechunk store, whose
+# variables are dimensioned ``(swath_time, spacecraft, [beam,] gpi)`` — gpi is
+# the *last* dim and the (time, slot) iteration is baked in.
+#
+# Many downstream products (the SWI ICDR is the first) have a different layout:
+# gpi is the *first* dim, and the trailing dims are an arbitrary mix of a time
+# axis plus zero-or-more "slot" / parameter dims. The function below handles
+# that general gpi-first case. It is intentionally a separate top-level entry
+# point rather than a refactor of ``regrid_to_latlon`` — gpi-first vs gpi-last
+# stores need different array indexing and slice iteration, and trying to fuse
+# them obscures both. The two functions share the genuinely-generic helpers
+# (``_build_regular_grid``, ``_compute_nn_lookup``, ``_gaussian_downsample_2d``,
+# ``_downsample_coords``).
+#
+# Output layout: variables are written with shape ``(*outer, lat, lon)`` where
+# ``outer`` is the concatenation of (time_dim if present) + slot_dims, matching
+# the dim order of the source. No incremental skip is supported — the caller
+# is expected to delete the output store before each run (the SWI ICDR is
+# rebuilt fresh per orchestration cycle).
+
+
+def _nn_downsample_2d(data, fill_val):
+    """2x downsample a 2D array by picking every other pixel (no smoothing).
+
+    Used for variables where aggregation across cells is meaningless — quality
+    flags (bitmasks), integer-encoded dates, categorical fields. Trim odd
+    trailing rows/cols so the 2x relationship is preserved.
+    """
+    h, w = data.shape
+    h_trim = h - (h % 2)
+    w_trim = w - (w % 2)
+    return data[:h_trim:2, :w_trim:2].copy()
+
+
+def _classify_gpi_first_vars(sparse_root, include_vars, time_dim, slot_dims):
+    """Categorize gpi-first variables by which outer dims they carry.
+
+    Returns ``(time_varying, slot_static, fully_static)``: three lists of
+    variable names. Categorization is by the variable's ``dimension_names``
+    attribute, which zarr v3 always carries.
+
+    - ``time_varying``: dims == ``(gpi, time_dim, *some_slot_dims)``
+    - ``slot_static``: dims == ``(gpi, *some_slot_dims)`` — no time
+    - ``fully_static``: dims == ``(gpi,)``
+
+    Variables outside these three shapes (e.g. those carrying an ``obs`` dim)
+    are rejected with a clear error so misconfiguration surfaces immediately
+    instead of producing a half-built pyramid.
+    """
+    time_varying = []
+    slot_static = []
+    fully_static = []
+
+    valid_outer = {time_dim} | set(slot_dims) if time_dim else set(slot_dims)
+
+    for name in include_vars:
+        arr = sparse_root[name]
+        dims = tuple(arr.metadata.dimension_names or ())
+        if not dims or dims[0] != "gpi":
+            raise ValueError(
+                f"Variable {name!r} has dims {dims}; expected gpi as first dim"
+            )
+        outer = dims[1:]
+        if time_dim is not None and time_dim in outer:
+            if not set(outer).issubset(valid_outer):
+                raise ValueError(
+                    f"Variable {name!r} has outer dims {outer} that include "
+                    f"unsupported dims (not in time_dim/slot_dims). Drop it "
+                    f"from include_vars."
+                )
+            time_varying.append(name)
+        elif outer and set(outer).issubset(set(slot_dims)):
+            slot_static.append(name)
+        elif not outer:
+            fully_static.append(name)
+        else:
+            raise ValueError(
+                f"Variable {name!r} has unsupported outer dims {outer}; "
+                f"expected subset of {{{time_dim}}} ∪ {set(slot_dims)}"
+            )
+
+    return time_varying, slot_static, fully_static
+
+
+def regrid_gpi_first_zarr_to_latlon(
+    *,
+    sparse_opener,
+    out_path,
+    grid,
+    time_dim,
+    slot_dims=(),
+    include_vars,
+    nn_vars=(),
+    resolution_deg=0.1,
+    max_dist_m=None,
+    n_pyramid_levels=4,
+    lat_chunk=256,
+    lon_chunk=256,
+    n_workers=1,
+):
+    """Regrid a gpi-first sparse zarr store to a lat/lon multiscale pyramid.
+
+    Source variables are expected to have ``gpi`` as their first dimension,
+    optionally followed by a time dim and zero-or-more "slot" / parameter
+    dims (e.g. ``ctime`` on the SWI ICDR). Each variable is regridded
+    per-slice via nearest-neighbor lookup at level 0, then pyramid levels
+    1..N-1 are built by 2x downsampling. Per-variable downsample policy:
+    Gaussian smoothing by default, NN (decimation) for ``nn_vars``.
+
+    The output store is built fresh — any existing ``out_path`` is removed.
+
+    Parameters
+    ----------
+    sparse_opener : callable
+        Zero-arg callable returning an opened ``zarr.Group`` over the
+        source. Must be picklable across ``ProcessPoolExecutor`` workers
+        (use a module-level function wrapped in ``functools.partial``).
+    out_path : str or Path
+        Output Zarr store path. Deleted and recreated.
+    grid : FibGrid or similar
+        Source grid with ``find_nearest_gpi`` and ``get_grid_points``.
+    time_dim : str or None
+        Name of the time dim (e.g. ``"daily_time_swi"``). If ``None``,
+        all variables must be static (no time axis).
+    slot_dims : tuple of str
+        Names of "slot" / parameter dims preserved in the output
+        (e.g. ``("ctime",)``).
+    include_vars : list of str
+        Variables to regrid. Each must have ``gpi`` as its first dim;
+        trailing dims must be a subset of ``{time_dim} ∪ slot_dims``.
+        Variables outside this shape are rejected.
+    nn_vars : iterable of str
+        Variables to downsample with nearest-neighbor decimation rather
+        than Gaussian smoothing. Use for quality flags, integer-encoded
+        dates, and other fields where smoothing is meaningless.
+    resolution_deg, max_dist_m, n_pyramid_levels, lat_chunk, lon_chunk,
+    n_workers
+        See ``regrid_to_latlon``.
+    """
+    if time_dim is None and not slot_dims:
+        # All-static is valid in principle but means the whole pyramid is
+        # one (lat, lon) per variable — no slot/time iteration. Allowed.
+        pass
+    if not include_vars:
+        raise ValueError("regrid_gpi_first_zarr_to_latlon: include_vars is required")
+
+    out_path = Path(out_path)
+    if out_path.exists():
+        shutil.rmtree(out_path)
+
+    sparse_root = sparse_opener()
+    nn_vars = set(nn_vars)
+
+    time_varying, slot_static, fully_static = _classify_gpi_first_vars(
+        sparse_root, include_vars, time_dim, slot_dims
+    )
+    print(f"Time-varying vars ({time_dim}, *slots): {sorted(time_varying)}")
+    print(f"Slot-static vars (*slots only): {sorted(slot_static)}")
+    print(f"Fully-static vars (gpi only): {sorted(fully_static)}")
+    print(f"NN-downsampled (no smoothing): {sorted(nn_vars)}")
+
+    # --- Build base lat/lon grid + NN lookup ---
+    lats_1d, lons_1d = _build_regular_grid(resolution_deg)
+    n_lat = len(lats_1d)
+    n_lon = len(lons_1d)
+    print(f"Base grid: {n_lat} x {n_lon} ({resolution_deg}deg)")
+
+    print("Computing lat/lon -> GPI nearest-neighbor lookup...")
+    lookup_start = timer()
+    nn_gpi_indices, nn_valid_mask = _compute_nn_lookup(
+        grid, lats_1d, lons_1d, resolution_deg, max_dist_m
+    )
+    n_valid = nn_valid_mask.sum()
+    print(f"Lookup computed in {timer() - lookup_start:.1f}s, "
+          f"{n_valid}/{n_lat * n_lon} cells have a nearby GPI")
+
+    # --- Slot dim sizes ---
+    slot_sizes = tuple(int(sparse_root[d].shape[0]) for d in slot_dims)
+    n_time = int(sparse_root[time_dim].shape[0]) if time_dim else None
+
+    # --- Create output store ---
+    print("Creating output Zarr structure...")
+    _gf_create_pyramid_store(
+        out_path=out_path,
+        sparse_root=sparse_root,
+        time_varying=time_varying,
+        slot_static=slot_static,
+        fully_static=fully_static,
+        time_dim=time_dim,
+        slot_dims=slot_dims,
+        slot_sizes=slot_sizes,
+        n_time=n_time,
+        lats_1d=lats_1d,
+        lons_1d=lons_1d,
+        resolution_deg=resolution_deg,
+        n_pyramid_levels=n_pyramid_levels,
+        lat_chunk=lat_chunk,
+        lon_chunk=lon_chunk,
+    )
+
+    # --- Regrid level 0 ---
+    # Time-varying: iterate (t, *slot_idxs)
+    # Slot-static: iterate (*slot_idxs,)  — gets written at every time? No:
+    #              stored with shape (*slots, lat, lon), one write per slot tuple.
+    # Fully-static: single write per var.
+    time_varying_slices = list(
+        itertools.product(range(n_time) if n_time else (None,),
+                          *[range(sz) for sz in slot_sizes])
+    ) if time_varying else []
+    slot_static_slices = list(
+        itertools.product(*[range(sz) for sz in slot_sizes])
+    ) if slot_static else []
+
+    print(f"Regridding {len(time_varying_slices)} time-varying slices, "
+          f"{len(slot_static_slices)} slot-static slices, "
+          f"{len(fully_static)} fully-static vars (level 0)")
+
+    start = timer()
+    if time_varying:
+        regrid_tv = partial(
+            _gf_regrid_time_varying_slice,
+            sparse_opener=sparse_opener,
+            out_path=str(out_path),
+            time_varying=time_varying,
+            nn_gpi_indices=nn_gpi_indices,
+            nn_valid_mask=nn_valid_mask,
+            n_lat=n_lat,
+            n_lon=n_lon,
+            has_time=time_dim is not None,
+            n_slot_dims=len(slot_dims),
+        )
+        if n_workers > 1:
+            with ProcessPoolExecutor(max_workers=n_workers) as executor:
+                futures = [executor.submit(regrid_tv, s) for s in time_varying_slices]
+                for f in tqdm(futures, total=len(futures), desc="Regridding time-varying"):
+                    f.result()
+        else:
+            for s in tqdm(time_varying_slices, desc="Regridding time-varying"):
+                regrid_tv(s)
+
+    if slot_static:
+        regrid_ss = partial(
+            _gf_regrid_slot_static_slice,
+            sparse_opener=sparse_opener,
+            out_path=str(out_path),
+            slot_static=slot_static,
+            nn_gpi_indices=nn_gpi_indices,
+            nn_valid_mask=nn_valid_mask,
+            n_lat=n_lat,
+            n_lon=n_lon,
+        )
+        for s in tqdm(slot_static_slices, desc="Regridding slot-static"):
+            regrid_ss(s)
+
+    if fully_static:
+        _gf_regrid_fully_static(
+            sparse_opener=sparse_opener,
+            out_path=str(out_path),
+            fully_static=fully_static,
+            nn_gpi_indices=nn_gpi_indices,
+            nn_valid_mask=nn_valid_mask,
+            n_lat=n_lat,
+            n_lon=n_lon,
+        )
+
+    print(f"Level 0 done in {timer() - start:.1f}s")
+
+    # --- Build pyramid levels ---
+    if n_pyramid_levels > 1:
+        print(f"Building {n_pyramid_levels - 1} pyramid levels...")
+        pyr_start = timer()
+        _gf_build_pyramid_levels(
+            out_path=str(out_path),
+            time_varying=time_varying,
+            slot_static=slot_static,
+            fully_static=fully_static,
+            nn_vars=nn_vars,
+            n_pyramid_levels=n_pyramid_levels,
+            n_time=n_time,
+            slot_sizes=slot_sizes,
+            time_varying_slices=time_varying_slices,
+            slot_static_slices=slot_static_slices,
+            n_workers=n_workers,
+        )
+        print(f"Pyramids done in {timer() - pyr_start:.1f}s")
+
+    print("All done!")
+
+
+# ---------------------------------------------------------------------------
+# gpi-first: output store creation
+# ---------------------------------------------------------------------------
+
+def _gf_create_pyramid_store(
+    out_path,
+    sparse_root,
+    time_varying,
+    slot_static,
+    fully_static,
+    time_dim,
+    slot_dims,
+    slot_sizes,
+    n_time,
+    lats_1d,
+    lons_1d,
+    resolution_deg,
+    n_pyramid_levels,
+    lat_chunk,
+    lon_chunk,
+):
+    """Create the output store. One group per pyramid level, each carrying
+    every variable at its level-specific lat/lon resolution. Slot/time
+    coords are written once at level 0 and replicated into each level.
+    """
+    store = zarr.storage.LocalStore(str(out_path))
+    root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
+
+    # OME-style multiscales metadata. Axes order matches array dim order:
+    # [time_dim], *slot_dims, latitude, longitude. The scale applies only
+    # to lat/lon — non-spatial dims get scale=1.0.
+    axes = []
+    if time_dim is not None:
+        axes.append({"name": time_dim, "type": "time"})
+    for d in slot_dims:
+        axes.append({"name": d, "type": ""})
+    axes.append({"name": "latitude", "type": "space", "unit": "degree"})
+    axes.append({"name": "longitude", "type": "space", "unit": "degree"})
+
+    n_outer = len(axes) - 2  # everything except lat/lon
+
+    datasets = []
+    for level in range(n_pyramid_levels):
+        scale = 2 ** level
+        datasets.append({
+            "path": str(level),
+            "coordinateTransformations": [
+                {
+                    "type": "scale",
+                    "scale": [1.0] * n_outer + [resolution_deg * scale,
+                                                resolution_deg * scale],
+                },
+                {
+                    "type": "translation",
+                    "translation": [0.0] * n_outer + [
+                        90.0 - (resolution_deg * scale) / 2.0,
+                        -180.0 + (resolution_deg * scale) / 2.0,
+                    ],
+                },
+            ],
+        })
+
+    root.attrs["multiscales"] = [{
+        "version": "0.4",
+        "name": "regridded_gpi_first_data",
+        "axes": axes,
+        "datasets": datasets,
+        "type": "gaussian",
+        "metadata": {
+            "description": (
+                "Nearest-neighbor regridded gpi-first data with mixed "
+                "Gaussian/NN pyramid downsampling"
+            ),
+        },
+    }]
+
+    compressors = [
+        zarr.codecs.BloscCodec(
+            cname="zstd", clevel=3, shuffle=zarr.codecs.BloscShuffle.shuffle
+        )
+    ]
+
+    for level in range(n_pyramid_levels):
+        scale = 2 ** level
+        level_lats = lats_1d if level == 0 else _downsample_coords(lats_1d, scale)
+        level_lons = lons_1d if level == 0 else _downsample_coords(lons_1d, scale)
+        n_lat_l = len(level_lats)
+        n_lon_l = len(level_lons)
+        level_lat_chunk = max(1, lat_chunk // scale)
+        level_lon_chunk = max(1, lon_chunk // scale)
+
+        level_group = root.create_group(str(level))
+
+        # Time-varying: (time, *slots, lat, lon)
+        for var in time_varying:
+            src = sparse_root[var]
+            shape = (n_time,) + slot_sizes + (n_lat_l, n_lon_l)
+            chunks = (1,) + (1,) * len(slot_sizes) + (level_lat_chunk, level_lon_chunk)
+            dim_names = (time_dim,) + tuple(slot_dims) + ("latitude", "longitude")
+            level_group.create_array(
+                name=var, dtype=src.dtype, shape=shape, chunks=chunks,
+                dimension_names=dim_names,
+                fill_value=src.metadata.fill_value,
+                compressors=compressors,
+                attributes=dict(src.attrs),
+            )
+
+        # Slot-static: (*slots, lat, lon)
+        for var in slot_static:
+            src = sparse_root[var]
+            shape = slot_sizes + (n_lat_l, n_lon_l)
+            chunks = (1,) * len(slot_sizes) + (level_lat_chunk, level_lon_chunk)
+            dim_names = tuple(slot_dims) + ("latitude", "longitude")
+            level_group.create_array(
+                name=var, dtype=src.dtype, shape=shape, chunks=chunks,
+                dimension_names=dim_names,
+                fill_value=src.metadata.fill_value,
+                compressors=compressors,
+                attributes=dict(src.attrs),
+            )
+
+        # Fully-static: (lat, lon)
+        for var in fully_static:
+            src = sparse_root[var]
+            level_group.create_array(
+                name=var, dtype=src.dtype,
+                shape=(n_lat_l, n_lon_l),
+                chunks=(level_lat_chunk, level_lon_chunk),
+                dimension_names=("latitude", "longitude"),
+                fill_value=src.metadata.fill_value,
+                compressors=compressors,
+                attributes=dict(src.attrs),
+            )
+
+        # Coord arrays
+        if time_dim is not None:
+            level_group.create_array(
+                time_dim, data=sparse_root[time_dim][:],
+                chunks=(1,), dimension_names=(time_dim,), compressors=None,
+            )
+        for d in slot_dims:
+            level_group.create_array(
+                d, data=sparse_root[d][:],
+                chunks=(1,), dimension_names=(d,), compressors=None,
+            )
+        level_group.create_array(
+            "latitude", data=level_lats.astype("float64"),
+            chunks=(level_lat_chunk,), dimension_names=("latitude",),
+            compressors=None,
+        )
+        level_group.create_array(
+            "longitude", data=level_lons.astype("float64"),
+            chunks=(level_lon_chunk,), dimension_names=("longitude",),
+            compressors=None,
+        )
+
+
+# ---------------------------------------------------------------------------
+# gpi-first: level-0 regridding
+# ---------------------------------------------------------------------------
+
+def _gf_regrid_time_varying_slice(
+    idx_tuple,
+    sparse_opener,
+    out_path,
+    time_varying,
+    nn_gpi_indices,
+    nn_valid_mask,
+    n_lat,
+    n_lon,
+    has_time,
+    n_slot_dims,
+):
+    """Regrid one (time, *slots) slice for every time-varying variable.
+
+    Source vars have dims ``(gpi, [time_dim,] *slot_dims)`` — we index the
+    trailing dims to extract a 1D gpi vector, then scatter into a 2D
+    (lat, lon) array via the precomputed NN lookup.
+    """
+    sparse_root = sparse_opener()
+    out_root = zarr.open(out_path, mode="a")
+    level0 = out_root["0"]
+
+    flat_gpi_idx = nn_gpi_indices[nn_valid_mask]
+
+    if has_time:
+        src_idx = idx_tuple              # (t, *slots)
+        out_idx = idx_tuple              # (t, *slots, :, :)
+    else:
+        src_idx = idx_tuple[1:]          # drop the None placeholder
+        out_idx = idx_tuple[1:]
+
+    for var in time_varying:
+        src_arr = sparse_root[var]
+        fill_val = src_arr.metadata.fill_value
+        gpi_data = src_arr[(slice(None),) + src_idx]
+        grid_2d = np.full((n_lat, n_lon), fill_val, dtype=src_arr.dtype)
+        grid_2d[nn_valid_mask] = gpi_data[flat_gpi_idx]
+        level0[var][out_idx + (slice(None), slice(None))] = grid_2d
+
+
+def _gf_regrid_slot_static_slice(
+    slot_idx_tuple,
+    sparse_opener,
+    out_path,
+    slot_static,
+    nn_gpi_indices,
+    nn_valid_mask,
+    n_lat,
+    n_lon,
+):
+    """Regrid one (*slots,) slice for every slot-static variable.
+
+    Source vars have dims ``(gpi, *slot_dims)`` — no time axis. Output
+    shape per slice is (lat, lon), placed at the matching slot indices.
+    """
+    sparse_root = sparse_opener()
+    out_root = zarr.open(out_path, mode="a")
+    level0 = out_root["0"]
+    flat_gpi_idx = nn_gpi_indices[nn_valid_mask]
+
+    for var in slot_static:
+        src_arr = sparse_root[var]
+        fill_val = src_arr.metadata.fill_value
+        gpi_data = src_arr[(slice(None),) + slot_idx_tuple]
+        grid_2d = np.full((n_lat, n_lon), fill_val, dtype=src_arr.dtype)
+        grid_2d[nn_valid_mask] = gpi_data[flat_gpi_idx]
+        level0[var][slot_idx_tuple + (slice(None), slice(None))] = grid_2d
+
+
+def _gf_regrid_fully_static(
+    sparse_opener,
+    out_path,
+    fully_static,
+    nn_gpi_indices,
+    nn_valid_mask,
+    n_lat,
+    n_lon,
+):
+    """Regrid each fully-static (gpi,) variable into a single (lat, lon)."""
+    sparse_root = sparse_opener()
+    out_root = zarr.open(out_path, mode="a")
+    level0 = out_root["0"]
+    flat_gpi_idx = nn_gpi_indices[nn_valid_mask]
+
+    for var in fully_static:
+        src_arr = sparse_root[var]
+        fill_val = src_arr.metadata.fill_value
+        gpi_data = src_arr[:]
+        grid_2d = np.full((n_lat, n_lon), fill_val, dtype=src_arr.dtype)
+        grid_2d[nn_valid_mask] = gpi_data[flat_gpi_idx]
+        level0[var][:, :] = grid_2d
+
+
+# ---------------------------------------------------------------------------
+# gpi-first: pyramid build (levels 1..N-1)
+# ---------------------------------------------------------------------------
+
+def _gf_build_pyramid_levels(
+    out_path,
+    time_varying,
+    slot_static,
+    fully_static,
+    nn_vars,
+    n_pyramid_levels,
+    n_time,
+    slot_sizes,
+    time_varying_slices,
+    slot_static_slices,
+    n_workers,
+):
+    """Build pyramid levels by 2x downsampling each (lat, lon) slice."""
+    for level in range(1, n_pyramid_levels):
+        print(f"  Building pyramid level {level}...")
+        level_start = timer()
+
+        # Time-varying slices
+        if time_varying:
+            downsample_tv = partial(
+                _gf_downsample_time_varying_slice,
+                out_path=out_path,
+                src_level=level - 1,
+                dst_level=level,
+                time_varying=time_varying,
+                nn_vars=nn_vars,
+                has_time=n_time is not None,
+            )
+            if n_workers > 1:
+                with ProcessPoolExecutor(max_workers=n_workers) as executor:
+                    futures = [executor.submit(downsample_tv, s)
+                               for s in time_varying_slices]
+                    for f in tqdm(futures, total=len(futures),
+                                  desc=f"  Level {level} time-varying"):
+                        f.result()
+            else:
+                for s in tqdm(time_varying_slices,
+                              desc=f"  Level {level} time-varying"):
+                    downsample_tv(s)
+
+        # Slot-static + fully-static run serially — small, no need for workers
+        if slot_static:
+            for s in tqdm(slot_static_slices,
+                          desc=f"  Level {level} slot-static"):
+                _gf_downsample_slot_static_slice(
+                    s, out_path=out_path, src_level=level - 1, dst_level=level,
+                    slot_static=slot_static, nn_vars=nn_vars,
+                )
+        if fully_static:
+            _gf_downsample_fully_static(
+                out_path=out_path, src_level=level - 1, dst_level=level,
+                fully_static=fully_static, nn_vars=nn_vars,
+            )
+
+        print(f"  Level {level} done in {timer() - level_start:.1f}s")
+
+
+def _gf_apply_downsample(src_data, fill_val, var, nn_vars):
+    """Pick the right per-variable downsampler."""
+    if var in nn_vars:
+        return _nn_downsample_2d(src_data, fill_val)
+    return _gaussian_downsample_2d(src_data, fill_val, sigma=1.0)
+
+
+def _gf_downsample_time_varying_slice(
+    idx_tuple,
+    out_path,
+    src_level,
+    dst_level,
+    time_varying,
+    nn_vars,
+    has_time,
+):
+    root = zarr.open(out_path, mode="a")
+    src_group = root[str(src_level)]
+    dst_group = root[str(dst_level)]
+    out_idx = idx_tuple if has_time else idx_tuple[1:]
+
+    for var in time_varying:
+        sel = out_idx + (slice(None), slice(None))
+        src_data = src_group[var][sel]
+        fill_val = src_group[var].metadata.fill_value
+        dst_group[var][sel] = _gf_apply_downsample(src_data, fill_val, var, nn_vars)
+
+
+def _gf_downsample_slot_static_slice(
+    slot_idx_tuple,
+    out_path,
+    src_level,
+    dst_level,
+    slot_static,
+    nn_vars,
+):
+    root = zarr.open(out_path, mode="a")
+    src_group = root[str(src_level)]
+    dst_group = root[str(dst_level)]
+
+    for var in slot_static:
+        sel = slot_idx_tuple + (slice(None), slice(None))
+        src_data = src_group[var][sel]
+        fill_val = src_group[var].metadata.fill_value
+        dst_group[var][sel] = _gf_apply_downsample(src_data, fill_val, var, nn_vars)
+
+
+def _gf_downsample_fully_static(
+    out_path,
+    src_level,
+    dst_level,
+    fully_static,
+    nn_vars,
+):
+    root = zarr.open(out_path, mode="a")
+    src_group = root[str(src_level)]
+    dst_group = root[str(dst_level)]
+
+    for var in fully_static:
+        src_data = src_group[var][:, :]
+        fill_val = src_group[var].metadata.fill_value
+        dst_group[var][:, :] = _gf_apply_downsample(src_data, fill_val, var, nn_vars)
