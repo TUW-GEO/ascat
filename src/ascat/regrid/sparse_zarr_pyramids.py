@@ -54,10 +54,21 @@ from tqdm import tqdm
 from ascat.utils import dtype_to_nan
 
 
+def _zarr_path_opener(sparse_path):
+    """Module-level opener used as the default when callers pass a path.
+
+    Module-level (not a lambda or closure) so ``functools.partial`` over it
+    pickles cleanly across ``ProcessPoolExecutor`` worker boundaries.
+    """
+    return zarr.open(str(sparse_path), mode="r")
+
+
 def regrid_to_latlon(
-    sparse_path,
-    out_path,
-    grid,
+    sparse_path=None,
+    out_path=None,
+    grid=None,
+    *,
+    sparse_opener=None,
     resolution_deg=0.25,
     max_dist_m=None,
     n_pyramid_levels=4,
@@ -73,13 +84,21 @@ def regrid_to_latlon(
 
     Parameters
     ----------
-    sparse_path : str or Path
+    sparse_path : str or Path, optional
         Path to the sparse Zarr store with dims (swath_time, spacecraft, [beam,] gpi).
+        Mutually exclusive with ``sparse_opener``; exactly one must be given.
     out_path : str or Path
-        Path for the output Zarr store with multiscale pyramid groups.
+        Path for the output Zarr store with multiscale pyramid groups. Required
+        (the leading optional default is a backwards-compat artifact for callers
+        that pass ``sparse_path`` positionally and ``out_path`` next).
     grid : FibGrid or similar
         Grid object with a KDTree (``grid.kdTree``) and ``get_grid_points()``
-        returning (gpis, lons, lats, cells).
+        returning (gpis, lons, lats, cells). Required.
+    sparse_opener : callable, optional
+        Zero-arg callable returning an opened ``zarr.Group`` over the sparse
+        store. Must be picklable (use a module-level function wrapped in
+        ``functools.partial`` — not a lambda or closure) so worker processes
+        can re-open the source. Mutually exclusive with ``sparse_path``.
     resolution_deg : float, optional
         Base resolution in degrees for the lat/lon grid. Default 0.25.
     max_dist_m : float or None, optional
@@ -94,10 +113,19 @@ def regrid_to_latlon(
     n_workers : int, optional
         Number of parallel workers. Default 1.
     """
-    sparse_path = Path(sparse_path)
+    if out_path is None:
+        raise TypeError("regrid_to_latlon: 'out_path' is required")
+    if grid is None:
+        raise TypeError("regrid_to_latlon: 'grid' is required")
+    if (sparse_path is None) == (sparse_opener is None):
+        raise ValueError(
+            "regrid_to_latlon: pass exactly one of sparse_path / sparse_opener"
+        )
+    if sparse_opener is None:
+        sparse_opener = partial(_zarr_path_opener, str(sparse_path))
     out_path = Path(out_path)
 
-    sparse_root = zarr.open(sparse_path, mode="r")
+    sparse_root = sparse_opener()
     has_beams = "beam" in sparse_root
     n_swath_time = sparse_root["swath_time"].shape[0]
     n_spacecraft = sparse_root["spacecraft"].shape[0]
@@ -150,7 +178,7 @@ def regrid_to_latlon(
     if store_exists:
         pending_slices = _find_pending_slices(
             out_path=out_path,
-            sparse_path=sparse_path,
+            sparse_source=sparse_opener,
             all_slices=all_slices,
         )
         n_skip = len(all_slices) - len(pending_slices)
@@ -166,7 +194,7 @@ def regrid_to_latlon(
 
         regrid_func = partial(
             _regrid_slice,
-            sparse_path=str(sparse_path),
+            sparse_opener=sparse_opener,
             out_path=str(out_path),
             beam_vars=beam_vars,
             scalar_vars=scalar_vars,
@@ -197,7 +225,6 @@ def regrid_to_latlon(
         pyr_start = timer()
         _build_pyramid_levels(
             out_path=str(out_path),
-            sparse_path=str(sparse_path),
             beam_vars=beam_vars,
             scalar_vars=scalar_vars,
             has_beams=has_beams,
@@ -215,7 +242,7 @@ def regrid_to_latlon(
 # Pending-slice detection
 # ---------------------------------------------------------------------------
 
-def _find_pending_slices(out_path, sparse_path, all_slices):
+def _find_pending_slices(out_path, sparse_source, all_slices):
     """Return slices that have data in the sparse store but are not yet marked
     done in the pyramid's ``processed`` array.
 
@@ -223,8 +250,9 @@ def _find_pending_slices(out_path, sparse_path, all_slices):
     ----------
     out_path : Path or str
         Path to the output pyramid Zarr store.
-    sparse_path : Path or str
-        Path to the sparse Zarr store.
+    sparse_source : Path, str, or callable
+        Either a path to the sparse Zarr store, or a zero-arg callable returning
+        an opened ``zarr.Group`` over it.
     all_slices : list of (int, int)
         All (swath_time_idx, spacecraft_idx) pairs to consider.
 
@@ -233,7 +261,10 @@ def _find_pending_slices(out_path, sparse_path, all_slices):
     list of (int, int)
         Slices that still need to be processed.
     """
-    sparse_root = zarr.open(str(sparse_path), mode="r")
+    if callable(sparse_source):
+        sparse_root = sparse_source()
+    else:
+        sparse_root = zarr.open(str(sparse_source), mode="r")
     out_root = zarr.open(str(out_path), mode="r")
 
     sparse_processed = sparse_root["processed"][:]   # (n_swath_time, n_spacecraft)
@@ -540,7 +571,7 @@ def _create_level_arrays(
 
 def _regrid_slice(
     ts_pair,
-    sparse_path,
+    sparse_opener,
     out_path,
     beam_vars,
     scalar_vars,
@@ -553,7 +584,7 @@ def _regrid_slice(
     """Regrid a single (swath_time, spacecraft) slice from GPI to lat/lon."""
     t_idx, s_idx = ts_pair
 
-    sparse_root = zarr.open(sparse_path, mode="r")
+    sparse_root = sparse_opener()
     out_root = zarr.open(out_path, mode="a")
     level0 = out_root["0"]
 
@@ -593,7 +624,6 @@ def _regrid_slice(
 
 def _build_pyramid_levels(
     out_path,
-    sparse_path,
     beam_vars,
     scalar_vars,
     has_beams,
