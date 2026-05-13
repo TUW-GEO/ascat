@@ -964,3 +964,184 @@ class TestBeamChunking:
         n_obs = ts_root["n_obs"][:5].sum()
         assert n_obs > 0, "No data was appended"
         print(f"✓ Append mode preserved beam chunking: {final_beam_chunks}")
+
+
+# ===========================================================================
+# Backfill mode (densify_from_intermediate(..., backfill_from=...))
+# ===========================================================================
+
+
+def _make_sparse_store_dated(tmp_path, populated_slots, slot_to_time):
+    """Variant of _make_sparse_store that overwrites the synthetic
+    time-value (originally ``t_idx + 1``) with a real days-since-1970
+    float per slot, so backfill's datetime-encoded cutoff is meaningful.
+
+    populated_slots : list of (t_idx, s_idx, gpi_slice, values)
+    slot_to_time    : dict[t_idx, float] — time value (days-since-1970) for slot
+    """
+    path = _make_sparse_store(tmp_path, populated_slots=populated_slots)
+    root = zarr.open(str(path), mode="a")
+    for t_idx, s_idx, gpi_slice, values in populated_slots:
+        n = values.shape[0]
+        root["time"][t_idx, s_idx, gpi_slice] = np.full(
+            n, slot_to_time[t_idx], dtype="float64"
+        )
+    root["time"].attrs["units"] = "days since 1970-01-01 00:00:00"
+    return path
+
+
+class TestBackfillMode:
+    """densify_from_intermediate with backfill_from fills in a missing hour."""
+
+    def _times(self):
+        from datetime import datetime
+        epoch = datetime(1970, 1, 1)
+        h0 = datetime(2025, 1, 1, 0)
+        h1 = datetime(2025, 1, 1, 1)
+        h2 = datetime(2025, 1, 1, 2)
+        as_days = lambda dt: (dt - epoch).total_seconds() / 86400.0
+        return h0, h1, h2, as_days(h0), as_days(h1), as_days(h2)
+
+    def test_backfill_fills_missing_hour(self, tmp_path):
+        """Initial densify of [h0, h2] (skipping h1). Then densify intermediate
+        of [h1, h2] with backfill_from = h1. The TS store should end up with
+        [h0, h1, h2] for every populated GPI.
+        """
+        from ascat.stack.sparse_zarr_to_ts import rechunk_sparse, densify_from_intermediate
+        h0, h1, h2, t0, t1, t2 = self._times()
+
+        gpi_slice = slice(0, CHUNK_SIZE_GPI)
+        vals = np.ones(CHUNK_SIZE_GPI, dtype="float32")
+        slot_to_time = {0: t0, 1: t1, 2: t2}
+
+        # --- Stage 1: sparse store with slots 0 and 2 only (h1 missing). ---
+        sparse1 = _make_sparse_store_dated(
+            tmp_path / "sp1",
+            populated_slots=[
+                (0, 0, gpi_slice, vals),
+                (2, 0, gpi_slice, vals * 3.0),
+            ],
+            slot_to_time=slot_to_time,
+        )
+        int1 = tmp_path / "int1.zarr"
+        rechunk_sparse(
+            sparse_path=sparse1, intermediate_path=str(int1),
+            target_gpi_chunk=CHUNK_SIZE_GPI, batch_size=30, n_read_threads=1,
+        )
+        ts_path = tmp_path / "ts.zarr"
+        densify_from_intermediate(
+            intermediate_path=str(int1), out_path=str(ts_path),
+            chunk_size_gpi=CHUNK_SIZE_GPI, chunk_size_obs=10,
+            n_workers=1, shard_size_gpi=None, shard_size_obs=None,
+        )
+        ts_root = zarr.open(str(ts_path), mode="r")
+        assert int(ts_root["n_obs"][0]) == 2
+        assert ts_root["time"][0, 0] == pytest.approx(t0)
+        assert ts_root["time"][0, 1] == pytest.approx(t2)
+
+        # --- Stage 2: sparse store with slots 1 and 2 (the backfill window). ---
+        sparse2 = _make_sparse_store_dated(
+            tmp_path / "sp2",
+            populated_slots=[
+                (1, 0, gpi_slice, vals * 2.0),
+                (2, 0, gpi_slice, vals * 3.0),
+            ],
+            slot_to_time=slot_to_time,
+        )
+        int2 = tmp_path / "int2.zarr"
+        rechunk_sparse(
+            sparse_path=sparse2, intermediate_path=str(int2),
+            target_gpi_chunk=CHUNK_SIZE_GPI, batch_size=30, n_read_threads=1,
+        )
+        densify_from_intermediate(
+            intermediate_path=str(int2), out_path=str(ts_path),
+            chunk_size_gpi=CHUNK_SIZE_GPI, chunk_size_obs=10,
+            n_workers=1, shard_size_gpi=None, shard_size_obs=None,
+            backfill_from=h1,
+        )
+
+        ts_root = zarr.open(str(ts_path), mode="r")
+        nobs = int(ts_root["n_obs"][0])
+        assert nobs == 3, f"Expected n_obs=3 after backfill, got {nobs}"
+        assert ts_root["time"][0, 0] == pytest.approx(t0)
+        assert ts_root["time"][0, 1] == pytest.approx(t1)
+        assert ts_root["time"][0, 2] == pytest.approx(t2)
+        # Data: h0=1.0, h1=2.0, h2=3.0
+        assert ts_root["surface_soil_moisture"][0, 0] == pytest.approx(1.0)
+        assert ts_root["surface_soil_moisture"][0, 1] == pytest.approx(2.0)
+        assert ts_root["surface_soil_moisture"][0, 2] == pytest.approx(3.0)
+
+    def test_backfill_is_idempotent(self, tmp_path):
+        """Running the same backfill twice produces the same TS store."""
+        from ascat.stack.sparse_zarr_to_ts import rechunk_sparse, densify_from_intermediate
+        h0, h1, h2, t0, t1, t2 = self._times()
+
+        gpi_slice = slice(0, CHUNK_SIZE_GPI)
+        vals = np.ones(CHUNK_SIZE_GPI, dtype="float32")
+        slot_to_time = {0: t0, 1: t1, 2: t2}
+
+        sparse1 = _make_sparse_store_dated(
+            tmp_path / "sp1",
+            populated_slots=[
+                (0, 0, gpi_slice, vals),
+                (2, 0, gpi_slice, vals * 3.0),
+            ],
+            slot_to_time=slot_to_time,
+        )
+        int1 = tmp_path / "int1.zarr"
+        rechunk_sparse(
+            sparse_path=sparse1, intermediate_path=str(int1),
+            target_gpi_chunk=CHUNK_SIZE_GPI, batch_size=30, n_read_threads=1,
+        )
+        ts_path = tmp_path / "ts.zarr"
+        densify_from_intermediate(
+            intermediate_path=str(int1), out_path=str(ts_path),
+            chunk_size_gpi=CHUNK_SIZE_GPI, chunk_size_obs=10,
+            n_workers=1, shard_size_gpi=None, shard_size_obs=None,
+        )
+
+        sparse2 = _make_sparse_store_dated(
+            tmp_path / "sp2",
+            populated_slots=[
+                (1, 0, gpi_slice, vals * 2.0),
+                (2, 0, gpi_slice, vals * 3.0),
+            ],
+            slot_to_time=slot_to_time,
+        )
+        int2 = tmp_path / "int2.zarr"
+        rechunk_sparse(
+            sparse_path=sparse2, intermediate_path=str(int2),
+            target_gpi_chunk=CHUNK_SIZE_GPI, batch_size=30, n_read_threads=1,
+        )
+        # First backfill
+        densify_from_intermediate(
+            intermediate_path=str(int2), out_path=str(ts_path),
+            chunk_size_gpi=CHUNK_SIZE_GPI, chunk_size_obs=10,
+            n_workers=1, shard_size_gpi=None, shard_size_obs=None,
+            backfill_from=h1,
+        )
+        ts_root = zarr.open(str(ts_path), mode="r")
+        time_1 = ts_root["time"][:, :3].copy()
+        nobs_1 = ts_root["n_obs"][:].copy()
+        ssm_1 = ts_root["surface_soil_moisture"][:, :3].copy()
+
+        # Second backfill: rebuild intermediate from same source, then re-run.
+        int3 = tmp_path / "int3.zarr"
+        rechunk_sparse(
+            sparse_path=sparse2, intermediate_path=str(int3),
+            target_gpi_chunk=CHUNK_SIZE_GPI, batch_size=30, n_read_threads=1,
+        )
+        densify_from_intermediate(
+            intermediate_path=str(int3), out_path=str(ts_path),
+            chunk_size_gpi=CHUNK_SIZE_GPI, chunk_size_obs=10,
+            n_workers=1, shard_size_gpi=None, shard_size_obs=None,
+            backfill_from=h1,
+        )
+        ts_root = zarr.open(str(ts_path), mode="r")
+        time_2 = ts_root["time"][:, :3]
+        nobs_2 = ts_root["n_obs"][:]
+        ssm_2 = ts_root["surface_soil_moisture"][:, :3]
+
+        assert np.array_equal(nobs_1, nobs_2)
+        assert np.array_equal(time_1, time_2)
+        assert np.array_equal(ssm_1, ssm_2)

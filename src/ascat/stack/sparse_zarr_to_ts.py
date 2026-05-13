@@ -958,6 +958,7 @@ def _process_spatial_chunk_append_mode(
     has_beams,
     obs_alignment,
     do_continuity_check,
+    backfill_from_encoded=None,
 ):
     """Append-mode variant: each GPI starts writing at existing n_obs[gpi].
 
@@ -1011,9 +1012,20 @@ def _process_spatial_chunk_append_mode(
     if n_valid_per_gpi.sum() == 0:
         return {"max_fwd_gap": 0, "gpi_start": gpi_start, "gpi_end": gpi_end, "n_obs_update": None}
 
-    # --- Determine write positions from existing n_obs ---
+    # --- Determine write positions from existing n_obs (or time, in backfill) ---
     existing_n_obs = out_root["n_obs"][gpi_start:gpi_end].astype(np.int32)
-    write_starts = existing_n_obs.copy()
+    if backfill_from_encoded is not None:
+        time_slab = out_root["time"][gpi_start:gpi_end, :]
+        write_starts = np.empty(chunk_width, dtype=np.int32)
+        for g in range(chunk_width):
+            nobs = int(existing_n_obs[g])
+            if nobs == 0:
+                write_starts[g] = 0
+                continue
+            row = time_slab[g, :nobs]
+            write_starts[g] = int(np.searchsorted(row, backfill_from_encoded, side="left"))
+    else:
+        write_starts = existing_n_obs.copy()
     new_counts = n_valid_per_gpi
     write_ends = write_starts + new_counts
 
@@ -1023,6 +1035,9 @@ def _process_spatial_chunk_append_mode(
 
     # --- Continuity check for this GPI range ---
     # Done before any writes so a violation aborts cleanly.
+    # In backfill mode the whole point is to overwrite data that overlaps
+    # existing timestamps, so the backwards-data check is disabled. We
+    # still track the forward-gap statistic for the leading edge.
     max_fwd_gap = 0
     if do_continuity_check:
         need_check = (existing_n_obs > 0) & active
@@ -1043,10 +1058,11 @@ def _process_spatial_chunk_append_mode(
                 min_new = new_time[g_local, 0]
 
                 if min_new < last_existing:
-                    violations += 1
-                    gap = last_existing - min_new
-                    if gap > max_back_gap:
-                        max_back_gap = gap
+                    if backfill_from_encoded is None:
+                        violations += 1
+                        gap = last_existing - min_new
+                        if gap > max_back_gap:
+                            max_back_gap = gap
                 else:
                     gap = min_new - last_existing
                     if gap > max_fwd_gap:
@@ -1209,6 +1225,7 @@ def densify_from_intermediate(
     shard_size_obs=None,
     skip_continuity_check=False,
     gap_warn_seconds=86400 * 7,
+    backfill_from=None,
 ):
     """Convert the intermediate rechunked store to a dense time-series store.
 
@@ -1272,6 +1289,7 @@ def densify_from_intermediate(
             n_workers=n_workers,
             skip_continuity_check=skip_continuity_check,
             gap_warn_seconds=gap_warn_seconds,
+            backfill_from=backfill_from,
         )
     else:
         print(f"Creating new dense store at {out_path}")
@@ -1396,6 +1414,7 @@ def _densify_append(
     n_workers,
     skip_continuity_check,
     gap_warn_seconds=86400 * 7,
+    backfill_from=None,
 ):
     """Append the intermediate into an existing dense store.
 
@@ -1443,13 +1462,52 @@ def _densify_append(
     int_time_fill = int_time.metadata.fill_value
     int_chunk_gpi = int_time.chunks[-1]
 
-    max_new_per_gpi = np.zeros(n_gpi, dtype=np.int64)
-    for gs in tqdm(range(0, n_gpi, int_chunk_gpi), desc="Counting new obs"):
-        ge = min(gs + int_chunk_gpi, n_gpi)
-        slab = int_time[:, gs:ge]
-        max_new_per_gpi[gs:ge] = (slab != int_time_fill).sum(axis=0)
+    # In backfill mode, decode the requested cutoff into the store's time
+    # units once here so workers can simply searchsorted against it. The TS
+    # store's time array is float64 "days since 1970-01-01".
+    backfill_from_encoded = None
+    if backfill_from is not None:
+        if hasattr(backfill_from, "tzinfo"):
+            from datetime import datetime as _datetime, timezone as _timezone
+            dt = backfill_from
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=_timezone.utc)
+            epoch = _datetime(1970, 1, 1, tzinfo=_timezone.utc)
+            backfill_from_encoded = (dt - epoch).total_seconds() / 86400.0
+        else:
+            backfill_from_encoded = float(backfill_from)
+        print(f"  Backfill mode: write_start = searchsorted(time, {backfill_from_encoded})")
 
-    worst_case_needed = int((existing_n_obs_all.astype(np.int64) + max_new_per_gpi).max())
+    max_new_per_gpi = np.zeros(n_gpi, dtype=np.int64)
+    if backfill_from_encoded is None:
+        for gs in tqdm(range(0, n_gpi, int_chunk_gpi), desc="Counting new obs"):
+            ge = min(gs + int_chunk_gpi, n_gpi)
+            slab = int_time[:, gs:ge]
+            max_new_per_gpi[gs:ge] = (slab != int_time_fill).sum(axis=0)
+        worst_case_needed = int((existing_n_obs_all.astype(np.int64) + max_new_per_gpi).max())
+    else:
+        # Worst case is write_starts + max_new_per_gpi (not n_obs + max_new),
+        # since we overwrite from write_start, we don't grow beyond it.
+        write_starts_all = np.zeros(n_gpi, dtype=np.int64)
+        time_chunk_gpi = out_root["time"].chunks[0]
+        for gs in tqdm(range(0, n_gpi, int_chunk_gpi), desc="Counting new obs"):
+            ge = min(gs + int_chunk_gpi, n_gpi)
+            slab = int_time[:, gs:ge]
+            max_new_per_gpi[gs:ge] = (slab != int_time_fill).sum(axis=0)
+        for gs in tqdm(range(0, n_gpi, time_chunk_gpi), desc="Locating backfill starts"):
+            ge = min(gs + time_chunk_gpi, n_gpi)
+            time_slab = out_root["time"][gs:ge, :]
+            for i in range(ge - gs):
+                nobs = int(existing_n_obs_all[gs + i])
+                if nobs == 0:
+                    write_starts_all[gs + i] = 0
+                else:
+                    row = time_slab[i, :nobs]
+                    write_starts_all[gs + i] = int(
+                        np.searchsorted(row, backfill_from_encoded, side="left")
+                    )
+        worst_case_needed = int((write_starts_all + max_new_per_gpi).max())
+
     current_obs_size = out_root["obs"].shape[0]
 
     if worst_case_needed > current_obs_size:
@@ -1486,6 +1544,7 @@ def _densify_append(
         has_beams=has_beams,
         obs_alignment=obs_alignment,
         do_continuity_check=not skip_continuity_check,
+        backfill_from_encoded=backfill_from_encoded,
     )
 
     start = timer()
