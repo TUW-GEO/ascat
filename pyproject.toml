@@ -1,9 +1,124 @@
-[build-system]
-# AVOID CHANGING REQUIRES: IT WILL BE UPDATED BY PYSCAFFOLD!
-requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
-build-backend = "setuptools.build_meta"
+[project]
+name = "ascat"
+version = "2.6.5"
+description = "Read and process backscatter and soil moisture data from the Advanced Scatterometer (ASCAT)"
+readme = "README.md"
+license = { file = "LICENSE.txt" }
+authors = [{ name = "TU Wien", email = "remote.sensing@geo.tuwien.ac.at" }]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "pandas",
+    "netCDF4",
+    "pykdtree",
+    "pyresample",
+    "h5py",
+    "h5netcdf",
+    "xarray",
+    "dask",
+    "shapely",
+    "cadati",
+    "pygeogrids",
+    "pynetcf",
+    "fibgrid",
+    "tqdm",
+    "zarr",
+    "lxml",
+    "requests",
+    "pdbufr",
+]
 
-[tool.setuptools_scm]
-# For smarter version schemes and other configuration options,
-# check out https://github.com/pypa/setuptools_scm
-version_scheme = "no-guess-dev"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Software Development :: Libraries",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: POSIX",
+    "Natural Language :: English",
+]
+
+[project.optional-dependencies]
+# pygrib is only needed for reading H SAF GRIB products (ascat.h_saf) and has
+# no pip wheel on Windows (conda-forge only), so it is kept as an extra.
+grib = ["pygrib"]
+docs = [
+    "sphinx>=7.2.6",
+    "sphinx-copybutton",
+    "sphinx-design",
+    "sphinx_rtd_theme>=2.0.0",
+    "myst-nb>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://tuwien.at/mg/geo/rs"
+Documentation = "https://ascat.readthedocs.org/"
+
+[project.scripts]
+hsaf_download = "ascat.download.interface:run_hsaf_download"
+eumetsat_download = "ascat.download.interface:run_eumetsat_download"
+ascat_swath_agg = "ascat.aggregate.interface:run_temporal_swath_agg"
+ascat_swath_regrid = "ascat.regrid.interface:run_swath_regrid"
+ascat_swath_resample = "ascat.resample.interface:run_swath_resample"
+ascat_swaths_to_cells = "ascat.stack.interface:run_swath_stacker"
+ascat_convert_cell_format = "ascat.stack.interface:run_cell_format_converter"
+ascat_product_info = "ascat.product_info.interface:run_product_info_interface"
+
+[build-system]
+requires = ["uv_build>=0.9.17,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+  {include-group = "lint"},
+  {include-group = "test"}
+]
+test = [
+    "pip>=25.3",
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "matplotlib",  # required by ascat.accessors (test-only, not a runtime dep)
+]
+lint = [
+    "ruff>=0.14.12",
+]
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812",  # missing-trailing-comma (may conflict with ruff formatter)
+    "D203",    # incorrect-blank-line-before-class (conflicts with D211)
+    "D213",    # multi-line-summary-second-line (conflicts with D212)
+]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402"]
+"**/{tests}/*" = ["E402", "ANN201", "D", "INP001", "S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
+
+[tool.pytest.ini_options]
+addopts = "--cov ascat --cov-report term-missing --verbose"
+testpaths = ["tests"]
+norecursedirs = ["dist", "build", ".tox"]
+
+[tool.coverage.run]
+relative_files = true
+source = ["ascat"]
