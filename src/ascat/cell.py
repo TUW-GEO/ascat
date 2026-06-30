@@ -328,7 +328,8 @@ class RaggedArrayTs(Filenames):
                                    dim="locations",
                                    data_vars="minimal",
                                    compat="equals")
-        merged_ds = xr.merge([obs_dim_ds, non_obs_dim_ds])
+        merged_ds = xr.merge([obs_dim_ds, non_obs_dim_ds],
+                              compat="no_conflicts")
         merged_ds = self._dim_safe_rechunk(merged_ds)
         return merged_ds
 
