@@ -27,21 +27,20 @@ http://help.zenodo.org/#versioning
 ## Installation ##
 
 ASCAT data are distributed in BUFR, NetCDF, EPS Native and GRIB format.
-Unfortunately neither BUFR nor GRIB readers work on Windows so if you need these
-formats then Linux or OS X are your only options.
+Unfortunately the GRIB reader does not work on Windows, so if you need that
+format then Linux or OS X are your only options.
 
-The following script will download and install all the needed packages.
-
-Linux:
+Install the latest release from PyPI:
 
 > ```bash
-> conda env create -f environment.yml
+> pip install ascat
 > ```
 
-Windows:
+Reading H SAF GRIB products requires `pygrib`, which is available through the
+optional `grib` extra (Linux/OS X only):
 
 > ```bash
-> conda env create -f environment_win.yml
+> pip install ascat[grib]
 > ```
 
 ## Supported datasets ##
@@ -104,7 +103,9 @@ If you want to contribute please follow these steps:
 
 - Fork the ascat repository to your account
 - Clone the repository, make sure you use ``git clone --recursive`` to also get the test data repository.
+- Set up the development environment with [uv](https://docs.astral.sh/uv/): ``uv sync`` (add ``--extra grib`` for GRIB support)
 - Make a new feature branch from the ascat master branch
 - Add your feature
 - Please include tests for your contributions in one of the test directories
+- Run the tests with ``uv run pytest``
 - Submit a pull request
