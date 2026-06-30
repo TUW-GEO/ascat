@@ -9,15 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - run: python3 -m pip install --upgrade build && python3 -m build
-      - name: Upload to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.13.0
-        with:
-          skip_existing: true
-          verbose: true
-          verify_metadata: true
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }} # this needs to be uploaded to github actions secrets
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Build package
+        run: uv build
+      - name: Publish to PyPI
+        run: uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}

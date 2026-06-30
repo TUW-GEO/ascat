@@ -2,6 +2,17 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+- Speed up reading of ASCAT Level 1b and Level 2 BUFR files by reading the
+  required fields directly via ``eccodes`` array access instead of
+  ``pdbufr.read_bufr(..., flat=True)`` (orders of magnitude faster for large
+  files; output unchanged)
+- Replace the ``pdbufr`` dependency with ``eccodes``
+- Switch packaging and dependency management to ``uv`` (``uv_build`` backend);
+  ``pygrib`` is now an optional ``grib`` extra
+
 Version 2.6.5
 =============
 
