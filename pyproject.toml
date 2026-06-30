@@ -16,6 +16,7 @@ dependencies = [
     "h5netcdf",
     "xarray",
     "dask",
+    "flox",
     "shapely",
     "cadati",
     "pygeogrids",
@@ -83,7 +84,6 @@ test = [
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "pytest-timeout>=2.4.0",
-    "matplotlib",
 ]
 lint = [
     "ruff>=0.14.12",

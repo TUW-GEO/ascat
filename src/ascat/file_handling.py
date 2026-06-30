@@ -69,17 +69,19 @@ class FilenameTemplate:
         Parameters
         ----------
         fn_fmt : dict
-            Filename format applied on filename pattern (fn_pattern).
-            e.g. fn_pattern = "{date}*.{suffix}"
-            with fn_format_dict = {"date": "20000101", "suffix": "nc"}
-            returns "20000101*.nc"
+            Filename format applied on filename pattern (fn_pattern), e.g.::
+
+                fn_pattern = "{date}*.{suffix}"
+                fn_format_dict = {"date": "20000101", "suffix": "nc"}
+                # returns "20000101*.nc"
         sf_fmt : dict of dicts
             Format dictionary for subfolders. Each subfolder contains
-            a dictionary defining the format of the folder name.
-            e.g. sf_templ = {"years": {year}, "months": {month}}
-            with sf_format = {"years": {"year": "2000"},
-                                "months": {"month": "02"}}
-            returns ["2000", "02"]
+            a dictionary defining the format of the folder name, e.g.::
+
+                sf_templ = {"years": {year}, "months": {month}}
+                sf_format = {"years": {"year": "2000"},
+                             "months": {"month": "02"}}
+                # returns ["2000", "02"]
 
         Returns
         -------
@@ -123,11 +125,12 @@ class FilenameTemplate:
         ----------
         fmt : dict of dicts
             Format dictionary for subfolders. Each subfolder contains
-            a dictionary defining the format of the folder name.
-            e.g. sf_pattern = {"years": {year}, "months": {month}}
-            with format_dict = {"years": {"year": "2000"},
-                                "months": {"month": "02"}}
-            returns ["2000", "02"]
+            a dictionary defining the format of the folder name, e.g.::
+
+                sf_pattern = {"years": {year}, "months": {month}}
+                format_dict = {"years": {"year": "2000"},
+                               "months": {"month": "02"}}
+                # returns ["2000", "02"]
 
         Returns
         -------

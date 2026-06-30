@@ -2098,35 +2098,37 @@ def set_flags(data, ignore_noise_ool=False):
     "EPS programme generic product format specification" (EPS.GGS.SPE.96167)
     and "ASCAT level 1 product format specification" (EPS.MIS.SPE.97233).
 
-    bit name      category   description
-    ------------------------------------
+    The flag bits are defined as follows::
 
-    flagfield_rf1
-    0  fnoise     amber     noise missing, interpolated noise value used instead
-    1  fpgp       amber     degraded power gain product
-    2  vpgp       red       very degraded power gain product
-    3  fhrx       amber     degraded filter shape
-    4  vhrx       red       very degraded filter shape
+        bit name      category   description
+        ------------------------------------
 
-    flagfield_rf2
-    0  pgp_ool    red       power gain product is outside limits
-    1  noise_ool  red       measured noise value is outside limits
+        flagfield_rf1
+        0  fnoise     amber     noise missing, interpolated noise value used instead
+        1  fpgp       amber     degraded power gain product
+        2  vpgp       red       very degraded power gain product
+        3  fhrx       amber     degraded filter shape
+        4  vhrx       red       very degraded filter shape
 
-    flagfield_pl
-    0  forb       red       orbit height is outside limits
-    1  fatt       red       no yaw steering
-    2  fcfg       red       unexpected instrument configuration
-    3  fman       red       satellite maneuver
-    4  fosv       warning   osv file missing (fman may be incorrect)
+        flagfield_rf2
+        0  pgp_ool    red       power gain product is outside limits
+        1  noise_ool  red       measured noise value is outside limits
 
-    flagfield_gen1
-    0  ftel       warning   telemetry missing (ftool may be incorrect)
-    1  ftool      red       telemetry out of limits
+        flagfield_pl
+        0  forb       red       orbit height is outside limits
+        1  fatt       red       no yaw steering
+        2  fcfg       red       unexpected instrument configuration
+        3  fman       red       satellite maneuver
+        4  fosv       warning   osv file missing (fman may be incorrect)
 
-    flagfield_gen2
-    0  fsol   amber     possible interference from solar array
-    1  fland  warning   lat/long position is over land
-    2  fgeo   red       geolocation algorithm failed
+        flagfield_gen1
+        0  ftel       warning   telemetry missing (ftool may be incorrect)
+        1  ftool      red       telemetry out of limits
+
+        flagfield_gen2
+        0  fsol   amber     possible interference from solar array
+        1  fland  warning   lat/long position is over land
+        2  fgeo   red       geolocation algorithm failed
 
     Each flag has belongs to a particular category which indicates the impact
     on data quality. Flags in the "amber" category indicate that the data is
@@ -2283,34 +2285,36 @@ def set_flags_fmv13(flagfield, ignore_noise_ool=False):
     "EPS programme generic product format specification" (EPS.GGS.SPE.96167)
     and "ASCAT level 1 product format specification" (EPS.MIS.SPE.97233).
 
-    bit name         category  description
-    ------------------------------------
-     0  f_noise       amber     1: noise missing/interpolated during processing
-     1  f_pg          amber     1: degraded power gain product (pgp)
-     2  v_pg          red       1: not valid power gain product (pgp)
-     3  f_filter      amber     1: degraded hrx
-     4  v_filter      red       1: no valid hrx
-     5  f_pgp_ool     red       1: estimated power gain product out of limits
-     6  f_np_ool      red       1: measured noise value is outside limits
-     7  f_pgp_drop    amber     0: continuous pgp 1: drop in pgp
-     8  f_attitude    red       1: non-normal attitude
-     9  f_omega       red       1: instrument parameter configuration mismatch
-    10  f_man         red       0: no-manoeuvre 1: manoeuvre
-    11  f_osv         info      1: osv file not available
-    12  f_e_tel_pres  amber     1: interpolated HKTM telemetry missing
-    13  f_e_tel_ir    red       1: some interpolated HKTM telemetry parameters
-                                   out of prescribed thresholds
-    14  f_ref         info      1: if f_pgp or f_np are 1
-    15  f_sa          amber     1: risk of solar array panel reflections
-                                   interference
-    16  f_land        info      0: no-land 1: land
-    17  f_geo         red       1: geolocation algorithm failed
-    18  f_sign        info         sigma0 in linear units is negative and value
-                                   in dB has been calculated from its
-                                   unsigned value
-    19  f_com_op      info      1: data taken during commissioning phase
+    The flag bits are defined as follows::
 
-    20-31 spare
+        bit name         category  description
+        ------------------------------------
+         0  f_noise       amber     1: noise missing/interpolated during processing
+         1  f_pg          amber     1: degraded power gain product (pgp)
+         2  v_pg          red       1: not valid power gain product (pgp)
+         3  f_filter      amber     1: degraded hrx
+         4  v_filter      red       1: no valid hrx
+         5  f_pgp_ool     red       1: estimated power gain product out of limits
+         6  f_np_ool      red       1: measured noise value is outside limits
+         7  f_pgp_drop    amber     0: continuous pgp 1: drop in pgp
+         8  f_attitude    red       1: non-normal attitude
+         9  f_omega       red       1: instrument parameter configuration mismatch
+        10  f_man         red       0: no-manoeuvre 1: manoeuvre
+        11  f_osv         info      1: osv file not available
+        12  f_e_tel_pres  amber     1: interpolated HKTM telemetry missing
+        13  f_e_tel_ir    red       1: some interpolated HKTM telemetry parameters
+                                       out of prescribed thresholds
+        14  f_ref         info      1: if f_pgp or f_np are 1
+        15  f_sa          amber     1: risk of solar array panel reflections
+                                       interference
+        16  f_land        info      0: no-land 1: land
+        17  f_geo         red       1: geolocation algorithm failed
+        18  f_sign        info         sigma0 in linear units is negative and value
+                                       in dB has been calculated from its
+                                       unsigned value
+        19  f_com_op      info      1: data taken during commissioning phase
+
+        20-31 spare
 
     Each flag has belongs to a particular category which indicates the impact
     on data quality. Flags in the "amber" category indicate that the data is

@@ -175,6 +175,7 @@ def get_window_radius(window, hp_radius):
     window : string
         Window function name.
         Current supported windows:
+
             - Hamming
             - Boxcar
     hp_radius : float32
