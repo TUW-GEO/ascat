@@ -23,7 +23,10 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libtiff-dev libeccodes-dev
+          # libeccodes: a single shared eccodes used by BOTH pdbufr and pygrib
+          # (mirrors the old conda-forge setup). pkg-config lets pygrib's source
+          # build locate it. libtiff is needed by pyresample/pykdtree.
+          sudo apt-get install -y libtiff-dev libeccodes-dev libeccodes-tools pkg-config
           sudo ln -s /usr/lib/x86_64-linux-gnu/libtiff.so.6 /usr/lib/x86_64-linux-gnu/libtiff.so.5
       - name: Checkout test data
         run: |
@@ -36,7 +39,15 @@ jobs:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
       - name: Install package and dependencies
-        run: uv sync --group test --extra grib
+        # Build pygrib from source so it links the system libeccodes instead of
+        # bundling its own copy. Loading two different libeccodes into one
+        # process corrupts eccodes' global state and deadlocks the BUFR reads.
+        run: uv sync --group test --extra grib --no-binary-package pygrib
+      - name: Force eccodes binding onto the system library
+        # findlibs would otherwise prefer a bundled "eccodeslib" wheel; disabling
+        # the PACKAGE source pins the pdbufr/eccodes binding to the same system
+        # libeccodes that pygrib was built against.
+        run: echo "FINDLIBS_DISABLE_PACKAGE=yes" >> "$GITHUB_ENV"
       - name: Print infos
         run: |
           git status
