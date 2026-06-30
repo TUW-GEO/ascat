@@ -7,7 +7,8 @@ HTTP and FTP download module.
 """
 
 import base64
-import urllib
+import urllib.parse
+import warnings
 import requests
 import logging
 from pathlib import Path, WindowsPath, PosixPath
@@ -18,8 +19,10 @@ import concurrent.futures
 from tqdm.auto import tqdm
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s %(levelname)s: %(message)s")
+
+# Default timeout (in seconds) for network requests so that a stalled server
+# cannot hang a download indefinitely.
+REQUEST_TIMEOUT = 120
 
 
 class Connector:
@@ -99,6 +102,9 @@ class HttpConnector(Connector):
             Location of remote resource.
         """
         self.base_url = base_url
+        # Set by subclasses that require token authentication (e.g. EumConnector
+        # in connect()). Left as None for unauthenticated HTTP downloads.
+        self.access_token = None
 
     def download_file(self, file_remote, file_local, overwrite=False, n_retry=5):
         """
@@ -117,25 +123,31 @@ class HttpConnector(Connector):
 
         i = 0
         while i < n_retry:
-            logging.debug("Send request")
+            logger.debug("Send request")
+
+            headers = {}
+            if self.access_token is not None:
+                headers["Authorization"] = f"Bearer {self.access_token}"
 
             try:
                 stream_response = requests.get(
                     file_remote,
                     params={"format": "json"},
                     stream=True,
-                    headers={"Authorization": f"Bearer {self.access_token}"})
+                    timeout=REQUEST_TIMEOUT,
+                    headers=headers)
 
                 self._assert_response(stream_response)
             except AssertionError:
                 i += 1
-                logging.debug(f"API Request failed - retry #{i}")
+                logger.debug(f"API Request failed - retry #{i}")
             else:
-                logging.debug("API Request successful")
+                logger.debug("API Request successful")
                 request_flag = True
                 break
         else:
-            logging.debug("Maximum number of API requests failed. Abort.")
+            raise RuntimeError(
+                f"Download failed after {n_retry} attempts: {file_remote}")
 
         if request_flag:
             total = int(stream_response.headers["content-length"])
@@ -149,7 +161,7 @@ class HttpConnector(Connector):
             if not overwrite and filename.exists():
                 lstat = filename.lstat()
                 if lstat.st_size == total:
-                    logging.info("Skip download. File exits.")
+                    logger.info("Skip download. File exists.")
             else:
                 pbar = tqdm(desc=file_local.name,
                             total=total,
@@ -159,21 +171,37 @@ class HttpConnector(Connector):
                             leave=False)
 
                 with open(filename, "wb") as fp:
-                    for chunk in stream_response.iter_content(chunk_size=1024):
+                    for chunk in stream_response.iter_content(chunk_size=65536):
                         if chunk:
                             fp.write(chunk)
-                            fp.flush()
                             pbar.update(len(chunk))
                 pbar.close()
 
                 if filename.exists():
                     lstat = filename.lstat()
                     if lstat.st_size == total:
-                        logging.debug("Download successful")
+                        logger.debug("Download successful")
                     else:
-                        logging.error("Download unsuccessful (file size mismatch)")
+                        filename.unlink()
+                        logger.error(
+                            "Download unsuccessful (file size mismatch), "
+                            "removed partial file: %s", filename)
                 else:
-                    logging.error("Downloaded file not found")
+                    logger.error("Downloaded file not found")
+
+    def _assert_response(self, response, success_code=200):
+        """
+        Check an HTTP response and raise if the status code is unexpected.
+
+        Parameters
+        ----------
+        response : requests.Response
+            The HTTP response.
+        success_code : int, optional
+            The expected success status code (default: 200).
+        """
+        msg = f"API Request Failed: {response.status_code}\n{response.content}"
+        assert (response.status_code == success_code), msg
 
 
 class FtpConnector(Connector):
@@ -191,7 +219,8 @@ class FtpConnector(Connector):
             Location of remote resource.
         """
         super().__init__(base_url)
-        self.ftp = FTP(self.base_url)
+        # Do not open a socket on construction; connect lazily in connect().
+        self.ftp = FTP(timeout=REQUEST_TIMEOUT)
 
     def connect(self, credentials):
         """
@@ -203,10 +232,12 @@ class FtpConnector(Connector):
             Dictionary of needed authentication parameters.
         """
         try:
+            self.ftp.connect(self.base_url)
             self.ftp.login(credentials["user"], credentials["password"])
-            logging.info("FTP connection successfully established")
-        except:
-            logging.error("FTP connection failed. User or password incorrect")
+            logger.info("FTP connection successfully established")
+        except Exception as error:
+            logger.error("FTP connection failed: %s", error)
+            raise
 
     def download_file(self, file_remote, file_local, overwrite=False):
         """
@@ -222,16 +253,16 @@ class FtpConnector(Connector):
             If True, existing files will be overwritten.
         """
         if file_remote not in self.ftp.nlst():
-            logging.warning(f"File not accessible on FTP: {file_remote}")
+            logger.warning(f"File not accessible on FTP: {file_remote}")
         else:
-            logging.debug(f"Start download: {file_remote}")
+            logger.debug(f"Start download: {file_remote}")
 
             total = self.ftp.size(file_remote)
 
             if not overwrite and file_local.exists():
                 lstat = file_local.lstat()
                 if lstat.st_size == total:
-                    logging.info("Skip download. File exits.")
+                    logger.info("Skip download. File exists.")
             else:
                 pbar = tqdm(desc=file_local.name,
                             total=total,
@@ -254,19 +285,21 @@ class FtpConnector(Connector):
                 if file_local.exists():
                     lstat = file_local.lstat()
                     if lstat.st_size == total:
-                        logging.debug("Download successful")
+                        logger.debug("Download successful")
                     else:
-                        logging.error(
-                            "Download unsuccessful (file size mismatch)")
+                        file_local.unlink()
+                        logger.error(
+                            "Download unsuccessful (file size mismatch), "
+                            "removed partial file: %s", file_local)
                 else:
-                    logging.error("Downloaded file not found")
+                    logger.error("Downloaded file not found")
 
     def close(self):
         """
         Close connection.
         """
         self.ftp.close()
-        logging.info("FTP disconnected")
+        logger.info("FTP disconnected")
 
 
 class HsafConnector(FtpConnector):
@@ -332,6 +365,12 @@ class HsafConnector(FtpConnector):
             # inner loop was broken, break the outer
             break
 
+        if not download_url_list:
+            warnings.warn(
+                f"No files found in '{remote_path}' between "
+                f"{start_date:%Y-%m-%d} and {end_date:%Y-%m-%d}.")
+            return
+
         download_url_list, local_file_list = zip(*sorted(zip(
             download_url_list, local_file_list)))
 
@@ -369,7 +408,9 @@ class HsafConnector(FtpConnector):
         self.ftp.retrlines("NLST ", list_of_files.append)
 
         days = end_date - start_date
-        for i in range(days.days):
+        # +1 so the range is inclusive of end_date (otherwise the last day,
+        # and for a one-day window the only requested day, is skipped).
+        for i in range(days.days + 1):
             date = (start_date + timedelta(days=i)).strftime("%Y%m%d")
             matches = sorted([x for x in list_of_files if date in x],
                              reverse=True)
@@ -451,7 +492,8 @@ class EumConnector(HttpConnector):
                 [f"{coord[0]} {coord[1]}" for coord in coords]))
 
         url = service_search
-        response = requests.get(url, dataset_parameters)
+        response = requests.get(url, dataset_parameters,
+                                timeout=REQUEST_TIMEOUT)
         found_data_sets = response.json()
 
         url = service_search
@@ -465,7 +507,8 @@ class EumConnector(HttpConnector):
 
         all_found_data_sets = []
         while dataset_parameters['si'] < found_data_sets['totalResults']:
-            response = requests.get(url, dataset_parameters)
+            response = requests.get(url, dataset_parameters,
+                                timeout=REQUEST_TIMEOUT)
             found_data_sets = response.json()
             all_found_data_sets.append(found_data_sets)
             dataset_parameters[
@@ -523,31 +566,12 @@ class EumConnector(HttpConnector):
         encoded_userpass = base64.b64encode(userpass.encode()).decode()
         headers = {"Authorization": f"Basic {encoded_userpass}"}
         data_payload = {"grant_type": "client_credentials"}
-        response = requests.post(token_url, headers=headers, data=data_payload)
+        response = requests.post(token_url, headers=headers, data=data_payload,
+                                 timeout=REQUEST_TIMEOUT)
 
         self._assert_response(response)
 
         return response.json()["access_token"]
-
-    def _assert_response(self, response, success_code=200):
-        """
-        Function to check API key generation response. Will return an error
-        if the key retrieval was not successful.
-
-        Parameters
-        ----------
-        response : obj
-            The authentication response.
-        success_code : int, optional
-            The expected sucess code (default: 200).
-
-        Returns
-        -------
-        result : None or str
-            Nothing if success, error message if fail.
-        """
-        msg = f"API Request Failed: {response.status_code}\n{response.content}"
-        assert (response.status_code == success_code), msg
 
 
 def concurrent_download(download_func,
