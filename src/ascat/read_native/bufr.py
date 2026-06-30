@@ -1,29 +1,7 @@
-# Copyright (c) 2025, TU Wien
-# All rights reserved.
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: Copyright (c) 2026 TU Wien
+# SPDX-FileContributor: For a full list of authors, see the AUTHORS file.
 
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#    * Redistributions of source code must retain the above copyright notice,
-#      this list of conditions and the following disclaimer.
-#    * Redistributions in binary form must reproduce the above copyright
-#      notice, this list of conditions and the following disclaimer in the
-#      documentation and/or other materials provided with the distribution.
-#    * Neither the name of TU Wien, Department of Geodesy and Geoinformation
-#      nor the names of its contributors may be used to endorse or promote
-#      products derived from this software without specific prior written
-#      permission.
-
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED. IN NO EVENT SHALL TU WIEN DEPARTMENT OF GEODESY AND
-# GEOINFORMATION BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
-# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 Readers for ASCAT Level 1b and Level 2 data in BUFR format.
 """
@@ -31,11 +9,12 @@ Readers for ASCAT Level 1b and Level 2 data in BUFR format.
 import os
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 from cadati.cal_date import cal2dt
 
 try:
-    import pdbufr
+    import eccodes
 except ImportError:
     pass
 
@@ -55,6 +34,77 @@ nan_val_dict = {
     np.uint16: uint16_nan,
     np.int32: int32_nan
 }
+
+
+def read_bufr_data(filename, key_lookup):
+    """
+    Read selected fields from a BUFR file using eccodes array access.
+
+    This reads the requested (rank-qualified) keys directly with
+    ``codes_get_array`` instead of expanding every key of every subset, which
+    is orders of magnitude faster than ``pdbufr.read_bufr(..., flat=True)`` for
+    the large ASCAT BUFR messages.
+
+    Parameters
+    ----------
+    filename : str
+        BUFR filename.
+    key_lookup : dict
+        Mapping of output field name to the eccodes key to read, e.g.
+        ``{"f_Backscatter": "#1#backscatter"}``. Keys yielding a single value
+        per message (compressed scalars) are broadcast to all subsets.
+
+    Returns
+    -------
+    data : pandas.DataFrame
+        One row per observation with the requested fields plus ``lat``, ``lon``
+        and ``time``.
+    """
+    time_keys = ("year", "month", "day", "hour", "minute", "second")
+    columns = {name: [] for name in key_lookup}
+    aux = {name: [] for name in ("lat", "lon", *time_keys)}
+
+    with open(filename, "rb") as fh:
+        while True:
+            handle = eccodes.codes_bufr_new_from_file(fh)
+            if handle is None:
+                break
+            try:
+                eccodes.codes_set(handle, "unpack", 1)
+                n_obs = eccodes.codes_get(handle, "numberOfSubsets")
+
+                def get(key):
+                    arr = np.atleast_1d(eccodes.codes_get_array(handle, key))
+                    if arr.size == 1 and n_obs != 1:
+                        arr = np.repeat(arr, n_obs)
+                    return arr
+
+                for name, key in key_lookup.items():
+                    columns[name].append(get(key))
+                aux["lat"].append(get("#1#latitude").astype(np.float32))
+                aux["lon"].append(get("#1#longitude").astype(np.float32))
+                for tkey in time_keys:
+                    aux[tkey].append(get("#1#" + tkey).astype(int))
+            finally:
+                eccodes.codes_release(handle)
+
+    data = {name: np.concatenate(parts) for name, parts in columns.items()}
+    # eccodes returns its missing-value sentinel (~1.7e38) for absent values;
+    # pdbufr's flat reader returned NaN, so match that for float fields.
+    for name, arr in data.items():
+        if np.issubdtype(arr.dtype, np.floating):
+            arr[np.abs(arr) > 1e37] = np.nan
+
+    data = pd.DataFrame(data)
+    data["lat"] = np.concatenate(aux["lat"])
+    data["lon"] = np.concatenate(aux["lon"])
+
+    cal_dates = np.vstack(
+        [np.concatenate(aux[tkey]) for tkey in time_keys]
+        + [np.zeros(data.shape[0])]).T
+    data["time"] = cal2dt(cal_dates)
+
+    return data
 
 class AscatL1bBufrFile(AscatFile):
     """
@@ -76,35 +126,42 @@ class AscatL1bBufrFile(AscatFile):
             if os.path.splitext(fname)[1] == '.gz':
                 self.filenames[i] = tmp_unzip(fname)
 
-        self.msg_name_lookup = {
-                4: "Satellite Identifier",
-                6: "Direction Of Motion Of Moving Observing Platform",
-                16: "Orbit Number",
-                17: "Cross-Track Cell Number",
-                21: "f_Beam Identifier",
-                22: "f_Radar Incidence Angle",
-                23: "f_Antenna Beam Azimuth",
-                24: "f_Backscatter",
-                25: "f_Radiometric Resolution (Noise Value)",
-                26: "f_ASCAT KP Estimate Quality",
-                27: "f_ASCAT Sigma-0 Usability",
-                34: "f_ASCAT Land Fraction",
-                35: "m_Beam Identifier",
-                36: "m_Radar Incidence Angle",
-                37: "m_Antenna Beam Azimuth",
-                38: "m_Backscatter",
-                39: "m_Radiometric Resolution (Noise Value)",
-                40: "m_ASCAT KP Estimate Quality",
-                41: "m_ASCAT Sigma-0 Usability",
-                48: "m_ASCAT Land Fraction",
-                49: "a_Beam Identifier",
-                50: "a_Radar Incidence Angle",
-                51: "a_Antenna Beam Azimuth",
-                52: "a_Backscatter",
-                53: "a_Radiometric Resolution (Noise Value)",
-                54: "a_ASCAT KP Estimate Quality",
-                55: "a_ASCAT Sigma-0 Usability",
-                62: "a_ASCAT Land Fraction"
+        # Output field name -> rank-qualified eccodes key. The three antenna
+        # beams (fore/mid/aft) share the same keys at successive ranks
+        # (#1#/#2#/#3#).
+        self.msg_key_lookup = {
+                "Satellite Identifier": "#1#satelliteIdentifier",
+                "Direction Of Motion Of Moving Observing Platform":
+                    "#1#directionOfMotionOfMovingObservingPlatform",
+                "Orbit Number": "#1#orbitNumber",
+                "Cross-Track Cell Number": "#1#crossTrackCellNumber",
+                "f_Beam Identifier": "#1#beamIdentifier",
+                "f_Radar Incidence Angle": "#1#radarIncidenceAngle",
+                "f_Antenna Beam Azimuth": "#1#antennaBeamAzimuth",
+                "f_Backscatter": "#1#backscatter",
+                "f_Radiometric Resolution (Noise Value)":
+                    "#1#radiometricResolutionNoiseValue",
+                "f_ASCAT KP Estimate Quality": "#1#ascatKpEstimateQuality",
+                "f_ASCAT Sigma-0 Usability": "#1#ascatSigma0Usability",
+                "f_ASCAT Land Fraction": "#1#landFraction",
+                "m_Beam Identifier": "#2#beamIdentifier",
+                "m_Radar Incidence Angle": "#2#radarIncidenceAngle",
+                "m_Antenna Beam Azimuth": "#2#antennaBeamAzimuth",
+                "m_Backscatter": "#2#backscatter",
+                "m_Radiometric Resolution (Noise Value)":
+                    "#2#radiometricResolutionNoiseValue",
+                "m_ASCAT KP Estimate Quality": "#2#ascatKpEstimateQuality",
+                "m_ASCAT Sigma-0 Usability": "#2#ascatSigma0Usability",
+                "m_ASCAT Land Fraction": "#2#landFraction",
+                "a_Beam Identifier": "#3#beamIdentifier",
+                "a_Radar Incidence Angle": "#3#radarIncidenceAngle",
+                "a_Antenna Beam Azimuth": "#3#antennaBeamAzimuth",
+                "a_Backscatter": "#3#backscatter",
+                "a_Radiometric Resolution (Noise Value)":
+                    "#3#radiometricResolutionNoiseValue",
+                "a_ASCAT KP Estimate Quality": "#3#ascatKpEstimateQuality",
+                "a_ASCAT Sigma-0 Usability": "#3#ascatSigma0Usability",
+                "a_ASCAT Land Fraction": "#3#landFraction",
             }
 
     def _read(self, filename, generic=False, to_xarray=False):
@@ -125,30 +182,7 @@ class AscatL1bBufrFile(AscatFile):
         ds : xarray.Dataset, numpy.ndarray
             ASCAT Level 1b data.
         """
-        df = pdbufr.read_bufr(filename, columns="data", flat=True)
-
-        col_rename = {}
-        for i, col in enumerate(df.columns.to_list()):
-            name = self.msg_name_lookup.get(i + 1, None)
-            if name is not None:
-                col_rename[col] = name
-
-        data = df.rename(columns=col_rename)[col_rename.values()]
-
-        data["lat"] = df["#1#latitude"].values.astype(np.float32)
-        data["lon"] = df["#1#longitude"].values.astype(np.float32)
-
-        year = df["#1#year"].values.astype(int)
-        month = df["#1#month"].values.astype(int)
-        day = df["#1#day"].values.astype(int)
-        hour = df["#1#hour"].values.astype(int)
-        minute = df["#1#minute"].values.astype(int)
-        seconds = df["#1#second"].values.astype(int)
-        milliseconds = np.zeros(seconds.size)
-        cal_dates = np.vstack(
-            (year, month, day, hour, minute, seconds, milliseconds)).T
-
-        data['time'] = cal2dt(cal_dates)
+        data = read_bufr_data(filename, self.msg_key_lookup)
         data = data.to_records(index=False)
         data = {name:data[name] for name in data.dtype.names}
 
@@ -341,53 +375,64 @@ class AscatL2BufrFile(AscatFile):
             if os.path.splitext(fname)[1] == '.gz':
                 self.filenames[i] = tmp_unzip(fname)
 
-        self.msg_name_lookup = {
-            4: "Satellite Identifier",
-            6: "Direction Of Motion Of Moving Observing Platform",
-            16: "Orbit Number",
-            17: "Cross-Track Cell Number",
-            21: "f_Beam Identifier",
-            22: "f_Radar Incidence Angle",
-            23: "f_Antenna Beam Azimuth",
-            24: "f_Backscatter",
-            25: "f_Radiometric Resolution (Noise Value)",
-            26: "f_ASCAT KP Estimate Quality",
-            27: "f_ASCAT Sigma-0 Usability",
-            34: "f_ASCAT Land Fraction",
-            35: "m_Beam Identifier",
-            36: "m_Radar Incidence Angle",
-            37: "m_Antenna Beam Azimuth",
-            38: "m_Backscatter",
-            39: "m_Radiometric Resolution (Noise Value)",
-            40: "m_ASCAT KP Estimate Quality",
-            41: "m_ASCAT Sigma-0 Usability",
-            48: "m_ASCAT Land Fraction",
-            49: "a_Beam Identifier",
-            50: "a_Radar Incidence Angle",
-            51: "a_Antenna Beam Azimuth",
-            52: "a_Backscatter",
-            53: "a_Radiometric Resolution (Noise Value)",
-            54: "a_ASCAT KP Estimate Quality",
-            55: "a_ASCAT Sigma-0 Usability",
-            62: "a_ASCAT Land Fraction",
-            65: "Surface Soil Moisture (Ms)",
-            66: "Estimated Error In Surface Soil Moisture",
-            67: "Backscatter",
-            68: "Estimated Error In Sigma0 At 40 Deg Incidence Angle",
-            69: "Slope At 40 Deg Incidence Angle",
-            70: "Estimated Error In Slope At 40 Deg Incidence Angle",
-            71: "Soil Moisture Sensitivity",
-            72: "Dry Backscatter",
-            73: "Wet Backscatter",
-            74: "Mean Surface Soil Moisture",
-            # 75: "Rain Fall Detection",
-            76: "Soil Moisture Correction Flag",
-            77: "Soil Moisture Processing Flag",
-            78: "Soil Moisture Quality",
-            79: "Snow Cover",
-            80: "Frozen Land Surface Fraction",
-            81: "Inundation And Wetland Fraction",
-            82: "Topographic Complexity",
+        # Output field name -> rank-qualified eccodes key. Beams use #1#/#2#/#3#;
+        # the L2 sigma0/dry/wet backscatter reuse the backscatter key at higher
+        # ranks (#4#/#5#/#6#).
+        self.msg_key_lookup = {
+            "Satellite Identifier": "#1#satelliteIdentifier",
+            "Direction Of Motion Of Moving Observing Platform":
+                "#1#directionOfMotionOfMovingObservingPlatform",
+            "Orbit Number": "#1#orbitNumber",
+            "Cross-Track Cell Number": "#1#crossTrackCellNumber",
+            "f_Beam Identifier": "#1#beamIdentifier",
+            "f_Radar Incidence Angle": "#1#radarIncidenceAngle",
+            "f_Antenna Beam Azimuth": "#1#antennaBeamAzimuth",
+            "f_Backscatter": "#1#backscatter",
+            "f_Radiometric Resolution (Noise Value)":
+                "#1#radiometricResolutionNoiseValue",
+            "f_ASCAT KP Estimate Quality": "#1#ascatKpEstimateQuality",
+            "f_ASCAT Sigma-0 Usability": "#1#ascatSigma0Usability",
+            "f_ASCAT Land Fraction": "#1#landFraction",
+            "m_Beam Identifier": "#2#beamIdentifier",
+            "m_Radar Incidence Angle": "#2#radarIncidenceAngle",
+            "m_Antenna Beam Azimuth": "#2#antennaBeamAzimuth",
+            "m_Backscatter": "#2#backscatter",
+            "m_Radiometric Resolution (Noise Value)":
+                "#2#radiometricResolutionNoiseValue",
+            "m_ASCAT KP Estimate Quality": "#2#ascatKpEstimateQuality",
+            "m_ASCAT Sigma-0 Usability": "#2#ascatSigma0Usability",
+            "m_ASCAT Land Fraction": "#2#landFraction",
+            "a_Beam Identifier": "#3#beamIdentifier",
+            "a_Radar Incidence Angle": "#3#radarIncidenceAngle",
+            "a_Antenna Beam Azimuth": "#3#antennaBeamAzimuth",
+            "a_Backscatter": "#3#backscatter",
+            "a_Radiometric Resolution (Noise Value)":
+                "#3#radiometricResolutionNoiseValue",
+            "a_ASCAT KP Estimate Quality": "#3#ascatKpEstimateQuality",
+            "a_ASCAT Sigma-0 Usability": "#3#ascatSigma0Usability",
+            "a_ASCAT Land Fraction": "#3#landFraction",
+            "Surface Soil Moisture (Ms)": "#1#surfaceSoilMoisture",
+            "Estimated Error In Surface Soil Moisture":
+                "#1#estimatedErrorInSurfaceSoilMoisture",
+            "Backscatter": "#4#backscatter",
+            "Estimated Error In Sigma0 At 40 Deg Incidence Angle":
+                "#1#estimatedErrorInSigma0At40DegreesIncidenceAngle",
+            "Slope At 40 Deg Incidence Angle":
+                "#1#slopeAt40DegreesIncidenceAngle",
+            "Estimated Error In Slope At 40 Deg Incidence Angle":
+                "#1#estimatedErrorInSlopeAt40DegreesIncidenceAngle",
+            "Soil Moisture Sensitivity": "#1#soilMoistureSensitivity",
+            "Dry Backscatter": "#5#backscatter",
+            "Wet Backscatter": "#6#backscatter",
+            "Mean Surface Soil Moisture": "#1#meanSurfaceSoilMoisture",
+            # "Rain Fall Detection": not read
+            "Soil Moisture Correction Flag": "#1#soilMoistureCorrectionFlag",
+            "Soil Moisture Processing Flag": "#1#soilMoistureProcessingFlag",
+            "Soil Moisture Quality": "#1#soilMoistureQuality",
+            "Snow Cover": "#1#snowCover",
+            "Frozen Land Surface Fraction": "#1#frozenLandSurfaceFraction",
+            "Inundation And Wetland Fraction": "#1#inundationAndWetlandFraction",
+            "Topographic Complexity": "#1#topographicComplexity",
         }
 
     def _read(self, filename, generic=False, to_xarray=False):
@@ -410,30 +455,7 @@ class AscatL2BufrFile(AscatFile):
         metadata : dict
             Metadata.
         """
-        df = pdbufr.read_bufr(filename, columns="data", flat=True)
-
-        col_rename = {}
-        for i, col in enumerate(df.columns.to_list()):
-            name = self.msg_name_lookup.get(i + 1, None)
-            if name is not None:
-                col_rename[col] = name
-
-        data = df.rename(columns=col_rename)[col_rename.values()]
-
-        data["lat"] = df["#1#latitude"].values.astype(np.float32)
-        data["lon"] = df["#1#longitude"].values.astype(np.float32)
-
-        year = df["#1#year"].values.astype(int)
-        month = df["#1#month"].values.astype(int)
-        day = df["#1#day"].values.astype(int)
-        hour = df["#1#hour"].values.astype(int)
-        minute = df["#1#minute"].values.astype(int)
-        seconds = df["#1#second"].values.astype(int)
-        milliseconds = np.zeros(seconds.size)
-        cal_dates = np.vstack(
-            (year, month, day, hour, minute, seconds, milliseconds)).T
-
-        data['time'] = cal2dt(cal_dates)
+        data = read_bufr_data(filename, self.msg_key_lookup)
         data = data.to_records(index=False)
         data = {name:data[name] for name in data.dtype.names}
 

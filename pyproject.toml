@@ -25,7 +25,7 @@ dependencies = [
     "zarr",
     "lxml",
     "requests",
-    "pdbufr",
+    "eccodes",
 ]
 
 classifiers = [
@@ -82,7 +82,8 @@ test = [
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
-    "matplotlib",  # required by ascat.accessors (test-only, not a runtime dep)
+    "pytest-timeout>=2.4.0",
+    "matplotlib",
 ]
 lint = [
     "ruff>=0.14.12",
@@ -118,6 +119,11 @@ docstring-code-line-length = "dynamic"
 addopts = "--cov ascat --cov-report term-missing --verbose"
 testpaths = ["tests"]
 norecursedirs = ["dist", "build", ".tox"]
+# Per-test runaway guard so a stuck test fails fast instead of blocking CI. The
+# "thread" method is required to interrupt a hang inside a C extension (e.g.
+# eccodes); the default "signal" method cannot break out of a C call.
+timeout = 300
+timeout_method = "thread"
 
 [tool.coverage.run]
 relative_files = true
