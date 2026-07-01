@@ -9,6 +9,17 @@ from typing import Union, Sequence, Callable
 import numpy as np
 import xarray as xr
 
+# The dataset-level conversions live in a class-free module; re-exported here
+# for backward compatibility.
+from ascat.cf_conversions import (  # noqa: F401
+    point_to_indexed,
+    point_to_contiguous,
+    contiguous_to_indexed,
+    indexed_to_contiguous,
+    indexed_to_point,
+    contiguous_to_point,
+)
+
 # Recognized CF discrete sampling geometry array types.
 POINT = "point"
 INDEXED = "indexed"
@@ -56,187 +67,6 @@ def cf_array_class(ds, array_type, **kwargs):
             f"Array type '{array_type}' not recognized. Should be one of "
             f"{', '.join(classes)}.")
     return classes[array_type](ds, **kwargs)
-
-
-def point_to_indexed(
-    ds: xr.Dataset,
-    sample_dim: str,
-    instance_dim: str,
-    timeseries_id: str,
-    index_var: str = "locationIndex",
-    instance_vars: Union[Sequence[str], None] = None,
-    coord_vars: Union[Sequence[str], None] = None,
-) -> xr.Dataset:
-    coord_vars = coord_vars or []
-    instance_vars = instance_vars or []
-    instance_vars = [timeseries_id] + instance_vars
-
-    _, unique_index_1d, instanceIndex = np.unique(
-        ds[timeseries_id], return_index=True, return_inverse=True
-    )
-    # use assign (not ds[index_var] = ...) so the caller's dataset is not mutated
-    ds = ds.assign(
-        {index_var: (sample_dim, instanceIndex,
-                     {"instance_dimension": instance_dim})}
-    )
-
-    for var in instance_vars:
-        if var in ds:
-            ds = ds.assign(
-                {var: (instance_dim, ds[var][unique_index_1d].data, ds[var].attrs)}
-            )
-            if var in coord_vars:
-                ds = ds.set_coords(var)
-    ds = ds.assign_attrs({"featureType": "timeSeries"})
-    return ds
-
-
-def point_to_contiguous(
-    ds: xr.Dataset,
-    sample_dim: str,
-    instance_dim: str,
-    timeseries_id: str,
-    count_var: str = "row_size",
-    instance_vars: Union[Sequence[str], None] = None,
-    coord_vars: Union[Sequence[str], None] = None,
-    sort_vars: Union[Sequence[str], None] = None,
-) -> xr.Dataset:
-    coord_vars = coord_vars or []
-    sort_vars = sort_vars or []
-    instance_vars = instance_vars or []
-    instance_vars = [timeseries_id] + instance_vars
-
-
-    ds = ds.sortby([timeseries_id, *sort_vars])
-    _, unique_index_1d, row_size = np.unique(
-        ds[timeseries_id], return_index=True, return_counts=True
-    )
-
-    ds[count_var] = ("locations", row_size, {"sample_dimension": sample_dim})
-
-    for var in instance_vars:
-        if var in ds:
-            encoding = ds[var].encoding
-            ds[var] = (instance_dim, ds[var][unique_index_1d].data, ds[var].attrs)
-            ds[var].encoding = encoding
-            if var in coord_vars:
-                ds = ds.set_coords(var)
-    ds = ds.assign_attrs({"featureType": "timeSeries"})
-    return ds
-
-
-def contiguous_to_indexed(
-    ds: xr.Dataset,
-    sample_dim: str,
-    instance_dim: str,
-    count_var: str,
-    index_var: str,
-) -> xr.Dataset:
-    """
-    Convert a contiguous ragged array dataset to an indexed ragged array dataset.
-    """
-    row_size = np.where(ds[count_var].data > 0, ds[count_var].data, 0)
-
-    locationIndex = np.repeat(np.arange(row_size.size), row_size)
-
-    ds = ds.assign(
-        {
-            index_var: (
-                sample_dim,
-                locationIndex,
-                {"instance_dimension": instance_dim},
-            )
-        }
-    ).drop_vars([count_var])
-
-    # put locationIndex as first var
-    ds = ds[[index_var] + [var for var in ds.variables if var != index_var]]
-
-    return ds
-
-
-def indexed_to_contiguous(
-    ds: xr.Dataset,
-    sample_dim: str,
-    instance_dim: str,
-    count_var: str,
-    index_var: str,
-    sort_vars: Union[Sequence[str], None] = None,
-) -> xr.Dataset:
-    """
-    Convert an indexed ragged array dataset to a contiguous ragged array dataset
-    """
-    sort_vars = sort_vars or []
-
-    ds = ds.sortby([index_var, *sort_vars])
-    idxs, sizes = np.unique(ds[index_var], return_counts=True)
-
-    row_size = np.zeros_like(ds[instance_dim].data)
-    row_size[idxs] = sizes
-    ds = ds.assign(
-        {count_var: (instance_dim, row_size, {"sample_dimension": sample_dim})}
-    ).drop_vars([index_var])
-
-    return ds
-
-
-def indexed_to_point(
-    ds: xr.Dataset, sample_dim: str, instance_dim: str, index_var: str
-):
-    instance_vars = [var for var in ds.variables if instance_dim in ds[var].dims]
-    for instance_var in instance_vars:
-        ds = ds.assign(
-            {
-                instance_var: (
-                    sample_dim,
-                    ds[instance_var][ds[index_var]].data,
-                    ds[instance_var].attrs,
-                )
-            }
-        )
-    ds = ds.drop_vars([index_var]).assign_attrs({"featureType": "point"})
-    return ds
-
-
-def contiguous_to_point(
-    ds: xr.Dataset,
-    sample_dim: str,
-    instance_dim: str,
-    count_var: str,
-):
-    """Convert a contiguous ragged array dataset to a Point Array.
-
-    Parameters
-    ----------
-    ds : xarray.Dataset
-        Dataset.
-    sample_dim : str
-        Name of the sample dimension.
-    instance_dim : str
-        Name of the instance dimension.
-    count_var : str
-        Name of the count variable.
-
-    Returns
-    -------
-    xarray.Dataset
-        Dataset with only the time series variables.
-    """
-    row_size = ds[count_var].values
-    ds = ds.drop_vars(count_var)
-    instance_vars = [var for var in ds.variables if instance_dim in ds[var].dims]
-    for instance_var in instance_vars:
-        ds = ds.assign(
-            {
-                instance_var: (
-                    sample_dim,
-                    np.repeat(ds[instance_var].values, row_size),
-                    ds[instance_var].attrs,
-                )
-            }
-        )
-    ds = ds.assign_attrs({"featureType": "point"})
-    return ds
 
 
 class CFDiscreteGeom:

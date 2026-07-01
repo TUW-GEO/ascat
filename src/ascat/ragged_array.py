@@ -2,35 +2,26 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 TU Wien
 # SPDX-FileContributor: For a full list of authors, see the AUTHORS file.
 
-import tempfile
 from pathlib import Path
 
 import numpy as np
 import xarray as xr
 
-from ascat.cf_array import indexed_to_contiguous
-from ascat.cf_array import contiguous_to_indexed
-
-dtype_to_nan = {
-    np.dtype("int8"): -2**7,
-    np.dtype("uint8"): 2**8 - 1,
-    np.dtype("int16"): -2**15,
-    np.dtype("uint16"): 2**16 - 1,
-    np.dtype("int32"): -2**31,
-    np.dtype("uint32"): 2**32 - 1,
-    np.dtype("int64"): -2**63,
-    np.dtype("uint64"): 2**64 - 1,
-    np.dtype("float32"): -2**31,
-    np.dtype("float64"): -2**31,
-    np.dtype("<M8[ns]"): 0,
-    np.dtype("<M8[s]"): 0,
-}
+from ascat.cf_conversions import indexed_to_contiguous
+from ascat.cf_conversions import contiguous_to_indexed
+from ascat.cf_conversions import contiguous_to_point
+from ascat.cf_conversions import indexed_to_point
+from ascat.cf_conversions import contiguous_to_incomplete
+from ascat.cf_conversions import incomplete_to_contiguous
+from ascat.cf_conversions import contiguous_to_orthogonal
+from ascat.cf_conversions import orthogonal_to_contiguous
 
 
-def verify_ortho_multi(ds: xr.Dataset, instance_dim: str,
-                       element_dim: str) -> None:
+def verify_multidim(ds: xr.Dataset, instance_dim: str,
+                    element_dim: str) -> None:
     """
-    Verify dataset follows orthogonal multidimensional array CF definition.
+    Verify a dataset follows the CF multidimensional array definition
+    (orthogonal or incomplete).
 
     Parameters
     ----------
@@ -40,11 +31,6 @@ def verify_ortho_multi(ds: xr.Dataset, instance_dim: str,
         Name of the instance dimension.
     element_dim : str
         Name of the element dimension.
-
-    Returns
-    -------
-    sample_dimension : str
-        Name of the sample dimension.
 
     Raises
     ------
@@ -272,28 +258,78 @@ class PointData:
         return ContiguousRaggedArray(
             new_ds, count_var=count_var, instance_dim=instance_dim)
 
+    def to_incomplete(self,
+                      count_var: str = "row_size",
+                      instance_dim: str = "loc"):
+        """
+        Convert point data to an incomplete multidimensional array (CF 9.3.2).
 
-class OrthoMultiArray:
+        Parameters
+        ----------
+        count_var : str, optional
+            Name of the intermediate count variable (default: "row_size").
+        instance_dim : str, optional
+            Name of the instance dimension (default: "loc").
+
+        Returns
+        -------
+        data : IncompleteMultidimArray
+            Incomplete multidimensional array time series.
+        """
+        return self.to_contiguous(
+            count_var=count_var, instance_dim=instance_dim).to_incomplete()
+
+    def to_orthogonal(self,
+                      element_coord: str,
+                      count_var: str = "row_size",
+                      instance_dim: str = "loc",
+                      element_dim: str = None,
+                      strict: bool = True):
+        """
+        Convert point data to an orthogonal multidimensional array (CF 9.3.1).
+
+        Parameters
+        ----------
+        element_coord : str
+            Name of the per-sample coordinate defining the shared element axis.
+        count_var : str, optional
+            Name of the intermediate count variable (default: "row_size").
+        instance_dim : str, optional
+            Name of the instance dimension (default: "loc").
+        element_dim : str, optional
+            Name of the resulting element dimension (default: ``element_coord``).
+        strict : bool, optional
+            If True (default), raise if the instances do not form a complete
+            grid on ``element_coord``.
+
+        Returns
+        -------
+        data : OrthogonalMultidimArray
+            Orthogonal multidimensional array time series.
+        """
+        return self.to_contiguous(
+            count_var=count_var, instance_dim=instance_dim).to_orthogonal(
+                element_coord, element_dim=element_dim, strict=strict)
+
+
+class MultidimArray:
     """
-    Orthogonal multidimensional array.
+    Base class for CF multidimensional array representations.
+
+    Holds a dense ``(instance, element)`` dataset and the behaviour shared by
+    the orthogonal (CF 9.3.1) and incomplete (CF 9.3.2) representations. The
+    conversions back to ragged/point form are defined by the subclasses, which
+    differ in whether the element dimension is a shared coordinate axis
+    (orthogonal) or a padded positional index (incomplete).
 
     Attributes
     ----------
     instance_dim : str
         Name of the instance dimension.
     element_dim : str
-        Element dimension name.
+        Name of the element dimension.
     ds : xarray.Dataset
-        Orthomulti array dataset.
-    instance_variables : list
-        List of instance variables.
-
-    Methods
-    -------
-    sel_instance(i)
-        Read time series for given instance.
-    iter()
-        Yield time series for each instance.
+        Multidimensional array dataset.
     """
 
     def __init__(self,
@@ -306,7 +342,7 @@ class OrthoMultiArray:
         Parameters
         ----------
         ds : xr.Dataset
-            Data stored in orthomulti array format.
+            Data stored in multidimensional array format.
         instance_dim : str
             Instance dimension name.
         element_dim : str
@@ -317,8 +353,8 @@ class OrthoMultiArray:
         self._data = ds
         self.validate()
 
-        # if instance_dim exists as a variable, it is assumed these are there
-        # instance identifiers used as keys/reading
+        # if instance_dim exists as a variable, its values are the instance
+        # identifiers used as keys for reading
         if self.instance_dim in ds:
             self._instances = ds[self.instance_dim].to_numpy()
             self._instance_lookup = np.zeros(
@@ -332,7 +368,7 @@ class OrthoMultiArray:
 
     def validate(self):
         """Validate format."""
-        verify_ortho_multi(self.ds, self.instance_dim, self.element_dim)
+        verify_multidim(self.ds, self.instance_dim, self.element_dim)
 
     @property
     def ds(self):
@@ -351,20 +387,105 @@ class OrthoMultiArray:
         """Explicit iterator method"""
         return self.__iter__()
 
-    def to_point_data(self):
-        raise NotImplementedError(
-            "Conversion to point data not implemented yet.")
-
-    def to_indexed(self):
-        raise NotImplementedError(
-            "Conversion to indexed ragged not implemented yet.")
-
-    def to_contiguous(self):
-        raise NotImplementedError(
-            "Conversion to contiguous ragged not implemented yet.")
-
     def apply(self, func):
-        pass
+        """Apply a function to each instance time series."""
+        return [func(ts) for ts in self]
+
+    def _to_contiguous_ds(self, count_var, sample_dim):
+        """Subclass hook: convert to a contiguous ragged array dataset."""
+        raise NotImplementedError
+
+    def to_contiguous(self, count_var: str = "row_size",
+                      sample_dim: str = "obs"):
+        """
+        Convert to a contiguous ragged array.
+
+        Returns
+        -------
+        data : ContiguousRaggedArray
+            Contiguous ragged array time series.
+        """
+        new_ds = self._to_contiguous_ds(count_var, sample_dim)
+        return ContiguousRaggedArray(new_ds, count_var, self.instance_dim)
+
+    def to_indexed(self, count_var: str = "row_size",
+                   sample_dim: str = "obs", index_var: str = "locationIndex"):
+        """
+        Convert to an indexed ragged array (via a contiguous ragged array).
+
+        Returns
+        -------
+        data : IndexedRaggedArray
+            Indexed ragged array time series.
+        """
+        return self.to_contiguous(
+            count_var=count_var, sample_dim=sample_dim).to_indexed(index_var)
+
+    def to_point_data(self, count_var: str = "row_size",
+                      sample_dim: str = "obs"):
+        """
+        Convert to point data (via a contiguous ragged array).
+
+        Returns
+        -------
+        data : PointData
+            Point data.
+        """
+        return self.to_contiguous(
+            count_var=count_var, sample_dim=sample_dim).to_point_data()
+
+
+class IncompleteMultidimArray(MultidimArray):
+    """
+    Incomplete multidimensional array representation (CF 9.3.2).
+
+    Instances may have different numbers of elements (and different element
+    coordinates); the dense ``(instance, element)`` array is padded with the
+    dtype fill value. The element dimension is a positional index.
+    """
+
+    def _to_contiguous_ds(self, count_var, sample_dim):
+        return incomplete_to_contiguous(
+            self.ds,
+            self.instance_dim,
+            self.element_dim,
+            count_var=count_var,
+            sample_dim=sample_dim,
+        )
+
+
+class OrthogonalMultidimArray(MultidimArray):
+    """
+    Orthogonal multidimensional array representation (CF 9.3.1).
+
+    All instances share the same element coordinate axis (e.g. one time axis),
+    stored as a single shared 1-D coordinate; the array is complete (no
+    padding).
+
+    Parameters
+    ----------
+    element_coord : str, optional
+        Name of the shared element coordinate variable (default: the element
+        dimension name).
+    """
+
+    def __init__(self,
+                 ds: xr.Dataset,
+                 instance_dim: str = "loc",
+                 element_dim: str = "time",
+                 element_coord: str = None):
+        self.element_coord = element_coord or element_dim
+        super().__init__(ds, instance_dim, element_dim)
+
+    def _to_contiguous_ds(self, count_var, sample_dim):
+        return orthogonal_to_contiguous(
+            self.ds,
+            self.instance_dim,
+            self.element_dim,
+            element_coord=self.element_coord,
+            count_var=count_var,
+            sample_dim=sample_dim,
+        )
 
 
 class ContiguousRaggedArray:
@@ -657,9 +778,14 @@ class ContiguousRaggedArray:
         """
         return self.__iter__()
 
-    def to_indexed(self):
+    def to_indexed(self, index_var: str = "locationIndex"):
         """
         Convert to indexed ragged array.
+
+        Parameters
+        ----------
+        index_var : str, optional
+            Name of the index variable to create (default: "locationIndex").
 
         Returns
         -------
@@ -667,47 +793,95 @@ class ContiguousRaggedArray:
             Indexed ragged array time series.
         """
         ds = contiguous_to_indexed(self.ds, self.sample_dim, self.instance_dim,
-                                   self.count_var, self.sample_dim)
+                                   self.count_var, index_var)
 
-        return IndexedRaggedArray(ds, self.sample_dim, self.sample_dim)
+        return IndexedRaggedArray(ds, index_var, self.sample_dim)
 
-    def to_orthomulti(self):
+    def to_incomplete(self):
         """
-        Convert to orthogonal multidimensional array.
+        Convert to an incomplete multidimensional array (CF 9.3.2).
+
+        Each instance's samples are packed into the leading columns of a dense
+        (instance x element) array and the rest padded with fill values.
 
         Returns
         -------
-        data : OrthoMultiArray
+        data : IncompleteMultidimArray
+            Incomplete multidimensional array time series.
+        """
+        instance_id_var = (
+            self.instance_id_var if self.instance_id_var is not None
+            else self.instance_dim
+        )
+        reshaped_ds = contiguous_to_incomplete(
+            self.ds,
+            self.sample_dim,
+            self.instance_dim,
+            self.count_var,
+            element_dim=self.sample_dim,
+            instance_id_var=instance_id_var,
+        )
+        return IncompleteMultidimArray(
+            reshaped_ds, self.instance_dim, self.sample_dim)
+
+    def to_orthogonal(self, element_coord: str, element_dim: str = None,
+                      strict: bool = True):
+        """
+        Convert to an orthogonal multidimensional array (CF 9.3.1).
+
+        All instances must share the same set of ``element_coord`` values (e.g.
+        the same time axis); the samples are pivoted onto that shared
+        coordinate.
+
+        Parameters
+        ----------
+        element_coord : str
+            Name of the per-sample coordinate defining the shared element axis.
+        element_dim : str, optional
+            Name of the resulting element dimension (default: ``element_coord``).
+        strict : bool, optional
+            If True (default), raise if the instances do not form a complete
+            grid on ``element_coord``.
+
+        Returns
+        -------
+        data : OrthogonalMultidimArray
             Orthogonal multidimensional array time series.
         """
-        # element length defined by longest time series
-        element_len = self._row_size.max()
-        instance_len = self.instance_ids.size
-
-        # compute matrix coordinates
-        x = np.arange(self._row_size.size).repeat(self._row_size)
-        y = vrange(np.zeros_like(self._row_size), self._row_size)
-        shape = (instance_len, element_len)
-
-        reshaped_ds = xr.Dataset(
-            {
-                var: ([self.instance_dim, self.sample_dim
-                      ], pad_to_2d(self.ds[var], x, y, shape)
-                     ) for var in self.instance_variables
-            },
-            coords={
-                self.instance_dim: self.instance_ids,
-            },
+        element_dim = element_dim or element_coord
+        instance_id_var = (
+            self.instance_id_var if self.instance_id_var is not None
+            else self.instance_dim
         )
-        for var in self.instance_variables:
-            reshaped_ds[var].encoding["_FillValue"] = dtype_to_nan[
-                reshaped_ds[var].dtype]
-
-        return OrthoMultiArray(reshaped_ds, self.instance_dim, self.sample_dim)
+        reshaped_ds = contiguous_to_orthogonal(
+            self.ds,
+            self.sample_dim,
+            self.instance_dim,
+            self.count_var,
+            element_coord,
+            element_dim=element_dim,
+            instance_id_var=instance_id_var,
+            strict=strict,
+        )
+        return OrthogonalMultidimArray(
+            reshaped_ds, self.instance_dim, element_dim,
+            element_coord=element_coord)
 
     def to_point_data(self):
-        raise NotImplementedError(
-            "Conversion to point data not implemented yet.")
+        """
+        Convert to point data.
+
+        Instance-level variables are broadcast to the sample dimension so that
+        every observation carries its instance's coordinates.
+
+        Returns
+        -------
+        data : PointData
+            Point data.
+        """
+        ds = contiguous_to_point(self.ds, self.sample_dim, self.instance_dim,
+                                 self.count_var)
+        return PointData(ds, self.sample_dim)
 
     def apply(self, func):
         """
@@ -1021,45 +1195,47 @@ class IndexedRaggedArray:
         ds = indexed_to_contiguous(self.ds, self.sample_dim, self.instance_dim,
                                    count_var, self.index_var)
 
-        return ContiguousRaggedArray(ds, self.instance_dim, self.instance_dim,
-                                     count_var)
+        return ContiguousRaggedArray(ds, count_var, self.instance_dim)
 
-    def to_orthomulti(self) -> OrthoMultiArray:
+    def to_incomplete(self) -> "IncompleteMultidimArray":
         """
-        Convert to orthogonal multidimensional array.
+        Convert to an incomplete multidimensional array (via a contiguous array).
 
         Returns
         -------
-        data : OrthoMultiArray
+        data : IncompleteMultidimArray
+            Incomplete multidimensional array time series.
+        """
+        return self.to_contiguous().to_incomplete()
+
+    def to_orthogonal(self, element_coord: str, element_dim: str = None,
+                      strict: bool = True) -> "OrthogonalMultidimArray":
+        """
+        Convert to an orthogonal multidimensional array (via a contiguous array).
+
+        Returns
+        -------
+        data : OrthogonalMultidimArray
             Orthogonal multidimensional array time series.
         """
-        ds = self.ds.sortby([self.index_var])
-        _, row_size = np.unique(ds[self.index_var], return_counts=True)
-
-        # size defined by longest time series
-        element_len = row_size.max()
-        instance_len = ds.sizes[self.instance_dim]
-
-        # compute matrix coordinates
-        x = np.arange(row_size.size).repeat(row_size)
-        y = vrange(np.zeros_like(row_size), row_size)
-        shape = (instance_len, element_len)
-
-        reshaped_ds = xr.Dataset(
-            {
-                var: ([self.instance_dim, self.sample_dim],
-                      pad_to_2d(ds[var], x, y, shape)) for var in ds.data_vars
-            },
-            coords={
-                self.instance_dim: ds[self.instance_dim],
-            },
-        )
-
-        return OrthoMultiArray(reshaped_ds, self.instance_dim, self.sample_dim)
+        return self.to_contiguous().to_orthogonal(
+            element_coord, element_dim=element_dim, strict=strict)
 
     def to_point_data(self):
-        raise NotImplementedError(
-            "Conversion to point data not implemented yet.")
+        """
+        Convert to point data.
+
+        Instance-level variables are broadcast to the sample dimension so that
+        every observation carries its instance's coordinates.
+
+        Returns
+        -------
+        data : PointData
+            Point data.
+        """
+        ds = indexed_to_point(self.ds, self.sample_dim, self.instance_dim,
+                              self.index_var)
+        return PointData(ds, self.sample_dim)
 
     def apply(self, func):
         """
@@ -1102,199 +1278,3 @@ class IndexedRaggedArray:
 
         self._set_instance_lut()
 
-
-def vrange(starts, stops):
-    """
-    Create concatenated ranges of integers for multiple start/stop values.
-
-    Parameters
-    ----------
-    starts : numpy.ndarray
-        Starts for each range.
-    stops : numpy.ndarray
-        Stops for each range (same shape as starts).
-
-    Returns
-    -------
-    ranges : numpy.ndarray
-        Concatenated ranges.
-
-    Example
-    -------
-        >>> starts = [1, 3, 4, 6]
-        >>> stops  = [1, 5, 7, 6]
-        >>> vrange(starts, stops)
-        array([3, 4, 4, 5, 6])
-    """
-    if starts.shape != stops.shape:
-        raise ValueError("starts and stops must have the same shape")
-
-    stops = np.asarray(stops)
-    l = stops - starts  # lengths of each range
-    return np.repeat(stops - l.cumsum(), l) + np.arange(l.sum())
-
-
-def pad_to_2d(var: xr.DataArray, x: np.array, y: np.array,
-              shape: tuple) -> np.array:
-    """
-    Pad each time series
-
-    Parameters
-    ----------
-    var : xarray.DataArray
-        1d array to be converted into 2d array.
-    x : np.array
-        Row indices.
-    y : np.array
-        Column indices.
-    shape : tuple
-        Array shape.
-
-    Returns
-    -------
-    padded : numpy.array
-        Padded 2d array.
-    """
-    padded = np.full(shape, dtype_to_nan[var.dtype], dtype=var.dtype)
-    padded[x, y] = var.values
-    padded[np.isnan(padded)] = dtype_to_nan[var.dtype]
-
-    return padded
-
-
-def create_contiguous_ragged():
-    """Create CF-compliant contiguous ragged array."""
-    count_var = "row_size"
-    sample_dim = "obs"
-    instance_dim = "loc"
-
-    row_size = np.array([5, 10, 2, 10])
-    n_obs = row_size.sum()
-    n_instances = row_size.size
-    attrs = {"sample_dimension": sample_dim}
-
-    data_vars = {
-        "precipitation": ((sample_dim,), 10 * np.random.randn(n_obs)),
-        "temperature": ((sample_dim,), 15 + 8 * np.random.randn(n_obs)),
-        count_var: ((instance_dim,), row_size, attrs)
-    }
-
-    location_id = np.random.choice(
-        np.arange(100), size=n_instances, replace=False)
-    coords = {
-        instance_dim: (instance_dim, np.arange(n_instances)),
-        "lon": ((instance_dim,), np.random.randn(n_instances)),
-        "lat": ((instance_dim,), np.random.randn(n_instances)),
-        "location_id": ((instance_dim,), location_id)
-    }
-
-    ds = xr.Dataset(data_vars=data_vars, coords=coords)
-    verify_contiguous_ragged(ds, count_var, instance_dim)
-    cr = ContiguousRaggedArray(ds, count_var, instance_dim)
-
-    tmp_dir = tempfile.mkdtemp()
-    filename = Path(tmp_dir) / "cont_ragged.nc"
-    print(filename)
-    ds.to_netcdf(filename)
-
-
-def create_indexed_ragged():
-    """Create CF-compliant indexed ragged array."""
-    sample_dim = "obs"
-    instance_dim = "loc"
-    index_var = "locationIndex"
-
-    n_obs = 100
-    location_index = np.random.choice(np.arange(10), size=n_obs)
-    n_instances = np.unique(location_index).size
-    attrs = {"instance_dimension": instance_dim}
-
-    data_vars = {
-        "precipitation": ((sample_dim,), 10 * np.random.randn(n_obs)),
-        "temperature": ((sample_dim,), 15 + 8 * np.random.randn(n_obs)),
-        index_var: ((sample_dim), location_index, attrs),
-    }
-
-    location_id = np.random.choice(
-        np.arange(100), size=n_instances, replace=False)
-    coords = {
-        instance_dim: (instance_dim, np.arange(n_instances)),
-        "lon": ((instance_dim,), np.random.randn(n_instances)),
-        "lat": ((instance_dim,), np.random.randn(n_instances)),
-        "location_id": ((instance_dim,), location_id)
-    }
-
-    ds = xr.Dataset(data_vars=data_vars, coords=coords)
-    verify_indexed_ragged(ds, index_var, sample_dim)
-    ir_arr = IndexedRaggedArray(ds, index_var, sample_dim)
-
-    tmp_dir = tempfile.mkdtemp()
-    filename = Path(tmp_dir) / "ind_ragged.nc"
-    print(filename)
-    ds.to_netcdf(filename)
-
-
-def create_ortho_multi():
-    """Create CF-compliant orthomulti array."""
-    instance_dim = "loc"
-    element_dim = "time"
-
-    n_instances = 10
-    n_obs = 10
-
-    data_vars = {
-        "precipitation": ((instance_dim, element_dim),
-                          10 * np.random.randn(n_instances, n_obs)),
-        "temperature": ((instance_dim, element_dim),
-                        15 + 8 * np.random.randn(n_instances, n_obs)),
-    }
-
-    coords = {
-        instance_dim: (instance_dim, np.arange(n_instances)),
-        "lon": ((instance_dim,), np.random.randn(n_instances)),
-        "lat": ((instance_dim,), np.random.randn(n_instances)),
-    }
-
-    ds = xr.Dataset(data_vars=data_vars, coords=coords)
-    verify_ortho_multi(ds, instance_dim, element_dim)
-    om_arr = OrthoMultiArray(ds, instance_dim, element_dim)
-
-    tmp_dir = tempfile.mkdtemp()
-    filename = Path(tmp_dir) / "om.nc"
-    print(filename)
-    ds.to_netcdf(filename)
-
-
-def create_point_data():
-    """Create CF-compliant point data array."""
-    sample_dim = "obs"
-    n_obs = 100
-
-    time = np.arange("2024-01-01", "2024-04-10", dtype="datetime64[D]")[:n_obs]
-    lat = np.random.uniform(-90, 90, size=n_obs)
-    lon = np.random.uniform(-180, 180, size=n_obs)
-
-    data_vars = {
-        "precipitation": ((sample_dim,), 10 * np.random.randn(n_obs)),
-        "temperature": ((sample_dim,), 15 + 8 * np.random.randn(n_obs)),
-    }
-
-    coords = {
-        sample_dim: np.arange(n_obs),
-        "time": (sample_dim, time),
-        "lat": (sample_dim, lat),
-        "lon": (sample_dim, lon),
-    }
-
-    ds = xr.Dataset(data_vars=data_vars, coords=coords)
-
-    ds["lat"].attrs = {"standard_name": "latitude", "units": "degrees_north"}
-    ds["lon"].attrs = {"standard_name": "longitude", "units": "degrees_east"}
-    ds["time"].attrs = {"standard_name": "time"}
-
-    verify_point_array(ds, sample_dim)
-
-    tmp_dir = tempfile.mkdtemp()
-    filename = Path(tmp_dir) / "point_data.nc"
-    print(filename)
-    ds.to_netcdf(filename)

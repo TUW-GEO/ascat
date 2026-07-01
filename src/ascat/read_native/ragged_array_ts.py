@@ -23,6 +23,7 @@ from ascat.read_native.xarray_io import trim_dates
 from ascat.read_native.xarray_io import append_to_netcdf
 
 from ascat.utils import Spacecraft
+from ascat.utils import vrange
 
 process_warnings = True
 
@@ -2520,30 +2521,3 @@ class CRANcFile(RAFile):
         target[x, y] = np.arange(1, 9)
         print(target)
 
-
-def vrange(starts, stops):
-    """
-    Create concatenated ranges of integers for multiple start/stop values.
-
-    Parameters
-    ----------
-    starts : numpy.ndarray
-        Starts for each range.
-    stops : numpy.ndarray
-        Stops for each range (same shape as starts).
-
-    Returns
-    -------
-    ranges : numpy.ndarray
-        Concatenated ranges.
-
-    Example
-    -------
-        >>> starts = [1, 3, 4, 6]
-        >>> stops  = [1, 5, 7, 6]
-        >>> vrange(starts, stops)
-        array([3, 4, 4, 5, 6])
-    """
-    stops = np.asarray(stops)
-    l = stops - starts # Lengths of each range.
-    return np.repeat(stops - l.cumsum(), l) + np.arange(l.sum())
