@@ -7,4 +7,10 @@
     - https://docs.pytest.org/en/stable/writing_plugins.html
 """
 
-# import pytest
+import os
+
+# Disable HDF5 file locking before netCDF4/h5py (and thus the HDF5 library) are
+# imported. On some CI filesystems HDF5's file locking blocks indefinitely when
+# writing NetCDF files, hanging to_netcdf() on the file lock. The test suite only
+# writes fresh temporary files from a single process, so locking is not needed.
+os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")

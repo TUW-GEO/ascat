@@ -10,6 +10,9 @@ jobs:
   build:
     name: Build py${{ matrix.python-version }} @ ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # HDF5 file locking hangs to_netcdf() on some CI filesystems
+    env:
+      HDF5_USE_FILE_LOCKING: "FALSE"
     strategy:
       fail-fast: false
       matrix:
