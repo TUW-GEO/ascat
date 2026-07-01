@@ -183,6 +183,99 @@ def test_contiguous_iter():
     assert sizes == list(ROW_SIZE)
 
 
+def test_contiguous_sel_instances():
+    cra = ContiguousRaggedArray(contiguous_ds(), COUNT_VAR, INSTANCE_DIM)
+    sel = cra.sel_instances(np.array([30, 10]))  # request order
+    np.testing.assert_array_equal(sel["loc"].values, [30, 10])
+    # instance 30 -> [3,4,5], instance 10 -> [0,1]
+    np.testing.assert_array_equal(sel["temperature"].values,
+                                  [3., 4., 5., 0., 1.])
+    # missing ids are skipped
+    sel2 = cra.sel_instances(np.array([20, 999]))
+    np.testing.assert_array_equal(sel2["temperature"].values, [2.])
+    assert cra.sel_instances(np.array([999])) is None
+
+
+# --- large, sparse instance ids (ASCAT location_id scale) --------------------
+BIG_IDS = np.array([10, 1_549_346, 3_200_000, 6_599_999], dtype=np.int64)
+
+
+def big_sparse_contiguous_ds():
+    rs = np.array([1, 2, 1, 3], dtype=np.int32)
+    n = int(rs.sum())
+    return xr.Dataset(
+        {"v": ((SAMPLE_DIM,), np.arange(n, dtype="float32")),
+         COUNT_VAR: ((INSTANCE_DIM,), rs, {"sample_dimension": SAMPLE_DIM})},
+        coords={INSTANCE_DIM: (INSTANCE_DIM, BIG_IDS)},
+    )
+
+
+def big_sparse_indexed_ds():
+    rs = np.array([1, 2, 1, 3], dtype=np.int32)
+    n = int(rs.sum())
+    li = np.repeat(np.arange(BIG_IDS.size), rs).astype("int32")
+    return xr.Dataset(
+        {"v": ((SAMPLE_DIM,), np.arange(n, dtype="float32")),
+         INDEX_VAR: ((SAMPLE_DIM,), li, {"instance_dimension": INSTANCE_DIM})},
+        coords={INSTANCE_DIM: (INSTANCE_DIM, BIG_IDS)},
+    )
+
+
+def test_contiguous_large_sparse_ids_selection():
+    cra = ContiguousRaggedArray(big_sparse_contiguous_ds(), COUNT_VAR,
+                                INSTANCE_DIM)
+    np.testing.assert_array_equal(
+        cra.sel_instance(1_549_346)["v"].values, [1., 2.])
+    np.testing.assert_array_equal(
+        cra.sel_instance(6_599_999)["v"].values, [4., 5., 6.])
+    assert cra.sel_instance(12_345) is None
+    sel = cra.sel_instances(np.array([6_599_999, 10]))
+    np.testing.assert_array_equal(sel["loc"].values, [6_599_999, 10])
+    np.testing.assert_array_equal(sel["v"].values, [4., 5., 6., 0.])
+
+
+def test_indexed_large_sparse_ids_selection():
+    ira = IndexedRaggedArray(big_sparse_indexed_ds(), INDEX_VAR, SAMPLE_DIM)
+    np.testing.assert_array_equal(
+        ira.sel_instance(1_549_346)["v"].values, [1., 2.])
+    sel = ira.sel_instances(np.array([6_599_999, 10]))
+    np.testing.assert_array_equal(sel.instance_ids, [6_599_999, 10])
+
+
+def test_instance_id_vs_positional_index_modes():
+    # MODE 1: the instance dimension carries real location_ids
+    cra_id = ContiguousRaggedArray(big_sparse_contiguous_ds(), COUNT_VAR,
+                                   INSTANCE_DIM)
+    np.testing.assert_array_equal(
+        cra_id.sel_instance(6_599_999)["v"].values, [4., 5., 6.])
+
+    # MODE 2: the instance dimension is just a positional index 0..X-1
+    rs = np.array([2, 1, 3], dtype=np.int32)
+    n = int(rs.sum())
+    ds = xr.Dataset(
+        {"v": ((SAMPLE_DIM,), np.arange(n, dtype="float32")),
+         COUNT_VAR: ((INSTANCE_DIM,), rs, {"sample_dimension": SAMPLE_DIM})},
+        coords={INSTANCE_DIM: (INSTANCE_DIM, np.arange(3))},
+    )
+    cra_idx = ContiguousRaggedArray(ds, COUNT_VAR, INSTANCE_DIM)
+    np.testing.assert_array_equal(cra_idx.sel_instance(2)["v"].values,
+                                  [3., 4., 5.])
+    # lookup memory scales with instance count in both modes;
+    # the 0..X-1 case takes the O(1) identity fast path
+    assert cra_id._lookup.size == cra_id.size
+    assert not cra_id._lookup._identity
+    assert cra_idx._lookup.size == cra_idx.size
+    assert cra_idx._lookup._identity
+
+
+def test_multidim_large_sparse_ids_construct():
+    # constructing orthogonal/incomplete with large sparse ids must not blow up
+    inc = ContiguousRaggedArray(big_sparse_contiguous_ds(), COUNT_VAR,
+                                INSTANCE_DIM).to_incomplete()
+    np.testing.assert_array_equal(inc.sel_instance(6_599_999)["v"].values[:3],
+                                  [4., 5., 6.])
+
+
 # --------------------------------------------------------------------------- #
 # round trips
 # --------------------------------------------------------------------------- #

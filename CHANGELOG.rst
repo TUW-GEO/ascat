@@ -2,6 +2,13 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+- Add cf_conversions and rework ragged array representations
+- Cleanup download functions
+- Make ragged-array instance lookup memory-efficient
+
 Version 2.7.0
 =============
 

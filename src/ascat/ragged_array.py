@@ -17,6 +17,47 @@ from ascat.cf_conversions import contiguous_to_orthogonal
 from ascat.cf_conversions import orthogonal_to_contiguous
 
 
+class _InstanceLookup:
+    """
+    Map instance ids to their positions.
+
+    Memory scales with the number of instances, not the largest id value. When
+    the ids are exactly ``0, 1, ..., N-1`` (a positional index) the lookup is a
+    direct O(1) index; otherwise it is an O(log N) binary search over the sorted
+    ids. ``positions`` returns ``-1`` for ids that are not present.
+    """
+
+    def __init__(self, instance_ids):
+        instance_ids = np.asarray(instance_ids)
+        self.size = instance_ids.size
+        # fast path: ids are already the positional index 0..N-1
+        self._identity = (
+            self.size > 0
+            and np.issubdtype(instance_ids.dtype, np.integer)
+            and instance_ids[0] == 0
+            and instance_ids[-1] == self.size - 1
+            and np.array_equal(instance_ids, np.arange(self.size))
+        )
+        if not self._identity:
+            order = np.argsort(instance_ids, kind="stable")
+            self._sorted_ids = instance_ids[order]
+            self._positions = order
+
+    def positions(self, ids):
+        """Return the position of each id, or -1 if absent."""
+        ids = np.atleast_1d(np.asarray(ids))
+        if self._identity:
+            pos = ids.astype(np.int64, copy=True)
+            pos[(ids < 0) | (ids >= self.size)] = -1
+            return pos
+        if self.size == 0:
+            return np.full(ids.shape, -1, dtype=np.int64)
+        rank = np.clip(
+            np.searchsorted(self._sorted_ids, ids), 0, self.size - 1)
+        found = self._sorted_ids[rank] == ids
+        return np.where(found, self._positions[rank], -1)
+
+
 def verify_multidim(ds: xr.Dataset, instance_dim: str,
                     element_dim: str) -> None:
     """
@@ -353,19 +394,6 @@ class MultidimArray:
         self._data = ds
         self.validate()
 
-        # if instance_dim exists as a variable, its values are the instance
-        # identifiers used as keys for reading
-        if self.instance_dim in ds:
-            self._instances = ds[self.instance_dim].to_numpy()
-            self._instance_lookup = np.zeros(
-                self._instances.max() + 1,
-                dtype=np.int64) + self._instances.size
-            self._instance_lookup[self._instances] = np.arange(
-                self._instances.size)
-        else:
-            self._instances = np.arange(ds.sizes[instance_dim])
-            self._instance_lookup = np.arange(self._instances.size)
-
     def validate(self):
         """Validate format."""
         verify_multidim(self.ds, self.instance_dim, self.element_dim)
@@ -560,7 +588,6 @@ class ContiguousRaggedArray:
 
         self.sample_dim = ds[count_var].attrs["sample_dimension"]
         self.instance_id_var = instance_id_var
-        self._lut = None
 
         # cache row_size and instance_ids data
         self._row_size = self.ds[self.count_var].to_numpy()
@@ -579,14 +606,12 @@ class ContiguousRaggedArray:
     def _set_instance_lut(self):
         """
         Set instance lookup-table.
-        """
-        self._instance_lookup = np.zeros(
-            self._instance_ids.max() + 1,
-            dtype=np.int64) + self._instance_ids.size
-        self._instance_lookup[self._instance_ids] = np.arange(
-            self._instance_ids.size)
 
-        self._lut = np.zeros(self._instance_ids.max() + 1, dtype=bool)
+        Memory scales with the number of instances, not the largest id value.
+        """
+        self._lookup = _InstanceLookup(self._instance_ids)
+        # exclusive prefix sum: first sample offset of each instance
+        self._row_start = np.cumsum(self._row_size) - self._row_size
 
     @classmethod
     def from_file(cls,
@@ -698,26 +723,19 @@ class ContiguousRaggedArray:
 
     def sel_instance(self, i: int):
         """Read time series"""
-        try:
-            idx = self._instance_lookup[i]
-        except IndexError:
-            data = None
-        else:
-            if idx == self._instance_ids.size:
-                data = None
-            else:
-                start = self._row_size[:idx].sum()
-                end = start + self._row_size[idx]
-                data = self.ds.isel({
-                    self.sample_dim: slice(start, end),
-                    self.instance_dim: idx
-                })
-
-        return data
+        idx = int(self._lookup.positions(i)[0])
+        if idx == -1:
+            return None
+        start = int(self._row_start[idx])
+        end = start + int(self._row_size[idx])
+        return self.ds.isel({
+            self.sample_dim: slice(start, end),
+            self.instance_dim: idx,
+        })
 
     def sel_instances(self, i: np.ndarray) -> xr.Dataset:
         """
-        Read time series for given instance IDs using a LUT and preserve order.
+        Read time series for the given instance IDs, preserving request order.
 
         Parameters
         ----------
@@ -726,34 +744,24 @@ class ContiguousRaggedArray:
 
         Returns
         -------
-        ds : xr.Dataset
-            Dataset containing the selected instances in the correct order.
+        ds : xr.Dataset or None
+            Dataset with the selected instances' samples (concatenated in the
+            order of ``i``), or None if none of the ids are present.
         """
-        i = np.asarray(i)
-        idx_array = self._instance_lookup[i]
+        i = np.atleast_1d(np.asarray(i))
+        pos = self._lookup.positions(i)
+        pos = pos[pos != -1]
+        if pos.size == 0:
+            return None
 
-        # mark selected instances in lookup table
-        self._lut[idx_array] = True
-
-        # map each sample index to its instance index
-        obs = np.repeat(np.arange(len(self._row_size)), self._row_size)
-
-        data = self.ds.sel({
-            self.sample_dim: self._lut[obs],
-            self.instance_dim: idx_array,
+        starts = self._row_start[pos]
+        ends = starts + self._row_size[pos]
+        sample_idx = np.concatenate(
+            [np.arange(s, e) for s, e in zip(starts, ends)])
+        return self.ds.isel({
+            self.sample_dim: sample_idx,
+            self.instance_dim: pos,
         })
-
-        # reset lookup table
-        self._lut[:] = False
-
-        # sort the selected data to match the order in i
-        # assuming instance_dim is coordinate-based and one-dimensional
-        _, order = np.unique(i, return_inverse=True)
-
-        data = data.isel({self.instance_dim: order})
-        data = data.assign_coords({self.instance_dim: i})
-
-        return data
 
     def __iter__(self):
         """
@@ -953,8 +961,6 @@ class IndexedRaggedArray:
         self.validate()
 
         self.instance_dim = ds[index_var].attrs["instance_dimension"]
-        self._instance_lut = None
-        self._lut = None
         self._set_instance_lut()
 
     def validate(self):
@@ -968,17 +974,15 @@ class IndexedRaggedArray:
     def _set_instance_lut(self):
         """
         Set instance lookup-table.
+
+        Uses a binary-search lookup over the sorted instance ids, so memory
+        scales with the number of instances rather than the largest id value.
         """
         if self.instance_dim in self.ds:
             instance_ids = self.ds[self.instance_dim].to_numpy()
-            self._instance_lut = np.zeros(
-                instance_ids.max() + 1, dtype=np.int64) - 1
-            self._instance_lut[instance_ids] = np.arange(instance_ids.size)
         else:
             instance_ids = np.unique(self.ds[self.index_var])
-            self._instance_lut = np.arange(instance_ids.size)
-
-        self._lut = np.zeros(instance_ids.max() + 1, dtype=bool)
+        self._lookup = _InstanceLookup(instance_ids)
 
     @classmethod
     def from_file(cls, filename: str, index_var: str, sample_dim: str):
@@ -1088,8 +1092,9 @@ class IndexedRaggedArray:
         ds : xr.Dataset
             Time series for instance.
         """
+        pos = int(self._lookup.positions(i)[0])
         data = self.ds.sel({
-            self.index_var: self._instance_lut[i],
+            self.index_var: pos,
             self.instance_dim: i
         })
 
@@ -1115,42 +1120,33 @@ class IndexedRaggedArray:
         ds : xr.Dataset
             Time series for instance.
         """
-        # check for duplicates in instance identifier?
-        i = np.asarray(i)
+        i = np.atleast_1d(np.asarray(i))
+        positions = self._lookup.positions(i)
 
-        # check if any missing instance ids have been selected
         if ignore_missing:
-            valid = np.where(self._instance_lut[i] != -1)[0]
-            if valid.size == 0:
+            keep = positions != -1
+            if not keep.any():
                 raise ValueError("No valid instances selected")
         else:
-            if np.any(self._instance_lut[np.asarray(i)] == -1):
+            if np.any(positions == -1):
                 raise ValueError("Missing instances selected")
-            else:
-                valid = np.ones(i.size, dtype=bool)
+            keep = np.ones(i.size, dtype=bool)
 
-        i = i[valid]
+        i = i[keep]
+        positions = positions[keep]
 
-        # initialize look-up table
-        self._lut[self._instance_lut[i]] = True
+        # keep samples whose index-variable position is among the selected ones
+        sample_mask = np.isin(self.ds[self.index_var].values, positions)
+        data = self.ds.isel({self.sample_dim: sample_mask})
 
-        data = self.ds.sel(
-            {self.index_var: self._lut[self.ds[self.index_var]]})
-
-        # reset index variable
-        index = data[self.instance_dim][data[self.index_var]].to_numpy()
-        lut = np.zeros(index.max() + 1, dtype=np.int64)
-        # n_inst = self.ds.sel({self.instance_dim: i}).sizes[self.instance_dim]
-        n_inst = i.size
-        lut[i] = np.arange(n_inst)
-        data[self.index_var] = (self.sample_dim, lut[index])
+        # remap each old position to its new index (request order of i)
+        new_index = _InstanceLookup(positions).positions(
+            data[self.index_var].values)
+        data[self.index_var] = (self.sample_dim, new_index)
         data = data.sel({self.instance_dim: i})
 
         # copy attributes
         data[self.index_var].attrs = self.ds[self.index_var].attrs
-
-        # reset look-up table
-        self._lut[:] = False
 
         return IndexedRaggedArray(data, self.index_var, self.sample_dim)
 
@@ -1271,10 +1267,10 @@ class IndexedRaggedArray:
 
         if self.instance_dim in self.ds:
             instance_ids = self.ds[self.instance_dim].to_numpy()
-            lut = np.zeros(instance_ids.max() + 1, dtype=np.int64)
-            lut[instance_ids] = np.arange(self.ds[self.instance_dim].size)
-            self.ds[self.index_var] = (self.sample_dim,
-                                       lut[self.ds[self.index_var]])
+            self.ds[self.index_var] = (
+                self.sample_dim,
+                _InstanceLookup(instance_ids).positions(
+                    self.ds[self.index_var].values))
 
         self._set_instance_lut()
 
