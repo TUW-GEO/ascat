@@ -4,10 +4,16 @@
 
 from __future__ import annotations
 
-from typing import Union, Sequence
+from typing import Union, Sequence, Callable
 
 import numpy as np
 import xarray as xr
+
+# Recognized CF discrete sampling geometry array types.
+POINT = "point"
+INDEXED = "indexed"
+CONTIGUOUS = "contiguous"
+ORTHOMULTI_TS = "orthomulti_ts"
 
 
 def check_orthomulti_ts(ds):
@@ -24,29 +30,32 @@ def check_orthomulti_ts(ds):
 
 
 def cf_array_type(ds):
+    """Detect the CF discrete sampling geometry array type of ``ds``."""
     if ds.attrs.get("featureType") == "point":
-        return "point"
+        return POINT
     for v in ds.variables:
         if "instance_dimension" in ds[v].attrs:
-            return "indexed"
+            return INDEXED
         if "sample_dimension" in ds[v].attrs:
-            return "contiguous"
+            return CONTIGUOUS
     if check_orthomulti_ts(ds):
-        return "orthomulti_ts"
+        return ORTHOMULTI_TS
     raise ValueError("Array type could not be determined.")
 
 
 def cf_array_class(ds, array_type, **kwargs):
-    if array_type == "point":
-        return TimeseriesPointArray(ds, **kwargs)
-    if array_type == "indexed":
-        return RaggedArray(ds, **kwargs)
-    if array_type == "contiguous":
-        return RaggedArray(ds, **kwargs)
-    if array_type == "orthomulti_ts":
-        return OrthoMultiTimeseriesArray(ds, **kwargs)
-    raise ValueError(f"Array type '{array_type}' not recognized."
-                     "Should be one of 'point', 'indexed', 'contiguous', 'orthomulti_ts'.")
+    """Wrap ``ds`` in the array class matching ``array_type``."""
+    classes = {
+        POINT: TimeseriesPointArray,
+        INDEXED: RaggedArray,
+        CONTIGUOUS: RaggedArray,
+        ORTHOMULTI_TS: OrthoMultiTimeseriesArray,
+    }
+    if array_type not in classes:
+        raise ValueError(
+            f"Array type '{array_type}' not recognized. Should be one of "
+            f"{', '.join(classes)}.")
+    return classes[array_type](ds, **kwargs)
 
 
 def point_to_indexed(
@@ -65,7 +74,11 @@ def point_to_indexed(
     _, unique_index_1d, instanceIndex = np.unique(
         ds[timeseries_id], return_index=True, return_inverse=True
     )
-    ds[index_var] = (sample_dim, instanceIndex, {"instance_dimension": instance_dim})
+    # use assign (not ds[index_var] = ...) so the caller's dataset is not mutated
+    ds = ds.assign(
+        {index_var: (sample_dim, instanceIndex,
+                     {"instance_dimension": instance_dim})}
+    )
 
     for var in instance_vars:
         if var in ds:
@@ -275,11 +288,37 @@ class CFDiscreteGeom:
         self._count_var = None
         self._index_var = None
         self._timeseries_id = None
-        self.array_type
+        self._resolve()
+
+    @classmethod
+    def from_dataset(cls, ds, **kwargs):
+        """Detect the array type of ``ds`` and wrap it in the right class."""
+        return cf_array_class(ds, cf_array_type(ds), **kwargs)
+
+    def _resolve(self):
+        """
+        Determine the array type and populate the dimension/variable metadata
+        (``_sample_dimension``, ``_instance_dimension``, ``_count_var``,
+        ``_index_var``, ``_ra_type``). Called once from ``__init__``.
+        """
+        raise NotImplementedError
 
     @property
-    def array_type():
-        raise NotImplementedError
+    def array_type(self):
+        return self._ra_type
+
+    @property
+    def timeseries_id(self):
+        """Name of the variable carrying ``cf_role='timeseries_id'``."""
+        if self._timeseries_id is not None:
+            return self._timeseries_id
+        for v in self._data.variables:
+            if self._data[v].attrs.get("cf_role") == "timeseries_id":
+                self._timeseries_id = v
+                return self._timeseries_id
+        raise ValueError(
+            "Timeseries ID could not be determined from dataset attributes."
+        )
 
 
 class PointArray(CFDiscreteGeom):
@@ -294,31 +333,14 @@ class TimeseriesPointArray(PointArray):
         of selecting instances and converting to ragged arrays. If you only have a single
         timeseries there's not much point in using this class.
     """
-    @property
-    def array_type(self) -> str:
-        if self._ra_type is None:
-            if self._data.attrs["featureType"] == "point":
-                self._ra_type = "point"
-                self._sample_dimension = str(list(self._data.dims)[0])
-            else:
-                raise ValueError(
-                    "Dataset is not a point array"
-                    "(should have featureType='point' in attributes)."
-                )
-        return self._ra_type
-
-    @property
-    def timeseries_id(self):
-        if self._timeseries_id is not None:
-            return self._timeseries_id
-        for v in self._data.variables:
-            if cf_role := self._data[v].attrs.get("cf_role"):
-                if cf_role == "timeseries_id":
-                    self._timeseries_id = v
-                    return self.timeseries_id
-        raise ValueError(
-            "Timeseries ID could not be determined from dataset attributes."
-        )
+    def _resolve(self):
+        if self._data.attrs.get("featureType") != "point":
+            raise ValueError(
+                "Dataset is not a point array"
+                "(should have featureType='point' in attributes)."
+            )
+        self._ra_type = POINT
+        self._sample_dimension = str(list(self._data.dims)[0])
 
     def sel_instances(
         self,
@@ -343,7 +365,7 @@ class TimeseriesPointArray(PointArray):
         instance_vars: Union[Sequence[str], None] = None,
         coord_vars: Union[Sequence[str], None] = None,
     ) -> xr.Dataset:
-        return self._point_to_indexed(
+        return point_to_indexed(
             self._data,
             self._sample_dimension,
             instance_dim,
@@ -362,7 +384,7 @@ class TimeseriesPointArray(PointArray):
         coord_vars: Union[Sequence[str], None] = None,
         sort_vars: Union[Sequence[str], None] = None,
     ) -> xr.Dataset:
-        return self._point_to_contiguous(
+        return point_to_contiguous(
             self._data,
             self._sample_dimension,
             instance_dim,
@@ -402,8 +424,8 @@ class TimeseriesPointArray(PointArray):
             coord_vars: Union[Sequence[str], None] = None,
             sort_vars: Union[Sequence[str], None] = None,
             vars_to_resample: Union[Sequence[str], None] = None,
-            resample_method: callable = np.mean,
-            resample_period: str = "1M",
+            resample_method: Callable = np.mean,
+            resample_period: str = "1ME",
     ):
         return self._resample_point_to_orthomulti(
             self._data,
@@ -447,48 +469,6 @@ class TimeseriesPointArray(PointArray):
         return ds.sel({sample_dim: sample_idx})
 
     @staticmethod
-    def _point_to_indexed(
-        ds: xr.Dataset,
-        sample_dim: str,
-        instance_dim: str,
-        timeseries_id: str,
-        index_var: str = "locationIndex",
-        instance_vars: Union[Sequence[str], None] = None,
-        coord_vars: Union[Sequence[str], None] = None,
-    ) -> xr.Dataset:
-        return point_to_indexed(
-            ds,
-            sample_dim,
-            instance_dim,
-            timeseries_id,
-            index_var,
-            instance_vars,
-            coord_vars,
-        )
-
-    @staticmethod
-    def _point_to_contiguous(
-        ds: xr.Dataset,
-        sample_dim: str,
-        instance_dim: str,
-        timeseries_id: str,
-        count_var: str = "row_size",
-        instance_vars: Union[Sequence[str], None] = None,
-        coord_vars: Union[Sequence[str], None] = None,
-        sort_vars: Union[Sequence[str], None] = None,
-    ) -> xr.Dataset:
-        return point_to_contiguous(
-            ds,
-            sample_dim,
-            instance_dim,
-            timeseries_id,
-            count_var,
-            instance_vars,
-            coord_vars,
-            sort_vars,
-        )
-
-    @staticmethod
     def _point_to_orthomulti(
         ds: xr.Dataset,
         sample_dim: str,
@@ -522,8 +502,8 @@ class TimeseriesPointArray(PointArray):
         coord_vars: Union[Sequence[str], None] = None,
         sort_vars: Union[Sequence[str], None] = None,
         vars_to_resample: Union[Sequence[str], None] = None,
-        resample_method: callable = np.mean,
-        resample_period: str = "1M",
+        resample_method: Callable = np.mean,
+        resample_period: str = "1ME",
     ) -> xr.Dataset:
         """
         At the moment, minimum resolution is 1D
@@ -537,71 +517,56 @@ class TimeseriesPointArray(PointArray):
 
 
 class RaggedArray(CFDiscreteGeom):
-    @property
-    def array_type(self):
-        if self._ra_type is not None:
-            return self._ra_type
-
+    def _resolve(self):
         ds = self._data
         for v in ds.variables:
             if "instance_dimension" in ds[v].attrs:
-                self._ra_type = "indexed"
+                self._ra_type = INDEXED
                 self._index_var = v
                 self._instance_dimension = ds[v].attrs["instance_dimension"]
                 self._sample_dimension = str(ds[v].dims[0])
-                return self._ra_type
+                return
 
             if "sample_dimension" in ds[v].attrs:
-                self._ra_type = "contiguous"
+                self._ra_type = CONTIGUOUS
                 self._count_var = v
                 self._sample_dimension = ds[v].attrs["sample_dimension"]
                 if len(ds[v].dims) > 0:
                     self._instance_dimension = ds[v].dims[0]
-                return self._ra_type
+                return
 
         raise ValueError("Ragged array type could not be determined.")
-
-    @property
-    def timeseries_id(self):
-        if self._timeseries_id is not None:
-            return self._timeseries_id
-        for v in self._data.variables:
-            if cf_role := self._data[v].attrs.get("cf_role"):
-                if cf_role == "timeseries_id":
-                    self._timeseries_id = v
-                    return self.timeseries_id
-        raise ValueError(
-            "Timeseries ID could not be determined from dataset attributes."
-        )
 
     def to_indexed_ragged(
             self,
             index_var: str = "locationIndex"
     ) -> xr.Dataset:
-        if self.array_type == "indexed":
+        if self.array_type == INDEXED:
             return self._data
-        elif self.array_type == "contiguous":
+        elif self.array_type == CONTIGUOUS:
             if self._index_var is None:
                 self._index_var = index_var
-            return self._contiguous_to_indexed(
+            return contiguous_to_indexed(
                 self._data,
                 self._sample_dimension,
                 self._instance_dimension,
                 self._count_var,
                 self._index_var,
             )
+        raise ValueError(
+            f"Cannot convert array type '{self.array_type}' to indexed ragged.")
 
     def to_contiguous_ragged(
         self,
         count_var: str = "row_size",
         sort_vars: Union[Sequence[str], None] = None
     ) -> xr.Dataset:
-        if self.array_type == "contiguous":
+        if self.array_type == CONTIGUOUS:
             return self._data
-        elif self.array_type == "indexed":
+        elif self.array_type == INDEXED:
             if self._count_var is None:
                 self._count_var = count_var
-            return self._indexed_to_contiguous(
+            return indexed_to_contiguous(
                 self._data,
                 self._sample_dimension,
                 self._instance_dimension,
@@ -609,29 +574,34 @@ class RaggedArray(CFDiscreteGeom):
                 self._index_var,
                 sort_vars=sort_vars or self._contiguous_sort_vars,
             )
+        raise ValueError(
+            f"Cannot convert array type '{self.array_type}' to contiguous "
+            "ragged.")
 
     def to_point_array(self):
-        if self.array_type == "indexed":
-            return self._indexed_to_point(
+        if self.array_type == INDEXED:
+            return indexed_to_point(
                 self._data,
                 self._sample_dimension,
                 self._instance_dimension,
                 self._index_var,
             )
-        if self.array_type == "contiguous":
-            return self._contiguous_to_point(
+        if self.array_type == CONTIGUOUS:
+            return contiguous_to_point(
                 self._data,
                 self._sample_dimension,
                 self._instance_dimension,
                 self._count_var,
             )
+        raise ValueError(
+            f"Cannot convert array type '{self.array_type}' to point array.")
 
     def sel_instances(
         self,
         instance_vals: Union[Sequence[Union[int, str]], np.ndarray, None] = None,
         instance_lookup_vector: Union[np.ndarray, None] = None,
     ) -> xr.Dataset:
-        if self.array_type == "indexed":
+        if self.array_type == INDEXED:
             # convert to point array, select there, convert back\
             ds = self.to_point_array()
             instances = ds.cf_geom.sel_instances(
@@ -640,7 +610,7 @@ class RaggedArray(CFDiscreteGeom):
             )
             return instances.cf_geom.to_indexed_ragged(index_var=self._index_var)
 
-        if self.array_type == "contiguous":
+        if self.array_type == CONTIGUOUS:
             return self._select_instances_contiguous(
                 self._data,
                 self._sample_dimension,
@@ -655,7 +625,7 @@ class RaggedArray(CFDiscreteGeom):
     def set_sample_dimension(self, sample_dim: str):
         if self._sample_dimension != sample_dim:
             self._data = self._data.rename_dims({self._sample_dimension: sample_dim})
-            if self.array_type == "contiguous":
+            if self.array_type == CONTIGUOUS:
                 self._data[self._count_var].attrs["sample_dimension"] = sample_dim
             self._sample_dimension = sample_dim
         return self._data
@@ -733,75 +703,22 @@ class RaggedArray(CFDiscreteGeom):
             )
 
 
-    @staticmethod
-    def _contiguous_to_indexed(
-        ds: xr.Dataset,
-        sample_dim: str,
-        instance_dim: str,
-        count_var: str,
-        index_var: str,
-    ) -> xr.Dataset:
-        """
-        Convert a contiguous ragged array dataset to an indexed ragged array dataset.
-        """
-        return contiguous_to_indexed(ds, sample_dim, instance_dim, count_var, index_var)
-
-    @staticmethod
-    def _indexed_to_contiguous(
-        ds: xr.Dataset,
-        sample_dim: str,
-        instance_dim: str,
-        count_var: str,
-        index_var: str,
-        sort_vars: Union[Sequence[str], None] = None,
-    ) -> xr.Dataset:
-        """
-        Convert an indexed ragged array dataset to a contiguous ragged array dataset
-        """
-        return indexed_to_contiguous(
-            ds, sample_dim, instance_dim, count_var, index_var, sort_vars
-        )
-
-    @staticmethod
-    def _indexed_to_point(
-        ds: xr.Dataset, sample_dim: str, instance_dim: str, index_var: str
-    ):
-        return indexed_to_point(ds, sample_dim, instance_dim, index_var)
-
-    @staticmethod
-    def _contiguous_to_point(
-        ds: xr.Dataset,
-        sample_dim: str,
-        instance_dim: str,
-        count_var: str,
-    ):
-        """Convert a ragged array dataset to a Point Array.
-
-        Parameters
-        ----------
-        ds : xarray.Dataset
-            Dataset.
-
-        Returns
-        -------
-        xarray.Dataset
-            Dataset with only the time series variables.
-        """
-        return contiguous_to_point(ds, sample_dim, instance_dim, count_var)
-
-
 class OrthoMultiTimeseriesArray(CFDiscreteGeom):
-    @property
-    def array_type(self):
-        if check_orthomulti_ts(self._data):
-            for v in self._data.variables:
-                if "cf_role" in self._data[v].attrs and self._data[v].attrs["cf_role"] == "timeseries_id":
-                    self._timeseries_id = v
-                    self._instance_dimension = self._data[v].dims[0]
-                    break
-            return "orthomulti_ts"
-        else:
-            raise ValueError("Dataset is not an orthomulti timeseries array.")
+    def _resolve(self):
+        if not check_orthomulti_ts(self._data):
+            raise ValueError(
+                "Dataset is not an orthomulti timeseries array.")
+        for v in self._data.variables:
+            if self._data[v].attrs.get("cf_role") == "timeseries_id":
+                self._timeseries_id = v
+                self._instance_dimension = self._data[v].dims[0]
+                break
+        # the sample (e.g. time) dimension is the remaining dimension
+        other_dims = [d for d in self._data.dims
+                      if d != self._instance_dimension]
+        if other_dims:
+            self._sample_dimension = str(other_dims[0])
+        self._ra_type = ORTHOMULTI_TS
 
     def sel_instances(
         self,
@@ -831,6 +748,37 @@ class OrthoMultiTimeseriesArray(CFDiscreteGeom):
             self._data = self._data.rename_dims({self._sample_dimension: sample_dim})
             self._sample_dimension = sample_dim
         return self._data
+
+    def to_point_array(self, sample_dim: str = "obs"):
+        """
+        Convert the orthomulti timeseries array to a point array.
+
+        The instance and sample dimensions are stacked into a single sample
+        dimension, so every instance/time combination becomes one observation
+        (an orthomulti array is dense by construction).
+        """
+        inst = self._instance_dimension
+        samp = self._sample_dimension
+        ds = self._data.stack({sample_dim: (inst, samp)}).reset_index(sample_dim)
+        # drop the positional instance level left over from stacking
+        if inst in ds.coords or inst in ds.variables:
+            ds = ds.drop_vars(inst)
+        return ds.assign_attrs({"featureType": "point"})
+
+    def to_indexed_ragged(self, sample_dim: str = "obs", **kwargs) -> xr.Dataset:
+        """Convert to an indexed ragged array (via a point array)."""
+        kwargs.setdefault("timeseries_id", self._timeseries_id)
+        return TimeseriesPointArray(
+            self.to_point_array(sample_dim=sample_dim)
+        ).to_indexed_ragged(**kwargs)
+
+    def to_contiguous_ragged(self, sample_dim: str = "obs",
+                             **kwargs) -> xr.Dataset:
+        """Convert to a contiguous ragged array (via a point array)."""
+        kwargs.setdefault("timeseries_id", self._timeseries_id)
+        return TimeseriesPointArray(
+            self.to_point_array(sample_dim=sample_dim)
+        ).to_contiguous_ragged(**kwargs)
 
     def to_raster(self,
                   x_var,
