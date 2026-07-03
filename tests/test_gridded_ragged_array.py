@@ -7,11 +7,13 @@ import pytest
 import xarray as xr
 from pygeogrids.grids import CellGrid
 
+from ascat.ragged_array import open_cf
 from ascat.gridded_ragged_array import (
     GridRegistry,
     GriddedContiguousRaggedArray,
     GriddedIndexedRaggedArray,
     GriddedOrthoMultiArray,
+    cells_to_incomplete_zarr,
     grid_registry,
 )
 
@@ -297,3 +299,45 @@ def test_caching_modes(cls, fixture, request):
     assert sorted(gra_c._cells) == [0, 5]
     gra_c.clear_cache()
     assert gra_c._cells == {}
+
+
+# --------------------------------------------------------------------------- #
+# monolithic incomplete zarr conversion
+# --------------------------------------------------------------------------- #
+def _contig_cell(location_ids, row_sizes):
+    n = int(np.sum(row_sizes))
+    return xr.Dataset(
+        {"sm": (("obs",), np.arange(n, dtype="float32")),
+         "row_size": (("locations",), np.array(row_sizes, dtype=np.int64),
+                      {"sample_dimension": "obs"}),
+         "location_id": (("locations",),
+                         np.array(location_ids, dtype=np.int64))},
+    )
+
+
+def test_cells_to_incomplete_zarr(tmp_path):
+    # two cells with different locations and different observation counts
+    _contig_cell([10, 11], [2, 3]).to_netcdf(tmp_path / "0001.nc")
+    _contig_cell([20], [1]).to_netcdf(tmp_path / "0002.nc")
+    store = str(tmp_path / "out.zarr")
+
+    cells_to_incomplete_zarr(tmp_path, store, fn_pattern="000*.nc",
+                             element_dim="element",
+                             chunks={"locations": 2, "element": 2})
+
+    z = xr.open_zarr(store)
+    assert z.sizes["locations"] == 3          # 10, 11, 20 across both cells
+    assert z.sizes["element"] == 3            # global max row_size
+    assert z["sm"].dims == ("locations", "element")
+    # the requested chunking is applied
+    import zarr
+    assert zarr.open(store)["sm"].chunks == (2, 2)
+
+    inc = open_cf(store, instance_id_var="location_id",
+                  instance_dim="locations", element_dim="element",
+                  engine="zarr")
+    # each location's real observations sit in the leading columns
+    np.testing.assert_array_equal(inc.sel_instance(11)["sm"].values[:3],
+                                  [2., 3., 4.])
+    assert inc.sel_instance(20)["sm"].values[0] == 0.
+    assert set(inc.instance_ids) == {10, 11, 20}

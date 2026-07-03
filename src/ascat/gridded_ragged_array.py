@@ -19,9 +19,11 @@ from pathlib import Path
 from typing import Union
 
 import numpy as np
+import xarray as xr
 from fibgrid.realization import FibGrid
 from pygeogrids.grids import CellGrid
 
+from ascat.array_utils import fill_value
 from ascat.ragged_array import (
     ContiguousRaggedArray,
     IndexedRaggedArray,
@@ -446,3 +448,227 @@ class GriddedOrthoMultiArray(GriddedRaggedArray):
             element_coord=self.element_coord,
             instance_id_var=self.instance_id_var,
         )
+
+
+def _pad_element_dim(ds, element_dim, target):
+    """Pad the element dimension of an incomplete array to ``target`` columns."""
+    size = ds.sizes.get(element_dim, 0)
+    if size >= target:
+        return ds
+    extra = target - size
+    new_vars = {}
+    for v in ds.variables:
+        if element_dim in ds[v].dims:
+            axis = ds[v].dims.index(element_dim)
+            width = [(0, 0)] * ds[v].ndim
+            width[axis] = (0, extra)
+            arr = np.pad(np.asarray(ds[v].values), width,
+                         constant_values=fill_value(ds[v].dtype))
+            new_vars[v] = (ds[v].dims, arr, dict(ds[v].attrs))
+        else:
+            new_vars[v] = ds[v]
+    # rebuild in one step (avoids a transient inconsistent element size), then
+    # restore which variables were coordinates
+    coord_names = [c for c in ds.coords]
+    result = xr.Dataset(new_vars)
+    result = result.set_coords([c for c in coord_names if c in result.variables])
+    result.attrs = dict(ds.attrs)
+    for v in ds.variables:
+        result[v].encoding = ds[v].encoding
+    return result
+
+
+def _cell_incomplete_block(task):
+    """
+    Read one contiguous ragged cell and return its padded incomplete block.
+
+    Runs in a worker process, so it returns plain arrays (not an open dataset):
+    ``(coord_names, {var: (dims, array, attrs)})``, with the instance dimension
+    coordinate dropped (it is set once on the store skeleton).
+    """
+    fn, opts = task
+    cra = ContiguousRaggedArray.from_file(
+        fn, count_var=opts["count_var"], instance_dim=opts["instance_dim"],
+        instance_id_var=opts["instance_id_var"], trim=opts["trim"])
+    ds = cra.to_incomplete().ds
+    if cra.sample_dim != opts["element_dim"]:
+        ds = ds.rename({cra.sample_dim: opts["element_dim"]})
+    ds = _pad_element_dim(ds, opts["element_dim"], opts["max_elem"])
+    cra.ds.close()
+    ds = ds.drop_vars(opts["instance_dim"])
+    coord_names = [str(c) for c in ds.coords]
+    data = {str(v): (ds[v].dims, np.asarray(ds[v].values), dict(ds[v].attrs))
+            for v in ds.variables}
+    return coord_names, data
+
+
+def cells_to_incomplete_zarr(
+    root_path,
+    store,
+    fn_pattern: str = "*.nc",
+    count_var: str = "row_size",
+    instance_dim: str = "locations",
+    instance_id_var: str = "location_id",
+    element_dim: str = "element",
+    trim: bool = True,
+    chunks: dict = None,
+    shards: dict = None,
+    n_workers: int = 1,
+):
+    """
+    Convert contiguous ragged cell files to a monolithic incomplete Zarr store.
+
+    Every cell file under ``root_path`` is read, converted to an incomplete
+    multidimensional array (CF 9.3.2) — a dense ``(instance, element)`` block
+    padded with fill values — and written into its slice of one store spanning
+    every location across all cells. The measurements become
+    ``(instance, element)`` arrays and the per-observation coordinates (e.g.
+    time) are carried as matching 2-D arrays.
+
+    An empty store is created first with the requested chunk/shard layout, then
+    each cell is written into a disjoint region of the instance dimension, so
+    the full array is never held in memory and cells can be processed in
+    parallel. Zarr compresses the fill padding on disk.
+
+    Parameters
+    ----------
+    root_path : str or pathlib.Path
+        Directory containing the contiguous ragged cell files (searched
+        recursively).
+    store : str or pathlib.Path or MutableMapping
+        Target Zarr store.
+    fn_pattern : str, optional
+        Glob pattern for the cell files (default: "*.nc").
+    count_var : str, optional
+        Count variable name (default: "row_size").
+    instance_dim : str, optional
+        Instance dimension name (default: "locations").
+    instance_id_var : str, optional
+        Instance identifier variable (default: "location_id").
+    element_dim : str, optional
+        Name of the (positional) element dimension in the output
+        (default: "element").
+    trim : bool, optional
+        Drop fill/padding locations when reading each cell (default: True).
+    chunks : dict, optional
+        Chunk size per dimension, e.g. ``{"locations": 5000, "element": 500}``.
+        Dimensions not given are a single chunk.
+    shards : dict, optional
+        Shard size per dimension (Zarr v3). Each shard size must be a multiple
+        of the corresponding chunk size.
+    n_workers : int, optional
+        Number of worker threads for reading/converting cells (default: 1).
+        Writes to the store are serialised; the parallelism speeds up the
+        per-cell conversion.
+
+    Returns
+    -------
+    store : str or pathlib.Path or MutableMapping
+        The store that was written.
+    """
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+    import dask.array as da
+
+    root = Path(root_path)
+    files = sorted(root.glob("**/" + fn_pattern))
+    if not files:
+        raise FileNotFoundError(
+            f"No files matching '{fn_pattern}' under '{root}'.")
+    chunks = dict(chunks or {})
+
+    def read(fn):
+        return ContiguousRaggedArray.from_file(
+            fn, count_var=count_var, instance_dim=instance_dim,
+            instance_id_var=instance_id_var, trim=trim)
+
+    def incomplete(cra):
+        ds = cra.to_incomplete().ds
+        if cra.sample_dim != element_dim:
+            ds = ds.rename({cra.sample_dim: element_dim})
+        return ds
+
+    # pass 1: layout (offset + size per cell), global max elements, ids, schema
+    layout, id_parts, offset, max_elem, schema = [], [], 0, 0, None
+    for fn in files:
+        cra = read(fn)
+        if cra.size == 0:
+            cra.ds.close()
+            continue
+        max_elem = max(max_elem, int(np.asarray(cra.ds[count_var]).max()))
+        layout.append((fn, offset, cra.size))
+        id_parts.append(np.asarray(cra.instance_ids))
+        offset += cra.size
+        if schema is None:
+            schema = incomplete(cra)
+        cra.ds.close()
+    if offset == 0:
+        raise ValueError("No valid locations found in the cell files.")
+    total = offset
+    instance_ids = np.concatenate(id_parts)
+    schema = _pad_element_dim(schema, element_dim, max_elem)
+
+    # build an empty skeleton with the requested chunk/shard layout
+    dim_size = {instance_dim: total, element_dim: max_elem}
+    skel = {}
+    for v in schema.variables:
+        if v == instance_dim:
+            continue
+        dims = schema[v].dims
+        shape = tuple(dim_size.get(d, schema.sizes[d]) for d in dims)
+        cshape = tuple(min(chunks.get(d, s), s) for d, s in zip(dims, shape))
+        skel[v] = (dims, da.full(shape, fill_value(schema[v].dtype),
+                                 dtype=schema[v].dtype, chunks=cshape),
+                   dict(schema[v].attrs))
+    skeleton = xr.Dataset(skel).assign_coords({instance_dim: instance_ids})
+    skeleton = skeleton.set_coords(
+        [c for c in schema.coords if c in skeleton.variables
+         and c != instance_dim])
+
+    encoding = {}
+    for v in skeleton.variables:
+        dims = skeleton[v].dims
+        enc = {"chunks": tuple(
+            min(chunks.get(d, skeleton.sizes[d]), skeleton.sizes[d])
+            for d in dims)}
+        fv = fill_value(skeleton[v].dtype)
+        if fv is not None and not np.issubdtype(skeleton[v].dtype,
+                                                np.datetime64):
+            enc["_FillValue"] = fv
+        if shards:
+            enc["shards"] = tuple(shards.get(d, skeleton.sizes[d]) for d in dims)
+        encoding[v] = enc
+    # metadata-only skeleton; the actual data is filled by the region writes
+    # below (serialised with a lock), so the chunk-alignment guard is bypassed
+    skeleton.to_zarr(store, mode="w", compute=False, encoding=encoding,
+                     safe_chunks=False)
+
+    # pass 2: convert each cell (optionally in parallel worker *processes* —
+    # netCDF4 is not thread-safe) and write it into its region. Writes stay in
+    # the main process so overlapping boundary chunks are never written
+    # concurrently.
+    opts = dict(count_var=count_var, instance_dim=instance_dim,
+                instance_id_var=instance_id_var, element_dim=element_dim,
+                trim=trim, max_elem=max_elem)
+
+    def write_block(off, n, coord_names, data):
+        block = xr.Dataset(data).set_coords(
+            [c for c in coord_names if c in data])
+        block.to_zarr(store, region={instance_dim: slice(off, off + n)},
+                      safe_chunks=False)
+
+    if n_workers and n_workers > 1:
+        # spawn (not fork) so worker interpreters have no inherited HDF5 state
+        ctx = multiprocessing.get_context("spawn")
+        tasks = [(fn, opts) for fn, _, _ in layout]
+        with ProcessPoolExecutor(max_workers=n_workers,
+                                 mp_context=ctx) as pool:
+            for (fn, off, n), (coord_names, data) in zip(
+                    layout, pool.map(_cell_incomplete_block, tasks)):
+                write_block(off, n, coord_names, data)
+    else:
+        for fn, off, n in layout:
+            coord_names, data = _cell_incomplete_block((fn, opts))
+            write_block(off, n, coord_names, data)
+
+    return store
