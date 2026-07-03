@@ -58,6 +58,8 @@ jobs:
       - name: Run tests
         run: uv run --no-sync pytest --cache-clear
       - name: Upload Coverage
+        # coveralls.io outages (e.g. 502s) must not fail the build
+        continue-on-error: true
         run: uv run --no-sync --with coveralls coveralls --service=github-actions
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -78,6 +80,7 @@ jobs:
     container: python:3-slim
     steps:
       - name: Finished
+        continue-on-error: true
         run: |
           pip3 install --upgrade coveralls && coveralls --service=github --finish
         env:
