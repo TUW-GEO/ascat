@@ -40,8 +40,10 @@ swath_time slots that have not yet been regridded are processed.  Delete
 the output store entirely to force a full rerun.
 """
 
+import base64
 import itertools
 import shutil
+import struct
 import warnings
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
@@ -452,21 +454,34 @@ def _downsample_coords(coords, scale):
 
 
 def _attrs_with_fill_value(src):
-    """Source var's attrs plus a CF ``_FillValue`` matching its zarr fill_value.
+    """Source var's attrs plus a ``_FillValue`` matching its zarr fill_value.
 
     ``fill_value`` on zarr array metadata only controls what uninitialized
     chunks read back as — it is not visible to CF-aware readers (e.g.
-    ``xr.open_zarr`` with ``mask_and_scale=True``, the default), which mask
-    on the ``_FillValue`` attribute instead. Without this, downsampled
-    pyramid levels (which write the sentinel into no-data cells rather than
-    NaN) surface raw fill values as if they were real data.
+    ``xr.open_zarr``) by default, which mask on the ``_FillValue`` attribute
+    instead. Without this, downsampled pyramid levels (which write the
+    sentinel into no-data cells rather than NaN) surface raw fill values as
+    if they were real data.
+
+    xarray's zarr-v3 backend defaults ``use_zarr_fill_value_as_mask=False``
+    and, in that mode, its store-level reader (``FillValueCoder.decode``)
+    requires float ``_FillValue`` to be base64-encoded little-endian doubles
+    rather than a plain literal — a plain numeric value raises inside
+    ``xr.open_zarr(path)`` with zero extra kwargs. Match that encoding for
+    floating dtypes so the default, no-kwargs open path works; int/uint/bool
+    fill values decode fine as plain literals so those are left as-is.
     """
     attrs = dict(src.attrs)
     fill_value = src.metadata.fill_value
-    if fill_value is not None:
-        attrs["_FillValue"] = (
-            fill_value.item() if isinstance(fill_value, np.generic) else fill_value
-        )
+    if fill_value is None:
+        return attrs
+    value = fill_value.item() if isinstance(fill_value, np.generic) else fill_value
+    if np.issubdtype(src.dtype, np.floating):
+        attrs["_FillValue"] = base64.standard_b64encode(
+            struct.pack("<d", float(value))
+        ).decode()
+    else:
+        attrs["_FillValue"] = value
     return attrs
 
 
