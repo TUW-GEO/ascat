@@ -451,6 +451,25 @@ def _downsample_coords(coords, scale):
     return coords[:trimmed].reshape(-1, scale).mean(axis=1)
 
 
+def _attrs_with_fill_value(src):
+    """Source var's attrs plus a CF ``_FillValue`` matching its zarr fill_value.
+
+    ``fill_value`` on zarr array metadata only controls what uninitialized
+    chunks read back as — it is not visible to CF-aware readers (e.g.
+    ``xr.open_zarr`` with ``mask_and_scale=True``, the default), which mask
+    on the ``_FillValue`` attribute instead. Without this, downsampled
+    pyramid levels (which write the sentinel into no-data cells rather than
+    NaN) surface raw fill values as if they were real data.
+    """
+    attrs = dict(src.attrs)
+    fill_value = src.metadata.fill_value
+    if fill_value is not None:
+        attrs["_FillValue"] = (
+            fill_value.item() if isinstance(fill_value, np.generic) else fill_value
+        )
+    return attrs
+
+
 def _create_level_arrays(
     group,
     sparse_root,
@@ -495,7 +514,7 @@ def _create_level_arrays(
                 ),
                 fill_value=src.metadata.fill_value,
                 compressors=compressors,
-                attributes=dict(src.attrs),
+                attributes=_attrs_with_fill_value(src),
             )
 
     for var in sorted(scalar_vars):
@@ -508,7 +527,7 @@ def _create_level_arrays(
             dimension_names=("swath_time", "spacecraft", "latitude", "longitude"),
             fill_value=src.metadata.fill_value,
             compressors=compressors,
-            attributes=dict(src.attrs),
+            attributes=_attrs_with_fill_value(src),
         )
 
     group.create_array(
@@ -1241,7 +1260,7 @@ def _gf_create_pyramid_store(
                 dimension_names=dim_names,
                 fill_value=src.metadata.fill_value,
                 compressors=compressors,
-                attributes=dict(src.attrs),
+                attributes=_attrs_with_fill_value(src),
             )
 
         # Slot-static: (*slots, lat, lon)
@@ -1255,7 +1274,7 @@ def _gf_create_pyramid_store(
                 dimension_names=dim_names,
                 fill_value=src.metadata.fill_value,
                 compressors=compressors,
-                attributes=dict(src.attrs),
+                attributes=_attrs_with_fill_value(src),
             )
 
         # Fully-static: (lat, lon)
@@ -1268,7 +1287,7 @@ def _gf_create_pyramid_store(
                 dimension_names=("latitude", "longitude"),
                 fill_value=src.metadata.fill_value,
                 compressors=compressors,
-                attributes=dict(src.attrs),
+                attributes=_attrs_with_fill_value(src),
             )
 
         # Coord arrays
