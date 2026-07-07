@@ -785,7 +785,7 @@ def _gaussian_downsample_2d(data, fill_val, sigma):
     downsampled = normalized[:h_trim:2, :w_trim:2]
     weight_down = smoothed_weights[:h_trim:2, :w_trim:2]
 
-    no_data = weight_down < 1e-10
+    no_data = weight_down < 1e-2
 
     if np.issubdtype(out_dtype, np.floating):
         result = downsampled.astype(out_dtype)
