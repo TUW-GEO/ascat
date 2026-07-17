@@ -453,6 +453,95 @@ def _downsample_coords(coords, scale):
     return coords[:trimmed].reshape(-1, scale).mean(axis=1)
 
 
+# ---------------------------------------------------------------------------
+# GeoZarr conventions metadata
+#
+# The gpi-first pyramid follows the modular zarr conventions that the
+# GeoZarr toolkit (https://github.com/zarr-developers/geozarr-toolkit)
+# validates: `multiscales` (layout of pyramid levels), `spatial` (affine
+# index->coordinate transform) and `proj` (CRS). Conventions in use are
+# registered under the `zarr_conventions` attribute.
+# ---------------------------------------------------------------------------
+
+MULTISCALES_CONVENTION = {
+    "uuid": "d35379db-88df-4056-af3a-620245f8e347",
+    "schema_url": (
+        "https://raw.githubusercontent.com/zarr-conventions/multiscales/"
+        "refs/tags/v0.1/schema.json"
+    ),
+    "spec_url": "https://github.com/zarr-conventions/multiscales/blob/v0.1/README.md",
+    "name": "multiscales",
+    "description": "Multiscale layout of zarr datasets",
+}
+
+SPATIAL_CONVENTION = {
+    "uuid": "689b58e2-cf7b-45e0-9fff-9cfc0883d6b4",
+    "schema_url": (
+        "https://raw.githubusercontent.com/zarr-conventions/spatial/"
+        "refs/tags/v0.1/schema.json"
+    ),
+    "spec_url": "https://github.com/zarr-conventions/spatial/blob/v0.1/README.md",
+    "name": "spatial",
+    "description": "Spatial coordinate information",
+}
+
+PROJ_CONVENTION = {
+    "uuid": "f17cb550-5864-4468-aeb7-f3180cfb622f",
+    "schema_url": (
+        "https://raw.githubusercontent.com/zarr-conventions/proj/"
+        "refs/tags/v0.1/schema.json"
+    ),
+    "spec_url": "https://github.com/zarr-conventions/proj/blob/v0.1/README.md",
+    "name": "proj",
+    "description": "Coordinate reference system information for geospatial data",
+}
+
+
+def wgs84_proj_attrs():
+    """`proj:` convention attrs for EPSG:4326.
+
+    `proj:wkt2` is the self-contained (database-free) representation the
+    convention recommends always including; it needs pyproj, so it is
+    skipped when pyproj is not importable.
+    """
+    attrs = {"proj:code": "EPSG:4326"}
+    try:
+        from pyproj import CRS
+
+        attrs["proj:wkt2"] = CRS.from_epsg(4326).to_wkt("WKT2_2019")
+    except Exception:
+        pass
+    return attrs
+
+
+def geozarr_spatial_attrs(lats_1d, lons_1d):
+    """`spatial:` convention attrs for a regular lat/lon grid.
+
+    ``lats_1d``/``lons_1d`` hold pixel *centers* (either axis direction).
+    The affine transform uses rasterio ordering ``[a, b, c, d, e, f]`` with
+    the (0, 0) index at the corner of the first pixel, so the first pixel
+    center sits at index (0.5, 0.5).
+    """
+    lat_step = float(lats_1d[1] - lats_1d[0])  # negative for north-up grids
+    lon_step = float(lons_1d[1] - lons_1d[0])
+    west = float(lons_1d[0]) - lon_step / 2.0
+    north = float(lats_1d[0]) - lat_step / 2.0
+    lat_far = float(lats_1d[-1]) + lat_step / 2.0
+    lon_far = float(lons_1d[-1]) + lon_step / 2.0
+    return {
+        "spatial:dimensions": ["latitude", "longitude"],
+        "spatial:shape": [len(lats_1d), len(lons_1d)],
+        "spatial:transform": [lon_step, 0.0, west, 0.0, lat_step, north],
+        "spatial:bbox": [
+            min(west, lon_far),
+            min(north, lat_far),
+            max(west, lon_far),
+            max(north, lat_far),
+        ],
+        "spatial:registration": "pixel",
+    }
+
+
 def _attrs_with_fill_value(src):
     """Source var's attrs plus a ``_FillValue`` matching its zarr fill_value.
 
@@ -1199,53 +1288,46 @@ def _gf_create_pyramid_store(
     store = zarr.storage.LocalStore(str(out_path))
     root = zarr.create_group(store=store, overwrite=True, zarr_format=3)
 
-    # OME-style multiscales metadata. Axes order matches array dim order:
-    # [time_dim], *slot_dims, latitude, longitude. The scale applies only
-    # to lat/lon — non-spatial dims get scale=1.0.
-    axes = []
-    if time_dim is not None:
-        axes.append({"name": time_dim, "type": "time"})
-    for d in slot_dims:
-        axes.append({"name": d, "type": ""})
-    axes.append({"name": "latitude", "type": "space", "unit": "degree"})
-    axes.append({"name": "longitude", "type": "space", "unit": "degree"})
-
-    n_outer = len(axes) - 2  # everything except lat/lon
-
-    datasets = []
+    # GeoZarr conventions metadata. The root group carries the multiscales
+    # layout (one entry per level with that level's absolute spatial
+    # transform) plus grid-wide spatial/proj attrs; each level group also
+    # carries its own spatial/proj attrs so a level published on its own
+    # (e.g. level 0 uploaded to S3) stays georeferenced.
+    level_coords = []
     for level in range(n_pyramid_levels):
         scale = 2 ** level
-        datasets.append({
-            "path": str(level),
-            "coordinateTransformations": [
-                {
-                    "type": "scale",
-                    "scale": [1.0] * n_outer + [resolution_deg * scale,
-                                                resolution_deg * scale],
-                },
-                {
-                    "type": "translation",
-                    "translation": [0.0] * n_outer + [
-                        90.0 - (resolution_deg * scale) / 2.0,
-                        -180.0 + (resolution_deg * scale) / 2.0,
-                    ],
-                },
-            ],
-        })
+        level_coords.append((
+            lats_1d if level == 0 else _downsample_coords(lats_1d, scale),
+            lons_1d if level == 0 else _downsample_coords(lons_1d, scale),
+        ))
 
-    root.attrs["multiscales"] = [{
-        "version": "0.4",
-        "name": "regridded_gpi_first_data",
-        "axes": axes,
-        "datasets": datasets,
-        "type": "gaussian",
-        "metadata": {
-            "description": (
-                "Nearest-neighbor regridded gpi-first data with mixed "
-                "Gaussian/NN pyramid downsampling"
-            ),
+    proj_attrs = wgs84_proj_attrs()
+
+    layout = []
+    for level in range(n_pyramid_levels):
+        level_spatial = geozarr_spatial_attrs(*level_coords[level])
+        item = {"asset": str(level)}
+        if level > 0:
+            item["derived_from"] = str(level - 1)
+            item["transform"] = {"scale": [2.0, 2.0], "translation": [0.5, 0.5]}
+        item["spatial:shape"] = level_spatial["spatial:shape"]
+        item["spatial:transform"] = level_spatial["spatial:transform"]
+        layout.append(item)
+
+    root_spatial = geozarr_spatial_attrs(lats_1d, lons_1d)
+    root.attrs.update({
+        "zarr_conventions": [
+            MULTISCALES_CONVENTION, SPATIAL_CONVENTION, PROJ_CONVENTION,
+        ],
+        "multiscales": {
+            "layout": layout,
+            "resampling_method": "gaussian",
         },
-    }]
+        "spatial:dimensions": root_spatial["spatial:dimensions"],
+        "spatial:bbox": root_spatial["spatial:bbox"],
+        "spatial:registration": root_spatial["spatial:registration"],
+        **proj_attrs,
+    })
 
     compressors = [
         zarr.codecs.BloscCodec(
@@ -1255,14 +1337,18 @@ def _gf_create_pyramid_store(
 
     for level in range(n_pyramid_levels):
         scale = 2 ** level
-        level_lats = lats_1d if level == 0 else _downsample_coords(lats_1d, scale)
-        level_lons = lons_1d if level == 0 else _downsample_coords(lons_1d, scale)
+        level_lats, level_lons = level_coords[level]
         n_lat_l = len(level_lats)
         n_lon_l = len(level_lons)
         level_lat_chunk = max(1, lat_chunk // scale)
         level_lon_chunk = max(1, lon_chunk // scale)
 
         level_group = root.create_group(str(level))
+        level_group.attrs.update({
+            "zarr_conventions": [SPATIAL_CONVENTION, PROJ_CONVENTION],
+            **geozarr_spatial_attrs(level_lats, level_lons),
+            **proj_attrs,
+        })
 
         # Time-varying: (time, *slots, lat, lon)
         for var in time_varying:
