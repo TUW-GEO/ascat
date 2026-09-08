@@ -2,8 +2,8 @@
 Changelog
 =========
 
-Unreleased
-==========
+Version 2.8.0
+=============
 
 - Add cf_conversions and rework ragged array representations
 - Cleanup download functions
