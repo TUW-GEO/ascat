@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 2.8.1
+=============
+
+- Fix uv dependencies
+
 Version 2.8.0
 =============
 

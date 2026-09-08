@@ -1,6 +1,6 @@
 [project]
 name = "ascat"
-version = "2.8.0"
+version = "2.8.1"
 description = "Read and process backscatter and soil moisture data from the Advanced Scatterometer (ASCAT)"
 readme = "README.md"
 license = { file = "LICENSE.txt" }
