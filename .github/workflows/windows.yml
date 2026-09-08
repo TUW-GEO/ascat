@@ -40,6 +40,5 @@ jobs:
         run: |
           git status
           uv pip list
-      # NOTE: WINDOWS tests are deactivated for now!
-      # - name: Run tests
-      #   run: uv run --no-sync pytest --cache-clear
+      - name: Run tests
+        run: uv run --no-sync pytest --cache-clear
