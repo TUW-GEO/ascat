@@ -19,6 +19,7 @@ from ascat.cell import OrthoMultiTimeseriesCell
 from ascat.cell import CellGridFiles
 
 from get_path import get_testdata_path
+from tempdir_cleanup import cleanup_tempdir
 
 TESTDATA_PATH = get_testdata_path()
 
@@ -73,7 +74,7 @@ class TestOrthoMultiCellFile(unittest.TestCase):
         gen_dummy_cellfiles(self.tempdir_path)
 
     def tearDown(self):
-        self.tempdir.cleanup()
+        cleanup_tempdir(self.tempdir)
 
     def test_init(self):
         # contiguous_ragged_path = self.tempdir_path/ "contiguous" / "2588_contiguous_ragged.nc"
@@ -148,7 +149,7 @@ class TestRaggedArrayCellFile(unittest.TestCase):
         gen_dummy_cellfiles(self.tempdir_path)
 
     def tearDown(self):
-        self.tempdir.cleanup()
+        cleanup_tempdir(self.tempdir)
 
     def test_init(self):
         contiguous_ragged_path = self.tempdir_path/ "contiguous" / "2588_contiguous_ragged.nc"
@@ -337,7 +338,7 @@ class TestCellGridFiles(unittest.TestCase):
 
 
     def tearDown(self):
-        self.tempdir.cleanup()
+        cleanup_tempdir(self.tempdir)
 
     def test_init(self):
         contig_collection = CellGridFiles(

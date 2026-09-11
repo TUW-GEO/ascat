@@ -18,6 +18,7 @@ from ascat.swath import Swath
 from ascat.swath import SwathGridFiles
 from ascat.product_info import AscatH129Swath
 from get_path import get_testdata_path
+from tempdir_cleanup import cleanup_tempdir
 
 TESTDATA_PATH = get_testdata_path()
 
@@ -39,7 +40,7 @@ class TestSwath(unittest.TestCase):
         gen_dummy_swathfiles(self.tempdir_path)
 
     def tearDown(self):
-        self.tempdir.cleanup()
+        cleanup_tempdir(self.tempdir)
 
     def test_init(self):
         swath_path = self.tempdir_path / "swath.nc"
@@ -142,7 +143,7 @@ class TestSwathGridFiles(unittest.TestCase):
         # gen_dummy_swathfiles(self.tempdir_path)
 
     def tearDown(self):
-        self.tempdir.cleanup()
+        cleanup_tempdir(self.tempdir)
 
     def test_init(self):
 

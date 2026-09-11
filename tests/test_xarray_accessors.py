@@ -11,6 +11,8 @@ import xarray as xr
 import numpy as np
 
 
+from tempdir_cleanup import cleanup_tempdir
+
 from ascat.read_native import generate_test_data as gtd
 
 # from ascat.read_native.product_info import cell_io_catalog
@@ -64,7 +66,7 @@ class TestCFDiscreteGeometryAccessor(unittest.TestCase):
         gen_dummy_cellfiles(self.tempdir_path, "metop_c")
 
     def tearDown(self):
-        self.tempdir.cleanup()
+        cleanup_tempdir(self.tempdir)
 
     def test_array_type(self):
         ds = xr.open_dataset(self.tempdir_path / "contiguous" / "2588.nc")
@@ -121,7 +123,7 @@ class TestPyGeoGriddedArrayAccessor(unittest.TestCase):
         gen_dummy_cellfiles(self.tempdir_path, "metop_c")
 
     def tearDown(self):
-        self.tempdir.cleanup()
+        cleanup_tempdir(self.tempdir)
 
     def test_array_type(self):
         ds = xr.open_dataset(self.tempdir_path / "contiguous" / "2588.nc")
