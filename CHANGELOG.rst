@@ -2,6 +2,15 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+- Re-enable the Windows test run in CI,
+- Fix a CI hang in which ``to_netcdf()`` blocked forever while acquiring
+  xarray's netCDF write lock.
+- Close the netCDF handles cached by xarray before removing temporary
+  directories in the tests.
+
 Version 2.8.1
 =============
 
