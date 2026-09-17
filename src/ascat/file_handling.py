@@ -520,6 +520,43 @@ class MultiFileHandler(metaclass=abc.ABCMeta):
         return sorted(filenames, reverse=True)
 
 
+def _is_empty(data):
+    """
+    Check whether a read returned no records.
+
+    Readers return either the data itself or a (data, metadata) tuple, and for
+    SZF products one dataset per antenna beam. Filtering for a time or region
+    of interest can leave any of them empty.
+
+    Parameters
+    ----------
+    data : object
+        Data returned by a reader.
+
+    Returns
+    -------
+    empty : bool
+        True if the data holds no records.
+    """
+    if data is None:
+        return True
+
+    if isinstance(data, tuple):
+        return _is_empty(data[0])
+
+    if isinstance(data, dict):
+        return all(_is_empty(value) for value in data.values())
+
+    # xarray.Dataset, without importing xarray here
+    sizes = getattr(data, "sizes", None)
+    if sizes is not None:
+        if "obs" in sizes:
+            return sizes["obs"] == 0
+        return all(size == 0 for size in sizes.values())
+
+    return data.size == 0
+
+
 class ChronFiles(MultiFileHandler):
     """
     Managing chronological files with a date field in the filename.
@@ -798,7 +835,10 @@ class ChronFiles(MultiFileHandler):
         for filename in filenames:
             self._open(filename)
             d = self.fid.read_period(dt_start, dt_end, **kwargs)
-            if d is not None:
+            # Files can fall outside the period entirely, e.g. because
+            # end_inclusive widens the search; skip them so they do not show
+            # up in the merged metadata.
+            if not _is_empty(d):
                 data.append(d)
 
         if data:

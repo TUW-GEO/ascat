@@ -303,88 +303,103 @@ def get_window_weights(window, radius, distance, norm=False):
     return weights
 
 
+def _take(data, index):
+    """
+    Positional subset of an xarray.Dataset or a numpy array.
+
+    Parameters
+    ----------
+    data : xarray.Dataset or numpy.ndarray
+        Data to be subset along the observation dimension.
+    index : numpy.ndarray
+        Positional indices to keep.
+
+    Returns
+    -------
+    data : xarray.Dataset or numpy.ndarray
+        Subset data. Empty if no index is given.
+    """
+    if isinstance(data, xr.Dataset):
+        return data.isel(obs=index)
+
+    return data[index]
+
+
+def _subset(ds, pick):
+    """
+    Apply pick() to each beam of a dict, or to the dataset itself.
+
+    Parameters
+    ----------
+    ds : dict, xarray.Dataset or numpy.ndarray
+        Dataset, or one dataset per antenna beam.
+    pick : callable
+        Function returning the subset of a single dataset.
+
+    Returns
+    -------
+    ds : dict, xarray.Dataset or numpy.ndarray
+        Filtered dataset.
+    """
+    if isinstance(ds, dict):
+        for key in ds:
+            ds[key] = pick(ds[key])
+        return ds
+
+    return pick(ds)
+
+
 def get_toi_subset(ds, toi):
     """
     Filter dataset for given time of interest.
 
+    Datasets without any observation in the time of interest are returned
+    empty, so that they can still be merged with others.
+
     Parameters
     ----------
-    ds : xarray.Dataset
+    ds : dict, xarray.Dataset or numpy.ndarray
         Dataset to be filtered for time of interest.
     toi : tuple of datetime
         Time of interest.
 
     Returns
     -------
-    ds : xarray.Dataset
+    ds : dict, xarray.Dataset or numpy.ndarray
         Filtered dataset.
     """
-    if isinstance(ds, dict):
-        for key in ds.keys():
-            subset = np.where((ds[key]['time'] > np.datetime64(toi[0]))
-                              & (ds[key]['time'] < np.datetime64(toi[1])))[0]
-            if subset.size == 0:
-                ds[key] = None
-            else:
-                if isinstance(ds[key], xr.Dataset):
-                    ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
-                elif isinstance(ds[key], np.ndarray):
-                    ds[key] = ds[key][subset]
-    else:
-        subset = np.where((ds['time'] > np.datetime64(toi[0]))
-                          & (ds['time'] < np.datetime64(toi[1])))[0]
-        if subset.size == 0:
-            ds = None
-        else:
-            if isinstance(ds, xr.Dataset):
-                ds = ds.sel(obs=np.nonzero(subset.values)[0])
-            elif isinstance(ds, np.ndarray):
-                ds = ds[subset]
+    start, end = np.datetime64(toi[0]), np.datetime64(toi[1])
 
-    return ds
+    return _subset(
+        ds, lambda d: _take(d, np.where((d["time"] > start)
+                                        & (d["time"] < end))[0]))
 
 
 def get_roi_subset(ds, roi):
     """
     Filter dataset for given region of interest.
 
+    Datasets without any observation in the region of interest are returned
+    empty, so that they can still be merged with others.
+
     Parameters
     ----------
-    ds : xarray.Dataset
+    ds : dict, xarray.Dataset or numpy.ndarray
         Dataset to be filtered for region of interest.
     roi : tuple of 4 float
         Region of interest: latmin, lonmin, latmax, lonmax
 
     Returns
     -------
-    ds : xarray.Dataset
+    ds : dict, xarray.Dataset or numpy.ndarray
         Filtered dataset.
     """
-    if isinstance(ds, dict):
-        for key in ds.keys():
-            subset = np.where((ds[key]['lat'] > roi[0])
-                              & (ds[key]['lat'] < roi[2])
-                              & (ds[key]['lon'] > roi[1])
-                              & (ds[key]['lon'] < roi[3]))[0]
-            if subset.size == 0:
-                ds[key] = None
-            else:
-                if isinstance(ds[key], xr.Dataset):
-                    ds[key] = ds[key].sel(obs=np.nonzero(subset.values)[0])
-                elif isinstance(ds[key], np.ndarray):
-                    ds[key] = ds[key][subset]
-    else:
-        subset = np.where((ds['lat'] > roi[0]) & (ds['lat'] < roi[2])
-                          & (ds['lon'] > roi[1]) & (ds['lon'] < roi[3]))[0]
-        if subset.size == 0:
-            ds = None
-        else:
-            if isinstance(ds, xr.Dataset):
-                ds = ds.sel(obs=np.nonzero(subset.values)[0])
-            elif isinstance(ds, np.ndarray):
-                ds = ds[subset]
+    return _subset(
+        ds, lambda d: _take(d, np.where((d["lat"] > roi[0])
+                                        & (d["lat"] < roi[2])
+                                        & (d["lon"] > roi[1])
+                                        & (d["lon"] < roi[3]))[0]))
 
-    return ds
 
 def get_grid_gpis(
         grid,

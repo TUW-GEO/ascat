@@ -26,6 +26,15 @@ Unreleased
   file next to XML metadata. ``get_file_format()`` determines the format from
   the data file inside the archive and ``tmp_unzip()`` extracts it, so ".zip"
   files can be passed to the EPS Native, NetCDF and BUFR readers directly.
+- Fix ``get_toi_subset()`` and ``get_roi_subset()`` on ``xarray.Dataset``
+  input, which raised ``AttributeError`` whenever the subset was not empty.
+- Return empty datasets instead of ``None`` from ``get_toi_subset()`` and
+  ``get_roi_subset()`` when nothing is left after filtering. The ``None`` was
+  concatenated during merging, which silently turned the merged arrays into
+  object arrays, e.g. in ``read_period()`` for files outside the requested
+  period or for antenna beams outside the region of interest.
+- Skip files that contribute no records in ``read_period()``, so that the
+  returned metadata describes only the files the data actually came from.
 
 Version 2.8.1
 =============
