@@ -1123,7 +1123,9 @@ def read_eps_l1b(filename,
                             (var_name, data[var_name][subset].dtype.str,
                              data[var_name][subset].shape[1:]))
 
-                    fill_values[var_name] = data[var_name].fill_value
+                    # Only the generic conversion produces masked arrays.
+                    fill_values[var_name] = getattr(data[var_name],
+                                                    "fill_value", None)
 
                 ds[beam] = np.ma.empty(
                     data["time"][subset].size, dtype=np.dtype(dtype))
@@ -1132,7 +1134,9 @@ def read_eps_l1b(filename,
                     if var_name == "beam_number" and generic:
                         continue
                     ds[beam][var_name] = v[subset]
-                    ds[beam][var_name].set_fill_value(fill_values[var_name])
+                    if fill_values[var_name] is not None:
+                        ds[beam][var_name].set_fill_value(
+                            fill_values[var_name])
 
     elif ptype in ["SZR", "SZO"]:
 
