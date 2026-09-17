@@ -760,8 +760,7 @@ class ChronFiles(MultiFileHandler):
         date_field_fmt : str, optional
             Date field string format (default: %Y%m%d).
         end_inclusive : bool, optional
-            Include files from a dt_delta length period beyond dt_end if True
-            (default: False).
+            Include files dated exactly at dt_end if True (default: True).
 
         Returns
         -------
@@ -770,9 +769,11 @@ class ChronFiles(MultiFileHandler):
         """
         filenames = []
 
-        dt_end = dt_end + dt_delta if end_inclusive else dt_end
-
-        for dt_cur in np.arange(dt_start, dt_end, dt_delta).astype(datetime):
+        # A search date covers a whole dt_delta long interval, so search one
+        # interval beyond the period to find files dated near its end. The
+        # files themselves are still filtered against dt_end.
+        for dt_cur in np.arange(dt_start, dt_end + dt_delta,
+                                dt_delta).astype(datetime):
             files, dates = self.search_date(
                 dt_cur,
                 search_date_fmt=search_date_fmt,
@@ -782,7 +783,8 @@ class ChronFiles(MultiFileHandler):
                 **fmt_kwargs,
             )
             for f, dt in zip(files, dates):
-                if f not in filenames and dt >= dt_start and dt < dt_end:
+                in_period = dt <= dt_end if end_inclusive else dt < dt_end
+                if f not in filenames and dt >= dt_start and in_period:
                     filenames.append(f)
 
         return filenames

@@ -35,6 +35,13 @@ Unreleased
   period or for antenna beams outside the region of interest.
 - Skip files that contribute no records in ``read_period()``, so that the
   returned metadata describes only the files the data actually came from.
+- Fix the file selection of ``search_period()`` for products with more than
+  one file per day. ``dt_delta`` was used both as the search step and to widen
+  the period, so ``end_inclusive=True`` returned files up to a whole
+  ``dt_delta`` after ``dt_end``, while ``end_inclusive=False`` missed files
+  dated after the last search step. The search now always covers one step
+  beyond the period, and ``end_inclusive`` only decides whether files dated
+  exactly at ``dt_end`` are included.
 
 Version 2.8.1
 =============
