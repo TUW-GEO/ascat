@@ -144,7 +144,7 @@ class AscatL1bHdf5File(AscatFile):
                 ds[beam] = xr.Dataset(sub_data, coords=coords,
                                       attrs=metadata)
                 if generic:
-                    data = mask_dtype_nans(data)
+                    ds[beam] = mask_dtype_nans(ds[beam])
             else:
                 # collect dtype info
                 dtype = []

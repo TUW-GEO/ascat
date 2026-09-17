@@ -187,35 +187,24 @@ class AscatL1bEpsFile(AscatFile):
 
         if isinstance(data[0], tuple):
             data, metadata = zip(*data)
-            if ptype == "szf":
-                merged_data = defaultdict(list)
-                for beam in all_beams:
-                    for d in data:
-                        merged_data[beam].append(d.pop(beam))
-                    if isinstance(merged_data[beam][0], xr.Dataset):
-                        merged_data[beam] = xr.concat(merged_data[beam],
-                                                      dim="obs",
-                                                      combine_attrs="drop_conflicts")
-                    else:
-                        merged_data[beam] = np.hstack(merged_data[beam])
-            else:
-                if isinstance(merged_data[beam][0], xr.Dataset):
-                    merged_data = xr.concat(data, dim="obs", combine_attrs="drop_conflicts")
-                else:
-                    merged_data = np.hstack(data)
 
-        # if ptype == "szf":
-        #     if isinstance(data[0], tuple):
-        #         data, metadata = zip(*data)
-        #     merged_data = defaultdict(list)
-        #     for beam in all_beams:
-        #         for d in data:
-        #             merged_data[beam].append(d.pop(beam))
-        #         merged_data[beam] = np.hstack(merged_data[beam])
-        # else:
-        #     if isinstance(data[0], tuple):
-        #         data, metadata = zip(*data)
-        #     merged_data = np.hstack(data)
+        if ptype.lower() == "szf":
+            merged_data = defaultdict(list)
+            for beam in all_beams:
+                for d in data:
+                    merged_data[beam].append(d.pop(beam))
+                if isinstance(merged_data[beam][0], xr.Dataset):
+                    merged_data[beam] = xr.concat(merged_data[beam],
+                                                  dim="obs",
+                                                  combine_attrs="drop_conflicts")
+                else:
+                    merged_data[beam] = np.hstack(merged_data[beam])
+        else:
+            if isinstance(data[0], xr.Dataset):
+                merged_data = xr.concat(data, dim="obs",
+                                        combine_attrs="drop_conflicts")
+            else:
+                merged_data = np.hstack(data)
 
         merged_data = (merged_data, metadata)
 
@@ -1115,7 +1104,7 @@ def read_eps_l1b(filename,
 
                 ds[beam] = xr.Dataset(sub_data, coords=coords, attrs=metadata)
                 if generic:
-                    data = mask_dtype_nans(data)
+                    ds[beam] = mask_dtype_nans(ds[beam])
             else:
                 # collect dtype info
                 dtype = []
@@ -1190,7 +1179,7 @@ def read_eps_l1b(filename,
 
             ds = xr.Dataset(data, coords=coords, attrs=metadata)
             if generic:
-                data = mask_dtype_nans(data)
+                ds = mask_dtype_nans(ds)
         else:
             # collect dtype info
             dtype = []
