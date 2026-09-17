@@ -42,6 +42,11 @@ Unreleased
   dated after the last search step. The search now always covers one step
   beyond the period, and ``end_inclusive`` only decides whether files dated
   exactly at ``dt_end`` are included.
+- Add ``ascat.eumetsat.sca.level1``, a reader for EPS-SG SCA Level 1b data.
+  ``ScaL1bFile`` returns the SZF full resolution backscatter as one dataset per
+  antenna beam and the SZR re-sampled backscatter as quintuplets, following the
+  structure of the ASCAT Level 1b readers. ``ScaL1bFileList`` searches and
+  reads a collection of such files.
 
 Version 2.8.1
 =============
