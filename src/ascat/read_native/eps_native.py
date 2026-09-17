@@ -8,9 +8,7 @@ Readers for ASCAT Level 1b and Level 2 data in EPS Native format.
 
 import os
 import fnmatch
-from gzip import GzipFile
 from collections import OrderedDict, defaultdict
-from tempfile import NamedTemporaryFile
 
 import numpy as np
 import xarray as xr
@@ -20,6 +18,7 @@ from datetime import datetime
 from datetime import timedelta
 
 from ascat.utils import get_toi_subset, get_roi_subset
+from ascat.utils import tmp_unzip
 from ascat.utils import get_bit, set_bit
 from ascat.utils import dtype_to_nan
 from ascat.utils import mask_dtype_nans
@@ -1321,16 +1320,11 @@ def read_eps(filename,
     prod : EPSProduct
         EPS data.
     """
-    zipped = False
-    if os.path.splitext(filename)[1] == ".gz":
-        zipped = True
+    zipped = os.path.splitext(filename)[1] in (".gz", ".zip")
 
     # for zipped files use an unzipped temporary copy
     if zipped:
-        with NamedTemporaryFile(delete=False) as tmp_fid:
-            with GzipFile(filename) as gz_fid:
-                tmp_fid.write(gz_fid.read())
-            filename = tmp_fid.name
+        filename = tmp_unzip(filename)
 
     # create the eps object with the filename and read it
     prod = EPSProduct(filename)

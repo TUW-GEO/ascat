@@ -7,6 +7,7 @@ import os
 from datetime import timedelta
 from gzip import GzipFile
 from tempfile import NamedTemporaryFile
+from zipfile import ZipFile
 
 import numpy as np
 import xarray as xr
@@ -92,9 +93,42 @@ def daterange(start_date, end_date):
         yield start_date + timedelta(n)
 
 
+def zip_data_member(zip_fid):
+    """
+    Name of the single data file inside a zip archive.
+
+    EUMETSAT delivers products as a zip holding the data file next to XML
+    metadata (e.g. "EOPMetadata.xml", "manifest.xml"), which is skipped here.
+
+    Parameters
+    ----------
+    zip_fid : zipfile.ZipFile
+        Open zip archive.
+
+    Returns
+    -------
+    member : str
+        Name of the data file.
+    """
+    members = [
+        name for name in zip_fid.namelist()
+        if not name.endswith("/") and not name.lower().endswith(".xml")
+    ]
+
+    if len(members) != 1:
+        raise RuntimeError(
+            "Expected one data file in {}, found {}: {}".format(
+                zip_fid.filename, len(members), ", ".join(members) or "none"))
+
+    return members[0]
+
+
 def tmp_unzip(filename):
     """
     Unzip file to temporary directory.
+
+    Gzip (".gz") and zip (".zip") files are supported. From a zip archive the
+    single data file is extracted, see :func:`zip_data_member`.
 
     Parameters
     ----------
@@ -107,8 +141,12 @@ def tmp_unzip(filename):
         Unzipped filename
     """
     with NamedTemporaryFile(delete=False) as tmp_fid:
-        with GzipFile(filename) as gz_fid:
-            tmp_fid.write(gz_fid.read())
+        if os.path.splitext(filename)[1] == ".zip":
+            with ZipFile(filename) as zip_fid:
+                tmp_fid.write(zip_fid.read(zip_data_member(zip_fid)))
+        else:
+            with GzipFile(filename) as gz_fid:
+                tmp_fid.write(gz_fid.read())
         unzipped_filename = tmp_fid.name
 
     return unzipped_filename
@@ -629,10 +667,15 @@ def get_file_format(filename):
     file_format : str
         File format indicator.
     """
-    if os.path.splitext(filename)[1] == ".gz":
+    file_format = os.path.splitext(filename)[1]
+
+    if file_format == ".gz":
         file_format = os.path.splitext(os.path.splitext(filename)[0])[1]
-    else:
-        file_format = os.path.splitext(filename)[1]
+    elif file_format == ".zip":
+        # The archive is named after the product and does not repeat the
+        # extension of the data file, so look inside.
+        with ZipFile(filename) as zip_fid:
+            file_format = os.path.splitext(zip_data_member(zip_fid))[1]
 
     return file_format
 

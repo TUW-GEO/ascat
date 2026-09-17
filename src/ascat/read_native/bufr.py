@@ -123,7 +123,7 @@ class AscatL1bBufrFile(AscatFile):
         super().__init__(filename, **kwargs)
 
         for i, fname in enumerate(self.filenames):
-            if os.path.splitext(fname)[1] == '.gz':
+            if os.path.splitext(fname)[1] in ('.gz', '.zip'):
                 self.filenames[i] = tmp_unzip(fname)
 
         # Output field name -> rank-qualified eccodes key. The three antenna
@@ -372,7 +372,7 @@ class AscatL2BufrFile(AscatFile):
         super().__init__(filename, **kwargs)
 
         for i, fname in enumerate(self.filenames):
-            if os.path.splitext(fname)[1] == '.gz':
+            if os.path.splitext(fname)[1] in ('.gz', '.zip'):
                 self.filenames[i] = tmp_unzip(fname)
 
         # Output field name -> rank-qualified eccodes key. Beams use #1#/#2#/#3#;

@@ -169,7 +169,7 @@ class AscatL1bNcFile(AscatFile):
         """
         super().__init__(filename, **kwargs)
         for i, fname in enumerate(self.filenames):
-            if os.path.splitext(fname)[1] == '.gz':
+            if os.path.splitext(fname)[1] in ('.gz', '.zip'):
                 self.filenames[i] = tmp_unzip(fname)
 
     def _read(self, filename, generic=False, to_xarray=False):
@@ -265,7 +265,7 @@ class AscatL2NcFile(AscatFile):
         """
         super().__init__(filename, **kwargs)
         for i, fname in enumerate(self.filenames):
-            if os.path.splitext(fname)[1] == '.gz':
+            if os.path.splitext(fname)[1] in ('.gz', '.zip'):
                 self.filenames[i] = tmp_unzip(fname)
 
     def _read(self, filename, generic=False, to_xarray=False):

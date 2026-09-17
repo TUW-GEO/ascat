@@ -10,6 +10,22 @@ Unreleased
   xarray's netCDF write lock.
 - Close the netCDF handles cached by xarray before removing temporary
   directories in the tests.
+- Fix reading ASCAT Level 1b EPS Native and HDF5 files with ``generic=True``
+  and ``to_xarray=True``, which raised ``AttributeError`` because
+  ``mask_dtype_nans()`` was applied to the intermediate ``dict`` instead of
+  the resulting ``xarray.Dataset``. SZR/SZO sentinel values in ``inc``,
+  ``azi``, ``sig`` and ``kp`` are now converted to NaN as intended.
+- Fix merging of multiple ASCAT Level 1b EPS Native files (e.g.
+  ``AscatL1bEpsFileList.read_period()``), which raised ``UnboundLocalError``.
+  ``PRODUCT_TYPE`` is upper case in the MPHR but was compared against a lower
+  case literal, so SZF data always took an unreachable branch.
+- Fix reading ASCAT Level 1b EPS Native SZF files with ``generic=False``,
+  which raised ``AttributeError`` because a fill value was read from every
+  field although only the generic conversion produces masked arrays.
+- Support reading zip archives as delivered by EUMETSAT, which hold the data
+  file next to XML metadata. ``get_file_format()`` determines the format from
+  the data file inside the archive and ``tmp_unzip()`` extracts it, so ".zip"
+  files can be passed to the EPS Native, NetCDF and BUFR readers directly.
 
 Version 2.8.1
 =============
