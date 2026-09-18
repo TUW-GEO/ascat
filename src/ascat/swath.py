@@ -457,7 +457,6 @@ class SwathGridFiles(ChronFiles):
             True if the file intersects with the gpis.
         """
         f = self.cls(filename)
-        ds = f.read()
         with f.read() as ds:
             lons, lats = ds["longitude"].values, ds["latitude"].values
             swath_def = SwathDefinition(lats=lats, lons=lons)
@@ -477,6 +476,7 @@ class SwathGridFiles(ChronFiles):
         dt_start,
         dt_end,
         dt_delta=None,
+        dt_buffer=None,
         search_date_fmt="%Y%m%d*",
         date_field="date",
         end_inclusive=True,
@@ -498,6 +498,11 @@ class SwathGridFiles(ChronFiles):
             End date.
         dt_delta : timedelta
             Time delta.
+        dt_buffer : timedelta, optional
+            Search buffer used to find files which start before dt_start but
+            still cover part of the period. Swath files are named after their
+            start time, so without a buffer a file overlapping the start of
+            the period is missed (default: dt_delta).
         search_date_fmt : str
             Search date format.
         date_field : str
@@ -523,9 +528,10 @@ class SwathGridFiles(ChronFiles):
             Filenames.
         """
         dt_delta = dt_delta or timedelta(days=1)
+        dt_buffer = dt_delta if dt_buffer is None else dt_buffer
 
         filenames = self.search_period(
-            dt_start,
+            dt_start - dt_buffer,
             dt_end,
             dt_delta,
             search_date_fmt,
@@ -555,6 +561,7 @@ class SwathGridFiles(ChronFiles):
         self,
         date_range,
         dt_delta=None,
+        dt_buffer=None,
         search_date_fmt="%Y%m%d*",
         date_field="date",
         end_inclusive=True,
@@ -576,6 +583,9 @@ class SwathGridFiles(ChronFiles):
             Start and end date.
         dt_delta : timedelta
             Time delta.
+        dt_buffer : timedelta, optional
+            Search buffer used to find files which start before the beginning
+            of the date range but still cover part of it (default: dt_delta).
         search_date_fmt : str
             Search date format.
         date_field : str
@@ -607,6 +617,7 @@ class SwathGridFiles(ChronFiles):
             dt_start,
             dt_end,
             dt_delta,
+            dt_buffer,
             search_date_fmt,
             date_field,
             end_inclusive,

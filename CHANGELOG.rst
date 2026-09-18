@@ -94,6 +94,13 @@ Unreleased
   It holds the nodes onto which the SZR products resample the measurements and
   has its own dimensions, so it is not returned together with the beams.
 - Add tests for the EPS-SG SCA reader, which write the products they read.
+- Find swath files which start before the requested period but still cover
+  part of it. ``SwathGridFiles.swath_search()`` and ``.read()`` take a
+  ``dt_buffer`` argument for this, as the file lists already did. Swath files
+  are named after their start time, so a file overlapping the beginning of the
+  period was missed.
+- Close the swath file opened to check whether it intersects the area of
+  interest, which was read twice and left open once.
 
 Version 2.8.1
 =============
