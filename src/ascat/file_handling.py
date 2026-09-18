@@ -16,6 +16,7 @@ from datetime import datetime
 from collections import defaultdict
 
 import numpy as np
+import xarray as xr
 
 from tqdm import tqdm
 from tqdm.dask import TqdmCallback
@@ -547,12 +548,10 @@ def _is_empty(data):
     if isinstance(data, dict):
         return all(_is_empty(value) for value in data.values())
 
-    # xarray.Dataset, without importing xarray here
-    sizes = getattr(data, "sizes", None)
-    if sizes is not None:
-        if "obs" in sizes:
-            return sizes["obs"] == 0
-        return all(size == 0 for size in sizes.values())
+    if isinstance(data, (xr.Dataset, xr.DataArray)):
+        if "obs" in data.sizes:
+            return data.sizes["obs"] == 0
+        return all(size == 0 for size in data.sizes.values())
 
     return data.size == 0
 

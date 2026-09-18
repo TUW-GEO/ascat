@@ -95,22 +95,6 @@ def product(request, sca_files):
     return reader, sca_files[request.param], per_beam
 
 
-#: Files are read once per format and kept, reading them is the slow part.
-_read_cache = {}
-
-
-def read(product, generic, to_xarray):
-    """Read a product, or return what a previous test already read."""
-    reader, path, per_beam = product
-    key = (str(path), generic, to_xarray)
-
-    if key not in _read_cache:
-        _read_cache[key] = reader(path).read(generic=generic,
-                                             to_xarray=to_xarray)
-
-    return _read_cache[key]
-
-
 def one(data, per_beam):
     """The dataset of the first beam, or the dataset itself."""
     return next(iter(data.values())) if per_beam else data
@@ -140,59 +124,54 @@ def values(dataset, name):
     return np.ma.getdata(dataset[name]).ravel()
 
 
-@pytest.mark.parametrize("generic", [False, True])
 @pytest.mark.parametrize("to_xarray", [False, True])
-def test_read(product, generic, to_xarray):
-    """Every combination reads and returns the type belonging to it."""
-    _, _, per_beam = product
-    data, metadata = read(product, generic, to_xarray)
-    dataset = one(data, per_beam)
+def test_the_two_formats(product, to_xarray, tmp_path):
+    """
+    Read a product in the original and in the generic format.
 
-    assert isinstance(dataset, xr.Dataset if to_xarray else np.ndarray)
-    assert fields(dataset)
-    assert metadata
+    Both are read in the same test because the datasets are large, up to a
+    gigabyte for a single product and format, and keeping them for a whole
+    test session would need far more memory than a test run should.
+    """
+    reader, path, per_beam = product
+    original_data, original_metadata = reader(path).read(
+        generic=False, to_xarray=to_xarray)
+    generic_data, generic_metadata = reader(path).read(
+        generic=True, to_xarray=to_xarray)
 
+    original = one(original_data, per_beam)
+    generic = one(generic_data, per_beam)
 
-@pytest.mark.parametrize("generic", [False, True])
-def test_numpy_and_xarray_hold_the_same_fields(product, generic):
-    """Asking for xarray changes the container, not what is in it."""
-    _, _, per_beam = product
-    as_numpy = one(read(product, generic, False)[0], per_beam)
-    as_xarray = one(read(product, generic, True)[0], per_beam)
+    # the type asked for is the type returned
+    for dataset in (original, generic):
+        assert isinstance(dataset, xr.Dataset if to_xarray else np.ndarray)
+        assert fields(dataset)
+    assert original_metadata and generic_metadata
 
-    assert fields(as_numpy) == fields(as_xarray)
-
-
-@pytest.mark.parametrize("to_xarray", [False, True])
-def test_generic_renames_the_coordinates(product, to_xarray):
-    """The generic format uses "lon" and "lat", the file its own names."""
-    _, _, per_beam = product
-    original = one(read(product, False, to_xarray)[0], per_beam)
-    generic = one(read(product, True, to_xarray)[0], per_beam)
-
+    # the coordinates are renamed for the generic format, and only there
     assert {"lon", "lat"} <= fields(generic)
     assert not {"lon", "lat"} & (fields(original) - fields(generic))
 
-
-@pytest.mark.parametrize("to_xarray", [False, True])
-def test_the_coordinates_survive_the_rename(product, to_xarray):
-    """Renaming a coordinate for the generic format does not change it."""
-    _, _, per_beam = product
-    original = one(read(product, False, to_xarray)[0], per_beam)
-    generic = one(read(product, True, to_xarray)[0], per_beam)
-
+    # renaming a coordinate does not change it
     for prefix in ("lon", "lat"):
-        before = values(original, named(original, prefix))
-        after = values(generic, prefix)
+        before = values(original, named(original, prefix)).astype("f8")
+        after = values(generic, prefix).astype("f8")
         assert before.size == after.size
-        nptest.assert_allclose(before.astype("f8"), after.astype("f8"),
-                               atol=1e-3)
+        nptest.assert_allclose(before, after, atol=1e-3)
+
+    # the metadata a dataset carries has to survive being written
+    if to_xarray:
+        original.to_netcdf(tmp_path / "original.nc")
+        generic.to_netcdf(tmp_path / "generic.nc")
 
 
-@pytest.mark.parametrize("generic", [False, True])
-def test_dataset_can_be_written(product, generic, tmp_path):
-    """The metadata a dataset carries has to survive being written."""
-    _, _, per_beam = product
-    data, _ = read(product, generic, True)
+def test_numpy_and_xarray_hold_the_same_fields(product):
+    """Asking for xarray changes the container, not what is in it."""
+    reader, path, per_beam = product
 
-    one(data, per_beam).to_netcdf(tmp_path / f"{generic}.nc")
+    for generic in (False, True):
+        as_numpy = one(reader(path).read(generic=generic)[0], per_beam)
+        as_xarray = one(
+            reader(path).read(generic=generic, to_xarray=True)[0], per_beam)
+
+        assert fields(as_numpy) == fields(as_xarray), f"generic={generic}"
