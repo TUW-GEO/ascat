@@ -47,7 +47,7 @@ class Test_AscatL2BufrFile(unittest.TestCase):
         """
         Test read.
         """
-        data, metadata = self.reader.read()
+        data, metadata = self.reader.read(generic=False)
 
         ssm_should = np.array([
             29.2, 30.2, 35.7, 38.6, 37.5, 37.6, 40.5, 44.5, 40.7, 39.7, 41.5,
@@ -91,7 +91,7 @@ class Test_AscatL2NcFile(unittest.TestCase):
         """
         Test read.
         """
-        data, metadata = self.reader.read()
+        data, metadata = self.reader.read(generic=False)
 
         ssm_should = np.array([
             2.96000004, 0., 0., 0., 0., 0., 0., 0., 0., 1.82999992, 3.32999992,
@@ -148,8 +148,8 @@ class Test_AscatL2NcFile_AscatL2BufrFile(unittest.TestCase):
         """
         Test read.
         """
-        data_nc, metadata = self.reader_nc.read()
-        data_bufr, metadata = self.reader_bufr.read()
+        data_nc, metadata = self.reader_nc.read(generic=False)
+        data_bufr, metadata = self.reader_bufr.read(generic=False)
 
         nptest.assert_allclose(
             data_nc['latitude'], data_bufr['lat'], atol=1e-4)

@@ -20,6 +20,7 @@ except ImportError:
 
 from ascat.utils import tmp_unzip
 from ascat.utils import mask_dtype_nans
+from ascat.utils import netcdf_attrs
 from ascat.utils import uint8_nan
 from ascat.utils import uint16_nan
 from ascat.utils import int32_nan
@@ -164,7 +165,7 @@ class AscatL1bBufrFile(AscatFile):
                 "a_ASCAT Land Fraction": "#3#landFraction",
             }
 
-    def _read(self, filename, generic=False, to_xarray=False):
+    def _read(self, filename, generic=True, to_xarray=False):
         """
         Read one ASCAT Level 1b BUFR file.
 
@@ -206,11 +207,15 @@ class AscatL1bBufrFile(AscatFile):
                 data[k] = (dim, data[k])
 
             coords = {}
-            coords_fields = ['lon', 'lat', 'time']
+            # Without the generic conversion the coordinates keep the
+            # names they have in the file.
+            coords_fields = ["lon", "longitude", "longitude_full",
+                             "lat", "latitude", "latitude_full", "time"]
             for cf in coords_fields:
-                coords[cf] = data.pop(cf)
+                if cf in data:
+                    coords[cf] = data.pop(cf)
 
-            data = xr.Dataset(data, coords=coords, attrs=metadata)
+            data = xr.Dataset(data, coords=coords, attrs=netcdf_attrs(metadata))
             if generic:
                 data = mask_dtype_nans(data)
         else:
@@ -435,7 +440,7 @@ class AscatL2BufrFile(AscatFile):
             "Topographic Complexity": "#1#topographicComplexity",
         }
 
-    def _read(self, filename, generic=False, to_xarray=False):
+    def _read(self, filename, generic=True, to_xarray=False):
         """
         Read one ASCAT Level 2 BUFR file.
 
@@ -481,11 +486,15 @@ class AscatL2BufrFile(AscatFile):
                 data[k] = (dim, data[k])
 
             coords = {}
-            coords_fields = ['lon', 'lat', 'time']
+            # Without the generic conversion the coordinates keep the
+            # names they have in the file.
+            coords_fields = ["lon", "longitude", "longitude_full",
+                             "lat", "latitude", "latitude_full", "time"]
             for cf in coords_fields:
-                coords[cf] = data.pop(cf)
+                if cf in data:
+                    coords[cf] = data.pop(cf)
 
-            data = xr.Dataset(data, coords=coords, attrs=metadata)
+            data = xr.Dataset(data, coords=coords, attrs=netcdf_attrs(metadata))
             if generic:
                 data = mask_dtype_nans(data)
         else:

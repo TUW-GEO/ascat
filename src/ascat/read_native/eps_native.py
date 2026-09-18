@@ -22,6 +22,7 @@ from ascat.utils import tmp_unzip
 from ascat.utils import get_bit, set_bit
 from ascat.utils import dtype_to_nan
 from ascat.utils import mask_dtype_nans
+from ascat.utils import netcdf_attrs
 from ascat.utils import int8_nan, uint8_nan
 from ascat.utils import int16_nan, uint16_nan
 from ascat.utils import int32_nan, uint32_nan
@@ -46,8 +47,8 @@ class AscatL1bEpsSzfFile(AscatFile):
     Class reading ASCAT Level 1b file in EPS Native format.
     """
 
-    def _read(self, filename, toi=None, roi=None, generic=True, to_xarray=False,
-             ignore_noise_ool=False):
+    def _read(self, filename, toi=None, roi=None, generic=True,
+              to_xarray=False, flag_kwargs=None):
         """
         Read one ASCAT Level 1b EPS Szf file.
 
@@ -65,8 +66,12 @@ class AscatL1bEpsSzfFile(AscatFile):
         to_xarray : boolean, optional
             Convert data to xarray.Dataset otherwise numpy.ndarray will be
             returned (default: False).
-        ignore_noise_ool : bool, optional
-            Ignore noise out of limit flag (default: False).
+        flag_kwargs : dict, optional
+            If given, a second summary flag "f_usable_user" is computed from
+            the flag field, e.g. ``{"ignore_noise_ool": True}`` to not let a
+            noise value outside its limits render a measurement unusable. The
+            flag computed with the default categories is always kept as
+            "f_usable" (default: None).
 
         Returns
         -------
@@ -88,7 +93,7 @@ class AscatL1bEpsSzfFile(AscatFile):
             full=False,
             unsafe=True,
             scale_mdr=False,
-            ignore_noise_ool=ignore_noise_ool)
+            flag_kwargs=flag_kwargs)
 
         if toi:
             data = get_toi_subset(data, toi)
@@ -141,7 +146,7 @@ class AscatL1bEpsFile(AscatFile):
     ASCAT Level 1b EPS Native reader class.
     """
 
-    def _read(self, filename, generic=False, to_xarray=False, **kwargs):
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
         """
         Read one ASCAT Level 1b EPS file.
 
@@ -149,7 +154,7 @@ class AscatL1bEpsFile(AscatFile):
         ----------
         generic : boolean, optional
             Convert original data field names to generic field names
-            (default: False).
+            (default: True).
         to_xarray : boolean, optional
             Convert data to xarray.Dataset otherwise numpy.ndarray will be
             returned (default: False).
@@ -222,7 +227,7 @@ class AscatL2EpsFile(AscatFile):
     ASCAT Level 2 EPS Native reader class.
     """
 
-    def _read(self, filename, generic=False, to_xarray=False, **kwargs):
+    def _read(self, filename, generic=True, to_xarray=False, **kwargs):
         """
         Read one ASCAT Level 2 EPS file.
 
@@ -230,7 +235,7 @@ class AscatL2EpsFile(AscatFile):
         -------
         generic : boolean, optional
             Convert original data field names to generic field names
-            (default: False).
+            (default: True).
         to_xarray : boolean, optional
             Convert data to xarray.Dataset otherwise numpy.ndarray will be
             returned (default: False).
@@ -837,6 +842,8 @@ def conv_epsl1bszf_generic(data, metadata, gen_fields_lut, skip_fields):
                                    invalid)
             data[new_name].set_fill_value(nan_val)
 
+    data["sat_id"] = np.repeat(metadata["sat_id"], data["time"].size)
+
     return data
 
 
@@ -951,7 +958,7 @@ def read_eps_l1b(filename,
                  full=True,
                  unsafe=False,
                  scale_mdr=True,
-                 ignore_noise_ool=False,
+                 flag_kwargs=None,
                  return_ptype=False):
     """
     Level 1b reader and data preparation.
@@ -975,8 +982,9 @@ def read_eps_l1b(filename,
         Default: False
     scale_mdr : bool, optional
         Compute scaled MDR (True) or not (False). Default: True
-    ignore_noise_ool : bool, optional
-        Ignore noise out of limit flag (default: False).
+    flag_kwargs : dict, optional
+        If given, a second summary flag "f_usable_user" is computed from the
+        flag field with these options (default: None).
 
     Returns
     -------
@@ -992,7 +1000,7 @@ def read_eps_l1b(filename,
     if ptype == "SZF":
 
         if fmv == 12:
-            data, metadata = read_szf_fmv_12(eps_file, ignore_noise_ool)
+            data, metadata = read_szf_fmv_12(eps_file)
 
             skip_fields = [
                 "utc_localisation-days", "utc_localisation-milliseconds",
@@ -1010,7 +1018,7 @@ def read_eps_l1b(filename,
                 "beam_number": ("beam_number", np.int8, (1, 6), int8_nan),
                 "swath_indicator":
                     ("swath_indicator", np.int8, (0, 1), int8_nan),
-                "land_frac": ("land_frac", np.float32, (0, 1), float32_nan),
+                "land_frac": ("f_land", np.float32, (0, 1), float32_nan),
                 "f_usable": ("f_usable", np.int8, (0, 2), int8_nan),
                 "as_des_pass": ("as_des_pass", np.uint8, (0, 1), uint8_nan),
                 "time": ("time", None, (np.datetime64("1900-01-01"),
@@ -1022,7 +1030,7 @@ def read_eps_l1b(filename,
             }
 
         elif fmv == 13:
-            data, metadata = read_szf_fmv_13(eps_file, ignore_noise_ool)
+            data, metadata = read_szf_fmv_13(eps_file)
 
             skip_fields = [
                 "utc_localisation-days",
@@ -1053,12 +1061,42 @@ def read_eps_l1b(filename,
         else:
             raise RuntimeError("L1b SZF format version not supported.")
 
-        rename_coords = {"longitude_full": "lon", "latitude_full": "lat"}
+        # set before the datasets are built, so that they carry it too
+        metadata["filename"] = os.path.basename(filename)
+        if return_ptype:
+            metadata["product_type"] = ptype
 
-        for k, v in rename_coords.items():
-            data[v] = data.pop(k)
+        # The summary flag computed with the user's own categories, next to
+        # the one computed with the default categories. Before the generic
+        # conversion, which drops the flag fields it is computed from.
+        if flag_kwargs is not None:
+            if fmv == 12:
+                data["f_usable_user"] = set_flags(data, **flag_kwargs)
+            else:
+                data["f_usable_user"] = set_flags_fmv13(data["flagfield"],
+                                                        **flag_kwargs)
+
+        # convert spacecraft_id to internal sat_id
+        sat_id = np.array([4, 3, 5])
+        metadata["sat_id"] = sat_id[metadata["spacecraft_id"] - 1]
 
         if generic:
+            # The summary flag, and for format version 12 the combined flag
+            # field, are derived from the flag fields of the file and belong to
+            # the generic format rather than to the file itself.
+            if fmv == 12:
+                data["flagfield"] = gen_flagfield(data)
+                data["f_usable"] = set_flags(data)
+            else:
+                data["f_usable"] = set_flags_fmv13(data["flagfield"])
+
+            # A non-generic read returns the fields as they are named in the
+            # file, so only rename the coordinates for the generic format.
+            rename_coords = {"longitude_full": "lon", "latitude_full": "lat"}
+
+            for k, v in rename_coords.items():
+                data[v] = data.pop(k)
+
             data = conv_epsl1bszf_generic(data, metadata, gen_fields_lut,
                                           skip_fields)
 
@@ -1073,10 +1111,6 @@ def read_eps_l1b(filename,
         for i, beam in enumerate(all_beams):
 
             subset = data["beam_number"] == i + 1
-
-            # convert spacecraft_id to internal sat_id
-            sat_id = np.array([4, 3, 5])
-            metadata["sat_id"] = sat_id[metadata["spacecraft_id"] - 1]
 
             # convert dict to xarray.Dataset or numpy.ndarray
             if to_xarray:
@@ -1096,12 +1130,16 @@ def read_eps_l1b(filename,
                     sub_data[var_name] = (dim, data[var_name][subset])
 
                 coords = {}
-                coords_fields = ["lon", "lat", "time"]
+                # Without the generic conversion the coordinates keep the
+                # names they have in the file.
+                coords_fields = ["lon", "longitude", "longitude_full",
+                                 "lat", "latitude", "latitude_full", "time"]
 
                 for cf in coords_fields:
-                    coords[cf] = sub_data.pop(cf)
+                    if cf in sub_data:
+                        coords[cf] = sub_data.pop(cf)
 
-                ds[beam] = xr.Dataset(sub_data, coords=coords, attrs=metadata)
+                ds[beam] = xr.Dataset(sub_data, coords=coords, attrs=netcdf_attrs(metadata))
                 if generic:
                     ds[beam] = mask_dtype_nans(ds[beam])
             else:
@@ -1150,10 +1188,10 @@ def read_eps_l1b(filename,
 
         data["time"] = jd2dt(data.pop("jd"))
 
-        rename_coords = {"longitude": "lon", "latitude": "lat"}
-
-        for k, v in rename_coords.items():
-            data[v] = data.pop(k)
+        # set before the datasets are built, so that they carry it too
+        metadata["filename"] = os.path.basename(filename)
+        if return_ptype:
+            metadata["product_type"] = ptype
 
         # convert spacecraft_id to internal sat_id
         sat_id = np.array([4, 3, 5])
@@ -1161,6 +1199,11 @@ def read_eps_l1b(filename,
 
         # add/rename/remove fields according to generic format
         if generic:
+            rename_coords = {"longitude": "lon", "latitude": "lat"}
+
+            for k, v in rename_coords.items():
+                data[v] = data.pop(k)
+
             data = conv_epsl1bszx_generic(data, metadata)
 
         # convert dict to xarray.Dataset or numpy.ndarray
@@ -1176,11 +1219,15 @@ def read_eps_l1b(filename,
                 data[k] = (dim, data[k])
 
             coords = {}
-            coords_fields = ["lon", "lat", "time"]
+            # Without the generic conversion the coordinates keep the
+            # names they have in the file.
+            coords_fields = ["lon", "longitude", "longitude_full",
+                             "lat", "latitude", "latitude_full", "time"]
             for cf in coords_fields:
-                coords[cf] = data.pop(cf)
+                if cf in data:
+                    coords[cf] = data.pop(cf)
 
-            ds = xr.Dataset(data, coords=coords, attrs=metadata)
+            ds = xr.Dataset(data, coords=coords, attrs=netcdf_attrs(metadata))
             if generic:
                 ds = mask_dtype_nans(ds)
         else:
@@ -1207,7 +1254,7 @@ def read_eps_l1b(filename,
     return ds, metadata
 
 
-def read_eps_l2(filename, generic=False, to_xarray=False, return_ptype=False):
+def read_eps_l2(filename, generic=True, to_xarray=False, return_ptype=False):
     """
     Level 2 reader and data preparation.
 
@@ -1244,10 +1291,10 @@ def read_eps_l2(filename, generic=False, to_xarray=False, return_ptype=False):
 
         data["time"] = jd2dt(data.pop("jd"))
 
-        rename_coords = {"longitude": "lon", "latitude": "lat"}
-
-        for k, v in rename_coords.items():
-            data[v] = data.pop(k)
+        # set before the datasets are built, so that they carry it too
+        metadata["filename"] = os.path.basename(filename)
+        if return_ptype:
+            metadata["product_type"] = ptype
 
         # convert spacecraft_id to internal sat_id
         sat_id = np.array([4, 3, 5])
@@ -1255,6 +1302,11 @@ def read_eps_l2(filename, generic=False, to_xarray=False, return_ptype=False):
 
         # add/rename/remove fields according to generic format
         if generic:
+            rename_coords = {"longitude": "lon", "latitude": "lat"}
+
+            for k, v in rename_coords.items():
+                data[v] = data.pop(k)
+
             data = conv_epsl2szx_generic(data, metadata)
 
         # convert dict to xarray.Dataset or numpy.ndarray
@@ -1270,11 +1322,15 @@ def read_eps_l2(filename, generic=False, to_xarray=False, return_ptype=False):
                 data[k] = (dim, data[k])
 
             coords = {}
-            coords_fields = ["lon", "lat", "time"]
+            # Without the generic conversion the coordinates keep the
+            # names they have in the file.
+            coords_fields = ["lon", "longitude", "longitude_full",
+                             "lat", "latitude", "latitude_full", "time"]
             for cf in coords_fields:
-                coords[cf] = data.pop(cf)
+                if cf in data:
+                    coords[cf] = data.pop(cf)
 
-            data = xr.Dataset(data, coords=coords, attrs=metadata)
+            data = xr.Dataset(data, coords=coords, attrs=netcdf_attrs(metadata))
             if generic:
                 data = mask_dtype_nans(data)
 
@@ -1513,7 +1569,7 @@ def read_szx_fmv_12(eps_file):
     return data, metadata
 
 
-def read_szf_fmv_12(eps_file, ignore_noise_ool=False):
+def read_szf_fmv_12(eps_file):
     """
     Read SZF format version 12.
 
@@ -1537,8 +1593,6 @@ def read_szf_fmv_12(eps_file, ignore_noise_ool=False):
     ----------
     eps_file : EPSProduct object
         EPS Product object.
-    ignore_noise_ool : bool, optional
-        Ignore noise out of limit flag (default: False).
 
     Returns
     -------
@@ -1632,12 +1686,6 @@ def read_szf_fmv_12(eps_file, ignore_noise_ool=False):
     # modify azimuth from (-180, 180) to (0, 360)
     idx = (data["azi_angle_full"] != int_nan) & (data["azi_angle_full"] < 0)
     data["azi_angle_full"][idx] += 360
-
-    # set flags
-    data["f_usable"] = set_flags(data, ignore_noise_ool)
-
-    # create flagflield
-    data["flagfield"] = gen_flagfield(data)
 
     return data, metadata
 
@@ -1836,7 +1884,7 @@ def read_smx_fmv_12(eps_file):
     return data, metadata
 
 
-def read_szf_fmv_13(eps_file, ignore_noise_ool=False):
+def read_szf_fmv_13(eps_file):
     """
     Read SZF format version 13.
 
@@ -1860,8 +1908,6 @@ def read_szf_fmv_13(eps_file, ignore_noise_ool=False):
     ----------
     eps_file : EPSProduct object
         EPS Product object.
-    ignore_noise_ool : bool, optional
-        Ignore noise out of limit flag (default: False).
 
     Returns
     -------
@@ -1959,9 +2005,6 @@ def read_szf_fmv_13(eps_file, ignore_noise_ool=False):
     # modify azimuth from (-180, 180) to (0, 360)
     idx = (data["azi_angle_full"] != int_nan) & (data["azi_angle_full"] < 0)
     data["azi_angle_full"][idx] += 360
-
-    # set flags
-    data["f_usable"] = set_flags_fmv13(data["flagfield"], ignore_noise_ool)
 
     return data, metadata
 

@@ -95,12 +95,11 @@ class Test_AscatL1bFile(unittest.TestCase):
         h5_data, h5_metadata = self.h5_szf.read()
 
         eps_fields = [
-            "sig", "inc", "as_des_pass", "land_frac", "swath_indicator"
+            "sig", "inc", "as_des_pass", "f_land", "swath_indicator"
         ]
 
         hdf5_fields = [
-            "sigma0_full", "inc_angle_full", "as_des_pass", "land_frac",
-            "swath_indicator"
+            "sig", "inc", "as_des_pass", "f_land", "swath_indicator"
         ]
 
         for antenna in ["lf-vv", "lm-vv", "la-vv", "rf-vv", "rm-vv", "ra-vv"]:
@@ -400,12 +399,11 @@ class Test_AscatL1bFileList(unittest.TestCase):
         hdf5_data, metadata = self.hdf5_szf.read(dt)
 
         eps_fields = [
-            "sig", "inc", "as_des_pass", "land_frac", "swath_indicator"
+            "sig", "inc", "as_des_pass", "f_land", "swath_indicator"
         ]
 
         hdf5_fields = [
-            "sigma0_full", "inc_angle_full", "as_des_pass", "land_frac",
-            "swath_indicator"
+            "sig", "inc", "as_des_pass", "f_land", "swath_indicator"
         ]
 
         for antenna in ["lf-vv", "lm-vv", "la-vv", "rf-vv", "rm-vv", "ra-vv"]:
@@ -442,7 +440,7 @@ class Test_AscatL1bFileList(unittest.TestCase):
                     atol=1e-4)
 
             matching = [
-                "sig", "inc", "azi", "sat_id", "as_des_pass", "land_frac",
+                "sig", "inc", "azi", "sat_id", "as_des_pass",
                 "f_usable", "f_land", "beam_number", "swath_indicator"
             ]
 

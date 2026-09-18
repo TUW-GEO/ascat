@@ -14,6 +14,7 @@ from ascat.read_native.bufr import AscatL1bBufrFileGeneric
 from ascat.read_native.eps_native import AscatL1bEpsFileGeneric
 from ascat.utils import get_file_format
 from ascat.file_handling import ChronFiles
+from ascat.utils import Spacecraft
 
 
 class AscatL1bFile:
@@ -73,8 +74,8 @@ class AscatL1bBufrFileList(ChronFiles):
             Filename template (default:
             "M0{sat}-ASCA-ASC{product}1B0200-NA-9.1-{date}.000000000Z-*-*.bfr")
         """
-        sat_lut = {"a": 2, "b": 1, "c": 3}
-        self.sat = sat_lut[sat]
+        sat_lut = {"A": 2, "B": 1, "C": 3}
+        self.sat = sat_lut[Spacecraft(sat).sat_name]
 
         self.product = product.upper()
 
@@ -136,7 +137,7 @@ class AscatL1bNcFileList(ChronFiles):
             Filename template (default:
             "W_XX-EUMETSAT-Darmstadt,SURFACE+SATELLITE,METOP{sat}+ASCAT_C_EUMP_{date}_*_eps_o_{product}_l1.nc")
         """
-        self.sat = sat
+        self.sat = Spacecraft(sat).sat_name
 
         lut = {"szr": "125", "szo": "250"}
         self.product = lut[product]
@@ -198,8 +199,8 @@ class AscatL1bEpsFileList(ChronFiles):
             Filename template (default:
                 "ASCA_{product}_1B_M0{sat}_{date}Z_*_*_*_*.nat")
         """
-        sat_lut = {"a": 2, "b": 1, "c": 3, "?": "?"}
-        self.sat = sat_lut[sat]
+        sat_lut = {"A": 2, "B": 1, "C": 3}
+        self.sat = "?" if sat == "?" else sat_lut[Spacecraft(sat).sat_name]
         self.product = product
 
         if filename_template is None:
@@ -256,8 +257,8 @@ class AscatL1bHdf5FileList(ChronFiles):
             Filename template (default:
               "ASCA_SZF_1B_M0{sat}_{date}Z_*_*_*_*.h5")
         """
-        sat_lut = {"a": "2", "b": "1", "c": "3", "?": "?"}
-        self.sat = sat_lut[sat]
+        sat_lut = {"A": "2", "B": "1", "C": "3"}
+        self.sat = "?" if sat == "?" else sat_lut[Spacecraft(sat).sat_name]
         self.product = product
 
         if filename_template is None:

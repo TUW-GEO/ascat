@@ -47,6 +47,35 @@ Unreleased
   antenna beam and the SZR re-sampled backscatter as quintuplets, following the
   structure of the ASCAT Level 1b readers. ``ScaL1bFileList`` searches and
   reads a collection of such files.
+- Read with ``generic=True`` by default. Only the SZF reader did so far, which
+  made the format depend on the product being read.
+- Return the fields of the file, and only those, when reading with
+  ``generic=False``. The coordinates were renamed to "lon" and "lat" even
+  then, and the ASCAT SZF readers added a summary flag "f_usable", and for
+  format version 12 a combined flag field "flagfield", which are derived from
+  the flag fields of the file rather than stored in it. Both are now part of
+  the generic format only.
+- Use the same generic field names across the ASCAT products. The land
+  fraction of the SZF products is now called "f_land", as in the SZR products,
+  instead of "land_frac", and "sat_id" was added to the SZF products.
+- Fix the conversion to the generic format of ASCAT Level 1b HDF5 files, which
+  never renamed anything because it tested the field names against the items,
+  rather than the keys, of its look-up table.
+- Read the summary flag computed with your own categories next to the one the
+  reader computes. Passing ``flag_kwargs`` to the read method of an ASCAT
+  Level 1b file adds a field "f_usable_user", e.g.
+  ``{"ignore_noise_ool": True}``. This replaces the ``ignore_noise_ool``
+  argument, which changed "f_usable" itself.
+- Fix writing a dataset read with ``to_xarray=True`` to NetCDF. The metadata of
+  the file is stored as dataset attributes, and netCDF only holds numbers,
+  strings and one-dimensional arrays, so a timestamp among them was enough to
+  make ``to_netcdf()`` fail for every reader. Timestamps are now stored as
+  strings and the values which still do not fit are left out of the
+  attributes; the metadata returned by the readers keeps all of them.
+- Accept the same spacecraft names everywhere. ``Spacecraft`` and the file
+  list classes now take the short forms ("a", "B1"), the identifiers used in
+  the file names ("M02", "SGB1") and the full names ("METOP-A",
+  "METOP-SG B1").
 
 Version 2.8.1
 =============

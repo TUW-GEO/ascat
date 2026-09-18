@@ -17,6 +17,7 @@ import xarray as xr
 from ascat.utils import tmp_unzip
 from ascat.utils import daterange
 from ascat.utils import mask_dtype_nans
+from ascat.utils import netcdf_attrs
 from ascat.utils import uint8_nan
 from ascat.utils import float32_nan
 from ascat.file_handling import ChronFiles
@@ -112,7 +113,9 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
                     (new_var_name, var_data.dtype.str, var_data.shape[1:]))
 
     num_records = num_rows * num_cells
-    coords_fields = ['lon', 'lat', 'time']
+    # Without the generic conversion the coordinates keep the names
+    # they have in the file.
+    coords_fields = ['lon', 'longitude', 'lat', 'latitude', 'time']
 
     if generic:
         sat_id = np.array([0, 4, 3, 5], dtype=np.uint8)
@@ -140,9 +143,10 @@ def read_nc(filename, generic, to_xarray, skip_fields, gen_fields_lut):
 
         coords = {}
         for cf in coords_fields:
-            coords[cf] = data.pop(cf)
+            if cf in data:
+                coords[cf] = data.pop(cf)
 
-        data = xr.Dataset(data, coords=coords, attrs=metadata)
+        data = xr.Dataset(data, coords=coords, attrs=netcdf_attrs(metadata))
         if generic:
             data = mask_dtype_nans(data)
     else:
@@ -172,7 +176,7 @@ class AscatL1bNcFile(AscatFile):
             if os.path.splitext(fname)[1] in ('.gz', '.zip'):
                 self.filenames[i] = tmp_unzip(fname)
 
-    def _read(self, filename, generic=False, to_xarray=False):
+    def _read(self, filename, generic=True, to_xarray=False):
         """
         Read one ASCAT Level 1b NetCDF4 file.
 
@@ -268,7 +272,7 @@ class AscatL2NcFile(AscatFile):
             if os.path.splitext(fname)[1] in ('.gz', '.zip'):
                 self.filenames[i] = tmp_unzip(fname)
 
-    def _read(self, filename, generic=False, to_xarray=False):
+    def _read(self, filename, generic=True, to_xarray=False):
         """
         Read one ASCAT Level 2 NetCDF4 file.
 

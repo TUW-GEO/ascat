@@ -4,7 +4,7 @@
 
 import os
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from gzip import GzipFile
 from tempfile import NamedTemporaryFile
 from zipfile import ZipFile
@@ -121,6 +121,39 @@ def zip_data_member(zip_fid):
                 zip_fid.filename, len(members), ", ".join(members) or "none"))
 
     return members[0]
+
+
+def netcdf_attrs(metadata):
+    """
+    Reduce metadata to values which can be stored as netCDF attributes.
+
+    Datasets carry the metadata of the file they were read from as attributes.
+    netCDF only stores numbers, strings and one-dimensional arrays, so a
+    dataset holding anything else cannot be written. Timestamps are converted
+    to strings, everything else that does not fit is left out. The metadata
+    returned by the readers keeps all of it.
+
+    Parameters
+    ----------
+    metadata : dict
+        Metadata.
+
+    Returns
+    -------
+    attrs : dict
+        Metadata without the values netCDF cannot store.
+    """
+    attrs = {}
+
+    for key, value in metadata.items():
+        if isinstance(value, (datetime, np.datetime64)):
+            attrs[key] = str(value)
+        elif isinstance(value, (str, bytes, int, float, np.number)):
+            attrs[key] = value
+        elif isinstance(value, np.ndarray) and value.ndim == 1:
+            attrs[key] = value
+
+    return attrs
 
 
 def tmp_unzip(filename):
@@ -704,6 +737,17 @@ class Spacecraft:
         "METOP-SG B1", "METOP-SG B2", "METOP-SG B3"
     ]
 
+    #: Short forms accepted in addition to the full spacecraft names, so that
+    #: the ASCAT and SCA file lists take the same argument.
+    aliases = {
+        "A": "METOP-A", "B": "METOP-B", "C": "METOP-C",
+        "M02": "METOP-A", "M01": "METOP-B", "M03": "METOP-C",
+        "B1": "METOP-SG B1", "B2": "METOP-SG B2", "B3": "METOP-SG B3",
+        "SGB1": "METOP-SG B1", "SGB2": "METOP-SG B2", "SGB3": "METOP-SG B3",
+        "METOP-SGB1": "METOP-SG B1", "METOP-SGB2": "METOP-SG B2",
+        "METOP-SGB3": "METOP-SG B3",
+    }
+
     def __init__(self, name):
         """
         Initialize spacecraft class.
@@ -713,6 +757,9 @@ class Spacecraft:
         name : str
             Spacecraft name.
         """
+        name = " ".join(str(name).upper().split())
+        name = Spacecraft.aliases.get(name, name)
+
         if name not in Spacecraft.valid_spacecraft_names:
             valid_names = ' ,'.join(Spacecraft.valid_spacecraft_names)
             msg = f"Spacecraft {name} unknown. Valid options: {valid_names}"

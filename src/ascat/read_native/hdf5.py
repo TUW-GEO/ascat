@@ -14,6 +14,7 @@ import numpy as np
 import xarray as xr
 
 from ascat.utils import mask_dtype_nans
+from ascat.utils import netcdf_attrs
 from ascat.read_native import AscatFile
 from ascat.read_native.eps_native import set_flags
 
@@ -22,7 +23,7 @@ class AscatL1bHdf5File(AscatFile):
     Class reading ASCAT Level 1b file in HDF5 format.
     """
 
-    def _read(self, filename, generic=False, to_xarray=False):
+    def _read(self, filename, generic=True, to_xarray=False):
         """
         Read one ASCAT Level 1b HDF5 file.
 
@@ -136,13 +137,17 @@ class AscatL1bHdf5File(AscatFile):
                     sub_data[var_name] = (dim, data[var_name][subset])
 
                 coords = {}
-                coords_fields = ["lon", "lat", "time"]
+                # Without the generic conversion the coordinates keep the
+                # names they have in the file.
+                coords_fields = ["lon", "longitude", "longitude_full",
+                                 "lat", "latitude", "latitude_full", "time"]
 
                 for cf in coords_fields:
-                    coords[cf] = sub_data.pop(cf)
+                    if cf in sub_data:
+                        coords[cf] = sub_data.pop(cf)
 
                 ds[beam] = xr.Dataset(sub_data, coords=coords,
-                                      attrs=metadata)
+                                      attrs=netcdf_attrs(metadata))
                 if generic:
                     ds[beam] = mask_dtype_nans(ds[beam])
             else:
@@ -255,7 +260,8 @@ def conv_hdf5l1b_generic(data, metadata):
 
     gen_fields_lut = {"inc_angle_full": ("inc", np.float32),
                       "azi_angle_full": ("azi", np.float32),
-                      "sigma0_full": ("sig", np.float32)}
+                      "sigma0_full": ("sig", np.float32),
+                      "land_frac": ("f_land", np.float32)}
 
     for var_name in skip_fields:
         if var_name in data:
@@ -263,15 +269,17 @@ def conv_hdf5l1b_generic(data, metadata):
 
     num_cells = data["lat"].shape[1]
 
-    for var_name in data.keys():
+    # list() because the loop renames, and so changes, the dictionary
+    for var_name in list(data.keys()):
         if len(data[var_name].shape) == 1:
             data[var_name] = np.repeat(data[var_name], num_cells)
         if len(data[var_name].shape) == 2:
             data[var_name] = data[var_name].flatten()
 
-        if var_name in gen_fields_lut.items():
-            new_name = gen_fields_lut[var_name][0]
-            new_dtype = gen_fields_lut[var_name][1]
+        if var_name in gen_fields_lut:
+            new_name, new_dtype = gen_fields_lut[var_name]
             data[new_name] = data.pop(var_name).astype(new_dtype)
+
+    data["sat_id"] = np.repeat(metadata["sat_id"], data["time"].size)
 
     return data
