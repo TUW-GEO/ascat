@@ -76,6 +76,24 @@ Unreleased
   list classes now take the short forms ("a", "B1"), the identifiers used in
   the file names ("M02", "SGB1") and the full names ("METOP-A",
   "METOP-SG B1").
+- Add ``ascat.eumetsat.sca.flags``, which derives the summary flag of EPS-SG
+  SCA Level 1b measurements from the individual processing flags.
+  ``set_flags()`` assigns each flag a category and reports the highest one set,
+  following the nominal, degraded and unusable convention of the ASCAT readers.
+  Pass ``rfi_red=False`` to keep a noise outlier from rendering a measurement
+  unusable, ``ignore`` to leave out other flags, or ``flag_bits`` to categorise
+  them differently. As for the ASCAT readers, ``flag_kwargs`` adds it to the
+  data as "f_usable_user", next to the summary the product provides.
+- Read the summary flags of EPS-SG SCA Level 1b files. They are added to the
+  metadata as "quality_...", and ``read_quality()`` reads them on their own,
+  without the measurements. For SZR they include how many grid points received
+  a complete set of measurements and how old the total electron content data
+  used for the Faraday rotation correction was, neither of which can be
+  derived from the measurements.
+- Read the swath grid of EPS-SG SCA Level 1b SZF files with ``read_grid()``.
+  It holds the nodes onto which the SZR products resample the measurements and
+  has its own dimensions, so it is not returned together with the beams.
+- Add tests for the EPS-SG SCA reader, which write the products they read.
 
 Version 2.8.1
 =============

@@ -30,6 +30,8 @@ passed through unchanged and end up in the generic field "sig", so take the
 product type into account before comparing them or the ASCAT backscatter.
 """
 
+import re
+
 from collections import OrderedDict
 from collections import defaultdict
 from datetime import datetime
@@ -39,8 +41,10 @@ import numpy as np
 import netCDF4
 import xarray as xr
 
+from ascat.eumetsat.sca.flags import set_flags
 from ascat.file_handling import ChronFiles
 from ascat.read_native.base import AscatFile
+from ascat.utils import netcdf_attrs
 from ascat.utils import Spacecraft
 
 #: SCA beam groups of the SZF product, keyed by an ASCAT style beam name.
@@ -59,6 +63,9 @@ szf_beams = OrderedDict([
     ("ra-vv", "right_aft_VV"),
 ])
 
+#: Product type as given in the file name, e.g. "...SGB1-SCA-1B-SZF_C_EUMT...".
+product_type_pattern = re.compile(r"SCA-\w+-([A-Z0-9]+)_")
+
 #: Beam order of the SZR quintuplets along the "beam" dimension.
 szr_beams = ["fore-vv", "mid-vv", "aft-vv", "mid-hh", "mid-xx"]
 
@@ -70,6 +77,10 @@ spacecraft_lut = {
 }
 
 # template - "original_name": ("generic_name", generic dtype)
+#
+# Only fields with an ASCAT counterpart are renamed. "flag_generic" and
+# "flag_surface" keep their names: the former is a SCA specific bitfield
+# unrelated to the ASCAT "flagfield", the latter has no ASCAT equivalent.
 szf_gen_fields_lut = {
     "backscatter": ("sig", np.float32),
     "longitude": ("lon", np.float32),
@@ -78,9 +89,7 @@ szf_gen_fields_lut = {
     "azimuth_angle": ("azi", np.float32),
     "lcr": ("f_land", np.float32),
     "flag_quality": ("f_usable", np.int8),
-    "flag_surface": ("f_surface", np.int8),
     "flag_pass": ("as_des_pass", np.uint8),
-    "flag_generic": ("flagfield", np.uint32),
 }
 
 szr_gen_fields_lut = {
@@ -94,9 +103,7 @@ szr_gen_fields_lut = {
     "corrected_cross_pol": ("sig_cross_pol", np.float32),
     "faraday_rotation_angle": ("faraday_rotation", np.float32),
     "flag_quality": ("f_usable", np.int8),
-    "flag_surface": ("f_surface", np.int8),
     "flag_pass": ("as_des_pass", np.uint8),
-    "flag_generic": ("flagfield", np.uint32),
     "line_index": ("line_num", np.uint32),
     "node_index": ("node_num", np.int16),
 }
@@ -121,6 +128,137 @@ def parse_time(variable):
 
     return (np.datetime64(epoch, "ms")
             + np.round(seconds * 1e3).astype("int64").astype("timedelta64[ms]"))
+
+
+def read_grid(source, to_xarray=False):
+    """
+    Read the swath grid of a SCA Level 1b SZF file.
+
+    Next to the measurements of the antenna beams, the SZF products carry the
+    grid onto which the SZR products resample them, as the coordinates of the
+    nodes of the left and the right hand swath. It is a coarser sampling of the
+    same acquisition, so it has its own dimensions and is not returned together
+    with the beams.
+
+    Parameters
+    ----------
+    source : str or netCDF4.Dataset
+        Filename, or an open SCA Level 1b SZF file.
+    to_xarray : boolean, optional
+        Convert data to xarray.Dataset otherwise a dictionary of
+        numpy.ndarray will be returned (default: False).
+
+    Returns
+    -------
+    grid : dict of numpy.ndarray or xarray.Dataset
+        Node coordinates of both swaths and the time of each line of nodes.
+
+    Raises
+    ------
+    KeyError
+        If the file has no grid, as is the case for the SZR products.
+    """
+    if isinstance(source, netCDF4.Dataset):
+        return _read_grid(source, to_xarray)
+
+    with netCDF4.Dataset(source) as fid:
+        return _read_grid(fid, to_xarray)
+
+
+def _read_grid(fid, to_xarray=False):
+    """
+    Read the "data/grid" group of an open SCA Level 1b file.
+
+    Parameters
+    ----------
+    fid : netCDF4.Dataset
+        Open SCA Level 1b file.
+    to_xarray : boolean, optional
+        Convert data to xarray.Dataset (default: False).
+
+    Returns
+    -------
+    grid : dict of numpy.ndarray or xarray.Dataset
+        Grid.
+    """
+    group = fid.groups["data"].groups.get("grid")
+
+    if group is None:
+        raise KeyError(
+            f"{Path(fid.product_name).name} has no grid. Only the SZF "
+            "products carry one, the SZR products are already on it.")
+
+    grid = {"time": parse_time(group.variables["time"])}
+
+    for var_name, variable in group.variables.items():
+        if var_name != "time":
+            grid[var_name] = variable[:]
+
+    if not to_xarray:
+        return grid
+
+    dims = ("along_track", "across_track")
+    variables = {name: (dims, value) for name, value in grid.items()
+                 if name != "time"}
+    variables["time"] = (dims[:1], grid["time"].astype("datetime64[ns]"))
+
+    return xr.Dataset(variables, attrs=netcdf_attrs(read_metadata(fid)))
+
+
+def read_quality(source):
+    """
+    Read the summary flags of a SCA Level 1b file.
+
+    The "quality" group holds a summary of the flags of the whole file, of the
+    flags of each beam, and for SZR how many grid points received a complete
+    set of measurements. It is small, so it can be read without touching the
+    measurements themselves, e.g. to decide whether a file is worth reading.
+
+    Parameters
+    ----------
+    source : str or netCDF4.Dataset
+        Filename, or an open SCA Level 1b file.
+
+    Returns
+    -------
+    quality : dict
+        Summary flags, keyed by the name of the variable prefixed with
+        "quality_". Empty if the file has no "quality" group.
+    """
+    if isinstance(source, netCDF4.Dataset):
+        return _read_quality(source)
+
+    with netCDF4.Dataset(source) as fid:
+        return _read_quality(fid)
+
+
+def _read_quality(fid):
+    """
+    Read the "quality" group of an open SCA Level 1b file.
+
+    Parameters
+    ----------
+    fid : netCDF4.Dataset
+        Open SCA Level 1b file.
+
+    Returns
+    -------
+    quality : dict
+        Summary flags.
+    """
+    group = fid.groups.get("quality")
+
+    if group is None:
+        return {}
+
+    quality = {}
+    for var_name, variable in group.variables.items():
+        value = np.ma.filled(variable[:])
+        # scalars are stored as zero-dimensional arrays
+        quality[f"quality_{var_name}"] = (value[()] if value.ndim == 0
+                                          else value)
+
+    return quality
 
 
 def read_metadata(fid):
@@ -158,6 +296,8 @@ def read_metadata(fid):
 
     instrument = status.groups["instrument"]
     metadata["instrument_mode"] = str(instrument.variables["instrument_mode"][0])
+
+    metadata.update(_read_quality(fid))
 
     return metadata
 
@@ -223,7 +363,7 @@ def to_ds(data, metadata, beam_dim=None):
     coords = {name: variables.pop(name)
               for name in coord_fields if name in variables}
 
-    return xr.Dataset(variables, coords=coords, attrs=metadata)
+    return xr.Dataset(variables, coords=coords, attrs=netcdf_attrs(metadata))
 
 
 def to_rec_array(data):
@@ -255,12 +395,41 @@ def to_rec_array(data):
     return rec_array
 
 
+def get_product_type(filename):
+    """
+    Determine the product type of a SCA Level 1b file.
+
+    The product type is taken from the file name, falling back to the "type"
+    attribute of the file itself. Reading it from the name keeps the file from
+    being opened twice per read, which the netCDF library does not always
+    survive when several handles to the same file are around.
+
+    Parameters
+    ----------
+    filename : str
+        Filename.
+
+    Returns
+    -------
+    product_type : str
+        Product type, e.g. "SZF" or "SZR".
+    """
+    match = product_type_pattern.search(Path(filename).name)
+
+    if match is not None:
+        return match.group(1)
+
+    with netCDF4.Dataset(filename) as fid:
+        return fid.type
+
+
 class ScaL1bSzfFile(AscatFile):
     """
     Class reading EPS-SG SCA Level 1b SZF files.
     """
 
-    def _read(self, filename, generic=True, to_xarray=False):
+    def _read(self, filename, generic=True, to_xarray=False,
+              flag_kwargs=None):
         """
         Read one SCA Level 1b SZF file.
 
@@ -274,6 +443,12 @@ class ScaL1bSzfFile(AscatFile):
         to_xarray : boolean, optional
             Convert data to xarray.Dataset otherwise numpy.ndarray will be
             returned (default: False).
+        flag_kwargs : dict, optional
+            If given, a second summary flag "f_usable_user" is computed from
+            "flag_generic" with :func:`ascat.eumetsat.sca.flags.set_flags`,
+            e.g. ``{"rfi_red": False}`` to not let a noise outlier render a
+            measurement unusable. The summary stored in the product is always
+            kept as "f_usable" (default: None).
 
         Returns
         -------
@@ -306,6 +481,10 @@ class ScaL1bSzfFile(AscatFile):
                 # The beam name tells which swath a measurement belongs to.
                 data["swath_indicator"] = np.full(
                     data["time"].size, int(beam.startswith("r")), dtype=np.int8)
+
+                if flag_kwargs is not None:
+                    data["f_usable_user"] = set_flags(data["flag_generic"],
+                                                      **flag_kwargs)
 
                 if generic:
                     data = conv_scal1b_generic(data, metadata,
@@ -356,7 +535,8 @@ class ScaL1bSzrFile(AscatFile):
     Class reading EPS-SG SCA Level 1b SZR files.
     """
 
-    def _read(self, filename, generic=True, to_xarray=False):
+    def _read(self, filename, generic=True, to_xarray=False,
+              flag_kwargs=None):
         """
         Read one SCA Level 1b SZR file.
 
@@ -370,6 +550,12 @@ class ScaL1bSzrFile(AscatFile):
         to_xarray : boolean, optional
             Convert data to xarray.Dataset otherwise numpy.ndarray will be
             returned (default: False).
+        flag_kwargs : dict, optional
+            If given, a second summary flag "f_usable_user" is computed from
+            "flag_generic" with :func:`ascat.eumetsat.sca.flags.set_flags`,
+            e.g. ``{"rfi_red": False}`` to not let a noise outlier render a
+            measurement unusable. The summary stored in the product is always
+            kept as "f_usable" (default: None).
 
         Returns
         -------
@@ -386,6 +572,10 @@ class ScaL1bSzrFile(AscatFile):
             for var_name, variable in group.variables.items():
                 if var_name != "time":
                     data[var_name] = variable[:]
+
+            if flag_kwargs is not None:
+                data["f_usable_user"] = set_flags(data["flag_generic"],
+                                                  **flag_kwargs)
 
             if generic:
                 data = conv_scal1b_generic(data, metadata, szr_gen_fields_lut)
@@ -445,8 +635,7 @@ class ScaL1bFile:
                 first = filename
             else:
                 first = filename[0]
-            with netCDF4.Dataset(first) as fid:
-                product_type = fid.type
+            product_type = get_product_type(first)
 
         product_type = product_type.upper()
 
@@ -482,7 +671,7 @@ class ScaL1bFileList(ChronFiles):
         filename_template : str, optional
             Filename template.
         """
-        self.sat = sat.upper()
+        self.sat = "SG" + Spacecraft(sat).sat_name
         self.product = product.upper()
 
         if filename_template is None:
