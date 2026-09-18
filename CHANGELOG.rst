@@ -107,6 +107,10 @@ Unreleased
   the beam belongs to already says which one it is.
 - Add a test reading every product in all combinations of the generic and the
   xarray format.
+- Read only the polarizations of interest from an EPS-SG SCA Level 1b SZF
+  file. Only the mid beams are measured in more than one polarization, so
+  ``skip_polarization=["hh", "vh", "hv"]`` leaves six of the twelve beams and a
+  quarter fewer measurements.
 
 Version 2.8.1
 =============

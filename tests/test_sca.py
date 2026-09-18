@@ -23,7 +23,8 @@ from ascat.eumetsat.sca import flags
 from ascat.eumetsat.sca.level1 import (ScaL1bFile, ScaL1bFileList,
                                        ScaL1bSzfFile, ScaL1bSzrFile,
                                        get_product_type, read_grid,
-                                       read_quality, szf_beams, szr_beams)
+                                       read_quality, select_beams,
+                                       szf_beams, szr_beams)
 
 # netCDF4 1.7.4 trips a NumPy 2.5 deprecation inside its own __setitem__ when
 # the test files are written; it says nothing about the reader under test.
@@ -458,3 +459,49 @@ class TestScaAttrs:
         assert "quality_flag_quality" in metadata
         assert "quality_flag_quality" not in data.attrs
         assert "quality_flag_generic" in data.attrs
+
+
+class TestScaSkipPolarization:
+
+    def test_nothing_skipped(self):
+        assert select_beams() is szf_beams
+        assert select_beams([]) is szf_beams
+
+    def test_only_vv_is_left(self):
+        beams = select_beams(["hh", "vh", "hv"])
+        assert list(beams) == ["lf-vv", "lm-vv", "la-vv",
+                               "rf-vv", "rm-vv", "ra-vv"]
+
+    def test_case_does_not_matter(self):
+        assert list(select_beams(["HH"])) == list(select_beams(["hh"]))
+
+    def test_unknown_polarization(self):
+        with pytest.raises(KeyError, match="Unknown polarization"):
+            select_beams(["xx"])
+
+    def test_skipping_everything(self):
+        with pytest.raises(ValueError, match="no beam to read"):
+            select_beams(["vv", "hh", "vh", "hv"])
+
+    def test_read_skips_the_beams(self, szf_file):
+        data, _ = ScaL1bFile(szf_file).read(skip_polarization=["hh", "vh", "hv"])
+        assert len(data) == 6
+        assert all(beam.endswith("vv") for beam in data)
+
+    def test_the_kept_beams_are_unchanged(self, szf_file):
+        full, _ = ScaL1bFile(szf_file).read()
+        some, _ = ScaL1bFile(szf_file).read(skip_polarization=["hh"])
+        nptest.assert_array_equal(np.ma.getdata(full["lf-vv"]["sig"]),
+                                  np.ma.getdata(some["lf-vv"]["sig"]))
+
+    def test_merge_follows_the_beams_read(self, tmp_path):
+        starts = [datetime(2026, 1, 2, 3, 4, 5), datetime(2026, 1, 2, 3, 5, 5)]
+        files = [write_szf(tmp_path / _name("SZF", s), s) for s in starts]
+        data, _ = ScaL1bFile(files).read(skip_polarization=["hh", "vh", "hv"])
+        assert len(data) == 6
+        assert data["lf-vv"].shape[0] == 2 * N_TIME * N_RANGE
+
+    def test_to_xarray(self, szf_file):
+        data, _ = ScaL1bFile(szf_file).read(skip_polarization=["vh", "hv"],
+                                            to_xarray=True)
+        assert len(data) == 8

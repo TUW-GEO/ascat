@@ -66,6 +66,9 @@ szf_beams = OrderedDict([
 #: Product type as given in the file name, e.g. "...SGB1-SCA-1B-SZF_C_EUMT...".
 product_type_pattern = re.compile(r"SCA-\w+-([A-Z0-9]+)_")
 
+#: Polarizations of the SZF beams, as they end the beam names above.
+szf_polarizations = ["vv", "hh", "vh", "hv"]
+
 #: Beam order of the SZR quintuplets along the "beam" dimension.
 szr_beams = ["fore-vv", "mid-vv", "aft-vv", "mid-hh", "mid-xx"]
 
@@ -395,6 +398,50 @@ def to_rec_array(data):
     return rec_array
 
 
+def select_beams(skip_polarization=None):
+    """
+    The SZF beam groups left after skipping polarizations.
+
+    Parameters
+    ----------
+    skip_polarization : iterable of str, optional
+        Polarizations not to read, out of "vv", "hh", "vh" and "hv"
+        (default: None). Only the mid beams are measured in more than one
+        polarization, so skipping all but "vv" leaves six of the twelve beams
+        and a quarter fewer measurements.
+
+    Returns
+    -------
+    beams : collections.OrderedDict
+        Beam groups to read, keyed by beam name.
+
+    Raises
+    ------
+    KeyError
+        If a polarization is unknown.
+    ValueError
+        If no beam is left to read.
+    """
+    if not skip_polarization:
+        return szf_beams
+
+    skip = {polarization.lower() for polarization in skip_polarization}
+    unknown = skip - set(szf_polarizations)
+
+    if unknown:
+        raise KeyError(
+            f"Unknown polarization(s): {', '.join(sorted(unknown))}. "
+            f"Valid are {', '.join(szf_polarizations)}.")
+
+    beams = OrderedDict((beam, group) for beam, group in szf_beams.items()
+                        if beam.split("-")[1] not in skip)
+
+    if not beams:
+        raise ValueError("Skipping every polarization leaves no beam to read.")
+
+    return beams
+
+
 def get_product_type(filename):
     """
     Determine the product type of a SCA Level 1b file.
@@ -429,7 +476,7 @@ class ScaL1bSzfFile(AscatFile):
     """
 
     def _read(self, filename, generic=True, to_xarray=False,
-              flag_kwargs=None):
+              flag_kwargs=None, skip_polarization=None):
         """
         Read one SCA Level 1b SZF file.
 
@@ -449,6 +496,9 @@ class ScaL1bSzfFile(AscatFile):
             e.g. ``{"rfi_red": False}`` to not let a noise outlier render a
             measurement unusable. The summary stored in the product is always
             kept as "f_usable" (default: None).
+        skip_polarization : iterable of str, optional
+            Polarizations not to read, out of "vv", "hh", "vh" and "hv"
+            (default: None), see :func:`select_beams`.
 
         Returns
         -------
@@ -462,7 +512,7 @@ class ScaL1bSzfFile(AscatFile):
         with netCDF4.Dataset(filename) as fid:
             metadata = read_metadata(fid)
 
-            for beam, group in szf_beams.items():
+            for beam, group in select_beams(skip_polarization).items():
                 beam_group = fid.groups["data"].groups[group]
                 num_range = beam_group.dimensions["range"].size
                 data = {"time": np.repeat(
@@ -516,8 +566,9 @@ class ScaL1bSzfFile(AscatFile):
         if isinstance(data[0], tuple):
             data, metadata = zip(*data)
 
+        # follow the beams which were read, polarizations may be skipped
         merged_data = defaultdict(list)
-        for beam in szf_beams:
+        for beam in list(data[0]):
             for d in data:
                 merged_data[beam].append(d.pop(beam))
             if isinstance(merged_data[beam][0], xr.Dataset):
