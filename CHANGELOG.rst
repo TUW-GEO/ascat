@@ -117,6 +117,11 @@ Unreleased
   readers return the same generic fields; which one a file belongs to follows
   from its name. Plotting needs matplotlib and eomaps, which are in the "plot"
   dependency group rather than installed with the package.
+- Fix ``ascat_swath_agg --help``, which raised a ``ValueError`` because the
+  percent signs in the descriptions of the masking thresholds were read as
+  format characters.
+- Describe every command the package installs in the README, with an example
+  of each, and how the readers of both instruments are used.
 
 Version 2.8.1
 =============

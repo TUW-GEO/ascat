@@ -45,22 +45,22 @@ def parse_args_temporal_swath_agg(args):
         metavar="SNOW_COVER_MASK",
         type=int,
         default=90,
-        help=("Snow cover probability (0-100 %) value above which "
-              "to mask the source data (default: 90 %)"))
+        help=("Snow cover probability (0-100 %%) value above which "
+              "to mask the source data (default: 90 %%)"))
     parser.add_argument(
         "--frozen_soil_mask",
         metavar="FROZEN_SOIL_MASK",
         type=int,
         default=90,
-        help=("Frozen soil probability (0-100 %) value above which "
-              "to mask the source data (default: 90 %)"))
+        help=("Frozen soil probability (0-100 %%) value above which "
+              "to mask the source data (default: 90 %%)"))
     parser.add_argument(
         "--subsurface_scattering_mask",
         metavar="SUBSURFACE_SCATTERING_MASK",
         type=int,
         default=10,
-        help=("Subsurface scattering probability (0-100 %) value above which "
-              "to mask the source data (default: 10 %)"))
+        help=("Subsurface scattering probability (0-100 %%) value above which "
+              "to mask the source data (default: 10 %%)"))
     parser.add_argument(
         "--ssm_sensitivity_mask",
         metavar="SSM_SENSITIVITY_MASK",
