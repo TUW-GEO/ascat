@@ -327,12 +327,12 @@ class TestScaFlags:
 
     def test_classification_bits_are_nominal(self):
         for name in ("land", "water", "asc", "desc", "pof"):
-            bit = flags.flag_bits[name][0]
+            bit = flags.default_flag_bits[name][0]
             fg = np.array([1 << bit], dtype=np.uint32)
             assert flags.set_flags(fg)[0] == flags.NOMINAL
 
     def test_ignore(self):
-        fg = np.array([1 << flags.flag_bits["vnoise"][0]], dtype=np.uint32)
+        fg = np.array([1 << flags.default_flag_bits["vnoise"][0]], dtype=np.uint32)
         assert flags.set_flags(fg)[0] == flags.RED
         assert flags.set_flags(fg, ignore=("vnoise",))[0] == flags.NOMINAL
 
@@ -341,7 +341,7 @@ class TestScaFlags:
             flags.set_flags(np.array([0], dtype=np.uint32), ignore=("nope",))
 
     def test_masks_disjoint(self):
-        amber, red = flags.category_masks(flags.flag_bits)
+        amber, red = flags.category_masks(flags.default_flag_bits)
         assert amber & red == 0
 
     def test_shape_and_dtype_preserved(self):

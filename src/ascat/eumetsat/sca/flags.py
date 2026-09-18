@@ -34,7 +34,7 @@ RED = 2
 #: solar array and the use of a predicted orbit. The remaining flags have no
 #: ASCAT counterpart, either because they concern parts of the instrument that
 #: only SCA has or because ASCAT reports a comparable situation differently.
-flag_bits = {
+default_flag_bits = {
     "pof": (0, NOMINAL),        # predicted orbit file used
     "man": (1, RED),            # manoeuvre taking place
     "yaw": (3, RED),            # satellite is not in yaw steering mode
@@ -105,7 +105,8 @@ def category_masks(flag_bits, rfi_red=True, ignore=()):
         if bit is None:
             raise KeyError(
                 f"Flag '{name}' has no bit number assigned. Add it to the flag "
-                "bit definitions, see ascat.eumetsat.sca.flags.flag_bits.")
+                "bit definitions, see "
+                "ascat.eumetsat.sca.flags.default_flag_bits.")
         masks[category] |= 1 << bit
 
     return masks[AMBER], masks[RED]
@@ -128,8 +129,8 @@ def set_flags(flag_generic, rfi_red=True, ignore=(), flag_bits=None):
         Names of flags to leave out of the summary (default: ()).
     flag_bits : dict, optional
         Flag bit definitions, "name": (bit, category). Defaults to
-        :data:`flag_bits`, pass a different table to use your own categories
-        without changing the module.
+        :data:`default_flag_bits`, pass a different table to use your own
+        categories without changing the module.
 
     Returns
     -------
@@ -138,7 +139,7 @@ def set_flags(flag_generic, rfi_red=True, ignore=(), flag_bits=None):
         severely degraded (2).
     """
     if flag_bits is None:
-        flag_bits = globals()["flag_bits"]
+        flag_bits = default_flag_bits
 
     amber_mask, red_mask = category_masks(flag_bits, rfi_red=rfi_red,
                                           ignore=ignore)
