@@ -101,6 +101,12 @@ Unreleased
   period was missed.
 - Close the swath file opened to check whether it intersects the area of
   interest, which was read twice and left open once.
+- Fix the generic format of the ASCAT Level 1b HDF5 SZF products, which held a
+  field "beam_number" that was never written. The beam number is left out of
+  the generic format, as it is for the EPS Native products, where the dataset
+  the beam belongs to already says which one it is.
+- Add a test reading every product in all combinations of the generic and the
+  xarray format.
 
 Version 2.8.1
 =============

@@ -155,6 +155,9 @@ class AscatL1bHdf5File(AscatFile):
                 dtype = []
                 for var_name in data.keys():
 
+                    if var_name == "beam_number" and generic:
+                        continue
+
                     if len(data[var_name][subset].shape) == 1:
                         dtype.append(
                             (var_name, data[var_name][subset].dtype.str))
