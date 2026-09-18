@@ -68,6 +68,7 @@ ascat_swath_resample = "ascat.resample.interface:run_swath_resample"
 ascat_swaths_to_cells = "ascat.stack.interface:run_swath_stacker"
 ascat_convert_cell_format = "ascat.stack.interface:run_cell_format_converter"
 ascat_product_info = "ascat.product_info.interface:run_product_info_interface"
+plot_szf = "ascat.plot.interface:run_plot_szf"
 
 [build-system]
 requires = ["uv_build>=0.9.17,<0.10.0"]
@@ -87,6 +88,10 @@ test = [
 ]
 lint = [
     "ruff>=0.14.12",
+]
+plot = [
+    "eomaps>=8.4",
+    "matplotlib>=3.11.2",
 ]
 
 [tool.ruff]

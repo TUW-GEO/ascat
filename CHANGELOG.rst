@@ -111,6 +111,12 @@ Unreleased
   file. Only the mid beams are measured in more than one polarization, so
   ``skip_polarization=["hh", "vh", "hv"]`` leaves six of the twelve beams and a
   quarter fewer measurements.
+- Add ``plot_szf``, which puts the measurements of an ASCAT or EPS-SG SCA
+  Level 1b SZF file on a map and tells what the file says about a measurement
+  which is clicked. Both instruments are read by the same routine, as their
+  readers return the same generic fields; which one a file belongs to follows
+  from its name. Plotting needs matplotlib and eomaps, which are in the "plot"
+  dependency group rather than installed with the package.
 
 Version 2.8.1
 =============
